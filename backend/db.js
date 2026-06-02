@@ -1,166 +1,186 @@
-import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
+import pg from 'pg';
 import { log } from './utils/logger.js';
+
+const { Pool } = pg;
 
 export default class Database {
   constructor() {
-    this.dbPath = '/opt/data/myfinanceapp-v2.db';
-    this.db = null;
+    // Use DATABASE_URL from Railway environment, fallback to local for development
+    const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/myfinanceapp';
+    
+    this.pool = new Pool({
+      connectionString,
+      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+    });
+    
+    log('DATABASE', `Connecting to PostgreSQL...`);
   }
 
   async init() {
-    return new Promise((resolve, reject) => {
-      this.db = new sqlite3.Database(this.dbPath, async (err) => {
-        if (err) {
-          log('DATABASE', `❌ Connection failed: ${err.message}`);
-          reject(err);
-        } else {
-          log('DATABASE', `✓ Connected to ${this.dbPath}`);
-          await this.createTables();
-          await this.seedData();
-          resolve();
-        }
-      });
-    });
+    try {
+      const result = await this.pool.query('SELECT NOW()');
+      log('DATABASE', `✓ Connected to PostgreSQL: ${result.rows[0].now}`);
+      await this.createTables();
+      await this.seedData();
+    } catch (err) {
+      log('DATABASE', `❌ Connection failed: ${err.message}`);
+      throw err;
+    }
   }
 
   async createTables() {
     const sql = `
       CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         name TEXT,
         email TEXT UNIQUE,
         role TEXT DEFAULT 'admin'
       );
 
       CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         date TEXT,
         description TEXT,
         category TEXT,
         amount REAL,
         direction TEXT,
         balance REAL,
-        user_id INTEGER
+        user_id INTEGER REFERENCES users(id)
       );
 
       CREATE TABLE IF NOT EXISTS credit_cards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT,
         balance REAL,
+        limit REAL,
         apr REAL,
-        payoff_priority INTEGER,
-        user_id INTEGER
+        user_id INTEGER REFERENCES users(id)
       );
 
       CREATE TABLE IF NOT EXISTS savings_goals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT,
-        target_amount REAL,
-        current_amount REAL,
-        target_date TEXT,
-        category TEXT,
-        user_id INTEGER
-      );
-
-      CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        token TEXT UNIQUE,
-        expires_at TEXT,
-        created_at TEXT
+        target REAL,
+        current REAL,
+        deadline TEXT,
+        user_id INTEGER REFERENCES users(id)
       );
     `;
 
-    for (const statement of sql.split(';').filter(s => s.trim())) {
-      await this.run(statement);
+    try {
+      await this.pool.query(sql);
+      log('DATABASE', '✓ Tables created/verified');
+    } catch (err) {
+      log('DATABASE', `❌ Error creating tables: ${err.message}`);
+      throw err;
     }
-    log('DATABASE', '✓ Tables created');
   }
 
   async seedData() {
-    // Check if data exists
-    const count = await new Promise((resolve) => {
-      this.db.get('SELECT COUNT(*) as count FROM transactions', (err, row) => {
-        resolve(row?.count || 0);
-      });
-    });
+    try {
+      // Check if data already exists
+      const userCheck = await this.pool.query('SELECT COUNT(*) FROM users');
+      if (userCheck.rows[0].count > 0) {
+        log('DATABASE', '✓ Data already seeded, skipping');
+        return;
+      }
 
-    if (count > 0) {
-      log('DATABASE', `✓ Data already seeded (${count} transactions)`);
-      return;
-    }
-
-    log('DATABASE', 'Seeding test data...');
-    // Users
-    await this.run('INSERT INTO users (id, name, email, role) VALUES (1, ?, ?, ?)', ['Shak', 'shak@example.com', 'admin']);
-    await this.run('INSERT INTO users (id, name, email, role) VALUES (2, ?, ?, ?)', ['Zunaira', 'zunaira@example.com', 'viewer']);
-
-    // Credit cards
-    await this.run('INSERT INTO credit_cards (name, balance, apr, payoff_priority, user_id) VALUES (?, ?, ?, ?, ?)', 
-      ['Amazon Store Card', 3522, 29.49, 1, 1]);
-    await this.run('INSERT INTO credit_cards (name, balance, apr, payoff_priority, user_id) VALUES (?, ?, ?, ?, ?)',
-      ['Ollo Card', 5022, 27.74, 2, 1]);
-    await this.run('INSERT INTO credit_cards (name, balance, apr, payoff_priority, user_id) VALUES (?, ?, ?, ?, ?)',
-      ['Credit One #1', 975, 27.49, 3, 1]);
-
-    // Sample transactions (last 30 days from May 22, 2026)
-    const transactions = [
-      { date: '2026-05-22', desc: 'Paycheck (Biweekly)', cat: 'Income', amt: 6211.68, dir: 'credit' },
-      { date: '2026-05-23', desc: 'Mortgage Payment', cat: 'Housing', amt: 1185.65, dir: 'debit' },
-      { date: '2026-05-24', desc: 'Grocery Store', cat: 'Food', amt: 125.43, dir: 'debit' },
-      { date: '2026-05-25', desc: 'Gas Station', cat: 'Auto', amt: 65.00, dir: 'debit' },
-      { date: '2026-05-28', desc: 'Dining Out', cat: 'Dining', amt: 87.50, dir: 'debit' },
-      { date: '2026-05-29', desc: 'Online Shopping', cat: 'Shopping', amt: 234.99, dir: 'debit' },
-      { date: '2026-06-01', desc: 'Utilities', cat: 'Utilities', amt: 150.00, dir: 'debit' },
-      { date: '2026-06-02', desc: 'Car Payment', cat: 'Auto Loan', amt: 443.00, dir: 'debit' },
-      { date: '2026-06-03', desc: 'Paycheck (Biweekly)', cat: 'Income', amt: 6211.68, dir: 'credit' },
-    ];
-
-    let balance = 339.01;
-    for (const tx of transactions) {
-      balance += tx.dir === 'credit' ? tx.amt : -tx.amt;
-      await this.run(
-        'INSERT INTO transactions (date, description, category, amount, direction, balance, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [tx.date, tx.desc, tx.cat, tx.amt, tx.dir, balance, 1]
+      // Insert users
+      await this.pool.query(
+        "INSERT INTO users (name, email, role) VALUES ($1, $2, $3)",
+        ['Shak', 'shak@example.com', 'admin']
       );
+      await this.pool.query(
+        "INSERT INTO users (name, email, role) VALUES ($1, $2, $3)",
+        ['Zunaira', 'zunaira@example.com', 'viewer']
+      );
+
+      // Insert transactions
+      const transactions = [
+        ['2026-05-29', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 994.08],
+        ['2026-05-28', 'Whole Foods', 'groceries', 85.32, 'debit', -91.57],
+        ['2026-05-27', 'Electric Bill', 'utilities', 145.00, 'debit', -6.25],
+        ['2026-05-26', 'Gas', 'transportation', 45.00, 'debit', 38.75],
+        ['2026-05-25', 'Costco', 'groceries', 120.50, 'debit', 83.75],
+        ['2026-05-24', 'Netflix', 'entertainment', 15.99, 'debit', 204.25],
+        ['2026-05-23', 'Chipotle', 'dining', 12.45, 'debit', 216.70],
+        ['2026-05-22', 'Target', 'shopping', 67.89, 'debit', 284.59],
+        ['2026-05-20', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 352.48]
+      ];
+
+      for (const txn of transactions) {
+        await this.pool.query(
+          'INSERT INTO transactions (date, description, category, amount, direction, balance, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [...txn, 1]
+        );
+      }
+
+      // Insert credit cards
+      await this.pool.query(
+        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Chase Sapphire', 3245.67, 15000, 18.99, 1]
+      );
+      await this.pool.query(
+        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Amex Gold', 2890.45, 20000, 19.99, 1]
+      );
+      await this.pool.query(
+        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Citi Double Cash', 4015.68, 12000, 17.99, 1]
+      );
+
+      // Insert savings goals
+      await this.pool.query(
+        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Emergency Fund', 10000, 2500, '2026-12-31', 1]
+      );
+      await this.pool.query(
+        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Vacation', 5000, 1200, '2026-09-30', 1]
+      );
+      await this.pool.query(
+        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
+        ['Home Improvement', 8000, 0, '2027-06-30', 1]
+      );
+
+      log('DATABASE', '✓ Data seeded successfully');
+    } catch (err) {
+      log('DATABASE', `❌ Error seeding data: ${err.message}`);
+      throw err;
     }
-
-    // Savings goals
-    await this.run('INSERT INTO savings_goals (name, target_amount, current_amount, target_date, category, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Debt-Free', 10151.80, 0, '2027-06-30', 'Debt Payoff', 1]);
-    await this.run('INSERT INTO savings_goals (name, target_amount, current_amount, target_date, category, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Emergency Fund', 25000, 445, '2027-12-31', 'Emergency', 1]);
-    await this.run('INSERT INTO savings_goals (name, target_amount, current_amount, target_date, category, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Family Vacation', 3280, 0, '2026-12-31', 'Vacation', 1]);
-
-    log('DATABASE', '✓ Test data seeded');
-  }
-
-  async run(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, function(err) {
-        if (err) reject(err);
-        else resolve({ id: this.lastID, changes: this.changes });
-      });
-    });
-  }
-
-  async get(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
   }
 
   async all(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    try {
+      const result = await this.pool.query(sql, params);
+      return result.rows;
+    } catch (err) {
+      log('DATABASE', `❌ Query failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  async get(sql, params = []) {
+    try {
+      const result = await this.pool.query(sql, params);
+      return result.rows[0];
+    } catch (err) {
+      log('DATABASE', `❌ Query failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  async run(sql, params = []) {
+    try {
+      await this.pool.query(sql, params);
+    } catch (err) {
+      log('DATABASE', `❌ Query failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  async close() {
+    await this.pool.end();
+    log('DATABASE', '✓ Connection closed');
   }
 }
