@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 7890;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static(join(__dirname, '../frontend/dist')));
+app.use(express.static(join(__dirname, '../frontend')));
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -59,11 +59,18 @@ app.use((err, req, res, next) => {
 
 // Initialize database and start server
 const db = new Database();
-await db.init();
+
+try {
+  await db.init();
+  log('SERVER', '✓ Database initialized successfully');
+} catch (err) {
+  log('SERVER', `❌ Database initialization failed: ${err.message}`);
+  process.exit(1);
+}
 
 app.listen(PORT, () => {
   log('SERVER', `🚀 MyFinanceApp running on port ${PORT}`);
-  log('SERVER', `📊 Database: ${db.dbPath}`);
+  log('SERVER', `📊 Database: PostgreSQL (Railway)`);
   log('SERVER', `🔐 Authentication: Local (hooks for email/password ready)`);
 });
 
