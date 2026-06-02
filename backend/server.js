@@ -1,0 +1,68 @@
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import Database from './db.js';
+import auth from './routes/auth.js';
+import dashboard from './routes/dashboard.js';
+import transactions from './routes/transactions.js';
+import debts from './routes/debts.js';
+import goals from './routes/goals.js';
+import { log } from './utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const app = express();
+const PORT = process.env.PORT || 7890;
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.static(join(__dirname, '../frontend/dist')));
+
+// Logging middleware
+app.use((req, res, next) => {
+  log('API', `[${req.method}] ${req.path}`);
+  next();
+});
+
+// Session middleware (HTTP-only cookies)
+app.use((req, res, next) => {
+  const sessionId = req.cookies?.session_id;
+  if (sessionId) {
+    req.user = { id: 1, name: 'Shak' }; // For now, hardcoded
+    log('AUTH', `User authenticated: ${req.user.name}`);
+  }
+  next();
+});
+
+// Routes
+app.use('/api/auth', auth);
+app.use('/api/dashboard', dashboard);
+app.use('/api/transactions', transactions);
+app.use('/api/debts', debts);
+app.use('/api/goals', goals);
+
+// Serve frontend
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, '../frontend/index.html'));
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  log('ERROR', `${err.message}`);
+  res.status(500).json({ error: err.message });
+});
+
+// Initialize database and start server
+const db = new Database();
+await db.init();
+
+app.listen(PORT, () => {
+  log('SERVER', `🚀 MyFinanceApp running on port ${PORT}`);
+  log('SERVER', `📊 Database: ${db.dbPath}`);
+  log('SERVER', `🔐 Authentication: Local (hooks for email/password ready)`);
+});
+
+export default app;
