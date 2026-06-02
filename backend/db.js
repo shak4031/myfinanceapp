@@ -5,15 +5,16 @@ const { Pool } = pg;
 
 export default class Database {
   constructor() {
-    // Use DATABASE_URL from Railway environment, fallback to local for development
-    const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/myfinanceapp';
+    // Use the Railway public TCP proxy URL (port 48317) for PostgreSQL
+    // Format: postgresql://postgres:PASSWORD@zephyr.proxy.rlwy.net:48317/railway
+    const connectionString = 'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@zephyr.proxy.rlwy.net:48317/railway';
     
     this.pool = new Pool({
       connectionString,
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+      ssl: { rejectUnauthorized: false }
     });
     
-    log('DATABASE', `Connecting to PostgreSQL...`);
+    log('DATABASE', `Connecting to PostgreSQL on zephyr.proxy.rlwy.net:48317...`);
   }
 
   async init() {
