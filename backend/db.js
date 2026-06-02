@@ -29,15 +29,16 @@ export default class Database {
   }
 
   async createTables() {
-    const sql = `
-      CREATE TABLE IF NOT EXISTS users (
+    // PostgreSQL doesn't support multiple statements in one query, so execute separately
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name TEXT,
         email TEXT UNIQUE,
         role TEXT DEFAULT 'admin'
-      );
-
-      CREATE TABLE IF NOT EXISTS transactions (
+      )`,
+      
+      `CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         date TEXT,
         description TEXT,
@@ -47,30 +48,32 @@ export default class Database {
         balance REAL,
         source TEXT,
         user_id INTEGER REFERENCES users(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS credit_cards (
+      )`,
+      
+      `CREATE TABLE IF NOT EXISTS credit_cards (
         id SERIAL PRIMARY KEY,
         name TEXT,
         balance REAL,
         limit REAL,
         apr REAL,
         user_id INTEGER REFERENCES users(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS savings_goals (
+      )`,
+      
+      `CREATE TABLE IF NOT EXISTS savings_goals (
         id SERIAL PRIMARY KEY,
         name TEXT,
         target REAL,
         current REAL,
         deadline TEXT,
         user_id INTEGER REFERENCES users(id)
-      );
-    `;
+      )`
+    ];
 
     try {
-      await this.pool.query(sql);
-      log('DATABASE', '✓ Tables created/verified');
+      for (const sql of statements) {
+        await this.pool.query(sql);
+      }
+      log('DATABASE', '✓ All tables created/verified');
     } catch (err) {
       log('DATABASE', `❌ Error creating tables: ${err.message}`);
       throw err;
