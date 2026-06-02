@@ -5,16 +5,16 @@ const { Pool } = pg;
 
 export default class Database {
   constructor() {
-    // Use Railway's private internal PostgreSQL connection
-    // Format: postgresql://postgres:PASSWORD@postgres.railway.internal:5432/railway
-    const connectionString = 'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@postgres.railway.internal:5432/railway';
+    // Use Railway's public TCP proxy URL for PostgreSQL
+    // Format: postgresql://postgres:PASSWORD@zephyr.proxy.rlwy.net:48317/railway
+    const connectionString = 'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@zephyr.proxy.rlwy.net:48317/railway';
     
     this.pool = new Pool({
       connectionString,
-      ssl: false  // No SSL needed for internal Railway connection
+      ssl: { rejectUnauthorized: false }  // SSL required for remote connection
     });
     
-    log('DATABASE', `Connecting to PostgreSQL on postgres.railway.internal:5432...`);
+    log('DATABASE', `Connecting to PostgreSQL on zephyr.proxy.rlwy.net:48317...`);
   }
 
   async init() {
