@@ -5,16 +5,19 @@ const { Pool } = pg;
 
 export default class Database {
   constructor() {
-    // Use Railway's public TCP proxy URL for PostgreSQL
-    // Format: postgresql://postgres:PASSWORD@zephyr.proxy.rlwy.net:48317/railway
-    const connectionString = 'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@zephyr.proxy.rlwy.net:48317/railway';
+    // Railway injects DATABASE_URL when services are in same project
+    // Format can be: postgres://user:pass@postgres:5432/railway (service name) or full URL
+    // Fallback to public URL if needed
+    const connectionString = process.env.DATABASE_URL || 
+      'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@postgres:5432/railway';
     
     this.pool = new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false }  // SSL required for remote connection
+      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
     });
     
-    log('DATABASE', `Connecting to PostgreSQL on zephyr.proxy.rlwy.net:48317...`);
+    log('DATABASE', `Connecting to PostgreSQL...`);
+    log('DATABASE', `Using host: ${process.env.DATABASE_URL ? 'DATABASE_URL env var' : 'postgres:5432'}`);
   }
 
   async init() {
