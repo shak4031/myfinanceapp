@@ -1,10 +1,11 @@
-const timestamp = () => new Date().toISOString().split('T')[1].split('.')[0];
+/**
+ * Simple logging utility
+ * Usage: log('MODULE', 'message')
+ */
 
-export function log(category, message) {
-  console.log(`[${timestamp()}] [${category.padEnd(10)}] ${message}`);
+export function log(module, message) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [${module}] ${message}`);
 }
 
-export function logError(category, message, error) {
-  console.error(`[${timestamp()}] [${category.padEnd(10)}] ❌ ${message}`);
-  if (error?.stack) console.error(error.stack);
-}
+export default { log };
