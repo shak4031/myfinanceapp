@@ -45,6 +45,7 @@ export default class Database {
         amount REAL,
         direction TEXT,
         balance REAL,
+        source TEXT,
         user_id INTEGER REFERENCES users(id)
       );
 
@@ -97,20 +98,20 @@ export default class Database {
 
       // Insert transactions
       const transactions = [
-        ['2026-05-29', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 994.08],
-        ['2026-05-28', 'Whole Foods', 'groceries', 85.32, 'debit', -91.57],
-        ['2026-05-27', 'Electric Bill', 'utilities', 145.00, 'debit', -6.25],
-        ['2026-05-26', 'Gas', 'transportation', 45.00, 'debit', 38.75],
-        ['2026-05-25', 'Costco', 'groceries', 120.50, 'debit', 83.75],
-        ['2026-05-24', 'Netflix', 'entertainment', 15.99, 'debit', 204.25],
-        ['2026-05-23', 'Chipotle', 'dining', 12.45, 'debit', 216.70],
-        ['2026-05-22', 'Target', 'shopping', 67.89, 'debit', 284.59],
-        ['2026-05-20', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 352.48]
+        ['2026-05-29', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 994.08, 'td-checking'],
+        ['2026-05-28', 'Whole Foods', 'groceries', 85.32, 'debit', -91.57, 'td-checking'],
+        ['2026-05-27', 'Electric Bill', 'utilities', 145.00, 'debit', -6.25, 'td-checking'],
+        ['2026-05-26', 'Gas', 'transportation', 45.00, 'debit', 38.75, 'td-checking'],
+        ['2026-05-25', 'Costco', 'groceries', 120.50, 'debit', 83.75, 'td-checking'],
+        ['2026-05-24', 'Netflix', 'entertainment', 15.99, 'debit', 204.25, 'credit-card'],
+        ['2026-05-23', 'Chipotle', 'dining', 12.45, 'debit', 216.70, 'credit-card'],
+        ['2026-05-22', 'Target', 'shopping', 67.89, 'debit', 284.59, 'credit-card'],
+        ['2026-05-20', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 352.48, 'td-checking']
       ];
 
       for (const txn of transactions) {
         await this.pool.query(
-          'INSERT INTO transactions (date, description, category, amount, direction, balance, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          'INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
           [...txn, 1]
         );
       }

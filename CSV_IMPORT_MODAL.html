@@ -1,0 +1,99 @@
+<!-- CSV Import Modal - Add this to index.html before closing </body> -->
+
+<div id="importModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+  <div style="background: #1a1a1a; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%;">
+    <h2 style="margin-top: 0; color: #fff;">Import CSV Statements</h2>
+    
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">Source</label>
+      <select id="importSource" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+        <option value="td-checking">TD Bank - Checking</option>
+        <option value="td-savings">TD Bank - Savings</option>
+        <option value="credit-card">Credit Card Statement</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">CSV File</label>
+      <input type="file" id="csvFile" accept=".csv" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+    </div>
+
+    <div id="importStatus" style="margin-bottom: 20px; padding: 15px; background: #2a2a2a; border-radius: 5px; display: none; color: #aaa; font-size: 14px;">
+      <p id="importStatusText"></p>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button onclick="closeImportModal()" style="flex: 1; padding: 10px; background: #333; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+      <button onclick="handleImport()" style="flex: 1; padding: 10px; background: #4CAF50; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openImportModal() {
+  document.getElementById('importModal').style.display = 'flex';
+  document.getElementById('csvFile').value = '';
+  document.getElementById('importStatus').style.display = 'none';
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').style.display = 'none';
+}
+
+async function handleImport() {
+  const source = document.getElementById('importSource').value;
+  const file = document.getElementById('csvFile').files[0];
+  
+  if (!file) {
+    alert('Please select a CSV file');
+    return;
+  }
+
+  // Show loading status
+  const statusDiv = document.getElementById('importStatus');
+  const statusText = document.getElementById('importStatusText');
+  statusDiv.style.display = 'block';
+  statusText.textContent = 'Importing...';
+
+  try {
+    // Read file
+    const csvData = await file.text();
+    
+    // Send to server
+    const response = await fetch('/api/import/import-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvData, source })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      statusText.innerHTML = `
+        <strong style="color: #4CAF50;">✓ Import Complete!</strong><br>
+        Imported: ${result.imported}<br>
+        Duplicates: ${result.duplicates}<br>
+        Errors: ${result.errors}<br>
+        Total: ${result.total}
+      `;
+      
+      // Refresh dashboard data
+      setTimeout(() => {
+        loadData();
+        closeImportModal();
+      }, 2000);
+    } else {
+      statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Import Failed</strong><br>${result.error}`;
+    }
+  } catch (err) {
+    statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Error</strong><br>${err.message}`;
+  }
+}
+
+// Close modal when clicking outside
+document.getElementById('importModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'importModal') {
+    closeImportModal();
+  }
+});
+</script>
