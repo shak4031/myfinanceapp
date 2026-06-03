@@ -103,7 +103,7 @@ router.post('/import-csv', async (req, res) => {
       imported,
       duplicates,
       errors,
-      total: lines.length - 1
+      total: csvLines.length - 1
     });
 
   } catch (err) {
