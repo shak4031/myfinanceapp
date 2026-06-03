@@ -20,25 +20,33 @@ router.post('/import-csv', async (req, res) => {
       });
     }
 
-    // Parse CSV
-    const lines = csvData.trim().split('\\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    // Parse CSV - handle both Unix (\n) and Windows (\r\n) line endings
+    let csvLines = csvData
+      .replace(/\r\n/g, '\n') // Convert Windows line endings to Unix
+      .trim()
+      .split('\n');
     
+    log('CSV_IMPORT', `Raw CSV has ${csvLines.length} lines`);
+    
+    const headers = csvLines[0].split(',').map(h => h.trim().toLowerCase());
     log('CSV_IMPORT', `Headers detected: ${headers.join(', ')}`);
-    
-    log('CSV_IMPORT', `Processing ${lines.length - 1} records from ${source}`);
+    log('CSV_IMPORT', `Processing ${csvLines.length - 1} data rows from ${source}`);
 
     let imported = 0;
     let duplicates = 0;
     let errors = 0;
 
-    // Process each row
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim());
+    // Parse data rows (skip header)
+    for (let i = 1; i < csvLines.length; i++) {
+      const row_str = csvLines[i].trim();
+      if (!row_str) continue; // Skip empty lines
+      
+      // Parse CSV line into columns
+      const cols = row_str.split(',').map(c => c.trim());
       const row = {};
       
       headers.forEach((header, idx) => {
-        row[header] = values[idx];
+        row[header] = cols[idx] || '';
       });
 
       try {
