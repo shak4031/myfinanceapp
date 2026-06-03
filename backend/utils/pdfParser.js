@@ -1,4 +1,5 @@
-import pdfParse from 'pdf-parse';
+import * as pdfParseModule from 'pdf-parse';
+const pdfParse = pdfParseModule.default || pdfParseModule;
 import { log } from './logger.js';
 
 /**
