@@ -29,15 +29,10 @@ router.post('/summary', async (req, res) => {
     const balance = txns.length > 0 ? txns[0].balance : 0;
     
     res.json({
-      currentBalance: balance,
       income: income,
       expenses: expenses,
       netCashflow: income - expenses,
-      balance: balance,
-      monthlyIncome: income,
-      monthlyExpenses: expenses,
-      netCashFlow: income - expenses,
-      transactions: txns.slice(0, 20)
+      balance: balance
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
@@ -49,38 +44,51 @@ router.post('/upcoming-payments', async (req, res) => {
   try {
     log('DASHBOARD', 'Fetching upcoming payments');
     
-    // Fixed bills (recurring)
-    const bills = [
-      { name: 'Mortgage', amount: 1185.65, dueDate: '1st', category: 'Housing' },
-      { name: 'Car Payment #1', amount: 443.00, dueDate: '4th', category: 'Auto' },
-      { name: 'Utilities', amount: 150.00, dueDate: '15th', category: 'Utilities' },
-      { name: 'Car Payment #2', amount: 513.00, dueDate: '21st', category: 'Auto' },
-      { name: 'Insurance', amount: 457.46, dueDate: '28th', category: 'Insurance' },
+    // Return array of payments directly - this is what frontend expects
+    const payments = [
+      { 
+        type: 'income', 
+        description: 'Paycheck (Biweekly)', 
+        amount: 6211.68, 
+        date: '2026-06-03' 
+      },
+      { 
+        type: 'expense', 
+        description: 'Mortgage', 
+        amount: 1185.65, 
+        date: '2026-06-01' 
+      },
+      { 
+        type: 'expense', 
+        description: 'Car Payment #1', 
+        amount: 443.00, 
+        date: '2026-06-04' 
+      },
+      { 
+        type: 'expense', 
+        description: 'Utilities', 
+        amount: 150.00, 
+        date: '2026-06-15' 
+      },
+      { 
+        type: 'expense', 
+        description: 'Car Payment #2', 
+        amount: 513.00, 
+        date: '2026-06-21' 
+      },
+      { 
+        type: 'expense', 
+        description: 'Insurance', 
+        amount: 457.46, 
+        date: '2026-06-28' 
+      }
     ];
     
-    const txns = await db.all('SELECT * FROM transactions WHERE user_id = 1 ORDER BY date DESC LIMIT 1');
-    const currentBalance = txns.length > 0 ? txns[0].balance : 0;
+    log('DASHBOARD', `Returning ${payments.length} upcoming payments`);
+    res.json(payments);
     
-    let projectedBalance = currentBalance;
-    bills.forEach(b => projectedBalance -= b.amount);
-    
-    res.json({
-      currentBalance,
-      projectedBalance,
-      totalRemaining: bills.reduce((sum, b) => sum + b.amount, 0),
-      bills,
-      items: [
-        { type: 'income', name: 'Paycheck (Biweekly)', amount: 6211.68, date: '2026-06-03' },
-        ...bills.map((b, i) => ({ 
-          type: 'expense', 
-          name: b.name, 
-          amount: b.amount, 
-          date: `2026-06-${b.dueDate.replace('st', '').replace('nd', '').replace('rd', '').replace('th', '')}` 
-        }))
-      ].sort((a, b) => new Date(a.date) - new Date(b.date))
-    });
   } catch (error) {
-    log('DASHBOARD', `Error: ${error.message}`);
+    log('DASHBOARD', `Error fetching payments: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
