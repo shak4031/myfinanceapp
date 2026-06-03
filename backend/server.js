@@ -21,7 +21,6 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static(join(__dirname, '../frontend')));
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -39,7 +38,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
+// Routes BEFORE static files
 app.use('/api/auth', auth);
 app.use('/api/dashboard', dashboard);
 app.use('/api/transactions', transactions);
@@ -47,6 +46,9 @@ app.use('/api/debts', debts);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
 app.use('/api', logsRoute);
+
+// Static files (after API routes)
+app.use(express.static(join(__dirname, '../frontend')));
 
 // Serve frontend
 app.get('*', (req, res) => {
