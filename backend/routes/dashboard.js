@@ -4,7 +4,6 @@ import { log } from '../utils/logger.js';
 
 const router = Router();
 const db = new Database();
-await db.init();
 
 router.post('/summary', async (req, res) => {
   try {
@@ -31,6 +30,10 @@ router.post('/summary', async (req, res) => {
     
     res.json({
       currentBalance: balance,
+      income: income,
+      expenses: expenses,
+      netCashflow: income - expenses,
+      balance: balance,
       monthlyIncome: income,
       monthlyExpenses: expenses,
       netCashFlow: income - expenses,

@@ -28,7 +28,9 @@ router.post('/import-csv', async (req, res) => {
     
     log('CSV_IMPORT', `Raw CSV has ${csvLines.length} lines`);
     
-    const headers = csvLines[0].split(',').map(h => h.trim().toLowerCase());
+    // Parse header with proper CSV handling
+    const headerLine = csvLines[0];
+    const headers = parseCSVLine(headerLine).map(h => h.toLowerCase());
     log('CSV_IMPORT', `Headers detected: ${headers.join(', ')}`);
     log('CSV_IMPORT', `Processing ${csvLines.length - 1} data rows from ${source}`);
 
@@ -41,15 +43,15 @@ router.post('/import-csv', async (req, res) => {
       const row_str = csvLines[i].trim();
       if (!row_str) continue; // Skip empty lines
       
-      // Parse CSV line into columns
-      const cols = row_str.split(',').map(c => c.trim());
-      const row = {};
-      
-      headers.forEach((header, idx) => {
-        row[header] = cols[idx] || '';
-      });
-
       try {
+        // Parse CSV line into columns with proper quote handling
+        const cols = parseCSVLine(row_str);
+        const row = {};
+        
+        headers.forEach((header, idx) => {
+          row[header] = cols[idx] || '';
+        });
+
         // Parse the row based on source type
         const transaction = parseTransaction(row, source);
         
@@ -193,6 +195,39 @@ function parseTransaction(row, source) {
   } catch (err) {
     return null;
   }
+}
+
+// Helper: Parse CSV line handling quoted fields
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        // Toggle quote mode
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // Field separator
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  // Add final field
+  result.push(current.trim());
+  return result;
 }
 
 // Helper: Find a column value by matching against multiple possible names
