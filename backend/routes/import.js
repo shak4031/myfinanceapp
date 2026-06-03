@@ -21,8 +21,10 @@ router.post('/import-csv', async (req, res) => {
     }
 
     // Parse CSV
-    const lines = csvData.trim().split('\n');
+    const lines = csvData.trim().split('\\n');
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    log('CSV_IMPORT', `Headers detected: ${headers.join(', ')}`);
     
     log('CSV_IMPORT', `Processing ${lines.length - 1} records from ${source}`);
 
@@ -109,13 +111,19 @@ router.post('/import-csv', async (req, res) => {
 function parseTransaction(row, source) {
   try {
     if (source === 'td-checking' || source === 'td-savings') {
-      // TD Bank CSV format: Date, Debit, Credit, Balance, Description
-      // Example: 05/29/2026, 85.32, , 994.08, WHOLE FOODS
+      // TD Bank CSV format: Date, Bank RTN, Account Number, Transaction Type, Description, Debit, Credit, Check Number, Account Running Balance
+      // The headers come in as lowercase, so we need to map them
       
-      const date = formatDate(row.date); // Convert 05/29/2026 to 2026-05-29
+      // Look for date column (might be 'date')
+      const dateStr = row.date || row['transaction date'];
+      if (!dateStr) {
+        return null; // Skip if no date found
+      }
+      
+      const date = formatDate(dateStr);
       const debit = parseFloat(row.debit) || 0;
       const credit = parseFloat(row.credit) || 0;
-      const balance = parseFloat(row.balance) || 0;
+      const balance = parseFloat(row['account running balance']) || parseFloat(row.balance) || 0;
       const description = row.description || 'Unknown';
 
       // Determine direction and amount
@@ -138,9 +146,13 @@ function parseTransaction(row, source) {
 
     } else if (source === 'credit-card') {
       // Credit Card CSV format: Transaction Date, Description, Amount, Running Balance
-      // Example: 05/29/2026, WHOLE FOODS MARKET, 85.32, 3245.67
       
-      const date = formatDate(row['transaction date'] || row.date);
+      const dateStr = row['transaction date'] || row.date;
+      if (!dateStr) {
+        return null;
+      }
+      
+      const date = formatDate(dateStr);
       const amount = parseFloat(row.amount);
       const balance = parseFloat(row['running balance'] || row.balance) || 0;
       const description = row.description || 'Unknown';
@@ -158,7 +170,6 @@ function parseTransaction(row, source) {
     return null;
 
   } catch (err) {
-    log('CSV_IMPORT', `Parse error: ${err.message}`);
     return null;
   }
 }
@@ -167,7 +178,14 @@ function parseTransaction(row, source) {
 function formatDate(dateStr) {
   if (!dateStr) return null;
   
-  const [month, day, year] = dateStr.split('/');
+  const dateStr_trimmed = dateStr.trim();
+  const parts = dateStr_trimmed.split('/');
+  
+  if (parts.length !== 3) {
+    return null; // Invalid date format
+  }
+  
+  const [month, day, year] = parts;
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
