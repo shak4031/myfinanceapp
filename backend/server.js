@@ -68,7 +68,7 @@ try {
   process.exit(1);
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   log('SERVER', `🚀 MyFinanceApp running on port ${PORT}`);
   log('SERVER', `📊 Database: PostgreSQL (Railway)`);
   log('SERVER', `🔐 Authentication: Local (hooks for email/password ready)`);
