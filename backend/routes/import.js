@@ -111,20 +111,26 @@ router.post('/import-csv', async (req, res) => {
 function parseTransaction(row, source) {
   try {
     if (source === 'td-checking' || source === 'td-savings') {
-      // TD Bank CSV format: Date, Bank RTN, Account Number, Transaction Type, Description, Debit, Credit, Check Number, Account Running Balance
-      // The headers come in as lowercase, so we need to map them
+      // Flexible TD Bank parser - finds columns by pattern matching
       
-      // Look for date column (might be 'date')
-      const dateStr = row.date || row['transaction date'];
-      if (!dateStr) {
-        return null; // Skip if no date found
-      }
+      // Find date column (looks for 'date' in any form)
+      const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
+      if (!dateStr) return null;
+      
+      // Find debit/credit columns
+      const debit = parseFloat(findColumn(row, ['debit', 'withdrawal']) || 0) || 0;
+      const credit = parseFloat(findColumn(row, ['credit', 'deposit']) || 0) || 0;
+      
+      // Find balance column (various names)
+      const balance = parseFloat(
+        findColumn(row, ['balance', 'account balance', 'account running balance', 'running balance']) || 0
+      ) || 0;
+      
+      // Find description column
+      const description = findColumn(row, ['description', 'memo', 'transaction description', 'details']) || 'Unknown';
       
       const date = formatDate(dateStr);
-      const debit = parseFloat(row.debit) || 0;
-      const credit = parseFloat(row.credit) || 0;
-      const balance = parseFloat(row['account running balance']) || parseFloat(row.balance) || 0;
-      const description = row.description || 'Unknown';
+      if (!date) return null; // Skip if date parsing failed
 
       // Determine direction and amount
       let direction = 'debit';
@@ -145,17 +151,24 @@ function parseTransaction(row, source) {
       };
 
     } else if (source === 'credit-card') {
-      // Credit Card CSV format: Transaction Date, Description, Amount, Running Balance
+      // Flexible credit card parser
       
-      const dateStr = row['transaction date'] || row.date;
-      if (!dateStr) {
-        return null;
-      }
+      const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
+      if (!dateStr) return null;
+      
+      const amount = parseFloat(
+        findColumn(row, ['amount', 'charge', 'transaction amount']) || 0
+      );
+      if (!amount || isNaN(amount)) return null;
+      
+      const balance = parseFloat(
+        findColumn(row, ['balance', 'running balance', 'available balance']) || 0
+      ) || 0;
+      
+      const description = findColumn(row, ['description', 'merchant', 'transaction description', 'details']) || 'Unknown';
       
       const date = formatDate(dateStr);
-      const amount = parseFloat(row.amount);
-      const balance = parseFloat(row['running balance'] || row.balance) || 0;
-      const description = row.description || 'Unknown';
+      if (!date) return null;
 
       return {
         date,
@@ -172,6 +185,25 @@ function parseTransaction(row, source) {
   } catch (err) {
     return null;
   }
+}
+
+// Helper: Find a column value by matching against multiple possible names
+function findColumn(row, possibleNames) {
+  for (const name of possibleNames) {
+    // Try exact match first
+    if (row[name] !== undefined && row[name] !== '' && row[name] !== null) {
+      return row[name];
+    }
+    
+    // Try fuzzy match (partial string match)
+    for (const key in row) {
+      if (key.includes(name.toLowerCase()) && row[key] !== '' && row[key] !== null) {
+        return row[key];
+      }
+    }
+  }
+  
+  return null;
 }
 
 // Convert date from MM/DD/YYYY to YYYY-MM-DD
