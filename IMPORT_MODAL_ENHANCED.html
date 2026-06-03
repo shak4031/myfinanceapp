@@ -1,0 +1,293 @@
+<!-- Enhanced Import Modal - Supports both CSV and PDF -->
+
+<div id="importModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+  <div style="background: #1a1a1a; padding: 30px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;">
+    <h2 style="margin-top: 0; color: #fff;">Import Bank Statements</h2>
+    
+    <!-- Tab Navigation -->
+    <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #444;">
+      <button id="csvTabBtn" onclick="switchTab('csv')" style="flex: 1; padding: 12px; background: none; color: #aaa; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 14px; transition: all 0.3s;" class="active-tab">📄 CSV Import</button>
+      <button id="pdfTabBtn" onclick="switchTab('pdf')" style="flex: 1; padding: 12px; background: none; color: #aaa; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 14px; transition: all 0.3s;">📕 PDF Import</button>
+    </div>
+
+    <!-- CSV Import Tab -->
+    <div id="csvTab" style="display: block;">
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">Source</label>
+        <select id="csvSource" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+          <option value="td-checking">TD Bank - Checking</option>
+          <option value="td-savings">TD Bank - Savings</option>
+          <option value="credit-card">Credit Card Statement</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">CSV File</label>
+        <input type="file" id="csvFile" accept=".csv" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+      </div>
+
+      <div id="csvStatus" style="margin-bottom: 20px; padding: 15px; background: #2a2a2a; border-radius: 5px; display: none; color: #aaa; font-size: 14px;">
+        <p id="csvStatusText"></p>
+      </div>
+    </div>
+
+    <!-- PDF Import Tab -->
+    <div id="pdfTab" style="display: none;">
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">Source</label>
+        <select id="pdfSource" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+          <option value="td-checking">TD Bank - Checking Statement</option>
+          <option value="td-savings">TD Bank - Savings Statement</option>
+          <option value="credit-card">Credit Card Statement</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 14px;">PDF Files (Single or Multiple)</label>
+        <input type="file" id="pdfFile" accept=".pdf" multiple style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 5px;">
+        <p style="margin-top: 8px; margin-bottom: 0; color: #666; font-size: 12px;">💡 Tip: Upload multiple PDF files at once for batch processing (7-day rolling window friendly)</p>
+      </div>
+
+      <div id="pdfFileList" style="margin-bottom: 20px; padding: 10px; background: #2a2a2a; border-radius: 5px; min-height: 30px; color: #aaa; font-size: 13px;">
+        <span id="pdfFileCount" style="color: #999;">No files selected</span>
+      </div>
+
+      <div id="pdfStatus" style="margin-bottom: 20px; padding: 15px; background: #2a2a2a; border-radius: 5px; display: none; color: #aaa; font-size: 14px;">
+        <p id="pdfStatusText"></p>
+        <div id="pdfProgress" style="margin-top: 10px; display: none;">
+          <div style="background: #1a1a1a; border-radius: 3px; height: 6px; overflow: hidden;">
+            <div id="pdfProgressBar" style="background: #4CAF50; height: 100%; width: 0%; transition: width 0.3s;"></div>
+          </div>
+          <p style="margin-top: 8px; margin-bottom: 0; font-size: 12px;" id="pdfProgressText">Processing...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div style="display: flex; gap: 10px;">
+      <button onclick="closeImportModal()" style="flex: 1; padding: 10px; background: #333; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+      <button id="importBtn" onclick="handleImport()" style="flex: 1; padding: 10px; background: #4CAF50; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Tab switching
+function switchTab(tab) {
+  // Hide all tabs
+  document.getElementById('csvTab').style.display = 'none';
+  document.getElementById('pdfTab').style.display = 'none';
+  
+  // Remove active class from all buttons
+  document.getElementById('csvTabBtn').style.borderBottomColor = 'transparent';
+  document.getElementById('pdfTabBtn').style.borderBottomColor = 'transparent';
+  
+  // Show selected tab and mark button as active
+  if (tab === 'csv') {
+    document.getElementById('csvTab').style.display = 'block';
+    document.getElementById('csvTabBtn').style.borderBottomColor = '#4CAF50';
+    document.getElementById('importBtn').textContent = 'Import CSV';
+  } else {
+    document.getElementById('pdfTab').style.display = 'block';
+    document.getElementById('pdfTabBtn').style.borderBottomColor = '#4CAF50';
+    document.getElementById('importBtn').textContent = 'Import PDF';
+  }
+}
+
+// Update file list display
+document.getElementById('pdfFile')?.addEventListener('change', function() {
+  const count = this.files.length;
+  const fileCount = document.getElementById('pdfFileCount');
+  
+  if (count === 0) {
+    fileCount.textContent = 'No files selected';
+  } else if (count === 1) {
+    fileCount.innerHTML = `<span style="color: #4CAF50;">✓</span> ${this.files[0].name}`;
+  } else {
+    const names = Array.from(this.files).map(f => f.name).join(', ');
+    fileCount.innerHTML = `<span style="color: #4CAF50;">✓</span> ${count} files selected: ${names}`;
+  }
+});
+
+function openImportModal() {
+  document.getElementById('importModal').style.display = 'flex';
+  document.getElementById('csvFile').value = '';
+  document.getElementById('pdfFile').value = '';
+  document.getElementById('csvStatus').style.display = 'none';
+  document.getElementById('pdfStatus').style.display = 'none';
+  document.getElementById('pdfFileCount').textContent = 'No files selected';
+  switchTab('csv'); // Default to CSV tab
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').style.display = 'none';
+}
+
+async function handleImport() {
+  const csvTab = document.getElementById('csvTab').style.display === 'block';
+  
+  if (csvTab) {
+    await handleCSVImport();
+  } else {
+    await handlePDFImport();
+  }
+}
+
+async function handleCSVImport() {
+  const source = document.getElementById('csvSource').value;
+  const file = document.getElementById('csvFile').files[0];
+  
+  if (!file) {
+    alert('Please select a CSV file');
+    return;
+  }
+
+  const statusDiv = document.getElementById('csvStatus');
+  const statusText = document.getElementById('csvStatusText');
+  statusDiv.style.display = 'block';
+  statusText.textContent = 'Importing CSV...';
+
+  try {
+    const csvData = await file.text();
+    
+    const response = await fetch('/api/import/import-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvData, source })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      statusText.innerHTML = `
+        <strong style="color: #4CAF50;">✓ Import Complete!</strong><br>
+        Imported: ${result.imported}<br>
+        Duplicates: ${result.duplicates}<br>
+        Errors: ${result.errors}<br>
+        Total Rows: ${result.total}
+      `;
+      
+      setTimeout(() => {
+        loadData();
+        closeImportModal();
+      }, 2000);
+    } else {
+      statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Import Failed</strong><br>${result.error}`;
+    }
+  } catch (err) {
+    statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Error</strong><br>${err.message}`;
+  }
+}
+
+async function handlePDFImport() {
+  const source = document.getElementById('pdfSource').value;
+  const files = document.getElementById('pdfFile').files;
+  
+  if (files.length === 0) {
+    alert('Please select at least one PDF file');
+    return;
+  }
+
+  const statusDiv = document.getElementById('pdfStatus');
+  const statusText = document.getElementById('pdfStatusText');
+  const progress = document.getElementById('pdfProgress');
+  const progressBar = document.getElementById('pdfProgressBar');
+  const progressText = document.getElementById('pdfProgressText');
+  
+  statusDiv.style.display = 'block';
+  statusText.textContent = `Processing ${files.length} PDF file(s)...`;
+  progress.style.display = 'block';
+
+  try {
+    // Convert files to base64 and prepare batch
+    const filePromises = Array.from(files).map(file => 
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({
+            pdfData: reader.result,
+            fileName: file.name,
+            source: source
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      })
+    );
+
+    const fileData = await Promise.all(filePromises);
+
+    // Update progress
+    progressBar.style.width = '25%';
+    progressText.textContent = `Sending ${files.length} file(s) to server...`;
+
+    // Send batch import request
+    const response = await fetch('/api/import/import-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: fileData })
+    });
+
+    progressBar.style.width = '75%';
+    progressText.textContent = 'Processing transactions...';
+
+    const result = await response.json();
+
+    progressBar.style.width = '100%';
+    progressText.textContent = 'Complete!';
+
+    if (result.success) {
+      let summary = `<strong style="color: #4CAF50;">✓ Batch Import Complete!</strong><br>`;
+      summary += `Total Imported: ${result.totalImported}<br>`;
+      summary += `Total Duplicates: ${result.totalDuplicates}<br>`;
+      summary += `Total Errors: ${result.totalErrors}<br><br>`;
+
+      if (result.fileResults && result.fileResults.length > 0) {
+        summary += `<strong style="font-size: 12px; color: #aaa;">File Details:</strong><br>`;
+        result.fileResults.forEach(fr => {
+          if (fr.error) {
+            summary += `<span style="color: #ff6b6b;">✗ ${fr.fileName}: ${fr.error}</span><br>`;
+          } else {
+            summary += `<span style="color: #4CAF50;">✓ ${fr.fileName}: ${fr.imported} imported</span><br>`;
+          }
+        });
+      }
+
+      statusText.innerHTML = summary;
+      
+      setTimeout(() => {
+        loadData();
+        closeImportModal();
+      }, 3000);
+    } else {
+      statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Import Failed</strong><br>${result.error}`;
+      progress.style.display = 'none';
+    }
+  } catch (err) {
+    statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Error</strong><br>${err.message}`;
+    progress.style.display = 'none';
+  }
+}
+
+// Close modal when clicking outside
+document.getElementById('importModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'importModal') {
+    closeImportModal();
+  }
+});
+</script>
+
+<style>
+#csvTabBtn, #pdfTabBtn {
+  transition: all 0.3s ease;
+}
+
+#csvTabBtn:hover, #pdfTabBtn:hover {
+  color: #fff;
+}
+
+.active-tab {
+  border-bottom-color: #4CAF50 !important;
+  color: #fff !important;
+}
+</style>

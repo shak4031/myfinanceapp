@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
+import PDFParser from '../utils/pdfParser.js';
 
 const router = Router();
 const db = new Database();
+const pdfParser = new PDFParser();
 
-// CSV Import endpoint
+// ============================================
+// CSV Import endpoint (existing)
+// ============================================
 router.post('/import-csv', async (req, res) => {
   try {
     log('CSV_IMPORT', 'Starting CSV import');
     
-    const { csvData, source } = req.body; // source: 'td-checking', 'td-savings', 'credit-card'
+    const { csvData, source } = req.body;
     
     if (!csvData || !source) {
       log('CSV_IMPORT', '❌ Missing csvData or source');
@@ -20,15 +24,13 @@ router.post('/import-csv', async (req, res) => {
       });
     }
 
-    // Parse CSV - handle both Unix (\n) and Windows (\r\n) line endings
     let csvLines = csvData
-      .replace(/\r\n/g, '\n') // Convert Windows line endings to Unix
+      .replace(/\r\n/g, '\n')
       .trim()
       .split('\n');
     
     log('CSV_IMPORT', `Raw CSV has ${csvLines.length} lines`);
     
-    // Parse header with proper CSV handling
     const headerLine = csvLines[0];
     const headers = parseCSVLine(headerLine).map(h => h.toLowerCase());
     log('CSV_IMPORT', `Headers detected: ${headers.join(', ')}`);
@@ -38,13 +40,11 @@ router.post('/import-csv', async (req, res) => {
     let duplicates = 0;
     let errors = 0;
 
-    // Parse data rows (skip header)
     for (let i = 1; i < csvLines.length; i++) {
       const row_str = csvLines[i].trim();
-      if (!row_str) continue; // Skip empty lines
+      if (!row_str) continue;
       
       try {
-        // Parse CSV line into columns with proper quote handling
         const cols = parseCSVLine(row_str);
         const row = {};
         
@@ -52,7 +52,6 @@ router.post('/import-csv', async (req, res) => {
           row[header] = cols[idx] || '';
         });
 
-        // Parse the row based on source type
         const transaction = parseTransaction(row, source);
         
         if (!transaction) {
@@ -60,7 +59,6 @@ router.post('/import-csv', async (req, res) => {
           continue;
         }
 
-        // Check for duplicates using date + description + amount + direction
         const duplicate = await db.get(
           `SELECT id FROM transactions 
            WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
@@ -73,7 +71,6 @@ router.post('/import-csv', async (req, res) => {
           continue;
         }
 
-        // Insert transaction
         await db.run(
           `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -84,7 +81,7 @@ router.post('/import-csv', async (req, res) => {
             transaction.amount,
             transaction.direction,
             transaction.balance,
-            1, // user_id
+            1,
             source
           ]
         );
@@ -117,32 +114,295 @@ router.post('/import-csv', async (req, res) => {
   }
 });
 
-// Parse transaction from CSV row based on source
+// ============================================
+// PDF Import endpoint (NEW)
+// ============================================
+router.post('/import-pdf', async (req, res) => {
+  try {
+    log('PDF_IMPORT', 'Starting PDF import');
+
+    const { pdfData, source, fileName } = req.body;
+
+    if (!pdfData || !source) {
+      log('PDF_IMPORT', '❌ Missing pdfData or source');
+      return res.status(400).json({
+        success: false,
+        error: 'pdfData and source required'
+      });
+    }
+
+    // Convert base64 to Buffer if necessary
+    let pdfBuffer;
+    if (typeof pdfData === 'string') {
+      // Remove data URI prefix if present
+      const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '');
+      pdfBuffer = Buffer.from(base64Data, 'base64');
+    } else {
+      pdfBuffer = pdfData;
+    }
+
+    log('PDF_IMPORT', `Processing PDF: ${fileName || 'unknown'} (${pdfBuffer.length} bytes)`);
+
+    // Parse PDF
+    let transactions = [];
+    try {
+      transactions = await pdfParser.parseStatement(pdfBuffer, source);
+      log('PDF_IMPORT', `✓ Extracted ${transactions.length} transactions from PDF`);
+    } catch (err) {
+      log('PDF_IMPORT', `❌ PDF parsing failed: ${err.message}`);
+      return res.status(400).json({
+        success: false,
+        error: `PDF parsing failed: ${err.message}`
+      });
+    }
+
+    let imported = 0;
+    let duplicates = 0;
+    let errors = 0;
+
+    // Process each transaction
+    for (const transaction of transactions) {
+      try {
+        // Enrich transaction with categorization
+        const enrichedTx = {
+          ...transaction,
+          category: categorizeTransaction(transaction.description),
+          balance: transaction.balance || 0,
+          source: source,
+          user_id: 1
+        };
+
+        // Check for duplicates
+        const duplicate = await db.get(
+          `SELECT id FROM transactions 
+           WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
+          [enrichedTx.date, enrichedTx.description, enrichedTx.amount, enrichedTx.direction]
+        );
+
+        if (duplicate) {
+          log('PDF_IMPORT', `Duplicate found: ${enrichedTx.description} (${enrichedTx.date})`);
+          duplicates++;
+          continue;
+        }
+
+        // Insert transaction
+        await db.run(
+          `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            enrichedTx.date,
+            enrichedTx.description,
+            enrichedTx.category,
+            enrichedTx.amount,
+            enrichedTx.direction,
+            enrichedTx.balance,
+            enrichedTx.user_id,
+            enrichedTx.source
+          ]
+        );
+
+        imported++;
+        log('PDF_IMPORT', `✓ Imported: ${enrichedTx.description} (${enrichedTx.amount})`);
+
+      } catch (err) {
+        errors++;
+        log('PDF_IMPORT', `❌ Error importing transaction: ${err.message}`);
+      }
+    }
+
+    log('PDF_IMPORT', `✓ Complete: ${imported} imported, ${duplicates} duplicates, ${errors} errors`);
+
+    res.json({
+      success: true,
+      imported,
+      duplicates,
+      errors,
+      total: transactions.length,
+      fileName: fileName || 'unknown'
+    });
+
+  } catch (err) {
+    log('PDF_IMPORT', `❌ PDF import failed: ${err.message}`);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// ============================================
+// Multi-file batch import endpoint
+// ============================================
+router.post('/import-batch', async (req, res) => {
+  try {
+    log('BATCH_IMPORT', 'Starting batch import');
+
+    const { files } = req.body; // Array of {pdfData, source, fileName}
+
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      log('BATCH_IMPORT', '❌ Missing files array');
+      return res.status(400).json({
+        success: false,
+        error: 'files array required'
+      });
+    }
+
+    const results = [];
+    let totalImported = 0;
+    let totalDuplicates = 0;
+    let totalErrors = 0;
+
+    for (const file of files) {
+      try {
+        const { pdfData, source, fileName } = file;
+
+        let pdfBuffer;
+        if (typeof pdfData === 'string') {
+          const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '');
+          pdfBuffer = Buffer.from(base64Data, 'base64');
+        } else {
+          pdfBuffer = pdfData;
+        }
+
+        let transactions = await pdfParser.parseStatement(pdfBuffer, source);
+
+        let imported = 0;
+        let duplicates = 0;
+        let errors = 0;
+
+        for (const transaction of transactions) {
+          try {
+            const enrichedTx = {
+              ...transaction,
+              category: categorizeTransaction(transaction.description),
+              balance: transaction.balance || 0,
+              source: source,
+              user_id: 1
+            };
+
+            const duplicate = await db.get(
+              `SELECT id FROM transactions 
+               WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
+              [enrichedTx.date, enrichedTx.description, enrichedTx.amount, enrichedTx.direction]
+            );
+
+            if (duplicate) {
+              duplicates++;
+              continue;
+            }
+
+            await db.run(
+              `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [
+                enrichedTx.date,
+                enrichedTx.description,
+                enrichedTx.category,
+                enrichedTx.amount,
+                enrichedTx.direction,
+                enrichedTx.balance,
+                enrichedTx.user_id,
+                enrichedTx.source
+              ]
+            );
+
+            imported++;
+          } catch (err) {
+            errors++;
+          }
+        }
+
+        results.push({
+          fileName,
+          source,
+          imported,
+          duplicates,
+          errors,
+          total: transactions.length
+        });
+
+        totalImported += imported;
+        totalDuplicates += duplicates;
+        totalErrors += errors;
+
+      } catch (err) {
+        log('BATCH_IMPORT', `❌ Error processing file: ${err.message}`);
+        results.push({
+          fileName: file.fileName,
+          error: err.message
+        });
+      }
+    }
+
+    log('BATCH_IMPORT', `✓ Batch complete: ${totalImported} imported, ${totalDuplicates} duplicates, ${totalErrors} errors`);
+
+    res.json({
+      success: true,
+      totalImported,
+      totalDuplicates,
+      totalErrors,
+      fileResults: results
+    });
+
+  } catch (err) {
+    log('BATCH_IMPORT', `❌ Batch import failed: ${err.message}`);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// ============================================
+// Helper Functions
+// ============================================
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current.trim());
+  return result;
+}
+
 function parseTransaction(row, source) {
   try {
     if (source === 'td-checking' || source === 'td-savings') {
-      // Flexible TD Bank parser - finds columns by pattern matching
-      
-      // Find date column (looks for 'date' in any form)
       const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
       if (!dateStr) return null;
       
-      // Find debit/credit columns
       const debit = parseFloat(findColumn(row, ['debit', 'withdrawal']) || 0) || 0;
       const credit = parseFloat(findColumn(row, ['credit', 'deposit']) || 0) || 0;
       
-      // Find balance column (various names)
       const balance = parseFloat(
         findColumn(row, ['balance', 'account balance', 'account running balance', 'running balance']) || 0
       ) || 0;
       
-      // Find description column
       const description = findColumn(row, ['description', 'memo', 'transaction description', 'details']) || 'Unknown';
       
       const date = formatDate(dateStr);
-      if (!date) return null; // Skip if date parsing failed
+      if (!date) return null;
 
-      // Determine direction and amount
       let direction = 'debit';
       let amount = debit;
 
@@ -161,8 +421,6 @@ function parseTransaction(row, source) {
       };
 
     } else if (source === 'credit-card') {
-      // Flexible credit card parser
-      
       const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
       if (!dateStr) return null;
       
@@ -185,7 +443,7 @@ function parseTransaction(row, source) {
         description,
         category: categorizeTransaction(description),
         amount,
-        direction: 'debit', // Credit card purchases are debits
+        direction: 'debit',
         balance
       };
     }
@@ -197,48 +455,12 @@ function parseTransaction(row, source) {
   }
 }
 
-// Helper: Parse CSV line handling quoted fields
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-    
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped quote
-        current += '"';
-        i++; // Skip next quote
-      } else {
-        // Toggle quote mode
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      // Field separator
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  // Add final field
-  result.push(current.trim());
-  return result;
-}
-
-// Helper: Find a column value by matching against multiple possible names
 function findColumn(row, possibleNames) {
   for (const name of possibleNames) {
-    // Try exact match first
     if (row[name] !== undefined && row[name] !== '' && row[name] !== null) {
       return row[name];
     }
     
-    // Try fuzzy match (partial string match)
     for (const key in row) {
       if (key.includes(name.toLowerCase()) && row[key] !== '' && row[key] !== null) {
         return row[key];
@@ -249,7 +471,6 @@ function findColumn(row, possibleNames) {
   return null;
 }
 
-// Convert date from MM/DD/YYYY to YYYY-MM-DD
 function formatDate(dateStr) {
   if (!dateStr) return null;
   
@@ -257,14 +478,13 @@ function formatDate(dateStr) {
   const parts = dateStr_trimmed.split('/');
   
   if (parts.length !== 3) {
-    return null; // Invalid date format
+    return null;
   }
   
   const [month, day, year] = parts;
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
-// Auto-categorize transactions
 function categorizeTransaction(description) {
   const desc = description.toUpperCase();
 
