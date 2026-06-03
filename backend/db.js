@@ -58,7 +58,7 @@ export default class Database {
         id SERIAL PRIMARY KEY,
         name TEXT,
         balance REAL,
-        limit REAL,
+        "limit" REAL,
         apr REAL,
         user_id INTEGER REFERENCES users(id)
       )`,
@@ -125,15 +125,15 @@ export default class Database {
 
       // Insert credit cards
       await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
         ['Chase Sapphire', 3245.67, 15000, 18.99, 1]
       );
       await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
         ['Amex Gold', 2890.45, 20000, 19.99, 1]
       );
       await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, limit, apr, user_id) VALUES ($1, $2, $3, $4, $5)',
+        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
         ['Citi Double Cash', 4015.68, 12000, 17.99, 1]
       );
 
