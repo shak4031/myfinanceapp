@@ -5,11 +5,8 @@ const { Pool } = pg;
 
 export default class Database {
   constructor() {
-    // Railway injects DATABASE_URL when services are in same project
-    // Format can be: postgres://user:pass@postgres:5432/railway (service name) or full URL
-    // Fallback to public URL if needed
     const connectionString = process.env.DATABASE_URL || 
-      'postgresql://postgres:ywifkZbCSkleSblFMnAnjamAAleLiTsV@postgres:5432/railway';
+      'postgresql://postgres:***@postgres:5432/railway';
     
     this.pool = new Pool({
       connectionString,
@@ -33,7 +30,6 @@ export default class Database {
   }
 
   async createTables() {
-    // PostgreSQL doesn't support multiple statements in one query, so execute separately
     const statements = [
       `CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -70,6 +66,13 @@ export default class Database {
         current REAL,
         deadline TEXT,
         user_id INTEGER REFERENCES users(id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE,
+        icon TEXT,
+        color TEXT
       )`
     ];
 
@@ -103,17 +106,68 @@ export default class Database {
         ['Zunaira', 'zunaira@example.com', 'viewer']
       );
 
-      // Insert transactions
+      // Insert comprehensive categories
+      const categories = [
+        ['Groceries', '🛒', '#2ecc71'],
+        ['Utilities', '⚡', '#3498db'],
+        ['Gas', '⛽', '#e74c3c'],
+        ['Dining', '🍽️', '#f39c12'],
+        ['Shopping', '🛍️', '#9b59b6'],
+        ['Entertainment', '🎬', '#e91e63'],
+        ['Healthcare', '🏥', '#00bcd4'],
+        ['Insurance', '🛡️', '#673ab7'],
+        ['Subscriptions', '📺', '#ff9800'],
+        ['Transportation', '🚗', '#795548'],
+        ['Childcare', '👶', '#ffc0cb'],
+        ['Education', '📚', '#4caf50'],
+        ['Pet Care', '🐾', '#8bc34a'],
+        ['Travel', '✈️', '#2196f3'],
+        ['Gifts', '🎁', '#ff5722'],
+        ['Home', '🏠', '#cddc39'],
+        ['Maintenance', '🔧', '#9e9e9e'],
+        ['Repairs', '🔨', '#607d8b'],
+        ['Professional Services', '💼', '#3f51b5'],
+        ['Taxes', '📋', '#1a237e'],
+        ['Salary', '💵', '#1b5e20'],
+        ['Bonus', '🎉', '#f57f17'],
+        ['Investments', '📈', '#00695c'],
+        ['Other', '📦', '#424242']
+      ];
+
+      for (const [name, icon, color] of categories) {
+        await this.pool.query(
+          'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3)',
+          [name, icon, color]
+        );
+      }
+
+      // Insert transactions with comprehensive category data
       const transactions = [
-        ['2026-05-29', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 994.08, 'td-checking'],
-        ['2026-05-28', 'Whole Foods', 'groceries', 85.32, 'debit', -91.57, 'td-checking'],
-        ['2026-05-27', 'Electric Bill', 'utilities', 145.00, 'debit', -6.25, 'td-checking'],
-        ['2026-05-26', 'Gas', 'transportation', 45.00, 'debit', 38.75, 'td-checking'],
-        ['2026-05-25', 'Costco', 'groceries', 120.50, 'debit', 83.75, 'td-checking'],
-        ['2026-05-24', 'Netflix', 'entertainment', 15.99, 'debit', 204.25, 'credit-card'],
-        ['2026-05-23', 'Chipotle', 'dining', 12.45, 'debit', 216.70, 'credit-card'],
-        ['2026-05-22', 'Target', 'shopping', 67.89, 'debit', 284.59, 'credit-card'],
-        ['2026-05-20', 'Biweekly Paycheck', 'income', 1185.65, 'credit', 352.48, 'td-checking']
+        ['2026-06-03', 'Biweekly Paycheck', 'Salary', 6211.68, 'credit', 12450.32, 'td-checking'],
+        ['2026-06-02', 'Whole Foods', 'Groceries', 85.32, 'debit', 6238.64, 'td-checking'],
+        ['2026-06-02', 'Electric Bill', 'Utilities', 145.00, 'debit', 6323.96, 'td-checking'],
+        ['2026-06-01', 'Shell Gas', 'Gas', 45.00, 'debit', 6468.96, 'td-checking'],
+        ['2026-05-31', 'Costco', 'Groceries', 120.50, 'debit', 6513.96, 'td-checking'],
+        ['2026-05-30', 'Netflix', 'Subscriptions', 15.99, 'debit', 6634.46, 'td-checking'],
+        ['2026-05-30', 'Chipotle', 'Dining', 12.45, 'debit', 6650.45, 'td-checking'],
+        ['2026-05-29', 'Target', 'Shopping', 67.89, 'debit', 6662.90, 'td-checking'],
+        ['2026-05-28', 'Uber', 'Transportation', 23.50, 'debit', 6730.79, 'td-checking'],
+        ['2026-05-27', 'Home Depot', 'Home', 156.78, 'debit', 6754.29, 'td-checking'],
+        ['2026-05-26', 'Amazon Prime', 'Subscriptions', 14.99, 'debit', 6911.07, 'td-checking'],
+        ['2026-05-25', 'Dr. Smith Visit', 'Healthcare', 150.00, 'debit', 6926.06, 'td-checking'],
+        ['2026-05-24', 'Pet Food Store', 'Pet Care', 45.60, 'debit', 7076.06, 'td-checking'],
+        ['2026-05-23', 'AMC Theaters', 'Entertainment', 28.00, 'debit', 7121.66, 'td-checking'],
+        ['2026-05-22', 'Starbucks', 'Dining', 6.45, 'debit', 7150.66, 'td-checking'],
+        ['2026-05-21', 'Microsoft 365', 'Subscriptions', 6.99, 'debit', 7157.11, 'td-checking'],
+        ['2026-05-20', 'Biweekly Paycheck', 'Salary', 6211.68, 'credit', 7164.10, 'td-checking'],
+        ['2026-05-19', 'Gym Membership', 'Entertainment', 50.00, 'debit', 952.42, 'td-checking'],
+        ['2026-05-18', 'Trader Joes', 'Groceries', 73.45, 'debit', 1002.42, 'td-checking'],
+        ['2026-05-17', 'Allstate Insurance', 'Insurance', 180.00, 'debit', 1075.87, 'td-checking'],
+        ['2026-05-16', 'Car Maintenance', 'Maintenance', 200.00, 'debit', 1255.87, 'td-checking'],
+        ['2026-05-15', 'Water Bill', 'Utilities', 60.00, 'debit', 1455.87, 'td-checking'],
+        ['2026-05-14', 'Vacation Fund', 'Savings', 500.00, 'debit', 1515.87, 'td-checking'],
+        ['2026-05-13', 'Airplane Ticket', 'Travel', 450.00, 'debit', 2015.87, 'td-checking'],
+        ['2026-05-12', 'Birthday Gift', 'Gifts', 75.00, 'debit', 2465.87, 'td-checking']
       ];
 
       for (const txn of transactions) {
