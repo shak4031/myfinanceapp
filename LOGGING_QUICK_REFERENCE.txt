@@ -1,0 +1,176 @@
+# MyFinanceApp - Quick Logging Reference
+
+**Base URL:** `https://myfinanceapp-production.up.railway.app`
+
+## Most Important Endpoints (Bookmark These!)
+
+### 🏥 System Health
+```bash
+curl https://myfinanceapp-production.up.railway.app/api/health
+```
+**Use when:** App seems broken or slow
+**Shows:** Database status, memory, uptime, transaction count
+
+---
+
+### 🔍 Get Recent Logs
+```bash
+curl https://myfinanceapp-production.up.railway.app/api/logs?lines=100
+```
+**Use when:** Need to see what's happening
+**Tips:** Change `?lines=50` to 20/100/500 for less/more output
+
+---
+
+### ❌ Get Only Errors
+```bash
+curl https://myfinanceapp-production.up.railway.app/api/logs/errors?lines=50
+```
+**Use when:** Something failed and you need the error message
+**Shows:** Only lines with ❌ or "error"
+
+---
+
+### 📊 CSV Import Logs
+```bash
+curl https://myfinanceapp-production.up.railway.app/api/logs/imports?lines=100
+```
+**Use when:** CSV import isn't working
+**Shows:** Import progress, skipped rows, final stats
+
+---
+
+### 📋 Activity Summary
+```bash
+curl https://myfinanceapp-production.up.railway.app/api/logs/summary
+```
+**Use when:** Want quick overview
+**Shows:** Error count, warning count, database transaction count
+
+---
+
+### 🔎 Search Logs
+```bash
+# Find imports
+curl "https://myfinanceapp-production.up.railway.app/api/logs/search?q=import"
+
+# Find database errors
+curl "https://myfinanceapp-production.up.railway.app/api/logs/search?q=database"
+
+# Find a specific transaction description
+curl "https://myfinanceapp-production.up.railway.app/api/logs/search?q=amazon"
+```
+**Use when:** Looking for specific event
+**Tips:** Search is case-insensitive
+
+---
+
+## Troubleshooting Workflow
+
+1. **Is the app running?**
+   ```bash
+   curl https://myfinanceapp-production.up.railway.app/api/health
+   ```
+
+2. **Are there errors?**
+   ```bash
+   curl https://myfinanceapp-production.up.railway.app/api/logs/errors?lines=20
+   ```
+
+3. **What happened with imports?**
+   ```bash
+   curl https://myfinanceapp-production.up.railway.app/api/logs/imports?lines=100
+   ```
+
+4. **Search for specific issue**
+   ```bash
+   curl "https://myfinanceapp-production.up.railway.app/api/logs/search?q=YOUR_SEARCH"
+   ```
+
+---
+
+## Pro Tips
+
+### Parse JSON nicely with jq:
+```bash
+curl -s https://myfinanceapp-production.up.railway.app/api/health | jq '.'
+```
+
+### Get just the logs array:
+```bash
+curl -s https://myfinanceapp-production.up.railway.app/api/logs?lines=20 | jq '.logs'
+```
+
+### Monitor in real-time:
+```bash
+watch -n 2 'curl -s https://myfinanceapp-production.up.railway.app/api/logs/imports | jq ".logs[-5:]"'
+```
+
+### Count errors:
+```bash
+curl -s https://myfinanceapp-production.up.railway.app/api/logs/summary | jq '.summary.errors'
+```
+
+### Find the last error:
+```bash
+curl -s https://myfinanceapp-production.up.railway.app/api/logs/errors?lines=1 | jq '.logs[0]'
+```
+
+---
+
+## What Each Endpoint Returns
+
+| Endpoint | Returns |
+|----------|---------|
+| `/api/health` | System status (memory, DB, uptime) |
+| `/api/logs` | Raw log lines |
+| `/api/logs/errors` | Error lines only |
+| `/api/logs/imports` | CSV import logs only |
+| `/api/logs/summary` | Stats (error count, module breakdown) |
+| `/api/logs/search?q=X` | Logs matching search term |
+| `/api/logs/filter?module=X` | Logs from specific module |
+| `/api/logs/list` | Available log files |
+| `/api/logs/file?date=YYYY-MM-DD` | Logs from specific date |
+
+---
+
+## Common Log Modules
+
+```
+[CSV_IMPORT]    - CSV upload/parsing
+[DASHBOARD]     - Dashboard operations
+[API]           - API requests
+[DATABASE]      - Database queries
+[AUTH]          - Login/auth
+[SERVER]        - Server startup
+[LOGS_API]      - Logging system
+```
+
+---
+
+## Example Log Output
+
+```
+[2026-06-03T06:11:02.117Z] [CSV_IMPORT] Starting CSV import
+[2026-06-03T06:11:02.118Z] [CSV_IMPORT] Raw CSV has 504 lines
+[2026-06-03T06:11:02.119Z] [CSV_IMPORT] Headers detected: date, bank rtn, account number, ...
+[2026-06-03T06:11:02.120Z] [CSV_IMPORT] Processing 503 data rows from td-checking
+[2026-06-03T06:11:02.150Z] [CSV_IMPORT] ✓ Imported: AMAZON PURCHASE ($25.99)
+[2026-06-03T06:11:02.155Z] [CSV_IMPORT] ⚠️ Skipped invalid row 221
+[2026-06-03T06:11:02.200Z] [CSV_IMPORT] ✓ Complete: 245 imported, 12 duplicates, 2 errors
+```
+
+---
+
+## Status Icons
+
+- ✓ Success
+- ❌ Error/Failed
+- ⚠️ Warning
+- 📊 Info
+- 🚀 Startup
+- 🗑️ Cleanup
+
+---
+
+**Full documentation:** See `LOGGING_GUIDE.md` in the repo
