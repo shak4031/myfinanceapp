@@ -188,31 +188,42 @@
   </script>
 
   <!-- CSV Import Modal -->
-  <div id="importModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: #1a1f2e; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; border: 1px solid #333;">
+  <div id="importModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; padding: 20px;">
+    <div style="background: #1a1f2e; padding: 30px; border-radius: 10px; max-width: 900px; width: 100%; border: 1px solid #333; max-height: 90vh; overflow-y: auto;">
       <h2 style="margin-top: 0; color: #4a9eff;">📥 Import CSV Statements</h2>
       
-      <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 12px; text-transform: uppercase;">Source</label>
-        <select id="importSource" style="width: 100%; padding: 10px; background: #2a3f5f; color: #fff; border: 1px solid #444; border-radius: 5px;">
-          <option value="td-checking">TD Bank - Checking</option>
-          <option value="td-savings">TD Bank - Savings</option>
-          <option value="credit-card">Credit Card Statement</option>
-        </select>
-      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        <!-- Left: Upload form -->
+        <div>
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 12px; text-transform: uppercase;">Source</label>
+            <select id="importSource" style="width: 100%; padding: 10px; background: #2a3f5f; color: #fff; border: 1px solid #444; border-radius: 5px;">
+              <option value="td-checking">TD Bank - Checking</option>
+              <option value="td-savings">TD Bank - Savings</option>
+              <option value="credit-card">Credit Card Statement</option>
+            </select>
+          </div>
 
-      <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 12px; text-transform: uppercase;">CSV File</label>
-        <input type="file" id="csvFile" accept=".csv" style="width: 100%; padding: 10px; background: #2a3f5f; color: #fff; border: 1px solid #444; border-radius: 5px;">
-      </div>
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 10px; color: #aaa; font-size: 12px; text-transform: uppercase;">CSV File</label>
+            <input type="file" id="csvFile" accept=".csv" style="width: 100%; padding: 10px; background: #2a3f5f; color: #fff; border: 1px solid #444; border-radius: 5px;">
+          </div>
 
-      <div id="importStatus" style="margin-bottom: 20px; padding: 15px; background: #2a3f5f; border-radius: 5px; display: none; color: #aaa; font-size: 14px;">
-        <p id="importStatusText"></p>
-      </div>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="closeImportModal()" style="flex: 1; padding: 10px; background: #2a3f5f; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Close</button>
+            <button onclick="handleImport()" style="flex: 1; padding: 10px; background: #4CAF50; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Import</button>
+          </div>
+        </div>
 
-      <div style="display: flex; gap: 10px;">
-        <button onclick="closeImportModal()" style="flex: 1; padding: 10px; background: #2a3f5f; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
-        <button onclick="handleImport()" style="flex: 1; padding: 10px; background: #4CAF50; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Import</button>
+        <!-- Right: Status and logs -->
+        <div>
+          <div id="importStatus" style="padding: 15px; background: #2a3f5f; border-radius: 5px; display: none; color: #aaa; font-size: 13px; max-height: 400px; overflow-y: auto; font-family: monospace;">
+            <p id="importStatusText"></p>
+          </div>
+          <div id="importLogs" style="padding: 15px; background: #2a3f5f; border-radius: 5px; display: none; color: #aaa; font-size: 11px; max-height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+            <p id="importLogsText"></p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -222,6 +233,7 @@
     document.getElementById('importModal').style.display = 'flex';
     document.getElementById('csvFile').value = '';
     document.getElementById('importStatus').style.display = 'none';
+    document.getElementById('importLogs').style.display = 'none';
   }
 
   function closeImportModal() {
@@ -239,8 +251,13 @@
 
     const statusDiv = document.getElementById('importStatus');
     const statusText = document.getElementById('importStatusText');
+    const logsDiv = document.getElementById('importLogs');
+    const logsText = document.getElementById('importLogsText');
+    
     statusDiv.style.display = 'block';
-    statusText.textContent = 'Importing...';
+    logsDiv.style.display = 'block';
+    statusText.innerHTML = '⏳ Importing...';
+    logsText.innerHTML = 'Fetching logs...';
 
     try {
       const csvData = await file.text();
@@ -253,24 +270,35 @@
 
       const result = await response.json();
 
+      // Fetch and display logs
+      const logsResponse = await fetch('/api/logs?lines=50');
+      const logsData = await logsResponse.json();
+      logsText.innerHTML = logsData.logs.join('\n');
+      logsDiv.scrollTop = logsDiv.scrollHeight; // Auto-scroll to bottom
+
       if (result.success) {
         statusText.innerHTML = `
-          <strong style="color: #51cf66;">✓ Import Complete!</strong><br>
-          Imported: ${result.imported}<br>
-          Duplicates: ${result.duplicates}<br>
-          Errors: ${result.errors}<br>
-          Total: ${result.total}
+✓ Import Complete!
+
+Imported: ${result.imported}
+Duplicates: ${result.duplicates}
+Errors: ${result.errors}
+Total Rows: ${result.total}
         `;
-        
-        setTimeout(() => {
-          loadData('dashboard');
-          closeImportModal();
-        }, 2000);
+        statusDiv.style.color = '#51cf66';
       } else {
-        statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Import Failed</strong><br>${result.error}`;
+        statusText.innerHTML = `❌ Import Failed\n\n${result.error}`;
+        statusDiv.style.color = '#ff6b6b';
       }
+      
+      // Refresh dashboard after a moment
+      setTimeout(() => {
+        loadData('dashboard');
+      }, 1000);
+
     } catch (err) {
-      statusText.innerHTML = `<strong style="color: #ff6b6b;">❌ Error</strong><br>${err.message}`;
+      statusText.innerHTML = `❌ Error\n\n${err.message}`;
+      statusDiv.style.color = '#ff6b6b';
     }
   }
 

@@ -10,6 +10,7 @@ import transactions from './routes/transactions.js';
 import debts from './routes/debts.js';
 import goals from './routes/goals.js';
 import importCsv from './routes/import.js';
+import logsRoute from './routes/logs.js';
 import { log } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +46,7 @@ app.use('/api/transactions', transactions);
 app.use('/api/debts', debts);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
+app.use('/api', logsRoute);
 
 // Serve frontend
 app.get('*', (req, res) => {
