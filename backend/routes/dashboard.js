@@ -47,16 +47,18 @@ async function getHistoricalAverages() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Get last 3 months
+    // Get last 3 months (April, May, June for June 4)
     const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, 1);
     const startDate = threeMonthsAgo.toISOString().split('T')[0];
     const endDate = today.toISOString().split('T')[0];
     
+    log('DASHBOARD', `Calculating historical averages from ${startDate} to ${endDate}`);
+    
     const result = await db.all(
       `SELECT 
         DATE_TRUNC('month', date::date)::date as month,
-        SUM(CASE WHEN UPPER(direction) = 'CREDIT' THEN amount ELSE 0 END) as monthly_income,
-        SUM(CASE WHEN UPPER(direction) = 'DEBIT' THEN amount ELSE 0 END) as monthly_expenses
+        SUM(CASE WHEN UPPER(COALESCE(direction, '')) = 'CREDIT' THEN COALESCE(amount, 0) ELSE 0 END) as monthly_income,
+        SUM(CASE WHEN UPPER(COALESCE(direction, '')) = 'DEBIT' THEN COALESCE(amount, 0) ELSE 0 END) as monthly_expenses
       FROM transactions
       WHERE user_id = $1 AND date >= $2 AND date <= $3
       GROUP BY DATE_TRUNC('month', date::date)
@@ -64,12 +66,17 @@ async function getHistoricalAverages() {
       [1, startDate, endDate]
     );
     
+    log('DASHBOARD', `Historical query returned ${result.length} months: ${JSON.stringify(result)}`);
+    
     if (result.length === 0) {
+      log('DASHBOARD', 'No transactions found in historical period');
       return { avgIncome: 0, avgExpenses: 0, months: [] };
     }
     
     const avgIncome = result.reduce((sum, m) => sum + (parseFloat(m.monthly_income) || 0), 0) / result.length;
     const avgExpenses = result.reduce((sum, m) => sum + (parseFloat(m.monthly_expenses) || 0), 0) / result.length;
+    
+    log('DASHBOARD', `Historical averages: Income $${avgIncome.toFixed(2)}, Expenses $${avgExpenses.toFixed(2)}`);
     
     return { avgIncome, avgExpenses, months: result };
   } catch (error) {
