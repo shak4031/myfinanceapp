@@ -1,0 +1,76 @@
+================================================================================
+                        SAMPLE SQL STATEMENTS
+================================================================================
+
+FILE: /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+--- DELETION STATEMENT (Clears existing data)
+DELETE FROM transactions;
+
+--- SAMPLE INSERT STATEMENTS (First 3 transactions)
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-03-05', 'PY *MANHATTAN MINI STORAG573-449-0091 NJ', NULL, 376.44, 'expense', NULL, 'doc_06f48cbd10d4_transactions (6)', 1);
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-03-10', 'Online Xfer', NULL, 700.00, 'income', NULL, 'doc_06f48cbd10d4_transactions (6)', 1);
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-03-26', 'Online Xfer Transfer to CK x5261', NULL, 100.00, 'expense', 5654.01, 'doc_06f48cbd10d4_transactions (6)', 1);
+
+--- SAMPLE INSERT STATEMENTS (Last 3 transactions)
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-06-02', 'PAYPAL PURCHASE', NULL, 36.00, 'expense', -18.92, 'doc_64818b08137d_transactions (4)', 1);
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-06-03', 'OVERDRAFT PD', NULL, 35.00, 'expense', 6064.34, 'doc_06f48cbd10d4_transactions (6)', 1);
+
+INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+VALUES ('2026-06-03', 'WELLS FARGO BANK PAYROLL', NULL, 6211.67, 'income', 6120.65, 'doc_06f48cbd10d4_transactions (6)', 1);
+
+================================================================================
+                        EXECUTION INSTRUCTIONS
+================================================================================
+
+Option 1: PostgreSQL
+  psql -U your_username -d your_database < /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+Option 2: MySQL
+  mysql -u your_username -p your_database < /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+Option 3: SQLite3
+  sqlite3 your_database.db < /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+Option 4: Interactive (PostgreSQL)
+  psql -U your_username -d your_database
+  \i /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+Option 5: Interactive (MySQL)
+  mysql -u your_username -p your_database
+  source /opt/data/myfinanceapp-v2/backend/data/final_import.sql
+
+================================================================================
+                            VERIFICATION QUERY
+================================================================================
+
+After import, run this query to verify data was loaded successfully:
+
+  SELECT 
+    COUNT(*) as total_transactions,
+    COUNT(CASE WHEN direction = 'expense' THEN 1 END) as expenses,
+    COUNT(CASE WHEN direction = 'income' THEN 1 END) as income,
+    MIN(date) as earliest_date,
+    MAX(date) as latest_date,
+    ROUND(AVG(amount), 2) as average_amount
+  FROM transactions;
+
+Expected Results:
+  total_transactions: 586
+  expenses: 480
+  income: 106
+  earliest_date: 2026-03-05
+  latest_date: 2026-06-03
+  average_amount: (calculated)
+
+================================================================================

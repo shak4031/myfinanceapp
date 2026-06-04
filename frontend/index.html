@@ -1007,7 +1007,7 @@
 
     async function loadDashboard() {
       try {
-        // Load metrics
+        // Load metrics (HISTORICAL AVERAGES + CURRENT BALANCE)
         const summaryRes = await fetch('/api/dashboard/summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1015,75 +1015,95 @@
         });
         const summary = await summaryRes.json();
 
+        // Show 3-month historical averages
         const metricsHtml = `
           <div class="metric-card positive">
-            <div class="metric-label">💰 Monthly Income</div>
+            <div class="metric-label">💰 Avg Monthly Income</div>
             <div class="metric-value">$${summary.income.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
           </div>
           <div class="metric-card ${summary.expenses >= 0 ? 'negative' : 'positive'}">
-            <div class="metric-label">💸 Monthly Expenses</div>
+            <div class="metric-label">💸 Avg Monthly Expenses</div>
             <div class="metric-value">$${Math.abs(summary.expenses).toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
           </div>
           <div class="metric-card ${summary.netCashflow >= 0 ? 'positive' : 'negative'}">
-            <div class="metric-label">📈 Net Cashflow</div>
+            <div class="metric-label">📈 Avg Net Cashflow</div>
             <div class="metric-value">$${summary.netCashflow.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
           </div>
           <div class="metric-card">
             <div class="metric-label">🏦 Current Balance</div>
             <div class="metric-value">$${summary.balance.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">Latest</div>
           </div>
         `;
         document.getElementById('metricsContainer').innerHTML = metricsHtml;
 
-        // Load payments
-        const paymentsRes = await fetch('/api/dashboard/upcoming-payments', {
+        // Load RECURRING PAYMENTS (subscriptions + bills) - NOT future predictions
+        const recurringRes = await fetch('/api/dashboard/recurring-payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
         });
-        const payments = await paymentsRes.json();
+        const recurring = await recurringRes.json();
 
         let paymentHtml = '';
-        let runningBalance = summary.balance;
-        payments.forEach(payment => {
-          const isIncome = payment.type === 'income';
-          const newBalance = isIncome ? runningBalance + payment.amount : runningBalance - payment.amount;
-          const balanceChange = ((newBalance / runningBalance - 1) * 100).toFixed(1);
-          
-          let status = 'safe';
-          if (newBalance < 500) status = 'danger';
-          else if (newBalance < 1000) status = 'warning';
+        const categoryIcons = {
+          'streaming': '📺',
+          'utilities': '⚡',
+          'insurance': '🛡️',
+          'wellness': '💪',
+          'housing': '🏠',
+          'auto': '🚗',
+          'software': '💻',
+          'subscription': '📦'
+        };
 
-          const date = new Date(payment.date);
-          const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
-
-          paymentHtml += `
-            <div class="payment-card ${isIncome ? 'income' : ''}">
-              <div class="payment-date">${dateStr}</div>
-              <div class="payment-description">${payment.description}</div>
-              <div class="payment-amount">${isIncome ? '+' : '-'}$${payment.amount.toFixed(2)}</div>
-              <div class="payment-balance">
-                <div style="color: var(--text-secondary); font-size: 11px;">Balance After</div>
-                <div class="payment-balance-value">$${newBalance.toFixed(2)}</div>
-              </div>
-              <span class="payment-status ${status}">${status.toUpperCase()}</span>
-            </div>
-          `;
-          runningBalance = newBalance;
+        // Group by category type
+        const byType = {};
+        recurring.forEach(p => {
+          const catType = p.category.type;
+          if (!byType[catType]) byType[catType] = [];
+          byType[catType].push(p);
         });
-        document.getElementById('paymentContainer').innerHTML = paymentHtml || '<p style="color: var(--text-secondary);">No upcoming payments</p>';
 
-        // Load transactions for categories
-        const transRes = await fetch('/api/transactions', {
+        Object.entries(byType).forEach(([type, payments]) => {
+          const icon = categoryIcons[type] || '📦';
+          const totalMonthly = payments.reduce((sum, p) => sum + p.amount, 0);
+          
+          paymentHtml += `
+            <div class="card" style="margin-bottom: 20px;">
+              <div class="card-title">${icon} ${type.toUpperCase()}</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Monthly: $${totalMonthly.toFixed(2)}</div>
+          `;
+          
+          payments.forEach(p => {
+            paymentHtml += `
+              <div class="card-item">
+                <div class="card-item-label">
+                  <span>${p.description}</span>
+                  <span style="font-size: 11px; color: var(--text-secondary);">${p.lastDate} (${p.frequency}x)</span>
+                </div>
+                <span class="card-amount debit">-$${p.amount.toFixed(2)}</span>
+              </div>
+            `;
+          });
+          
+          paymentHtml += `</div>`;
+        });
+
+        document.getElementById('paymentContainer').innerHTML = paymentHtml || '<div class="card" style="padding: 20px; color: var(--text-secondary);">No recurring payments detected</div>';
+
+        // Load CATEGORY SPENDING for selected date range
+        const categoryRes = await fetch('/api/dashboard/category-spending', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dateFilter: currentDateFilter })
         });
-        const transactions = await transRes.json();
+        const categories = await categoryRes.json();
 
-        // Group by category
-        const categorySpending = {};
-        const categoryIcons = {
+        const categoryIcons2 = {
           'Groceries': '🛒',
           'Utilities': '⚡',
           'Gas': '⛽',
@@ -1110,34 +1130,28 @@
           'Other': '📦'
         };
 
-        transactions.forEach(t => {
-          if (!categorySpending[t.category]) {
-            categorySpending[t.category] = { total: 0, count: 0 };
-          }
-          if (t.direction === 'debit') {
-            categorySpending[t.category].total += t.amount;
-            categorySpending[t.category].count += 1;
-          }
-        });
-
         let categoryHtml = '';
-        Object.entries(categorySpending)
-          .sort((a, b) => b[1].total - a[1].total)
-          .slice(0, 8)
-          .forEach(([cat, data]) => {
-            const icon = categoryIcons[cat] || '📦';
-            categoryHtml += `
-              <div class="category-card" onclick="showCategoryDetail('${cat}')">
-                <div class="category-icon">${icon}</div>
-                <div class="category-name">${cat}</div>
-                <div class="category-amount">$${data.total.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${data.count} transactions</div>
-              </div>
-            `;
-          });
-        document.getElementById('categoryContainer').innerHTML = categoryHtml;
+        categories.slice(0, 8).forEach(cat => {
+          const icon = categoryIcons2[cat.name] || '📦';
+          categoryHtml += `
+            <div class="category-card" onclick="showCategoryDetail('${cat.name}')">
+              <div class="category-icon">${icon}</div>
+              <div class="category-name">${cat.name}</div>
+              <div class="category-amount">$${cat.totalSpending.toFixed(2)}</div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${cat.transactionCount} transactions</div>
+            </div>
+          `;
+        });
+        document.getElementById('categoryContainer').innerHTML = categoryHtml || '<p style="color: var(--text-secondary); padding: 20px;">No spending data for this period</p>';
 
-        // Recent transactions
+        // Load RECENT TRANSACTIONS
+        const transRes = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dateFilter: currentDateFilter })
+        });
+        const transactions = await transRes.json();
+
         let transHtml = '';
         transactions.slice(0, 15).forEach(t => {
           const sign = t.direction === 'debit' ? '-' : '+';
@@ -1163,12 +1177,25 @@
 
     async function loadCategories() {
       try {
-        const transRes = await fetch('/api/transactions', {
+        // Load category trends (month-over-month)
+        const trendsRes = await fetch('/api/dashboard/category-trends', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dateFilter: 'all' })
+          body: JSON.stringify({})
         });
-        const transactions = await transRes.json();
+        const trends = await trendsRes.json();
+
+        // Calculate totals across all months
+        const categoryTotals = {};
+        Object.entries(trends).forEach(([month, cats]) => {
+          cats.forEach(cat => {
+            if (!categoryTotals[cat.category]) {
+              categoryTotals[cat.category] = { total: 0, count: 0 };
+            }
+            categoryTotals[cat.category].total += cat.spending;
+            categoryTotals[cat.category].count += cat.transactions;
+          });
+        });
 
         const categoryIcons = {
           'Groceries': '🛒', 'Utilities': '⚡', 'Gas': '⛽', 'Dining': '🍽️', 'Shopping': '🛍️',
@@ -1179,28 +1206,24 @@
           'Investments': '📈', 'Other': '📦'
         };
 
-        const categorySpending = {};
-        transactions.forEach(t => {
-          if (!categorySpending[t.category]) {
-            categorySpending[t.category] = { total: 0, count: 0 };
-          }
-          if (t.direction === 'debit') {
-            categorySpending[t.category].total += t.amount;
-            categorySpending[t.category].count += 1;
-          }
-        });
-
         let categoryHtml = '';
-        Object.entries(categorySpending)
+        Object.entries(categoryTotals)
           .sort((a, b) => b[1].total - a[1].total)
           .forEach(([cat, data]) => {
             const icon = categoryIcons[cat] || '📦';
+            // Get trend data for this category
+            const monthlyData = [];
+            Object.entries(trends).forEach(([month, cats]) => {
+              const catData = cats.find(c => c.category === cat);
+              if (catData) monthlyData.push({ month, spending: catData.spending });
+            });
+            
             categoryHtml += `
               <div class="category-card" onclick="showCategoryDetail('${cat}')">
                 <div class="category-icon">${icon}</div>
                 <div class="category-name">${cat}</div>
                 <div class="category-amount">$${data.total.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${data.count} txns</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${data.count} transactions</div>
               </div>
             `;
           });
@@ -1230,6 +1253,7 @@
       document.getElementById('categoryDetailTitle').innerHTML = `${icon} ${category}`;
 
       try {
+        // Get transactions for this category
         const transRes = await fetch('/api/transactions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1237,23 +1261,62 @@
         });
         const transactions = await transRes.json();
 
+        // Get trends for month-by-month comparison
+        const trendsRes = await fetch('/api/dashboard/category-trends', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const trends = await trendsRes.json();
+
+        // Calculate stats
         let totalSpent = 0;
         let maxAmount = 0;
+        let debitCount = 0;
+        
         transactions.forEach(t => {
           if (t.direction === 'debit') {
             totalSpent += t.amount;
             maxAmount = Math.max(maxAmount, t.amount);
+            debitCount += 1;
           }
         });
 
-        const average = transactions.length > 0 ? totalSpent / transactions.length : 0;
+        const average = debitCount > 0 ? totalSpent / debitCount : 0;
 
         document.getElementById('categoryTotalSpent').textContent = `$${totalSpent.toFixed(2)}`;
-        document.getElementById('categoryTxnCount').textContent = transactions.length;
+        document.getElementById('categoryTxnCount').textContent = debitCount;
         document.getElementById('categoryAverage').textContent = `$${average.toFixed(2)}`;
         document.getElementById('categoryHighest').textContent = `$${maxAmount.toFixed(2)}`;
 
-        let transHtml = '';
+        // Build month-by-month view
+        let monthTrendsHtml = '<div style="margin-bottom: 20px;"><h3 style="color: var(--primary); margin-bottom: 12px;">Monthly Breakdown</h3>';
+        
+        const monthlySpending = {};
+        Object.entries(trends).forEach(([month, cats]) => {
+          const catData = cats.find(c => c.category === category);
+          if (catData) {
+            monthlySpending[month] = catData.spending;
+          }
+        });
+
+        Object.entries(monthlySpending)
+          .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+          .forEach(([month, spending]) => {
+            const monthStr = new Date(month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            monthTrendsHtml += `
+              <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);">
+                <span>${monthStr}</span>
+                <span style="color: var(--danger); font-weight: 600;">$${spending.toFixed(2)}</span>
+              </div>
+            `;
+          });
+        monthTrendsHtml += '</div>';
+
+        // Transaction list
+        let transHtml = monthTrendsHtml;
+        transHtml += '<h3 style="color: var(--primary); margin-bottom: 12px;">All Transactions</h3>';
+        
         transactions.slice(0, 50).forEach(t => {
           const sign = t.direction === 'debit' ? '-' : '+';
           const amountClass = t.direction === 'debit' ? 'debit' : 'credit';

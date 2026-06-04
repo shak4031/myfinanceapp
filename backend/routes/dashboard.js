@@ -41,6 +41,99 @@ function getDateRange(filter) {
   };
 }
 
+// Helper: Calculate 3-month historical averages
+async function getHistoricalAverages() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get last 3 months
+    const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+    const startDate = threeMonthsAgo.toISOString().split('T')[0];
+    const endDate = today.toISOString().split('T')[0];
+    
+    const result = await db.all(
+      `SELECT 
+        DATE_TRUNC('month', date::date)::date as month,
+        SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END) as monthly_income,
+        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as monthly_expenses
+      FROM transactions
+      WHERE user_id = $1 AND date >= $2 AND date <= $3
+      GROUP BY DATE_TRUNC('month', date::date)
+      ORDER BY month DESC`,
+      [1, startDate, endDate]
+    );
+    
+    if (result.length === 0) {
+      return { avgIncome: 0, avgExpenses: 0, months: [] };
+    }
+    
+    const avgIncome = result.reduce((sum, m) => sum + (parseFloat(m.monthly_income) || 0), 0) / result.length;
+    const avgExpenses = result.reduce((sum, m) => sum + (parseFloat(m.monthly_expenses) || 0), 0) / result.length;
+    
+    return { avgIncome, avgExpenses, months: result };
+  } catch (error) {
+    log('DASHBOARD', `Error calculating historical averages: ${error.message}`);
+    return { avgIncome: 0, avgExpenses: 0, months: [] };
+  }
+}
+
+// Helper: Detect recurring payments (subscriptions, bills)
+async function getRecurringPayments() {
+  try {
+    const result = await db.all(
+      `SELECT 
+        description,
+        amount,
+        EXTRACT(DAY FROM date::date) as day_of_month,
+        COUNT(*) as frequency,
+        MAX(date) as last_date
+      FROM transactions
+      WHERE user_id = $1 AND direction = 'debit'
+      GROUP BY description, amount, EXTRACT(DAY FROM date::date)
+      HAVING COUNT(*) >= 2
+      ORDER BY frequency DESC, last_date DESC`,
+      [1]
+    );
+    
+    return result.filter(p => {
+      const recurring = p.frequency >= 2;
+      const isSubscription = /netflix|prime|spotify|hulu|subscription|monthly|fee|bill|payment|insurance|mortgage|utilities/i.test(p.description);
+      return recurring || isSubscription;
+    }).map(p => ({
+      description: p.description,
+      amount: parseFloat(p.amount),
+      dayOfMonth: parseInt(p.day_of_month),
+      lastDate: p.last_date,
+      frequency: parseInt(p.frequency)
+    }));
+  } catch (error) {
+    log('DASHBOARD', `Error detecting recurring payments: ${error.message}`);
+    return [];
+  }
+}
+
+// Helper: Categorize subscriptions
+function categorizeSubscription(description) {
+  const desc = description.toLowerCase();
+  
+  if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video' };
+  if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix' };
+  if (/spotify/i.test(desc)) return { type: 'streaming', name: 'Spotify' };
+  if (/hulu/i.test(desc)) return { type: 'streaming', name: 'Hulu' };
+  if (/disney|espn\+|hbo/i.test(desc)) return { type: 'streaming', name: 'Streaming Service' };
+  if (/iptv|apple tv|youtube|crunchyroll/i.test(desc)) return { type: 'streaming', name: 'IPTV' };
+  if (/internet|comcast|verizon|at&t|phone|mobile|wireless/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone' };
+  if (/electricity|gas|water|power|utility|hydro/i.test(desc)) return { type: 'utilities', name: 'Utilities' };
+  if (/insurance|homeowners|renters|auto|health/i.test(desc)) return { type: 'insurance', name: 'Insurance' };
+  if (/gym|fitness|peloton|yoga|membership/i.test(desc)) return { type: 'wellness', name: 'Fitness' };
+  if (/mortgage|rent|lease/i.test(desc)) return { type: 'housing', name: 'Housing' };
+  if (/car.*payment|auto.*loan|vehicle/i.test(desc)) return { type: 'auto', name: 'Car Payment' };
+  if (/storage|cloud|backup|subscription/i.test(desc)) return { type: 'software', name: 'Software/Cloud' };
+  
+  return { type: 'subscription', name: 'Subscription' };
+}
+
 router.post('/summary', async (req, res) => {
   try {
     const { dateFilter = 'current' } = req.body;
@@ -48,32 +141,29 @@ router.post('/summary', async (req, res) => {
 
     log('DASHBOARD', `Summary: ${startDate} to ${endDate}`);
 
-    // Get all transactions to find latest balance
-    const allTxns = await db.all(
-      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
+    // Get latest balance (only forward-looking metric)
+    const latestBalance = await db.all(
+      'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
       [1]
     );
+    const balance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // Get filtered transactions
-    const txns = await db.all(
-      'SELECT * FROM transactions WHERE user_id = $1 AND date >= $2 AND date <= $3 ORDER BY date DESC',
-      [1, startDate, endDate]
-    );
+    // Get historical averages from past 3 months (NOT period filter)
+    const { avgIncome, avgExpenses, months } = await getHistoricalAverages();
 
-    let income = 0, expenses = 0;
-    txns.forEach(tx => {
-      if (tx.direction === 'credit') income += parseFloat(tx.amount);
-      else expenses += parseFloat(tx.amount);
-    });
-
-    const balance = allTxns.length > 0 ? parseFloat(allTxns[0].balance) : 0;
+    log('DASHBOARD', `Historical: Income avg $${avgIncome.toFixed(2)}, Expenses avg $${avgExpenses.toFixed(2)}`);;
 
     res.json({
-      income: income,
-      expenses: expenses,
-      netCashflow: income - expenses,
+      income: avgIncome,
+      expenses: avgExpenses,
+      netCashflow: avgIncome - avgExpenses,
       balance: balance,
-      period: { startDate, endDate }
+      period: { startDate, endDate },
+      historicalMonths: months.map(m => ({
+        month: m.month,
+        income: parseFloat(m.monthly_income || 0),
+        expenses: parseFloat(m.monthly_expenses || 0)
+      }))
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
@@ -81,51 +171,109 @@ router.post('/summary', async (req, res) => {
   }
 });
 
-router.post('/upcoming-payments', async (req, res) => {
+router.post('/recurring-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching upcoming payments with smart cascade');
+    log('DASHBOARD', 'Fetching recurring payments (subscriptions/bills)');
 
-    // Get current balance
-    const balanceRes = await db.all(
-      'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC LIMIT 1',
-      [1]
+    const recurring = await getRecurringPayments();
+    
+    // Categorize subscriptions
+    const categorized = recurring.map(p => ({
+      ...p,
+      category: categorizeSubscription(p.description)
+    }));
+
+    log('DASHBOARD', `Found ${categorized.length} recurring payments`);
+    res.json(categorized);
+  } catch (error) {
+    log('DASHBOARD', `Error fetching recurring payments: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/category-spending', async (req, res) => {
+  try {
+    const { dateFilter = 'current' } = req.body;
+    const { startDate, endDate } = getDateRange(dateFilter);
+
+    log('DASHBOARD', `Category spending: ${startDate} to ${endDate}`);
+
+    const result = await db.all(
+      `SELECT 
+        category,
+        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as total_spending,
+        COUNT(*) as transaction_count,
+        DATE_TRUNC('month', date::date)::date as month
+      FROM transactions
+      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND direction = 'debit'
+      GROUP BY category, DATE_TRUNC('month', date::date)
+      ORDER BY month DESC, total_spending DESC`,
+      [1, startDate, endDate]
     );
-    const currentBalance = balanceRes.length > 0 ? parseFloat(balanceRes[0].balance) : 0;
 
-    // Hardcoded upcoming payments with smart cascade logic
-    const basePayments = [
-      { type: 'income', description: 'Paycheck (Biweekly)', amount: 6211.68, date: '2026-06-06' },
-      { type: 'expense', description: 'Mortgage', amount: 1185.65, date: '2026-06-01' },
-      { type: 'expense', description: 'Car Payment #1', amount: 443.00, date: '2026-06-04' },
-      { type: 'expense', description: 'Utilities', amount: 150.00, date: '2026-06-15' },
-      { type: 'expense', description: 'Car Payment #2', amount: 513.00, date: '2026-06-21' },
-      { type: 'income', description: 'Paycheck (Biweekly)', amount: 6211.68, date: '2026-06-20' },
-      { type: 'expense', description: 'Insurance', amount: 457.46, date: '2026-06-28' }
-    ];
-
-    // Sort by date
-    basePayments.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    // Calculate cascading balance
-    let cascadeBalance = currentBalance;
-    const payments = basePayments.map(p => {
-      const isIncome = p.type === 'income';
-      const newBalance = isIncome ? cascadeBalance + p.amount : cascadeBalance - p.amount;
-      
-      const payment = {
-        ...p,
-        balanceBefore: cascadeBalance,
-        balanceAfter: newBalance
-      };
-
-      cascadeBalance = newBalance;
-      return payment;
+    // Format response
+    const categoryByMonth = {};
+    result.forEach(row => {
+      const cat = row.category || 'Other';
+      if (!categoryByMonth[cat]) {
+        categoryByMonth[cat] = [];
+      }
+      categoryByMonth[cat].push({
+        month: row.month,
+        spending: parseFloat(row.total_spending),
+        transactions: parseInt(row.transaction_count)
+      });
     });
 
-    log('DASHBOARD', `Returning ${payments.length} upcoming payments`);
-    res.json(payments);
+    // Convert to flat list with totals
+    const categories = Object.entries(categoryByMonth).map(([name, months]) => ({
+      name,
+      totalSpending: months.reduce((sum, m) => sum + m.spending, 0),
+      transactionCount: months.reduce((sum, m) => sum + m.transactions, 0),
+      monthlyBreakdown: months
+    })).sort((a, b) => b.totalSpending - a.totalSpending);
+
+    res.json(categories);
   } catch (error) {
-    log('DASHBOARD', `Error fetching payments: ${error.message}`);
+    log('DASHBOARD', `Error fetching category spending: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/category-trends', async (req, res) => {
+  try {
+    log('DASHBOARD', 'Fetching category trends (month-over-month)');
+
+    const result = await db.all(
+      `SELECT 
+        category,
+        DATE_TRUNC('month', date::date)::date as month,
+        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as total_spending,
+        COUNT(*) as transaction_count
+      FROM transactions
+      WHERE user_id = $1 AND direction = 'debit'
+      GROUP BY category, DATE_TRUNC('month', date::date)
+      ORDER BY month DESC, category ASC`,
+      [1]
+    );
+
+    // Organize by month, then category
+    const trendsByMonth = {};
+    result.forEach(row => {
+      const month = row.month;
+      if (!trendsByMonth[month]) {
+        trendsByMonth[month] = [];
+      }
+      trendsByMonth[month].push({
+        category: row.category || 'Other',
+        spending: parseFloat(row.total_spending),
+        transactions: parseInt(row.transaction_count)
+      });
+    });
+
+    res.json(trendsByMonth);
+  } catch (error) {
+    log('DASHBOARD', `Error fetching category trends: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
