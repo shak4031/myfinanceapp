@@ -89,24 +89,14 @@ export default class Database {
 
   async seedData() {
     try {
-      // Check if data already exists
-      const userCheck = await this.pool.query('SELECT COUNT(*) FROM users');
-      if (userCheck.rows[0].count > 0) {
-        log('DATABASE', '✓ Data already seeded, skipping');
+      // Only seed categories (no mock transactions)
+      const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
+      if (categoryCheck.rows[0].count > 0) {
+        log('DATABASE', '✓ Categories already seeded, skipping');
         return;
       }
 
-      // Insert users
-      await this.pool.query(
-        "INSERT INTO users (name, email, role) VALUES ($1, $2, $3)",
-        ['Shak', 'shak@example.com', 'admin']
-      );
-      await this.pool.query(
-        "INSERT INTO users (name, email, role) VALUES ($1, $2, $3)",
-        ['Zunaira', 'zunaira@example.com', 'viewer']
-      );
-
-      // Insert comprehensive categories
+      // Insert comprehensive categories only
       const categories = [
         ['Groceries', '🛒', '#2ecc71'],
         ['Utilities', '⚡', '#3498db'],
@@ -141,71 +131,7 @@ export default class Database {
         );
       }
 
-      // Insert transactions with comprehensive category data
-      const transactions = [
-        ['2026-06-03', 'Biweekly Paycheck', 'Salary', 6211.68, 'credit', 12450.32, 'td-checking'],
-        ['2026-06-02', 'Whole Foods', 'Groceries', 85.32, 'debit', 6238.64, 'td-checking'],
-        ['2026-06-02', 'Electric Bill', 'Utilities', 145.00, 'debit', 6323.96, 'td-checking'],
-        ['2026-06-01', 'Shell Gas', 'Gas', 45.00, 'debit', 6468.96, 'td-checking'],
-        ['2026-05-31', 'Costco', 'Groceries', 120.50, 'debit', 6513.96, 'td-checking'],
-        ['2026-05-30', 'Netflix', 'Subscriptions', 15.99, 'debit', 6634.46, 'td-checking'],
-        ['2026-05-30', 'Chipotle', 'Dining', 12.45, 'debit', 6650.45, 'td-checking'],
-        ['2026-05-29', 'Target', 'Shopping', 67.89, 'debit', 6662.90, 'td-checking'],
-        ['2026-05-28', 'Uber', 'Transportation', 23.50, 'debit', 6730.79, 'td-checking'],
-        ['2026-05-27', 'Home Depot', 'Home', 156.78, 'debit', 6754.29, 'td-checking'],
-        ['2026-05-26', 'Amazon Prime', 'Subscriptions', 14.99, 'debit', 6911.07, 'td-checking'],
-        ['2026-05-25', 'Dr. Smith Visit', 'Healthcare', 150.00, 'debit', 6926.06, 'td-checking'],
-        ['2026-05-24', 'Pet Food Store', 'Pet Care', 45.60, 'debit', 7076.06, 'td-checking'],
-        ['2026-05-23', 'AMC Theaters', 'Entertainment', 28.00, 'debit', 7121.66, 'td-checking'],
-        ['2026-05-22', 'Starbucks', 'Dining', 6.45, 'debit', 7150.66, 'td-checking'],
-        ['2026-05-21', 'Microsoft 365', 'Subscriptions', 6.99, 'debit', 7157.11, 'td-checking'],
-        ['2026-05-20', 'Biweekly Paycheck', 'Salary', 6211.68, 'credit', 7164.10, 'td-checking'],
-        ['2026-05-19', 'Gym Membership', 'Entertainment', 50.00, 'debit', 952.42, 'td-checking'],
-        ['2026-05-18', 'Trader Joes', 'Groceries', 73.45, 'debit', 1002.42, 'td-checking'],
-        ['2026-05-17', 'Allstate Insurance', 'Insurance', 180.00, 'debit', 1075.87, 'td-checking'],
-        ['2026-05-16', 'Car Maintenance', 'Maintenance', 200.00, 'debit', 1255.87, 'td-checking'],
-        ['2026-05-15', 'Water Bill', 'Utilities', 60.00, 'debit', 1455.87, 'td-checking'],
-        ['2026-05-14', 'Vacation Fund', 'Savings', 500.00, 'debit', 1515.87, 'td-checking'],
-        ['2026-05-13', 'Airplane Ticket', 'Travel', 450.00, 'debit', 2015.87, 'td-checking'],
-        ['2026-05-12', 'Birthday Gift', 'Gifts', 75.00, 'debit', 2465.87, 'td-checking']
-      ];
-
-      for (const txn of transactions) {
-        await this.pool.query(
-          'INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [...txn, 1]
-        );
-      }
-
-      // Insert credit cards
-      await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Chase Sapphire', 3245.67, 15000, 18.99, 1]
-      );
-      await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Amex Gold', 2890.45, 20000, 19.99, 1]
-      );
-      await this.pool.query(
-        'INSERT INTO credit_cards (name, balance, "limit", apr, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Citi Double Cash', 4015.68, 12000, 17.99, 1]
-      );
-
-      // Insert savings goals
-      await this.pool.query(
-        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Emergency Fund', 10000, 2500, '2026-12-31', 1]
-      );
-      await this.pool.query(
-        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Vacation', 5000, 1200, '2026-09-30', 1]
-      );
-      await this.pool.query(
-        'INSERT INTO savings_goals (name, target, current, deadline, user_id) VALUES ($1, $2, $3, $4, $5)',
-        ['Home Improvement', 8000, 0, '2027-06-30', 1]
-      );
-
-      log('DATABASE', '✓ Data seeded successfully');
+      log('DATABASE', '✓ Categories seeded successfully (no mock transactions)');
     } catch (err) {
       log('DATABASE', `❌ Error seeding data: ${err.message}`);
       throw err;
