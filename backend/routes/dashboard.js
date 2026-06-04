@@ -438,4 +438,66 @@ router.post('/category-trends', async (req, res) => {
   }
 });
 
+router.post('/category-transactions-for-month', async (req, res) => {
+  try {
+    const { category, month } = req.body;
+
+    if (!category || !month) {
+      return res.status(400).json({ error: 'category and month are required' });
+    }
+
+    log('DASHBOARD', `Fetching transactions for category: ${category}, month: ${month}`);
+
+    // Parse month (format: YYYY-MM or similar)
+    let monthStart, monthEnd;
+    
+    // Handle both "2026-05" and "2026-05-01" formats
+    if (month.length === 7) {
+      // "2026-05" format
+      const [year, monthNum] = month.split('-');
+      monthStart = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+    } else {
+      // "2026-05-01" format
+      monthStart = new Date(month);
+    }
+    
+    monthStart.setHours(0, 0, 0, 0);
+    
+    monthEnd = new Date(monthStart);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    monthEnd.setDate(0);
+    monthEnd.setHours(23, 59, 59, 999);
+
+    const startDate = monthStart.toISOString().split('T')[0];
+    const endDate = monthEnd.toISOString().split('T')[0];
+
+    const result = await db.all(
+      `SELECT 
+        id,
+        date,
+        description,
+        amount,
+        category as currentCategory
+      FROM transactions
+      WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4 AND UPPER(direction) = 'DEBIT'
+      ORDER BY date DESC`,
+      [1, category, startDate, endDate]
+    );
+
+    const transactions = result.map(row => ({
+      id: row.id,
+      date: row.date,
+      description: row.description,
+      amount: parseFloat(row.amount),
+      currentCategory: row.currentCategory
+    }));
+
+    log('DASHBOARD', `Found ${transactions.length} transactions for category ${category} in ${month}`);
+    res.json(transactions);
+  } catch (error) {
+    log('DASHBOARD', `Error fetching category transactions for month: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

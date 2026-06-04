@@ -620,6 +620,28 @@
       }
     }
 
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+    }
+
     /* CATEGORY DETAIL VIEW */
     .category-detail {
       display: none;
@@ -935,6 +957,28 @@
     </div>
   </div>
 
+  <!-- MONTH TRANSACTIONS MODAL -->
+  <div class="modal" id="monthTransactionsModal">
+    <div class="modal-content">
+      <div class="modal-header" id="monthTransactionsHeader">Transactions</div>
+      
+      <div id="monthTransactionsContainer" style="margin-bottom: 20px;">
+        <div class="loading"><span class="spinner"></span> Loading transactions...</div>
+      </div>
+
+      <div style="display: none; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;" id="monthTransactionsToast">
+        <span id="monthTransactionsToastText"></span>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeMonthTransactionsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 2000;"></div>
+
   <script>
     let currentDateFilter = 'current';
     let currentCategory = null;
@@ -1197,6 +1241,9 @@
 
         // Calculate totals across all months
         const categoryTotals = {};
+        let totalSpending = 0;
+        let totalTransactions = 0;
+        
         Object.entries(trends).forEach(([month, cats]) => {
           cats.forEach(cat => {
             if (!categoryTotals[cat.category]) {
@@ -1204,6 +1251,8 @@
             }
             categoryTotals[cat.category].total += cat.spending;
             categoryTotals[cat.category].count += cat.transactions;
+            totalSpending += cat.spending;
+            totalTransactions += cat.transactions;
           });
         });
 
@@ -1216,18 +1265,67 @@
           'Investments': '📈', 'Other': '📦'
         };
 
+        // Build summary cards (top 3 categories)
+        const sortedCategories = Object.entries(categoryTotals)
+          .sort((a, b) => b[1].total - a[1].total)
+          .slice(0, 3);
+
+        let summaryHtml = `
+          <h3 style="color: var(--text-primary); margin-bottom: 16px; margin-top: 0;">💡 Summary</h3>
+          <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 32px;">
+        `;
+
+        summaryHtml += `
+          <div class="metric-card">
+            <div class="metric-label">Total Spending</div>
+            <div class="metric-value" style="color: var(--danger);">$${totalSpending.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Transaction Count</div>
+            <div class="metric-value">${totalTransactions}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Average per Transaction</div>
+            <div class="metric-value">$${totalTransactions > 0 ? (totalSpending / totalTransactions).toFixed(2) : '0.00'}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
+          </div>
+        `;
+
+        summaryHtml += '</div>';
+
+        // Add top 3 categories section
+        summaryHtml += '<h3 style="color: var(--text-primary); margin-bottom: 16px;">🏆 Top 3 Categories</h3>';
+        summaryHtml += '<div style="display: grid; gap: 12px; margin-bottom: 32px;">';
+        
+        sortedCategories.forEach(([cat, data], idx) => {
+          const icon = categoryIcons[cat] || '📦';
+          const percentage = totalSpending > 0 ? ((data.total / totalSpending) * 100).toFixed(1) : 0;
+          summaryHtml += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border);">
+              <div>
+                <span style="font-size: 16px; margin-right: 8px;">${icon}</span>
+                <span style="font-weight: 500;">${cat}</span>
+              </div>
+              <div style="text-align: right;">
+                <div style="color: var(--primary); font-weight: 600;">$${data.total.toFixed(2)}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">${percentage}% of total</div>
+              </div>
+            </div>
+          `;
+        });
+
+        summaryHtml += '</div>';
+
+        // Now add all categories grid
+        summaryHtml += '<h3 style="color: var(--text-primary); margin-bottom: 16px;">📊 All Categories</h3>';
+        
         let categoryHtml = '';
         Object.entries(categoryTotals)
           .sort((a, b) => b[1].total - a[1].total)
           .forEach(([cat, data]) => {
             const icon = categoryIcons[cat] || '📦';
-            // Get trend data for this category
-            const monthlyData = [];
-            Object.entries(trends).forEach(([month, cats]) => {
-              const catData = cats.find(c => c.category === cat);
-              if (catData) monthlyData.push({ month, spending: catData.spending });
-            });
-            
             categoryHtml += `
               <div class="category-card" onclick="showCategoryDetail('${cat}')">
                 <div class="category-icon">${icon}</div>
@@ -1237,7 +1335,8 @@
               </div>
             `;
           });
-        document.getElementById('allCategoriesContainer').innerHTML = categoryHtml;
+        
+        document.getElementById('allCategoriesContainer').innerHTML = summaryHtml + '<div class="category-grid">' + categoryHtml + '</div>';
 
       } catch (err) {
         console.error('Categories error:', err);
@@ -1299,7 +1398,7 @@
         document.getElementById('categoryAverage').textContent = `$${average.toFixed(2)}`;
         document.getElementById('categoryHighest').textContent = `$${maxAmount.toFixed(2)}`;
 
-        // Build month-by-month view
+        // Build month-by-month view - MAKE CLICKABLE
         let monthTrendsHtml = '<div style="margin-bottom: 20px;"><h3 style="color: var(--primary); margin-bottom: 12px;">Monthly Breakdown</h3>';
         
         const monthlySpending = {};
@@ -1315,33 +1414,19 @@
           .forEach(([month, spending]) => {
             const monthStr = new Date(month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
             monthTrendsHtml += `
-              <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);">
+              <div style="display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; border-radius: 6px; transition: all 0.2s ease; background: var(--bg-tertiary);" 
+                   onmouseover="this.style.background='var(--bg-secondary)'; this.style.borderColor='var(--primary)';"
+                   onmouseout="this.style.background='var(--bg-tertiary)'; this.style.borderColor='var(--border)';"
+                   onclick="showMonthTransactions('${category}', '${month}')">
                 <span>${monthStr}</span>
-                <span style="color: var(--danger); font-weight: 600;">$${spending.toFixed(2)}</span>
+                <span style="color: var(--primary); font-weight: 600; cursor: pointer;">$${spending.toFixed(2)} →</span>
               </div>
             `;
           });
         monthTrendsHtml += '</div>';
 
-        // Transaction list
-        let transHtml = monthTrendsHtml;
-        transHtml += '<h3 style="color: var(--primary); margin-bottom: 12px;">All Transactions</h3>';
-        
-        transactions.slice(0, 50).forEach(t => {
-          const sign = t.direction === 'debit' ? '-' : '+';
-          const amountClass = t.direction === 'debit' ? 'debit' : 'credit';
-          const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-          transHtml += `
-            <div class="card-item">
-              <div class="card-item-label">
-                <span style="color: var(--text-secondary); font-size: 12px;">${date}</span>
-                <span>${t.description}</span>
-              </div>
-              <span class="card-amount ${amountClass}">${sign}$${t.amount.toFixed(2)}</span>
-            </div>
-          `;
-        });
-        document.getElementById('categoryTransactionsContainer').innerHTML = transHtml || '<p style="color: var(--text-secondary);">No transactions</p>';
+        // Show only monthly breakdown (removed All Transactions section)
+        document.getElementById('categoryTransactionsContainer').innerHTML = monthTrendsHtml;
 
       } catch (err) {
         console.error('Category detail error:', err);
@@ -1352,6 +1437,86 @@
       currentCategory = null;
       document.getElementById('categoryDetail').classList.remove('active');
       document.getElementById('categoryOverview').style.display = 'block';
+    }
+
+    async function showMonthTransactions(category, month) {
+      try {
+        // Show modal and loading state
+        document.getElementById('monthTransactionsModal').classList.add('active');
+        document.getElementById('monthTransactionsContainer').innerHTML = '<div class="loading"><span class="spinner"></span> Loading transactions...</div>';
+        
+        // Format month for display
+        const monthStr = new Date(month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        document.getElementById('monthTransactionsHeader').innerHTML = `${category} - ${monthStr}`;
+
+        // Fetch transactions for this month
+        const res = await fetch('/api/dashboard/category-transactions-for-month', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: category, month: month })
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const transactions = await res.json();
+
+        // Build transaction list
+        let html = '';
+        if (transactions.length === 0) {
+          html = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No transactions for this month</p>';
+        } else {
+          html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+          transactions.forEach(t => {
+            const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+            html += `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border);">
+                <div style="flex: 1;">
+                  <div style="color: var(--text-secondary); font-size: 12px;">${date}</div>
+                  <div>${t.description}</div>
+                </div>
+                <div style="text-align: right; margin-left: 16px;">
+                  <div style="color: var(--danger); font-weight: 600;">-$${t.amount.toFixed(2)}</div>
+                  <div style="font-size: 11px; color: var(--text-secondary);">${t.currentCategory}</div>
+                </div>
+              </div>
+            `;
+          });
+          html += '</div>';
+        }
+
+        document.getElementById('monthTransactionsContainer').innerHTML = html;
+      } catch (err) {
+        console.error('Error loading month transactions:', err);
+        document.getElementById('monthTransactionsContainer').innerHTML = '<div class="alert error">Failed to load transactions</div>';
+      }
+    }
+
+    function closeMonthTransactionsModal() {
+      document.getElementById('monthTransactionsModal').classList.remove('active');
+    }
+
+    function showToast(message, duration = 3000) {
+      const toast = document.createElement('div');
+      toast.style.cssText = `
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        animation: slideIn 0.3s ease;
+        margin-bottom: 12px;
+        font-size: 14px;
+      `;
+      toast.textContent = message;
+      document.getElementById('toastContainer').appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
     }
 
     async function loadDebts() {
