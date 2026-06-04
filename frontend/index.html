@@ -1390,8 +1390,80 @@
   </div>
 
   <!-- CATEGORIZATIONS TAB -->
-  <div class="page" id="categorizations" style="display: flex; padding: 0; margin: 0; height: 100%; overflow: hidden;">
-    <iframe src="/categorizations-simple.html" style="width: 100%; height: 100%; border: none; flex: 1;"></iframe>
+  <div class="page" id="categorizations">
+    <div style="max-width: 900px; margin: 0 auto; width: 100%;">
+      <h1 style="font-size: 32px; margin-bottom: 30px; color: var(--text-primary);">📋 Categorizations Overview</h1>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 10px;">Total Transactions</div>
+          <div style="font-size: 32px; font-weight: bold; color: var(--primary);" id="stat-total">-</div>
+        </div>
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 10px;">Categories</div>
+          <div style="font-size: 32px; font-weight: bold; color: var(--primary);" id="stat-categories">-</div>
+        </div>
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 10px;">Current Period</div>
+          <div style="font-size: 32px; font-weight: bold; color: var(--primary);">June 2026</div>
+        </div>
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 10px;">Total Spending</div>
+          <div style="font-size: 32px; font-weight: bold; color: var(--primary);" id="stat-spending">-</div>
+        </div>
+      </div>
+      
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--text-primary);">✅ How Categorization Works</h2>
+        <p style="line-height: 1.6; color: #c0c0c0; margin-bottom: 12px;">Your transactions are automatically categorized based on:</p>
+        <ul style="list-style: none; margin: 16px 0;">
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Auto-Detection:</strong> Patterns from merchant names and descriptions</li>
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Smart Learning:</strong> Categories you've manually set before</li>
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Historical Data:</strong> Transaction history and known merchants</li>
+        </ul>
+      </div>
+      
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--text-primary);">📊 Review Your Categorizations</h2>
+        <p style="line-height: 1.6; color: #c0c0c0; margin-bottom: 12px;">To review and modify how transactions are categorized:</p>
+        
+        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; border-left: 3px solid var(--primary); margin: 16px 0;">
+          <div style="font-weight: 600; color: var(--primary); margin-bottom: 8px;">Go to Dashboard → Categories Tab</div>
+          <p>This page shows all your transactions grouped by category with ability to:</p>
+          <ul style="list-style: none; margin: 16px 0;">
+            <li style="padding: 8px 0;"><strong>View by Category:</strong> See all spending in each category</li>
+            <li style="padding: 8px 0;"><strong>Drill Down by Month:</strong> Click a month to see individual transactions</li>
+            <li style="padding: 8px 0;"><strong>Verify Categorization:</strong> Confirm transactions are in the right category</li>
+            <li style="padding: 8px 0;"><strong>See Trends:</strong> Track spending patterns over time</li>
+          </ul>
+        </div>
+        
+        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="switchPage('dashboard')" style="padding: 12px 24px;">📊 Go to Dashboard</button>
+          <button class="btn btn-secondary" onclick="switchPage('categories')" style="padding: 12px 24px;">📁 View Categories</button>
+        </div>
+      </div>
+      
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--text-primary);">🔧 Need to Fix a Categorization?</h2>
+        <p style="line-height: 1.6; color: #c0c0c0; margin-bottom: 12px;">If you notice a transaction is categorized incorrectly:</p>
+        <ol style="list-style: none; margin: 16px 0;">
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Dashboard → Categories:</strong> Find the transaction in the category month view</li>
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Note the Description:</strong> Remember the merchant/description name</li>
+          <li style="padding: 12px; margin: 8px 0; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--success);"><strong style="color: var(--success);">Future Imports:</strong> System will remember this correction for similar transactions</li>
+        </ol>
+      </div>
+      
+      <div style="background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%); border: 1px solid var(--primary); border-radius: 8px; padding: 24px;">
+        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--text-primary);">💡 Pro Tips</h2>
+        <p style="color: #c0c0c0;">
+          • <strong>Categories are smart:</strong> Correcting one transaction teaches the system about similar ones<br/>
+          • <strong>Monthly View:</strong> Use the Categories tab's month filter to review specific periods<br/>
+          • <strong>Search & Filter:</strong> Use dashboard features to find specific merchants<br/>
+          • <strong>Consistent Tagging:</strong> Regular review helps improve auto-categorization accuracy
+        </p>
+      </div>
+    </div>
   </div>
 
   <!-- IMPORT MODAL -->
@@ -1537,6 +1609,8 @@
           await loadGoals();
         } else if (tab === 'categories') {
           await loadCategories();
+        } else if (tab === 'categorizations') {
+          await loadCategorizations();
         }
       } catch (err) {
         console.error('Error loading data:', err);
@@ -1925,6 +1999,40 @@
       currentCategory = null;
       document.getElementById('categoryDetail').classList.remove('active');
       document.getElementById('categoryOverview').style.display = 'block';
+    }
+
+    async function loadCategorizations() {
+      try {
+        // Load category spending stats
+        const res = await fetch('/api/dashboard/category-spending', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        
+        if (!res.ok) throw new Error('Failed to load stats');
+        
+        const categories = await res.json();
+        
+        // Calculate stats
+        let totalTxns = 0;
+        let totalSpending = 0;
+        categories.forEach(cat => {
+          totalTxns += cat.transactionCount;
+          totalSpending += cat.totalSpending;
+        });
+        
+        document.getElementById('stat-total').textContent = totalTxns;
+        document.getElementById('stat-categories').textContent = categories.length;
+        document.getElementById('stat-spending').textContent = '$' + totalSpending.toFixed(2);
+        
+      } catch (err) {
+        console.error('Categorizations error:', err);
+      }
+    }
+    
+    function switchPage(page) {
+      switchTab(page);
     }
 
     async function showMonthTransactions(category, month) {
