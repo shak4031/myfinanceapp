@@ -11,8 +11,8 @@ router.post('/import-sql', async (req, res) => {
   try {
     log('IMPORT', 'Executing SQL import script...');
     
-    // Read the SQL script
-    const sqlPath = '/opt/data/import_transactions.sql';
+    // Read the SQL script from the app directory
+    const sqlPath = new URL('../data/import_transactions.sql', import.meta.url).pathname;
     const sqlScript = readFileSync(sqlPath, 'utf-8');
     
     // Extract all INSERT statements
