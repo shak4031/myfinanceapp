@@ -9,48 +9,47 @@ const db = new Database();
 // Execute the full SQL import script
 router.post('/import-sql', async (req, res) => {
   try {
-    log('IMPORT', 'Executing SQL import script...');
+    log('IMPORT', 'Starting bulk SQL import from transactions_clean.sql...');
     
     // Read the SQL script from the app directory
-    const sqlPath = new URL('../data/import_transactions.sql', import.meta.url).pathname;
+    const sqlPath = new URL('../data/transactions_clean.sql', import.meta.url).pathname;
     const sqlScript = readFileSync(sqlPath, 'utf-8');
     
-    // Extract all INSERT statements
-    const insertStatements = sqlScript.split('\n')
-      .filter(line => line.trim().startsWith('INSERT INTO transactions'))
-      .map(line => line.trim());
+    // Split by semicolon and filter out empty statements
+    const statements = sqlScript.split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'));
     
-    log('IMPORT', `Found ${insertStatements.length} transaction INSERT statements`);
+    log('IMPORT', `Found ${statements.length} SQL statements`);
     
-    let imported = 0;
+    let executed = 0;
     let errors = 0;
+    const errorDetails = [];
     
-    // Execute each INSERT statement
-    for (const stmt of insertStatements) {
+    // Execute each statement in sequence
+    for (const stmt of statements) {
       try {
-        await db.pool.query(stmt);
-        imported++;
+        const result = await db.pool.query(stmt + ';');
+        executed++;
       } catch (err) {
-        // Log but continue - likely duplicate key violations which are expected
-        if (!err.message.includes('duplicate key')) {
-          log('IMPORT', `Error on statement: ${err.message}`);
-          errors++;
-        }
+        log('IMPORT', `Error executing statement: ${err.message}`);
+        errorDetails.push(`${err.message}`);
+        errors++;
       }
     }
     
     // Get final count
     const countResult = await db.pool.query('SELECT COUNT(*) as count FROM transactions');
-    const totalCount = countResult.rows[0].count;
+    const totalCount = parseInt(countResult.rows[0].count);
     
-    log('IMPORT', `✓ Import complete: ${totalCount} total transactions in database`);
+    log('IMPORT', `✓ Import complete: ${executed} executed, ${errors} errors, ${totalCount} total transactions in database`);
     
     res.json({
-      success: true,
-      imported,
+      success: errors === 0,
+      executed,
       errors,
       totalInDatabase: totalCount,
-      message: `Successfully imported transactions. Total in database: ${totalCount}`
+      message: `Import complete: ${executed} statements executed, ${totalCount} transactions in database`
     });
   } catch (err) {
     log('IMPORT', `Import failed: ${err.message}`);
