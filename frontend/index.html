@@ -1041,7 +1041,7 @@
         document.getElementById('metricsContainer').innerHTML = metricsHtml;
 
         // Load RECURRING PAYMENTS (subscriptions + bills) - NOT future predictions
-        const recurringRes = await fetch('/api/dashboard/recurring-payments', {
+        const recurringRes = await fetch('/api/dashboard/upcoming-payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
