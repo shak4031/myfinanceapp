@@ -22,6 +22,7 @@ export default class Database {
       const result = await this.pool.query('SELECT NOW()');
       log('DATABASE', `✓ Connected to PostgreSQL: ${result.rows[0].now}`);
       await this.createTables();
+      await this.migrateSchema();
       await this.seedData();
     } catch (err) {
       log('DATABASE', `❌ Connection failed: ${err.message}`);
@@ -47,7 +48,10 @@ export default class Database {
         direction TEXT,
         balance REAL,
         source TEXT,
-        user_id INTEGER REFERENCES users(id)
+        user_id INTEGER REFERENCES users(id),
+        category_corrected BOOLEAN DEFAULT FALSE,
+        previous_category TEXT,
+        correction_timestamp TIMESTAMP
       )`,
       
       `CREATE TABLE IF NOT EXISTS credit_cards (
@@ -83,6 +87,33 @@ export default class Database {
       log('DATABASE', '✓ All tables created/verified');
     } catch (err) {
       log('DATABASE', `❌ Error creating tables: ${err.message}`);
+      throw err;
+    }
+  }
+
+  async migrateSchema() {
+    try {
+      // Add new columns if they don't exist
+      const migrations = [
+        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_corrected BOOLEAN DEFAULT FALSE`,
+        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_category TEXT`,
+        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMP`
+      ];
+
+      for (const sql of migrations) {
+        try {
+          await this.pool.query(sql);
+        } catch (err) {
+          if (err.message.includes('already exists')) {
+            // Column already exists, skip
+          } else {
+            throw err;
+          }
+        }
+      }
+      log('DATABASE', '✓ Schema migrations applied');
+    } catch (err) {
+      log('DATABASE', `❌ Error migrating schema: ${err.message}`);
       throw err;
     }
   }
