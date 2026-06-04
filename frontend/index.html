@@ -740,6 +740,477 @@
       }
     }
 
+    /* CATEGORIZATIONS PAGE STYLES (INTEGRATED) */
+    #categorizations-page {
+      padding: 24px 0;
+      min-height: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-height: calc(100vh - 120px);
+    }
+
+    #cat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    #cat-header h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .cat-stats {
+      display: flex;
+      gap: 20px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .cat-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cat-stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0;
+    }
+
+    .cat-stat-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--primary);
+      margin: 0;
+    }
+
+    .cat-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .cat-tab-btn {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .cat-tab-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .cat-tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .cat-tab-pane {
+      display: none;
+      flex: 1;
+      overflow: hidden;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cat-tab-pane.active {
+      display: flex;
+    }
+
+    /* TAB 1: REVIEW MODE */
+    #cat-review-table {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cat-table-header {
+      display: grid;
+      grid-template-columns: 70px 1fr 100px 150px;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .cat-table-rows {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cat-row {
+      display: grid;
+      grid-template-columns: 70px 1fr 100px 150px;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 12px;
+      height: 36px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      background: var(--bg-secondary);
+      transition: background 0.1s ease;
+    }
+
+    .cat-row:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .cat-row:last-child {
+      border-bottom: none;
+    }
+
+    .cat-date {
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .cat-desc {
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cat-amount {
+      text-align: right;
+      font-weight: 600;
+      color: var(--success);
+    }
+
+    .cat-amount.expense {
+      color: var(--danger);
+    }
+
+    .cat-select {
+      padding: 6px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .cat-select:hover {
+      border-color: var(--primary);
+    }
+
+    .cat-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+    }
+
+    .cat-review-footer {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* TAB 2: BULK EDITOR */
+    .cat-bulk-container {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 16px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .cat-category-list {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cat-category-item {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .cat-category-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .cat-category-item.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .cat-category-count {
+      font-size: 12px;
+      opacity: 0.7;
+      font-weight: 600;
+    }
+
+    .cat-bulk-right {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .cat-bulk-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    #cat-bulk-table {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cat-bulk-row {
+      display: grid;
+      grid-template-columns: 30px 70px 1fr 100px;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 12px;
+      height: 36px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      background: var(--bg-secondary);
+      transition: background 0.1s ease;
+    }
+
+    .cat-bulk-row:hover {
+      background: var(--bg-tertiary);
+    }
+
+    /* TAB 3: LEARNING PATTERNS */
+    .cat-patterns-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cat-pattern-card {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .cat-pattern-info {
+      flex: 1;
+    }
+
+    .cat-pattern-keyword {
+      font-weight: 600;
+      color: var(--primary);
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .cat-pattern-stat {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .cat-pattern-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* BUTTONS */
+    .cat-btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .cat-btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .cat-btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .cat-btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .cat-btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .cat-btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .cat-btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .cat-btn-yes {
+      background: var(--success);
+      color: white;
+    }
+
+    .cat-btn-yes:hover {
+      background: #4ab157;
+    }
+
+    /* SELECT DROPDOWNS */
+    .cat-select-dropdown {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* LOADING & EMPTY STATES */
+    .cat-loading {
+      text-align: center;
+      color: var(--text-secondary);
+      padding: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .cat-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top: 2px solid var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .cat-empty {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-secondary);
+    }
+
+    .cat-empty h3 {
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    /* TOAST NOTIFICATIONS */
+    .cat-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 16px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      animation: slideIn 0.3s ease;
+      max-width: 350px;
+      z-index: 2000;
+      font-size: 14px;
+    }
+
+    .cat-toast.success {
+      border-left: 4px solid var(--success);
+      color: var(--success);
+    }
+
+    .cat-toast.error {
+      border-left: 4px solid var(--danger);
+      color: var(--danger);
+    }
+
+    .cat-toast.info {
+      border-left: 4px solid var(--primary);
+      color: var(--primary);
+    }
+
+    .cat-info-box {
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--primary);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
     @media (prefers-color-scheme: light) {
       :root {
         --bg-primary: #f5f5f5;
@@ -903,7 +1374,94 @@
 
   <!-- CATEGORIZATIONS TAB -->
   <div class="page" id="categorizations">
-    <iframe src="/categorizations.html" style="width: 100%; height: 100%; border: none; border-radius: 8px;"></iframe>
+    <div id="categorizations-page">
+      <div id="cat-header">
+        <h1>Transaction Categorizations</h1>
+      </div>
+
+      <div class="cat-stats">
+        <div class="cat-stat">
+          <p class="cat-stat-label">Uncategorized</p>
+          <p class="cat-stat-value" id="stat-uncategorized">-</p>
+        </div>
+        <div class="cat-stat">
+          <p class="cat-stat-label">Categorized</p>
+          <p class="cat-stat-value" id="stat-categorized">-</p>
+        </div>
+        <div class="cat-stat">
+          <p class="cat-stat-label">Recently Corrected</p>
+          <p class="cat-stat-value" id="stat-corrected">-</p>
+        </div>
+      </div>
+
+      <div class="cat-info-box">
+        <strong>💡 Tip:</strong> Correcting categories here will automatically update the "Upcoming Payments" section on the dashboard when you refresh.
+      </div>
+
+      <div class="cat-tabs">
+        <button class="cat-tab-btn active" data-tab="review">Review & Fix</button>
+        <button class="cat-tab-btn" data-tab="bulk">Bulk Editor</button>
+        <button class="cat-tab-btn" data-tab="learning">Learning Patterns</button>
+      </div>
+
+      <!-- TAB 1: REVIEW & FIX MODE -->
+      <div class="cat-tab-pane active" id="review-pane">
+        <div id="cat-review-table">
+          <div class="cat-table-header">
+            <div>Date</div>
+            <div>Description</div>
+            <div>Amount</div>
+            <div>Category</div>
+          </div>
+          <div class="cat-table-rows" id="review-rows">
+            <div class="cat-loading">
+              <div class="cat-spinner"></div>
+              <span>Loading transactions...</span>
+            </div>
+          </div>
+        </div>
+        <div class="cat-review-footer">
+          <button class="cat-btn cat-btn-primary" id="save-btn">Save Changes</button>
+          <span style="color: var(--text-secondary); font-size: 12px;" id="changes-status"></span>
+        </div>
+      </div>
+
+      <!-- TAB 2: BULK EDITOR -->
+      <div class="cat-tab-pane" id="bulk-pane">
+        <div class="cat-bulk-container">
+          <div class="cat-category-list" id="category-list">
+            <div class="cat-loading">
+              <div class="cat-spinner"></div>
+            </div>
+          </div>
+          <div class="cat-bulk-right">
+            <div class="cat-bulk-actions">
+              <button class="cat-btn cat-btn-secondary cat-btn-sm" id="select-all-btn">Select All</button>
+              <select class="cat-select-dropdown" id="move-category-select">
+                <option value="">Move selected to...</option>
+              </select>
+              <button class="cat-btn cat-btn-primary cat-btn-sm" id="bulk-move-btn" disabled>Move</button>
+            </div>
+            <div id="cat-bulk-table">
+              <div class="cat-empty">
+                <h3>No transactions</h3>
+                <p>Select a category from the left panel</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: LEARNING PATTERNS -->
+      <div class="cat-tab-pane" id="learning-pane">
+        <div class="cat-patterns-list" id="patterns-list">
+          <div class="cat-loading">
+            <div class="cat-spinner"></div>
+            <span>Analyzing patterns...</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- IMPORT MODAL -->
@@ -1672,6 +2230,353 @@
 
     // Load initial data
     loadData('dashboard');
+
+    // ============================================================
+    // CATEGORIZATIONS PAGE JAVASCRIPT (INTEGRATED)
+    // ============================================================
+
+    // STATE
+    const CAT_API_BASE = '/api/categorizations';
+    const CAT_CATEGORIES = [
+      'Groceries', 'Utilities', 'Gas', 'Dining', 'Shopping', 'Entertainment',
+      'Healthcare', 'Insurance', 'Subscriptions', 'Transportation', 'Childcare',
+      'Education', 'Pet Care', 'Travel', 'Gifts', 'Home', 'Maintenance', 'Repairs',
+      'Professional Services', 'Taxes', 'Salary', 'Bonus', 'Investments', 'Income', 'Other'
+    ];
+
+    let pendingChanges = new Map();
+    let selectedCheckboxes = new Set();
+    let currentCatCategory = null;
+    let totalTransactions = 0;
+
+    // UTILITIES
+    function showCatToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `cat-toast ${type}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // TAB SWITCHING
+    document.querySelectorAll('.cat-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.cat-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.cat-tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`${tab}-pane`).classList.add('active');
+
+        if (tab === 'review') loadCatReview();
+        else if (tab === 'bulk') loadCatBulk();
+        else if (tab === 'learning') loadCatLearning();
+      });
+    });
+
+    // LOAD STATS
+    async function loadCatStats() {
+      try {
+        const res = await fetch(`${CAT_API_BASE}/list?limit=1`, { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('stat-uncategorized').textContent = data.counts.uncategorized;
+        document.getElementById('stat-categorized').textContent = data.counts.categorized;
+        document.getElementById('stat-corrected').textContent = data.counts.recentlyCorrected;
+      } catch (err) {
+        console.error('Error loading stats:', err);
+      }
+    }
+
+    // TAB 1: REVIEW & FIX MODE
+    async function loadCatReview() {
+      try {
+        const res = await fetch(`${CAT_API_BASE}/list?limit=50&offset=0&dateFilter=all`, { method: 'POST' });
+        const data = await res.json();
+        totalTransactions = data.counts.categorized + data.counts.uncategorized;
+        pendingChanges.clear();
+        renderCatReview(data.transactions);
+      } catch (err) {
+        console.error('Error loading review:', err);
+        showCatToast('Error loading transactions', 'error');
+      }
+    }
+
+    function renderCatReview(txns) {
+      const rows = document.getElementById('review-rows');
+      if (!txns.length) {
+        rows.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
+        return;
+      }
+
+      let html = txns.map(txn => {
+        const amount = parseFloat(txn.amount);
+        const isExpense = amount < 0;
+        const displayAmount = Math.abs(amount).toFixed(2);
+        const cat = pendingChanges.get(txn.id) || txn.currentCategory || '';
+
+        return `
+          <div class="cat-row">
+            <div class="cat-date">${txn.date}</div>
+            <div class="cat-desc" title="${txn.description}">${txn.description}</div>
+            <div class="cat-amount ${isExpense ? 'expense' : ''}">$${displayAmount}</div>
+            <select class="cat-select" data-id="${txn.id}" data-orig="${txn.currentCategory || ''}">
+              <option value="">Uncategorized</option>
+              ${CAT_CATEGORIES.map(c => `<option value="${c}" ${cat === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }).join('');
+
+      rows.innerHTML = html;
+      updateCatReviewStatus();
+
+      document.querySelectorAll('#review-rows .cat-select').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+          const id = parseInt(e.target.dataset.id);
+          const orig = e.target.dataset.orig;
+          const newVal = e.target.value;
+
+          if (newVal !== orig) {
+            pendingChanges.set(id, newVal);
+          } else {
+            pendingChanges.delete(id);
+          }
+          updateCatReviewStatus();
+        });
+      });
+    }
+
+    function updateCatReviewStatus() {
+      const count = pendingChanges.size;
+      const status = document.getElementById('changes-status');
+      status.textContent = count > 0 ? `${count} change(s) pending - Showing 50 of ${totalTransactions}` : `Showing 50 of ${totalTransactions}`;
+      document.getElementById('save-btn').disabled = count === 0;
+    }
+
+    document.getElementById('save-btn').addEventListener('click', async () => {
+      if (pendingChanges.size === 0) return;
+
+      const updates = Array.from(pendingChanges.entries()).map(([id, newCat]) => ({
+        id,
+        newCategory: newCat
+      }));
+
+      try {
+        const res = await fetch(`${CAT_API_BASE}/update-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates })
+        });
+
+        const data = await res.json();
+        showCatToast(`✓ Updated ${data.updated} transactions`, 'success');
+        pendingChanges.clear();
+        await loadCatStats();
+        await loadCatReview();
+      } catch (err) {
+        console.error('Error saving:', err);
+        showCatToast('Error saving changes', 'error');
+      }
+    });
+
+    // TAB 2: BULK EDITOR
+    async function loadCatBulk() {
+      try {
+        const res = await fetch(`${CAT_API_BASE}/category-summary`, { method: 'POST' });
+        const data = await res.json();
+        renderCatCategoryList(data.categories);
+        populateCatMoveSelect();
+      } catch (err) {
+        console.error('Error loading bulk:', err);
+        showCatToast('Error loading categories', 'error');
+      }
+    }
+
+    function renderCatCategoryList(cats) {
+      const list = document.getElementById('category-list');
+      let html = cats.map(c => `
+        <div class="cat-category-item" data-category="${c.category || ''}">
+          <span>${c.category || 'Uncategorized'}</span>
+          <span class="cat-category-count">${c.count}</span>
+        </div>
+      `).join('');
+
+      list.innerHTML = html;
+
+      document.querySelectorAll('.cat-category-item').forEach(item => {
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.cat-category-item').forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          currentCatCategory = item.dataset.category;
+          loadCatBulkTransactions(currentCatCategory);
+        });
+      });
+    }
+
+    function populateCatMoveSelect() {
+      const sel = document.getElementById('move-category-select');
+      sel.innerHTML = '<option value="">Move selected to...</option>' +
+        CAT_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    async function loadCatBulkTransactions(cat) {
+      try {
+        const res = await fetch(`${CAT_API_BASE}/by-category`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: cat, limit: 100, offset: 0 })
+        });
+        const data = await res.json();
+        renderCatBulkTransactions(data.transactions);
+      } catch (err) {
+        console.error('Error loading bulk txns:', err);
+        showCatToast('Error loading transactions', 'error');
+      }
+    }
+
+    function renderCatBulkTransactions(txns) {
+      const table = document.getElementById('cat-bulk-table');
+      if (!txns.length) {
+        table.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
+        return;
+      }
+
+      let html = txns.map(txn => {
+        const amount = parseFloat(txn.amount);
+        const isExpense = amount < 0;
+        const displayAmount = Math.abs(amount).toFixed(2);
+
+        return `
+          <div class="cat-bulk-row">
+            <input type="checkbox" class="bulk-check" data-id="${txn.id}">
+            <div class="cat-date">${txn.date}</div>
+            <div class="cat-desc">${txn.description}</div>
+            <div class="cat-amount ${isExpense ? 'expense' : ''}">$${displayAmount}</div>
+          </div>
+        `;
+      }).join('');
+
+      table.innerHTML = html;
+      selectedCheckboxes.clear();
+      updateCatBulkButtons();
+
+      document.querySelectorAll('.bulk-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            selectedCheckboxes.add(parseInt(e.target.dataset.id));
+          } else {
+            selectedCheckboxes.delete(parseInt(e.target.dataset.id));
+          }
+          updateCatBulkButtons();
+        });
+      });
+    }
+
+    function updateCatBulkButtons() {
+      document.getElementById('bulk-move-btn').disabled = selectedCheckboxes.size === 0;
+    }
+
+    document.getElementById('select-all-btn').addEventListener('click', () => {
+      const cbs = document.querySelectorAll('.bulk-check');
+      const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
+
+      cbs.forEach(cb => {
+        cb.checked = !allChecked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+
+    document.getElementById('bulk-move-btn').addEventListener('click', async () => {
+      const cat = document.getElementById('move-category-select').value;
+      if (!cat || selectedCheckboxes.size === 0) return;
+
+      const updates = Array.from(selectedCheckboxes).map(id => ({
+        id,
+        newCategory: cat
+      }));
+
+      try {
+        const res = await fetch(`${CAT_API_BASE}/update-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates })
+        });
+
+        const data = await res.json();
+        showCatToast(`✓ Moved ${data.updated} transactions to ${cat}`, 'success');
+        selectedCheckboxes.clear();
+        await loadCatStats();
+        await loadCatBulk();
+      } catch (err) {
+        console.error('Error moving:', err);
+        showCatToast('Error moving transactions', 'error');
+      }
+    });
+
+    // TAB 3: LEARNING PATTERNS
+    async function loadCatLearning() {
+      try {
+        const res = await fetch(`${CAT_API_BASE}/patterns`, { method: 'POST' });
+        const data = await res.json();
+        renderCatPatterns(data.patterns);
+      } catch (err) {
+        console.error('Error loading patterns:', err);
+        showCatToast('Error loading patterns', 'error');
+      }
+    }
+
+    function renderCatPatterns(patterns) {
+      const list = document.getElementById('patterns-list');
+      if (!patterns.length) {
+        list.innerHTML = '<div class="cat-empty"><h3>No patterns found</h3><p>Need 3+ transactions with same description</p></div>';
+        return;
+      }
+
+      let html = patterns.map(p => `
+        <div class="cat-pattern-card">
+          <div class="cat-pattern-info">
+            <div class="cat-pattern-keyword">${p.keyword}</div>
+            <div class="cat-pattern-stat">📊 Appears ${p.count} times</div>
+            <div class="cat-pattern-stat">Suggest: <strong>${p.suggestedCategory}</strong></div>
+          </div>
+          <div class="cat-pattern-actions">
+            <button class="cat-btn cat-btn-sm cat-btn-yes" data-keyword="${p.keyword}" data-category="${p.suggestedCategory}">Yes</button>
+            <button class="cat-btn cat-btn-sm">No</button>
+          </div>
+        </div>
+      `).join('');
+
+      list.innerHTML = html;
+
+      document.querySelectorAll('.cat-btn-yes').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const keyword = e.target.dataset.keyword;
+          const category = e.target.dataset.category;
+
+          try {
+            const res = await fetch(`${CAT_API_BASE}/learn-pattern`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ keyword, suggestedCategory: category })
+            });
+
+            const data = await res.json();
+            showCatToast(`✓ Applied pattern to ${data.updated} transactions`, 'success');
+            await loadCatStats();
+            await loadCatLearning();
+          } catch (err) {
+            console.error('Error learning pattern:', err);
+            showCatToast('Error applying pattern', 'error');
+          }
+        });
+      });
+    }
+
+    // INIT CATEGORIZATIONS
+    loadCatStats();
+    loadCatReview();
   </script>
 </body>
 </html>
