@@ -1060,38 +1060,42 @@
           'subscription': '📦'
         };
 
-        // Group by category type
-        const byType = {};
-        recurring.forEach(p => {
-          const catType = p.category.type;
-          if (!byType[catType]) byType[catType] = [];
-          byType[catType].push(p);
-        });
 
-        Object.entries(byType).forEach(([type, payments]) => {
-          const icon = categoryIcons[type] || '📦';
-          const totalMonthly = payments.reduce((sum, p) => sum + p.amount, 0);
-          
-          paymentHtml += `
-            <div class="card" style="margin-bottom: 20px;">
-              <div class="card-title">${icon} ${type.toUpperCase()}</div>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Monthly: $${totalMonthly.toFixed(2)}</div>
-          `;
-          
-          payments.forEach(p => {
+        // Response is an array of category groups: [{category, totalAmount, items[], projectedBalance}, ...]
+        if (Array.isArray(recurring) && recurring.length > 0) {
+          recurring.forEach(categoryGroup => {
+            const icon = categoryIcons[categoryGroup.category.toLowerCase()] || '📦';
+            
             paymentHtml += `
-              <div class="card-item">
-                <div class="card-item-label">
-                  <span>${p.description}</span>
-                  <span style="font-size: 11px; color: var(--text-secondary);">${p.lastDate} (${p.frequency}x)</span>
+              <div class="card" style="margin-bottom: 20px;">
+                <div class="card-title">${icon} ${categoryGroup.category.toUpperCase()}</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Monthly: $${categoryGroup.totalAmount.toFixed(2)}</div>
+            `;
+            
+            // Show up to 5 items
+            categoryGroup.items.slice(0, 5).forEach(item => {
+              paymentHtml += `
+                <div class="card-item">
+                  <div class="card-item-label">
+                    <span>Day ${item.dayOfMonth}</span>
+                    <span style="font-size: 11px; color: var(--text-secondary);">${item.lastDate} (${item.frequency}x)</span>
+                  </div>
+                  <span class="card-amount debit">-$${(item.amount || 0).toFixed(2)}</span>
                 </div>
-                <span class="card-amount debit">-$${p.amount.toFixed(2)}</span>
+              `;
+            });
+            
+            if (categoryGroup.items.length > 5) {
+              paymentHtml += `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">+${categoryGroup.items.length - 5} more payments</div>`;
+            }
+            
+            paymentHtml += `
               </div>
             `;
           });
-          
-          paymentHtml += `</div>`;
-        });
+        } else {
+          paymentHtml = '<div class="card" style="padding: 20px; color: var(--text-secondary);">No recurring payments detected</div>';
+        }
 
         document.getElementById('paymentContainer').innerHTML = paymentHtml || '<div class="card" style="padding: 20px; color: var(--text-secondary);">No recurring payments detected</div>';
 
