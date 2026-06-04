@@ -55,8 +55,8 @@ async function getHistoricalAverages() {
     const result = await db.all(
       `SELECT 
         DATE_TRUNC('month', date::date)::date as month,
-        SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END) as monthly_income,
-        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as monthly_expenses
+        SUM(CASE WHEN UPPER(direction) = 'CREDIT' THEN amount ELSE 0 END) as monthly_income,
+        SUM(CASE WHEN UPPER(direction) = 'DEBIT' THEN amount ELSE 0 END) as monthly_expenses
       FROM transactions
       WHERE user_id = $1 AND date >= $2 AND date <= $3
       GROUP BY DATE_TRUNC('month', date::date)
@@ -89,7 +89,7 @@ async function getRecurringPayments() {
         COUNT(*) as frequency,
         MAX(date) as last_date
       FROM transactions
-      WHERE user_id = $1 AND direction = 'debit'
+      WHERE user_id = $1 AND UPPER(direction) = 'DEBIT'
       GROUP BY description, amount, EXTRACT(DAY FROM date::date)
       HAVING COUNT(*) >= 2
       ORDER BY frequency DESC, last_date DESC`,
@@ -201,11 +201,11 @@ router.post('/category-spending', async (req, res) => {
     const result = await db.all(
       `SELECT 
         category,
-        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as total_spending,
+        SUM(CASE WHEN UPPER(direction) = 'DEBIT' THEN amount ELSE 0 END) as total_spending,
         COUNT(*) as transaction_count,
         DATE_TRUNC('month', date::date)::date as month
       FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND direction = 'debit'
+      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND UPPER(direction) = 'DEBIT'
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, total_spending DESC`,
       [1, startDate, endDate]
@@ -248,10 +248,10 @@ router.post('/category-trends', async (req, res) => {
       `SELECT 
         category,
         DATE_TRUNC('month', date::date)::date as month,
-        SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END) as total_spending,
+        SUM(CASE WHEN UPPER(direction) = 'DEBIT' THEN amount ELSE 0 END) as total_spending,
         COUNT(*) as transaction_count
       FROM transactions
-      WHERE user_id = $1 AND direction = 'debit'
+      WHERE user_id = $1 AND UPPER(direction) = 'DEBIT'
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, category ASC`,
       [1]
