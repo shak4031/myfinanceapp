@@ -240,7 +240,7 @@ router.post('/learn-pattern', async (req, res) => {
     res.json({
       success: true,
       updated,
-      message: `Successfully auto-learned ${updated} new patterns`
+      message: `Applied pattern to ${updated} transactions`
     });
   } catch (err) {
     log('CATEGORIZATIONS', `Error: ${err.message}`);
