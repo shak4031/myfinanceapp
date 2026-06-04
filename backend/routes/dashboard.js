@@ -5,6 +5,16 @@ import { log } from '../utils/logger.js';
 const router = Router();
 const db = new Database();
 
+// Helper: Internal transfer keywords to exclude
+const INTERNAL_TRANSFER_KEYWORDS = ['transfer', 'xfer', 'move', 'internal', 'savings', 'chequing', 'acct'];
+
+// Helper: Check if transaction is an internal transfer
+function isInternalTransfer(description) {
+  if (!description) return false;
+  const desc = description.toLowerCase();
+  return INTERNAL_TRANSFER_KEYWORDS.some(keyword => desc.includes(keyword));
+}
+
 // Helper: Get date range based on filter
 function getDateRange(filter) {
   const today = new Date();
@@ -41,7 +51,7 @@ function getDateRange(filter) {
   };
 }
 
-// Helper: Calculate 3-month historical averages
+// Helper: Calculate 3-month historical averages (excluding internal transfers)
 async function getHistoricalAverages() {
   try {
     const today = new Date();
@@ -73,19 +83,55 @@ async function getHistoricalAverages() {
       return { avgIncome: 0, avgExpenses: 0, months: [] };
     }
     
-    const avgIncome = result.reduce((sum, m) => sum + (parseFloat(m.monthly_income) || 0), 0) / result.length;
-    const avgExpenses = result.reduce((sum, m) => sum + (parseFloat(m.monthly_expenses) || 0), 0) / result.length;
+    // Filter out internal transfers from averages
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    const filteredMonths = [];
     
-    log('DASHBOARD', `Historical averages: Income $${avgIncome.toFixed(2)}, Expenses $${avgExpenses.toFixed(2)}`);
+    for (const month of result) {
+      const monthTransactions = await db.all(
+        `SELECT description, amount, direction FROM transactions 
+         WHERE user_id = $1 AND DATE_TRUNC('month', date::date)::date = $2`,
+        [1, month.month]
+      );
+      
+      let monthIncome = 0;
+      let monthExpenses = 0;
+      
+      for (const tx of monthTransactions) {
+        if (isInternalTransfer(tx.description)) {
+          continue; // Skip internal transfers
+        }
+        
+        if (tx.direction && tx.direction.toUpperCase() === 'CREDIT') {
+          monthIncome += parseFloat(tx.amount) || 0;
+        } else if (tx.direction && tx.direction.toUpperCase() === 'DEBIT') {
+          monthExpenses += parseFloat(tx.amount) || 0;
+        }
+      }
+      
+      totalIncome += monthIncome;
+      totalExpenses += monthExpenses;
+      filteredMonths.push({
+        month: month.month,
+        monthly_income: monthIncome,
+        monthly_expenses: monthExpenses
+      });
+    }
     
-    return { avgIncome, avgExpenses, months: result };
+    const avgIncome = filteredMonths.length > 0 ? totalIncome / filteredMonths.length : 0;
+    const avgExpenses = filteredMonths.length > 0 ? totalExpenses / filteredMonths.length : 0;
+    
+    log('DASHBOARD', `Historical averages (filtered): Income $${avgIncome.toFixed(2)}, Expenses $${avgExpenses.toFixed(2)}`);
+    
+    return { avgIncome, avgExpenses, months: filteredMonths };
   } catch (error) {
     log('DASHBOARD', `Error calculating historical averages: ${error.message}`);
     return { avgIncome: 0, avgExpenses: 0, months: [] };
   }
 }
 
-// Helper: Detect recurring payments (subscriptions, bills)
+// Helper: Detect recurring payments (subscriptions, bills) - excluding internal transfers
 async function getRecurringPayments() {
   try {
     const result = await db.all(
@@ -104,6 +150,10 @@ async function getRecurringPayments() {
     );
     
     return result.filter(p => {
+      // Exclude internal transfers
+      if (isInternalTransfer(p.description)) {
+        return false;
+      }
       const recurring = p.frequency >= 2;
       const isSubscription = /netflix|prime|spotify|hulu|subscription|monthly|fee|bill|payment|insurance|mortgage|utilities/i.test(p.description);
       return recurring || isSubscription;
@@ -179,7 +229,7 @@ router.post('/summary', async (req, res) => {
     // Get historical averages from past 3 months (NOT period filter)
     const { avgIncome, avgExpenses, months } = await getHistoricalAverages();
 
-    log('DASHBOARD', `Historical: Income avg $${avgIncome.toFixed(2)}, Expenses avg $${avgExpenses.toFixed(2)}`);;
+    log('DASHBOARD', `Historical: Income avg $${avgIncome.toFixed(2)}, Expenses avg $${avgExpenses.toFixed(2)}`);
 
     res.json({
       income: avgIncome,
@@ -199,22 +249,56 @@ router.post('/summary', async (req, res) => {
   }
 });
 
-router.post('/recurring-payments', async (req, res) => {
+router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching recurring payments (subscriptions/bills)');
+    log('DASHBOARD', 'Fetching upcoming payments (subscriptions/bills)');
 
     const recurring = await getRecurringPayments();
     
-    // Categorize subscriptions
-    const categorized = recurring.map(p => ({
-      ...p,
-      category: categorizeSubscription(p.description)
-    }));
+    // Categorize payments and group by category
+    const byCategory = {};
+    
+    recurring.forEach(p => {
+      const categoryInfo = categorizeSubscription(p.description);
+      const categoryName = categoryInfo.name;
+      
+      if (!byCategory[categoryName]) {
+        byCategory[categoryName] = {
+          category: categoryName,
+          items: [],
+          totalAmount: 0
+        };
+      }
+      
+      byCategory[categoryName].items.push({
+        dayOfMonth: p.dayOfMonth,
+        amount: p.amount,
+        frequency: p.frequency,
+        lastDate: p.lastDate
+      });
+      
+      byCategory[categoryName].totalAmount += p.amount;
+    });
 
-    log('DASHBOARD', `Found ${categorized.length} recurring payments`);
-    res.json(categorized);
+    // Get current balance for projected balance calculations
+    const latestBalance = await db.all(
+      'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
+      [1]
+    );
+    const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
+
+    // Convert to array and add projected balance
+    const grouped = Object.values(byCategory).map(group => ({
+      category: group.category,
+      totalAmount: group.totalAmount,
+      items: group.items,
+      projectedBalance: currentBalance - group.totalAmount
+    })).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    log('DASHBOARD', `Found ${recurring.length} recurring payments in ${grouped.length} categories`);
+    res.json(grouped);
   } catch (error) {
-    log('DASHBOARD', `Error fetching recurring payments: ${error.message}`);
+    log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -264,6 +348,54 @@ router.post('/category-spending', async (req, res) => {
     res.json(categories);
   } catch (error) {
     log('DASHBOARD', `Error fetching category spending: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/category-transactions', async (req, res) => {
+  try {
+    const { category, month } = req.body;
+
+    if (!category || !month) {
+      return res.status(400).json({ error: 'category and month are required' });
+    }
+
+    log('DASHBOARD', `Fetching transactions for category: ${category}, month: ${month}`);
+
+    // Parse month (format: YYYY-MM-DD or similar)
+    const monthStart = new Date(month);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    
+    const monthEnd = new Date(monthStart);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    monthEnd.setDate(0);
+    monthEnd.setHours(23, 59, 59, 999);
+
+    const startDate = monthStart.toISOString().split('T')[0];
+    const endDate = monthEnd.toISOString().split('T')[0];
+
+    const result = await db.all(
+      `SELECT 
+        date,
+        description,
+        amount
+      FROM transactions
+      WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4
+      ORDER BY date DESC`,
+      [1, category, startDate, endDate]
+    );
+
+    const transactions = result.map(row => ({
+      date: row.date,
+      description: row.description,
+      amount: parseFloat(row.amount)
+    }));
+
+    log('DASHBOARD', `Found ${transactions.length} transactions for category ${category}`);
+    res.json(transactions);
+  } catch (error) {
+    log('DASHBOARD', `Error fetching category transactions: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
