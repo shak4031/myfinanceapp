@@ -12,6 +12,7 @@ import goals from './routes/goals.js';
 import importCsv from './routes/import.js';
 import bulkImport from './routes/bulk-import.js';
 import categorizations from './routes/categorizations.js';
+import categorizationsLite from './routes/categorizations-lite.js';
 import logsRoute from './routes/logs.js';
 import { log } from './utils/logger.js';
 
@@ -49,6 +50,7 @@ app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categorizations', categorizations);
+app.use('/api/categorizations-lite', categorizationsLite);
 app.use('/api', logsRoute);
 
 // Static files (after API routes)
