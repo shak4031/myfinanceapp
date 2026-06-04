@@ -98,15 +98,30 @@
       overflow-y: auto;
       padding: 32px;
       background: var(--bg-primary);
+      display: flex;
+      flex-direction: column;
     }
 
     .page {
       display: none;
       animation: fadeIn 0.3s ease;
+      height: 100%;
+      overflow: hidden;
     }
 
     .page.active {
       display: block;
+    }
+
+    /* Special handling for pages with iframes */
+    .page iframe {
+      display: block;
+    }
+
+    /* Categorizations page - no padding */
+    #categorizations {
+      padding: 0 !important;
+      margin: 0 !important;
     }
 
     @keyframes fadeIn {
@@ -1373,8 +1388,8 @@
   </div>
 
   <!-- CATEGORIZATIONS TAB -->
-  <div class="page" id="categorizations">
-    <iframe src="/categorizations-simple.html" style="width: 100%; height: 100%; border: none;"></iframe>
+  <div class="page" id="categorizations" style="display: flex; padding: 0; margin: 0; height: 100%; overflow: hidden;">
+    <iframe src="/categorizations-simple.html" style="width: 100%; height: 100%; border: none; flex: 1;"></iframe>
   </div>
 
   <!-- IMPORT MODAL -->
