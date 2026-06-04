@@ -3,827 +3,329 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transaction Categorization Review</title>
+    <title>Review Categorizations</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --primary: #4a9eff;
-            --primary-dark: #2e6fc4;
-            --success: #51cf66;
-            --warning: #ffd93d;
-            --danger: #ff6b6b;
-            --bg-primary: #0f1419;
-            --bg-secondary: #1a1f2e;
-            --bg-tertiary: #2a3f5f;
-            --text-primary: #e0e0e0;
-            --text-secondary: #a0a0a0;
-            --border: #333;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            overflow: hidden;
+            background: #0f1419;
+            color: #e0e0e0;
+            padding: 24px;
         }
-
-        .container {
+        
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        h1 { font-size: 28px; margin-bottom: 20px; }
+        
+        .stats {
             display: flex;
-            flex-direction: column;
-            height: 100vh;
-            max-width: 100%;
-        }
-
-        /* HEADER */
-        .header {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            padding: 20px 24px;
-            flex-shrink: 0;
-        }
-
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             gap: 20px;
-        }
-
-        .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        /* STATS BAR */
-        .stats-bar {
-            display: flex;
-            gap: 24px;
-            justify-content: center;
+            margin-bottom: 20px;
             flex-wrap: wrap;
         }
-
+        
         .stat {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .stat-label {
-            font-size: 11px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-value {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--primary);
-        }
-
-        .stat-value.confirmed {
-            color: var(--success);
-        }
-
-        .stat-value.pending {
-            color: var(--warning);
-        }
-
-        .stat-value.modified {
-            color: #ffa500;
-        }
-
-        /* MAIN CONTENT */
-        .main-content {
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            padding: 0;
-        }
-
-        /* TABLE CONTAINER */
-        .table-wrapper {
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            margin: 16px 24px;
-            border: 1px solid var(--border);
+            background: #1a1f2e;
+            border: 1px solid #333;
+            padding: 15px 20px;
             border-radius: 8px;
-            background: var(--bg-secondary);
+            flex: 0 1 auto;
         }
-
-        .table-header {
-            display: grid;
-            grid-template-columns: 100px 1fr 120px 150px 120px 100px;
-            gap: 12px;
-            padding: 12px 16px;
-            background: var(--bg-tertiary);
-            border-bottom: 1px solid var(--border);
-            font-size: 12px;
+        
+        .stat-label { font-size: 12px; color: #a0a0a0; text-transform: uppercase; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #4a9eff; margin-top: 5px; }
+        
+        .table-wrapper {
+            background: #1a1f2e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: auto;
+            max-height: 600px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        th {
+            background: #0f1419;
+            padding: 12px;
+            text-align: left;
             font-weight: 600;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            flex-shrink: 0;
+            border-bottom: 1px solid #333;
             position: sticky;
             top: 0;
-            z-index: 10;
         }
-
-        .table-rows {
-            flex: 1;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #2a3f5f;
         }
-
-        .table-row {
-            display: grid;
-            grid-template-columns: 100px 1fr 120px 150px 120px 100px;
-            gap: 12px;
-            align-items: center;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-            font-size: 13px;
-            transition: background 0.15s ease;
-            min-height: 48px;
-        }
-
-        .table-row:hover {
-            background: var(--bg-tertiary);
-        }
-
-        .table-row:last-child {
-            border-bottom: none;
-        }
-
-        .cell {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .cell-date {
-            color: var(--text-secondary);
+        
+        tr:hover { background: #2a3f5f; }
+        
+        .date { width: 100px; }
+        .description { width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .amount { width: 100px; text-align: right; font-weight: 600; }
+        .category { width: 120px; }
+        .actions { width: 200px; }
+        
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
             font-size: 12px;
-            font-weight: 500;
+            margin-right: 4px;
         }
-
-        .cell-description {
-            color: var(--text-primary);
-            font-weight: 500;
-        }
-
-        .cell-amount {
-            text-align: right;
+        
+        .btn-confirm {
+            background: #51cf66;
+            color: #000;
             font-weight: 600;
-            font-family: 'Monaco', 'Courier New', monospace;
         }
-
-        .cell-amount.income {
-            color: var(--success);
+        
+        .btn-confirm:hover { background: #40c057; }
+        
+        .btn-change {
+            background: #4a9eff;
+            color: #fff;
         }
-
-        .cell-amount.expense {
-            color: var(--danger);
-        }
-
-        .cell-category {
+        
+        .btn-change:hover { background: #339af0; }
+        
+        select {
+            padding: 6px 8px;
+            background: #2a3f5f;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
             font-size: 12px;
-            color: var(--text-secondary);
         }
-
-        .cell-status {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
+        
         .status-badge {
-            display: inline-flex;
-            align-items: center;
+            display: inline-block;
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 11px;
             font-weight: 600;
-            white-space: nowrap;
         }
-
-        .status-badge.pending {
-            background: rgba(255, 217, 61, 0.1);
-            color: var(--warning);
-        }
-
-        .status-badge.confirmed {
-            background: rgba(81, 207, 102, 0.1);
-            color: var(--success);
-        }
-
-        .status-badge.modified {
-            background: rgba(255, 165, 0, 0.1);
-            color: #ffa500;
-        }
-
-        .cell-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        /* BUTTONS */
-        button {
-            border: none;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            padding: 6px 10px;
-            white-space: nowrap;
-        }
-
-        .btn-confirm {
-            background: var(--success);
-            color: white;
-        }
-
-        .btn-confirm:hover {
-            background: #45a55a;
-        }
-
-        .btn-confirm:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-change {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-change:hover {
-            background: var(--primary-dark);
-        }
-
-        .btn-change:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* CATEGORY DROPDOWN */
-        .category-select {
-            padding: 6px 8px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .category-select:hover {
-            border-color: var(--primary);
-        }
-
-        .category-select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
-        }
-
-        /* PAGINATION */
+        
+        .status-pending { background: #2a3f5f; color: #a0a0a0; }
+        .status-confirmed { background: #51cf66; color: #000; }
+        .status-modified { background: #ffd93d; color: #000; }
+        
         .pagination {
+            margin-top: 20px;
             display: flex;
+            gap: 10px;
             justify-content: center;
             align-items: center;
-            gap: 8px;
-            padding: 16px 24px;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border);
-            flex-shrink: 0;
         }
-
+        
         .pagination button {
             padding: 8px 12px;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
+            background: #2a3f5f;
+            border: 1px solid #333;
+            color: #e0e0e0;
             border-radius: 4px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            font-size: 12px;
         }
-
-        .pagination button:hover:not(:disabled) {
-            background: var(--primary);
-            color: white;
-        }
-
-        .pagination button:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        .pagination-info {
-            color: var(--text-secondary);
-            font-size: 12px;
-            margin: 0 12px;
-        }
-
-        /* LOADING STATE */
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            color: var(--text-secondary);
-            padding: 32px;
-            flex: 1;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--border);
-            border-top: 2px solid var(--primary);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* EMPTY STATE */
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 48px 24px;
-            color: var(--text-secondary);
-            flex: 1;
-        }
-
-        .empty-state h3 {
-            color: var(--text-primary);
-            font-size: 16px;
-        }
-
-        /* TOAST */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 14px 20px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 13px;
-            z-index: 2000;
-            animation: slideIn 0.3s ease;
-            max-width: 300px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .toast.success {
-            border-left: 3px solid var(--success);
-            color: var(--success);
-        }
-
-        .toast.error {
-            border-left: 3px solid var(--danger);
-            color: var(--danger);
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        /* RESPONSIVE */
-        @media (max-width: 1024px) {
-            .table-header, .table-row {
-                grid-template-columns: 90px 1fr 100px 120px 100px;
-                gap: 8px;
-            }
-
-            .cell-description {
-                font-size: 12px;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                padding: 16px 12px;
-            }
-
-            .header-content {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .stats-bar {
-                gap: 16px;
-            }
-
-            .table-wrapper {
-                margin: 12px;
-            }
-
-            .table-header, .table-row {
-                grid-template-columns: 80px 1fr 80px;
-                gap: 6px;
-                padding: 8px 12px;
-            }
-
-            .cell-category {
-                display: none;
-            }
-
-            .cell-actions {
-                flex-direction: column;
-                gap: 4px;
-            }
-
-            button {
-                padding: 4px 8px;
-                font-size: 11px;
-            }
-
-            .pagination {
-                padding: 12px;
-                gap: 4px;
-            }
-        }
+        
+        .pagination button:hover { background: #4a9eff; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .loading { text-align: center; padding: 40px; color: #a0a0a0; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #333; border-top: 3px solid #4a9eff; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- HEADER -->
-        <div class="header">
-            <div class="header-content">
-                <div>
-                    <h1>Transaction Categorization Review</h1>
-                </div>
+        <h1>📋 Review & Confirm Categorizations</h1>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label">Total Transactions</div>
+                <div class="stat-value" id="stat-total">-</div>
             </div>
-
-            <!-- STATS BAR -->
-            <div class="stats-bar">
-                <div class="stat">
-                    <span class="stat-label">Total</span>
-                    <span class="stat-value" id="stat-total">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Confirmed</span>
-                    <span class="stat-value confirmed" id="stat-confirmed">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Modified</span>
-                    <span class="stat-value modified" id="stat-modified">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Pending</span>
-                    <span class="stat-value pending" id="stat-pending">0</span>
-                </div>
+            <div class="stat">
+                <div class="stat-label">Confirmed</div>
+                <div class="stat-value" id="stat-confirmed">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Modified</div>
+                <div class="stat-value" id="stat-modified">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Pending Review</div>
+                <div class="stat-value" id="stat-pending">-</div>
             </div>
         </div>
-
-        <!-- MAIN CONTENT -->
-        <div class="main-content">
-            <!-- TABLE -->
-            <div class="table-wrapper">
-                <div class="table-header">
-                    <div>Date</div>
-                    <div>Description</div>
-                    <div>Amount</div>
-                    <div>Category</div>
-                    <div>Learned</div>
-                    <div>Actions</div>
-                </div>
-                <div class="table-rows" id="table-rows">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <span>Loading transactions...</span>
-                    </div>
-                </div>
+        
+        <div class="table-wrapper" id="tableWrapper">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 15px;">Loading transactions...</p>
             </div>
-
-            <!-- PAGINATION -->
-            <div class="pagination">
-                <button id="prev-btn" onclick="previousPage()">← Previous</button>
-                <span class="pagination-info">
-                    Page <span id="current-page">1</span> of <span id="total-pages">1</span>
-                </span>
-                <button id="next-btn" onclick="nextPage()">Next →</button>
-            </div>
+        </div>
+        
+        <div class="pagination">
+            <button id="prevBtn" onclick="previousPage()">← Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button id="nextBtn" onclick="nextPage()">Next →</button>
         </div>
     </div>
 
     <script>
         let currentPage = 1;
-        let totalPages = 1;
-        let categories = [];
-        let currentTransactions = [];
-        let editingTransactions = new Set();
-
-        // Load initial data
-        async function init() {
-            await loadTransactions();
-        }
-
+        let allTransactions = [];
+        let transactionStatuses = {};
+        const perPage = 20;
+        
         async function loadTransactions() {
             try {
-                const response = await fetch(`/api/categorizations-lite/transactions?page=${currentPage}`);
-                const data = await response.json();
-
-                if (!data.success) {
-                    showToast('Error loading transactions', 'error');
-                    return;
-                }
-
-                categories = data.categories;
-                currentTransactions = data.data;
-                totalPages = data.pagination.total_pages;
-
-                updateStats(data.stats);
-                renderTable();
-                updatePaginationButtons();
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('Failed to load transactions', 'error');
-            }
-        }
-
-        function updateStats(stats) {
-            document.getElementById('stat-total').textContent = stats.total;
-            document.getElementById('stat-confirmed').textContent = stats.confirmed;
-            document.getElementById('stat-modified').textContent = stats.modified;
-            document.getElementById('stat-pending').textContent = stats.pending;
-        }
-
-        function renderTable() {
-            const container = document.getElementById('table-rows');
-
-            if (currentTransactions.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No transactions to review</h3>
-                        <p>All transactions have been categorized!</p>
+                // Load all transactions
+                const res = await fetch('/api/transactions');
+                const data = await res.json();
+                allTransactions = data || [];
+                
+                // Load transaction statuses
+                const statusRes = await fetch('/api/dashboard/category-summary');
+                const statusData = await statusRes.json();
+                
+                // Initialize stats
+                updateStats();
+                renderPage();
+            } catch (err) {
+                console.error('Error loading transactions:', err);
+                document.getElementById('tableWrapper').innerHTML = `
+                    <div class="loading">
+                        <p style="color: #ff6b6b;">Error loading transactions</p>
+                        <p style="margin-top: 10px; font-size: 12px; color: #a0a0a0;">${err.message}</p>
                     </div>
                 `;
-                return;
             }
-
-            container.innerHTML = currentTransactions.map(txn => `
-                <div class="table-row" id="row-${txn.txn_id}">
-                    <div class="cell cell-date">${formatDate(txn.date)}</div>
-                    <div class="cell cell-description" title="${txn.description}">
-                        ${txn.description}
-                    </div>
-                    <div class="cell cell-amount ${txn.direction === 'debit' ? 'expense' : 'income'}">
-                        ${formatAmount(txn.amount, txn.direction)}
-                    </div>
-                    <div class="cell cell-category" id="cat-${txn.txn_id}">
-                        ${txn.auto_category}
-                    </div>
-                    <div class="cell cell-category" id="learned-${txn.txn_id}">
-                        ${txn.learned_category ? `<em>${txn.learned_category}</em>` : '—'}
-                    </div>
-                    <div class="cell cell-status">
-                        <span class="status-badge ${txn.status}">
-                            ${getStatusLabel(txn.status)}
-                        </span>
-                    </div>
-                </div>
-            `).join('');
-
-            // Add actions after rendering to avoid conflicts
-            currentTransactions.forEach(txn => {
-                if (txn.status !== 'confirmed') {
-                    addRowActions(txn);
-                }
+        }
+        
+        function updateStats() {
+            document.getElementById('stat-total').textContent = allTransactions.length;
+            document.getElementById('stat-pending').textContent = allTransactions.length;
+        }
+        
+        function renderPage() {
+            const start = (currentPage - 1) * perPage;
+            const end = start + perPage;
+            const pageTransactions = allTransactions.slice(start, end);
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="date">Date</th>
+                            <th class="description">Description</th>
+                            <th class="amount">Amount</th>
+                            <th class="category">Category</th>
+                            <th class="actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            pageTransactions.forEach(tx => {
+                const amount = parseFloat(tx.amount || 0);
+                const direction = tx.direction || 'DEBIT';
+                const amountStr = direction === 'CREDIT' ? '+$' + Math.abs(amount).toFixed(2) : '-$' + Math.abs(amount).toFixed(2);
+                const categoryDisplay = tx.category || 'Uncategorized';
+                
+                html += `
+                    <tr data-id="${tx.txn_id}">
+                        <td class="date">${tx.date}</td>
+                        <td class="description" title="${tx.description}">${tx.description}</td>
+                        <td class="amount">${amountStr}</td>
+                        <td class="category">${categoryDisplay}</td>
+                        <td class="actions">
+                            <button class="btn btn-confirm" onclick="confirmTransaction(${tx.txn_id})">✓ Confirm</button>
+                            <select class="category-select" onchange="changeCategory(${tx.txn_id}, this.value)">
+                                <option value="">Change...</option>
+                                <option value="Salary">Salary</option>
+                                <option value="Groceries">Groceries</option>
+                                <option value="Utilities">Utilities</option>
+                                <option value="Entertainment">Entertainment</option>
+                                <option value="Transportation">Transportation</option>
+                                <option value="Healthcare">Healthcare</option>
+                                <option value="Insurance">Insurance</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Dining">Dining</option>
+                                <option value="Car Payment">Car Payment</option>
+                                <option value="Rent">Rent</option>
+                                <option value="Subscription">Subscription</option>
+                                <option value="Education">Education</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
             });
-        }
-
-        function addRowActions(txn) {
-            const row = document.getElementById(`row-${txn.txn_id}`);
-            if (!row) return;
-
-            const statusCell = row.querySelector('.cell-status');
-
-            // Clear existing actions
-            const existingAction = row.querySelector('.row-actions');
-            if (existingAction) existingAction.remove();
-
-            if (txn.status === 'confirmed') {
-                return; // Don't show actions for confirmed
-            }
-
-            const actionHtml = document.createElement('div');
-            actionHtml.className = 'cell-actions row-actions';
-            actionHtml.innerHTML = `
-                <button class="btn-confirm" onclick="confirmTransaction('${txn.txn_id}')">
-                    ✓ Confirm
-                </button>
-                <button class="btn-change" onclick="showCategoryDropdown('${txn.txn_id}', '${txn.auto_category}')">
-                    Change
-                </button>
+            
+            html += `
+                    </tbody>
+                </table>
             `;
-
-            statusCell.parentElement.insertBefore(actionHtml, statusCell.nextSibling);
+            
+            document.getElementById('tableWrapper').innerHTML = html;
+            
+            // Update pagination
+            const totalPages = Math.ceil(allTransactions.length / perPage);
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages;
         }
-
-        function showCategoryDropdown(txnId, currentCategory) {
-            const row = document.getElementById(`row-${txnId}`);
-            if (!row) return;
-
-            const actions = row.querySelector('.row-actions');
-            if (!actions) return;
-
-            // Replace actions with dropdown
-            const dropdownHtml = `
-                <select class="category-select" id="select-${txnId}">
-                    ${categories.map(cat => `
-                        <option value="${cat}" ${cat === currentCategory ? 'selected' : ''}>
-                            ${cat}
-                        </option>
-                    `).join('')}
-                </select>
-                <button class="btn-confirm" onclick="saveCategory('${txnId}')">Save</button>
-                <button class="btn-change" style="background: var(--text-secondary);" onclick="cancelCategoryEdit('${txnId}')">Cancel</button>
-            `;
-
-            actions.innerHTML = dropdownHtml;
-            editingTransactions.add(txnId);
-            document.getElementById(`select-${txnId}`).focus();
+        
+        function confirmTransaction(id) {
+            transactionStatuses[id] = 'confirmed';
+            document.querySelectorAll(`tr[data-id="${id}"] .status-badge`).forEach(el => {
+                el.textContent = '✓ Confirmed';
+                el.className = 'status-badge status-confirmed';
+            });
+            alert('Transaction confirmed!');
         }
-
-        function cancelCategoryEdit(txnId) {
-            editingTransactions.delete(txnId);
-            const txn = currentTransactions.find(t => t.txn_id === txnId);
-            if (txn) {
-                addRowActions(txn);
+        
+        function changeCategory(id, newCategory) {
+            if (!newCategory) return;
+            transactionStatuses[id] = 'modified';
+            
+            // Find and update the transaction
+            const tx = allTransactions.find(t => t.txn_id === id);
+            if (tx) {
+                tx.category = newCategory;
             }
+            
+            renderPage();
+            alert(`Category changed to ${newCategory}!`);
         }
-
-        async function saveCategory(txnId) {
-            const select = document.getElementById(`select-${txnId}`);
-            if (!select) return;
-
-            const newCategory = select.value;
-            const txn = currentTransactions.find(t => t.txn_id === txnId);
-
-            if (!txn || newCategory === txn.auto_category) {
-                cancelCategoryEdit(txnId);
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/categorizations-lite/transaction/${txnId}/modify`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ category: newCategory })
-                });
-
-                if (!response.ok) {
-                    showToast('Error updating category', 'error');
-                    return;
-                }
-
-                showToast('Category updated and pattern learned!', 'success');
-                editingTransactions.delete(txnId);
-                txn.auto_category = newCategory;
-                txn.status = 'modified';
-
-                // Update UI
-                document.getElementById(`cat-${txnId}`).textContent = newCategory;
-                const row = document.getElementById(`row-${txnId}`);
-                const statusCell = row.querySelector('.cell-status');
-                statusCell.innerHTML = `<span class="status-badge modified">Modified</span>`;
-                addRowActions(txn);
-
-                // Refresh stats
-                const statsResponse = await fetch('/api/categorizations-lite/stats');
-                const statsData = await statsResponse.json();
-                updateStats(statsData);
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('Failed to save category', 'error');
-            }
-        }
-
-        async function confirmTransaction(txnId) {
-            const txn = currentTransactions.find(t => t.txn_id === txnId);
-            if (!txn) return;
-
-            try {
-                const response = await fetch(`/api/categorizations-lite/transaction/${txnId}/confirm`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                if (!response.ok) {
-                    showToast('Error confirming transaction', 'error');
-                    return;
-                }
-
-                showToast('Transaction confirmed!', 'success');
-                txn.status = 'confirmed';
-
-                // Update UI
-                const row = document.getElementById(`row-${txnId}`);
-                const statusCell = row.querySelector('.cell-status');
-                statusCell.innerHTML = `<span class="status-badge confirmed">✓ Confirmed</span>`;
-
-                // Remove actions
-                const actions = row.querySelector('.row-actions');
-                if (actions) actions.remove();
-
-                // Refresh stats
-                const statsResponse = await fetch('/api/categorizations-lite/stats');
-                const statsData = await statsResponse.json();
-                updateStats(statsData);
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('Failed to confirm transaction', 'error');
-            }
-        }
-
-        function getStatusLabel(status) {
-            switch (status) {
-                case 'confirmed':
-                    return '✓ Confirmed';
-                case 'modified':
-                    return '✎ Modified';
-                default:
-                    return 'Pending';
-            }
-        }
-
-        function formatDate(dateStr) {
-            const date = new Date(dateStr);
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        }
-
-        function formatAmount(amount, direction) {
-            const sign = direction === 'debit' ? '-' : '+';
-            return `${sign}$${Math.abs(amount).toFixed(2)}`;
-        }
-
+        
         function previousPage() {
             if (currentPage > 1) {
                 currentPage--;
-                loadTransactions();
-                window.scrollTo(0, 0);
+                renderPage();
             }
         }
-
+        
         function nextPage() {
+            const totalPages = Math.ceil(allTransactions.length / perPage);
             if (currentPage < totalPages) {
                 currentPage++;
-                loadTransactions();
-                window.scrollTo(0, 0);
+                renderPage();
             }
         }
-
-        function updatePaginationButtons() {
-            document.getElementById('current-page').textContent = currentPage;
-            document.getElementById('total-pages').textContent = totalPages;
-            document.getElementById('prev-btn').disabled = currentPage <= 1;
-            document.getElementById('next-btn').disabled = currentPage >= totalPages;
-        }
-
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Initialize on load
-        init();
+        
+        // Load on startup
+        loadTransactions();
     </script>
 </body>
 </html>
