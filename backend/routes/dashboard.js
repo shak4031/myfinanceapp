@@ -124,21 +124,42 @@ async function getRecurringPayments() {
 function categorizeSubscription(description) {
   const desc = description.toLowerCase();
   
+  // Streaming services
   if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video' };
   if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix' };
   if (/spotify/i.test(desc)) return { type: 'streaming', name: 'Spotify' };
   if (/hulu/i.test(desc)) return { type: 'streaming', name: 'Hulu' };
   if (/disney|espn\+|hbo/i.test(desc)) return { type: 'streaming', name: 'Streaming Service' };
-  if (/iptv|apple tv|youtube|crunchyroll/i.test(desc)) return { type: 'streaming', name: 'IPTV' };
-  if (/internet|comcast|verizon|at&t|phone|mobile|wireless/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone' };
-  if (/electricity|gas|water|power|utility|hydro/i.test(desc)) return { type: 'utilities', name: 'Utilities' };
-  if (/insurance|homeowners|renters|auto|health/i.test(desc)) return { type: 'insurance', name: 'Insurance' };
-  if (/gym|fitness|peloton|yoga|membership/i.test(desc)) return { type: 'wellness', name: 'Fitness' };
-  if (/mortgage|rent|lease/i.test(desc)) return { type: 'housing', name: 'Housing' };
-  if (/car.*payment|auto.*loan|vehicle/i.test(desc)) return { type: 'auto', name: 'Car Payment' };
-  if (/storage|cloud|backup|subscription/i.test(desc)) return { type: 'software', name: 'Software/Cloud' };
+  if (/iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'streaming', name: 'IPTV/Streaming' };
   
-  return { type: 'subscription', name: 'Subscription' };
+  // Utilities & Internet  
+  if (/internet|comcast|verizon|at&t|phone|mobile|wireless|cable|broadband/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone' };
+  if (/electricity|gas|water|power|utility|hydro|pepco|eversource/i.test(desc)) return { type: 'utilities', name: 'Utilities' };
+  
+  // Insurance (needs to come BEFORE generic subscription)
+  if (/insurance|homeowners|renters|auto|health|state farm|geico|allstate|usaa|progressive|amica/i.test(desc)) return { type: 'insurance', name: 'Insurance' };
+  
+  // Housing & Auto
+  if (/mortgage|rent|lease|apartment|housing|property/i.test(desc)) return { type: 'housing', name: 'Housing' };
+  if (/car.*payment|auto.*loan|vehicle|bmw|ford|tesla|honda|chevy|payment/i.test(desc)) return { type: 'auto', name: 'Car Payment' };
+  
+  // Wellness & Fitness
+  if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness' };
+  if (/healthcare|medical|doctor|dentist|dental|pharmacy|cvs|walgreens|chiropractor|physical therapy/i.test(desc)) return { type: 'wellness', name: 'Healthcare' };
+  
+  // Software & Cloud
+  if (/office|microsoft|adobe|dropbox|onedrive|icloud|google one|amazon photos|backup/i.test(desc)) return { type: 'software', name: 'Software/Cloud' };
+  
+  // Banking & Finance (fees, overdraft, etc)
+  if (/overdraft|bank fee|atm fee|wire transfer|td bank|chase|wells fargo|bofa|bank of america/i.test(desc)) return { type: 'banking', name: 'Banking Fees' };
+  
+  // Business & Professional
+  if (/accounting|bookkeeping|lawyer|legal|consulting|freelance|visa fee|merchant|payment|square|stripe/i.test(desc)) return { type: 'professional', name: 'Professional Services' };
+  
+  // Subscriptions (catch-all, last resort)
+  if (/subscription|membership|annual|yearly|monthly|recurring/i.test(desc)) return { type: 'subscription', name: 'Subscription' };
+  
+  return { type: 'subscription', name: 'Recurring Payment' };
 }
 
 router.post('/summary', async (req, res) => {
