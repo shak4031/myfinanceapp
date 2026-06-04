@@ -235,6 +235,8 @@
       padding: 20px;
       box-shadow: var(--shadow-sm);
       transition: var(--transition);
+      display: flex;
+      flex-direction: column;
     }
 
     .metric-card:hover {
@@ -662,6 +664,7 @@
     /* CATEGORY DETAIL VIEW */
     .category-detail {
       display: none;
+      margin-top: 20px;
     }
 
     .category-detail.active {
@@ -1395,33 +1398,33 @@
       <h1 class="page-title">🔧 Categorizations</h1>
     </div>
     
-    <div style="max-width: 800px;">
-      <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 32px; margin-bottom: 24px; text-align: center;">
-        <h2 style="color: var(--text-primary); margin-bottom: 16px;">✅ Transactions Auto-Categorized</h2>
+    <div style="max-width: 800px; margin: 0 auto;">
+      <!-- INFO CARD -->
+      <div class="card" style="text-align: center; margin-bottom: 32px;">
+        <h2 class="card-title" style="font-size: 20px; margin-bottom: 12px;">✅ Transactions Auto-Categorized</h2>
         <p style="color: var(--text-secondary); margin-bottom: 24px;">All your transactions are automatically categorized. To review, modify, or verify categorizations:</p>
-        <button class="btn btn-primary" onclick="switchTab('categories')" style="padding: 12px 28px; font-size: 15px;">
-          📁 Go to Categories Tab
-        </button>
+        <button class="btn btn-primary" onclick="switchTab('categories')">📁 Go to Categories Tab</button>
       </div>
       
-      <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 24px;">
-        <h3 style="color: var(--text-primary); margin-bottom: 16px;">📊 Statistics</h3>
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
-          <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Total Transactions</div>
-            <div style="font-size: 28px; font-weight: bold; color: var(--primary);" id="stat-total">-</div>
+      <!-- STATS CARD -->
+      <div class="card" style="margin-bottom: 32px;">
+        <h3 class="card-title" style="margin-bottom: 20px; margin-top: 0;">📊 Statistics</h3>
+        <div class="metrics-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 0;">
+          <div class="metric-card">
+            <div class="metric-label">Total Transactions</div>
+            <div class="metric-value" id="stat-total">-</div>
           </div>
-          <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Categories</div>
-            <div style="font-size: 28px; font-weight: bold; color: var(--primary);" id="stat-categories">-</div>
+          <div class="metric-card">
+            <div class="metric-label">Categories</div>
+            <div class="metric-value" id="stat-categories">-</div>
           </div>
-          <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Total Spending</div>
-            <div style="font-size: 28px; font-weight: bold; color: var(--primary);" id="stat-spending">-</div>
+          <div class="metric-card">
+            <div class="metric-label">Total Spending</div>
+            <div class="metric-value" id="stat-spending">-</div>
           </div>
-          <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Period</div>
-            <div style="font-size: 28px; font-weight: bold; color: var(--primary);">June 2026</div>
+          <div class="metric-card">
+            <div class="metric-label">Period</div>
+            <div class="metric-value">June 2026</div>
           </div>
         </div>
       </div>
