@@ -167,6 +167,44 @@ export default class Database {
     }
   }
 
+  async importTransactions(transactions) {
+    try {
+      let imported = 0;
+      let duplicates = 0;
+
+      for (const txn of transactions) {
+        try {
+          // Check for duplicate
+          const existing = await this.pool.query(
+            'SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3',
+            [txn.date, txn.description, txn.amount]
+          );
+
+          if (existing.rows.length > 0) {
+            duplicates++;
+            continue;
+          }
+
+          // Insert transaction
+          await this.pool.query(
+            'INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [txn.date, txn.description, txn.category, txn.amount, txn.direction, txn.balance || null, txn.source, 1]
+          );
+
+          imported++;
+        } catch (err) {
+          log('DATABASE', `Error importing transaction: ${err.message}`);
+        }
+      }
+
+      log('DATABASE', `✓ Import complete: ${imported} imported, ${duplicates} duplicates skipped`);
+      return { imported, duplicates };
+    } catch (err) {
+      log('DATABASE', `❌ Error importing transactions: ${err.message}`);
+      throw err;
+    }
+  }
+
   async close() {
     await this.pool.end();
     log('DATABASE', '✓ Connection closed');
