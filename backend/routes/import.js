@@ -1,503 +1,267 @@
-import { Router } from 'express';
-import Database from '../db.js';
+import express from 'express';
 import { log } from '../utils/logger.js';
-import PDFParser from '../utils/pdfParser.js';
+import Database from '../db.js';
 
-const router = Router();
+const router = express.Router();
 const db = new Database();
-const pdfParser = new PDFParser();
 
-// ============================================
-// CSV Import endpoint (existing)
-// ============================================
-router.post('/import-csv', async (req, res) => {
-  try {
-    log('CSV_IMPORT', 'Starting CSV import');
-    
-    const { csvData, source } = req.body;
-    
-    if (!csvData || !source) {
-      log('CSV_IMPORT', '❌ Missing csvData or source');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'csvData and source required' 
-      });
-    }
+/**
+ * SMART CSV IMPORT FOR WEB UPLOADS
+ * Handles TD Bank CSV files with intelligent deduplication and categorization
+ */
 
-    let csvLines = csvData
-      .replace(/\r\n/g, '\n')
-      .trim()
-      .split('\n');
-    
-    log('CSV_IMPORT', `Raw CSV has ${csvLines.length} lines`);
-    
-    const headerLine = csvLines[0];
-    const headers = parseCSVLine(headerLine).map(h => h.toLowerCase());
-    log('CSV_IMPORT', `Headers detected: ${headers.join(', ')}`);
-    log('CSV_IMPORT', `Processing ${csvLines.length - 1} data rows from ${source}`);
+// Category rules for smart matching
+const CATEGORY_RULES = {
+  'Groceries': ['GROCERY', 'SAFEWAY', 'WHOLE FOODS', 'TRADER JOE', 'INSTACART', 'WAWA', 'KROGER', 'PUBLIX'],
+  'Dining': ['RESTAURANT', 'CAFE', 'CHIPOTLE', 'ROY ROGERS', 'PANERA', 'PIZZA', 'BURGER KING', 'WENDYS', 'SUBWAY', 'PANERA'],
+  'Shopping': ['TARGET', 'AMAZON', 'ETSY', 'WALMART', 'COSTCO', 'KOHLS', 'PAYPAL', 'AFFIRM', 'KLARNA'],
+  'Entertainment': ['CINEMA', 'NETFLIX', 'SPOTIFY', 'HULU', 'GAME', 'STEAM'],
+  'Transportation': ['UBER', 'LYFT', 'TAXI', 'HYUNDAI', 'FORD', 'TESLA', 'LEASE', 'PARKING'],
+  'Healthcare': ['PHARMACY', 'DOCTOR', 'HOSPITAL', 'DENTAL', 'CVS', 'WALGREENS', 'MEDICAL'],
+  'Utilities': ['ELECTRIC', 'WATER', 'GAS', 'VERIZON', 'COMCAST', 'AMEREN'],
+  'Insurance': ['STATE FARM', 'ALLSTATE', 'GEICO', 'INSURANCE'],
+  'Subscriptions': ['SUBSCRIPTION', 'NETFLIX', 'HULU', 'SPOTIFY'],
+  'Childcare': ['DAYCARE', 'SCHOOL', 'NANNY'],
+  'Home': ['MORTGAGE', 'RENT', 'HOME DEPOT', 'LOWES', 'PENNYMAC', 'LEASE'],
+  'Taxes': ['TAX', 'IRS'],
+};
 
-    let imported = 0;
-    let duplicates = 0;
-    let errors = 0;
-
-    for (let i = 1; i < csvLines.length; i++) {
-      const row_str = csvLines[i].trim();
-      if (!row_str) continue;
-      
-      try {
-        const cols = parseCSVLine(row_str);
-        const row = {};
-        
-        headers.forEach((header, idx) => {
-          row[header] = cols[idx] || '';
-        });
-
-        const transaction = parseTransaction(row, source);
-        
-        if (!transaction) {
-          log('CSV_IMPORT', `⚠️ Skipped invalid row ${i}`);
-          continue;
-        }
-
-        const duplicate = await db.get(
-          `SELECT id FROM transactions 
-           WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
-          [transaction.date, transaction.description, transaction.amount, transaction.direction]
-        );
-
-        if (duplicate) {
-          log('CSV_IMPORT', `Duplicate found: ${transaction.description} (${transaction.date})`);
-          duplicates++;
-          continue;
-        }
-
-        await db.run(
-          `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            transaction.date,
-            transaction.description,
-            transaction.category,
-            transaction.amount,
-            transaction.direction,
-            transaction.balance,
-            1,
-            source
-          ]
-        );
-
-        imported++;
-        log('CSV_IMPORT', `✓ Imported: ${transaction.description} (${transaction.amount})`);
-
-      } catch (err) {
-        errors++;
-        log('CSV_IMPORT', `❌ Error processing row ${i}: ${err.message}`);
+function categorize(description) {
+  if (!description) return 'Other';
+  const desc = description.toUpperCase();
+  for (const [category, keywords] of Object.entries(CATEGORY_RULES)) {
+    for (const keyword of keywords) {
+      if (desc.includes(keyword)) {
+        return category;
       }
     }
-
-    log('CSV_IMPORT', `✓ Complete: ${imported} imported, ${duplicates} duplicates, ${errors} errors`);
-    
-    res.json({
-      success: true,
-      imported,
-      duplicates,
-      errors,
-      total: csvLines.length - 1
-    });
-
-  } catch (err) {
-    log('CSV_IMPORT', `❌ Import failed: ${err.message}`);
-    res.status(500).json({ 
-      success: false, 
-      error: err.message 
-    });
   }
-});
+  return 'Other';
+}
 
-// ============================================
-// PDF Import endpoint (NEW)
-// ============================================
-router.post('/import-pdf', async (req, res) => {
+/**
+ * POST /api/import/import-csv
+ * Import CSV file uploaded from the web interface
+ */
+router.post('/import-csv', async (req, res) => {
+  const startTime = Date.now();
   try {
-    log('PDF_IMPORT', 'Starting PDF import');
+    const { csvData, source } = req.body;
 
-    const { pdfData, source, fileName } = req.body;
+    if (!csvData) {
+      return res.status(400).json({ success: false, error: 'No CSV data provided' });
+    }
 
-    if (!pdfData || !source) {
-      log('PDF_IMPORT', '❌ Missing pdfData or source');
+    log('IMPORT', '📥 Processing CSV upload...');
+
+    // Parse CSV
+    const lines = csvData.trim().split('\n');
+    if (lines.length < 2) {
+      return res.status(400).json({ success: false, error: 'CSV file is empty or invalid' });
+    }
+
+    // Parse header row
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map(h => h.trim());
+
+    log('IMPORT', `Headers detected: ${headers.join(', ')}`);
+
+    // Find column indices with fuzzy matching
+    const findColumn = (aliases) => {
+      for (let i = 0; i < headers.length; i++) {
+        const h = headers[i].toLowerCase();
+        for (const alias of aliases) {
+          if (h.includes(alias.toLowerCase())) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    };
+
+    const dateCol = findColumn(['date']);
+    const descCol = findColumn(['description', 'memo', 'transaction']);
+    const debitCol = findColumn(['debit', 'withdrawal']);
+    const creditCol = findColumn(['credit', 'deposit']);
+    const balanceCol = findColumn(['balance', 'running balance']);
+
+    if (dateCol === -1 || descCol === -1) {
       return res.status(400).json({
         success: false,
-        error: 'pdfData and source required'
+        error: 'Could not find Date and Description columns. Please use standard TD Bank CSV format.'
       });
     }
 
-    // Convert base64 to Buffer if necessary
-    let pdfBuffer;
-    if (typeof pdfData === 'string') {
-      // Remove data URI prefix if present
-      const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '');
-      pdfBuffer = Buffer.from(base64Data, 'base64');
-    } else {
-      pdfBuffer = pdfData;
-    }
+    log('IMPORT', `Column mapping: date=${dateCol}, desc=${descCol}, debit=${debitCol}, credit=${creditCol}, balance=${balanceCol}`);
 
-    log('PDF_IMPORT', `Processing PDF: ${fileName || 'unknown'} (${pdfBuffer.length} bytes)`);
+    // Parse transactions
+    const transactions = [];
+    const errors = [];
 
-    // Parse PDF
-    let transactions = [];
-    try {
-      transactions = await pdfParser.parseStatement(pdfBuffer, source);
-      log('PDF_IMPORT', `✓ Extracted ${transactions.length} transactions from PDF`);
-    } catch (err) {
-      log('PDF_IMPORT', `❌ PDF parsing failed: ${err.message}`);
-      return res.status(400).json({
-        success: false,
-        error: `PDF parsing failed: ${err.message}`
-      });
-    }
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
-    let imported = 0;
-    let duplicates = 0;
-    let errors = 0;
-
-    // Process each transaction
-    for (const transaction of transactions) {
       try {
-        // Enrich transaction with categorization
-        const enrichedTx = {
-          ...transaction,
-          category: categorizeTransaction(transaction.description),
-          balance: transaction.balance || 0,
-          source: source,
+        const cols = line.split(',').map(c => c.trim());
+
+        const date = cols[dateCol];
+        const description = cols[descCol];
+        const debitStr = debitCol >= 0 ? cols[debitCol] : '';
+        const creditStr = creditCol >= 0 ? cols[creditCol] : '';
+        const balanceStr = balanceCol >= 0 ? cols[balanceCol] : '';
+
+        // Skip empty rows
+        if (!date || !description) continue;
+
+        // Parse amounts
+        const debitAmount = debitStr ? parseFloat(debitStr) : 0;
+        const creditAmount = creditStr ? parseFloat(creditStr) : 0;
+
+        // Determine direction and amount
+        let amount = 0;
+        let direction = 'DEBIT';
+
+        if (creditAmount > 0) {
+          amount = creditAmount;
+          direction = 'CREDIT';
+        } else if (debitAmount > 0) {
+          amount = debitAmount;
+          direction = 'DEBIT';
+        } else {
+          continue; // Skip transactions with no amount
+        }
+
+        // Parse balance
+        const balance = balanceStr ? parseFloat(balanceStr) : null;
+
+        // Detect account source from source parameter or description
+        let accountSource = 'checking';
+        if (source && source.includes('savings')) {
+          accountSource = 'savings';
+        }
+
+        const transaction = {
+          date,
+          description: description.trim(),
+          category: categorize(description),
+          amount,
+          direction,
+          balance,
+          source: accountSource,
           user_id: 1
         };
 
-        // Check for duplicates
-        const duplicate = await db.get(
+        transactions.push(transaction);
+      } catch (err) {
+        errors.push({ line: i, error: err.message });
+        if (errors.length <= 5) {
+          log('IMPORT', `⚠ Parse error on line ${i}: ${err.message}`);
+        }
+      }
+    }
+
+    log('IMPORT', `✓ Parsed ${transactions.length} transactions from CSV`);
+
+    if (transactions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: `No valid transactions found in CSV. Parsed ${errors.length} errors.`,
+        sampleErrors: errors.slice(0, 3)
+      });
+    }
+
+    // Check for duplicates and insert
+    let imported = 0;
+    let duplicates = 0;
+    const insertErrors = [];
+
+    for (const txn of transactions) {
+      try {
+        // Check if transaction already exists (by date, description, amount)
+        const existCheck = await db.pool.query(
           `SELECT id FROM transactions 
            WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
-          [enrichedTx.date, enrichedTx.description, enrichedTx.amount, enrichedTx.direction]
+          [txn.date, txn.description, txn.amount, txn.direction]
         );
 
-        if (duplicate) {
-          log('PDF_IMPORT', `Duplicate found: ${enrichedTx.description} (${enrichedTx.date})`);
+        if (existCheck.rows.length > 0) {
           duplicates++;
           continue;
         }
 
-        // Insert transaction
-        await db.run(
-          `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            enrichedTx.date,
-            enrichedTx.description,
-            enrichedTx.category,
-            enrichedTx.amount,
-            enrichedTx.direction,
-            enrichedTx.balance,
-            enrichedTx.user_id,
-            enrichedTx.source
-          ]
+        // Insert new transaction
+        const result = await db.pool.query(
+          `INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id`,
+          [txn.date, txn.description, txn.category, txn.amount, txn.direction, txn.balance, txn.source, txn.user_id]
         );
 
-        imported++;
-        log('PDF_IMPORT', `✓ Imported: ${enrichedTx.description} (${enrichedTx.amount})`);
-
+        if (result.rows.length > 0) {
+          imported++;
+        }
       } catch (err) {
-        errors++;
-        log('PDF_IMPORT', `❌ Error importing transaction: ${err.message}`);
+        insertErrors.push({ transaction: txn.description, error: err.message });
+        if (insertErrors.length <= 3) {
+          log('IMPORT', `✗ Insert error: ${err.message}`);
+        }
       }
     }
 
-    log('PDF_IMPORT', `✓ Complete: ${imported} imported, ${duplicates} duplicates, ${errors} errors`);
+    const duration = Date.now() - startTime;
+
+    log('IMPORT', `✅ CSV import complete in ${duration}ms`);
+    log('IMPORT', `  Imported: ${imported}`);
+    log('IMPORT', `  Duplicates skipped: ${duplicates}`);
+    log('IMPORT', `  Insert errors: ${insertErrors.length}`);
+
+    // Get final count
+    const countResult = await db.pool.query('SELECT COUNT(*) as count FROM transactions');
+    const totalInDb = parseInt(countResult.rows[0].count);
 
     res.json({
-      success: true,
+      success: imported > 0,
       imported,
       duplicates,
-      errors,
       total: transactions.length,
-      fileName: fileName || 'unknown'
+      errors: insertErrors.length,
+      totalInDatabase: totalInDb,
+      duration,
+      message: `Imported ${imported} new transactions (${duplicates} duplicates skipped). Total in database: ${totalInDb}`
     });
 
   } catch (err) {
-    log('PDF_IMPORT', `❌ PDF import failed: ${err.message}`);
+    log('IMPORT', `❌ CSV import failed: ${err.message}`);
     res.status(500).json({
       success: false,
-      error: err.message
+      error: err.message,
+      type: 'CSV_IMPORT_ERROR'
     });
   }
 });
 
-// ============================================
-// Multi-file batch import endpoint
-// ============================================
-router.post('/import-batch', async (req, res) => {
+/**
+ * GET /api/import/status
+ * Get import status and statistics
+ */
+router.get('/status', async (req, res) => {
   try {
-    log('BATCH_IMPORT', 'Starting batch import');
+    const result = await db.pool.query(
+      'SELECT COUNT(*) as total, COUNT(DISTINCT category) as categories FROM transactions'
+    );
 
-    const { files } = req.body; // Array of {pdfData, source, fileName}
-
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      log('BATCH_IMPORT', '❌ Missing files array');
-      return res.status(400).json({
-        success: false,
-        error: 'files array required'
-      });
-    }
-
-    const results = [];
-    let totalImported = 0;
-    let totalDuplicates = 0;
-    let totalErrors = 0;
-
-    for (const file of files) {
-      try {
-        const { pdfData, source, fileName } = file;
-
-        let pdfBuffer;
-        if (typeof pdfData === 'string') {
-          const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '');
-          pdfBuffer = Buffer.from(base64Data, 'base64');
-        } else {
-          pdfBuffer = pdfData;
-        }
-
-        let transactions = await pdfParser.parseStatement(pdfBuffer, source);
-
-        let imported = 0;
-        let duplicates = 0;
-        let errors = 0;
-
-        for (const transaction of transactions) {
-          try {
-            const enrichedTx = {
-              ...transaction,
-              category: categorizeTransaction(transaction.description),
-              balance: transaction.balance || 0,
-              source: source,
-              user_id: 1
-            };
-
-            const duplicate = await db.get(
-              `SELECT id FROM transactions 
-               WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
-              [enrichedTx.date, enrichedTx.description, enrichedTx.amount, enrichedTx.direction]
-            );
-
-            if (duplicate) {
-              duplicates++;
-              continue;
-            }
-
-            await db.run(
-              `INSERT INTO transactions (date, description, category, amount, direction, balance, user_id, source)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [
-                enrichedTx.date,
-                enrichedTx.description,
-                enrichedTx.category,
-                enrichedTx.amount,
-                enrichedTx.direction,
-                enrichedTx.balance,
-                enrichedTx.user_id,
-                enrichedTx.source
-              ]
-            );
-
-            imported++;
-          } catch (err) {
-            errors++;
-          }
-        }
-
-        results.push({
-          fileName,
-          source,
-          imported,
-          duplicates,
-          errors,
-          total: transactions.length
-        });
-
-        totalImported += imported;
-        totalDuplicates += duplicates;
-        totalErrors += errors;
-
-      } catch (err) {
-        log('BATCH_IMPORT', `❌ Error processing file: ${err.message}`);
-        results.push({
-          fileName: file.fileName,
-          error: err.message
-        });
-      }
-    }
-
-    log('BATCH_IMPORT', `✓ Batch complete: ${totalImported} imported, ${totalDuplicates} duplicates, ${totalErrors} errors`);
+    const row = result.rows[0];
 
     res.json({
       success: true,
-      totalImported,
-      totalDuplicates,
-      totalErrors,
-      fileResults: results
+      transactionsInDatabase: parseInt(row.total),
+      uniqueCategories: parseInt(row.categories),
+      status: 'ready'
     });
-
   } catch (err) {
-    log('BATCH_IMPORT', `❌ Batch import failed: ${err.message}`);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// ============================================
-// Helper Functions
-// ============================================
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-    
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current.trim());
-  return result;
-}
-
-function parseTransaction(row, source) {
-  try {
-    if (source === 'td-checking' || source === 'td-savings') {
-      const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
-      if (!dateStr) return null;
-      
-      const debit = parseFloat(findColumn(row, ['debit', 'withdrawal']) || 0) || 0;
-      const credit = parseFloat(findColumn(row, ['credit', 'deposit']) || 0) || 0;
-      
-      const balance = parseFloat(
-        findColumn(row, ['balance', 'account balance', 'account running balance', 'running balance']) || 0
-      ) || 0;
-      
-      const description = findColumn(row, ['description', 'memo', 'transaction description', 'details']) || 'Unknown';
-      
-      const date = formatDate(dateStr);
-      if (!date) return null;
-
-      let direction = 'debit';
-      let amount = debit;
-
-      if (credit > 0) {
-        direction = 'credit';
-        amount = credit;
-      }
-
-      return {
-        date,
-        description,
-        category: categorizeTransaction(description),
-        amount,
-        direction,
-        balance
-      };
-
-    } else if (source === 'credit-card') {
-      const dateStr = findColumn(row, ['date', 'transaction date', 'posting date']);
-      if (!dateStr) return null;
-      
-      const amount = parseFloat(
-        findColumn(row, ['amount', 'charge', 'transaction amount']) || 0
-      );
-      if (!amount || isNaN(amount)) return null;
-      
-      const balance = parseFloat(
-        findColumn(row, ['balance', 'running balance', 'available balance']) || 0
-      ) || 0;
-      
-      const description = findColumn(row, ['description', 'merchant', 'transaction description', 'details']) || 'Unknown';
-      
-      const date = formatDate(dateStr);
-      if (!date) return null;
-
-      return {
-        date,
-        description,
-        category: categorizeTransaction(description),
-        amount,
-        direction: 'debit',
-        balance
-      };
-    }
-
-    return null;
-
-  } catch (err) {
-    return null;
-  }
-}
-
-function findColumn(row, possibleNames) {
-  for (const name of possibleNames) {
-    if (row[name] !== undefined && row[name] !== '' && row[name] !== null) {
-      return row[name];
-    }
-    
-    for (const key in row) {
-      if (key.includes(name.toLowerCase()) && row[key] !== '' && row[key] !== null) {
-        return row[key];
-      }
-    }
-  }
-  
-  return null;
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return null;
-  
-  const dateStr_trimmed = dateStr.trim();
-  const parts = dateStr_trimmed.split('/');
-  
-  if (parts.length !== 3) {
-    return null;
-  }
-  
-  const [month, day, year] = parts;
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-}
-
-function categorizeTransaction(description) {
-  const desc = description.toUpperCase();
-
-  if (desc.includes('PAYCHECK') || desc.includes('DEPOSIT')) return 'income';
-  if (desc.includes('WHOLE FOODS') || desc.includes('COSTCO') || desc.includes('KROGER') || desc.includes('SAFEWAY')) return 'groceries';
-  if (desc.includes('ELECTRIC') || desc.includes('GAS') || desc.includes('WATER')) return 'utilities';
-  if (desc.includes('CHIPOTLE') || desc.includes('STARBUCKS') || desc.includes('RESTAURANT')) return 'dining';
-  if (desc.includes('TARGET') || desc.includes('WALMART') || desc.includes('AMAZON')) return 'shopping';
-  if (desc.includes('NETFLIX') || desc.includes('HULU') || desc.includes('SPOTIFY')) return 'entertainment';
-  if (desc.includes('GAS STATION') || desc.includes('SHELL') || desc.includes('CHEVRON')) return 'transportation';
-  if (desc.includes('CREDIT CARD') || desc.includes('PAYMENT')) return 'credit-card-payment';
-
-  return 'other';
-}
 
 export default router;
