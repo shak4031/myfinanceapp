@@ -1,0 +1,14 @@
+[2026-06-04T11:59:30.678Z] [PARSER] Detected columns: {"date":0,"description":4,"amount":5,"debit":5,"credit":6,"balance":8,"txnType":3,"checkNumber":7,"accountNumber":2,"rtn":1}
+[2026-06-04T11:59:30.679Z] [PARSER] Processing 157 transaction rows from doc_64818b08137d_transactions (4).csv
+[2026-06-04T11:59:30.687Z] [PARSER] ✓ Parsed 156 transactions, 1 duplicates within file, 0 errors
+[2026-06-04T11:59:30.687Z] [PARSER] Detected columns: {"date":0,"description":4,"amount":5,"debit":5,"credit":6,"balance":8,"txnType":3,"checkNumber":7,"accountNumber":2,"rtn":1}
+[2026-06-04T11:59:30.682Z] [PARSER] Duplicate detected: VISA DDA PUR AP 479338 ETSY COM SADESIGNSPRINT BROOKLYN * NY on 2026-06-01
+[2026-06-04T11:59:30.688Z] [PARSER] Processing 32 transaction rows from doc_7186bb17cca9_transactions (5).csv
+[2026-06-04T11:59:30.688Z] [PARSER] ✓ Parsed 188 transactions, 0 duplicates within file, 0 errors
+[2026-06-04T11:59:48.620Z] [PARSER] Detected columns: {"date":0,"description":4,"amount":5,"debit":5,"credit":6,"balance":8,"txnType":3,"checkNumber":7,"accountNumber":2,"rtn":1}
+[2026-06-04T11:59:48.620Z] [PARSER] Processing 157 transaction rows from doc_64818b08137d_transactions (4).csv
+[2026-06-04T11:59:48.623Z] [PARSER] Duplicate detected: VISA DDA PUR AP 479338 ETSY COM SADESIGNSPRINT BROOKLYN * NY on 2026-06-01
+[2026-06-04T11:59:48.628Z] [PARSER] ✓ Parsed 156 transactions, 1 duplicates within file, 0 errors
+[2026-06-04T11:59:48.629Z] [PARSER] Detected columns: {"date":0,"description":4,"amount":5,"debit":5,"credit":6,"balance":8,"txnType":3,"checkNumber":7,"accountNumber":2,"rtn":1}
+[2026-06-04T11:59:48.629Z] [PARSER] Processing 32 transaction rows from doc_7186bb17cca9_transactions (5).csv
+[2026-06-04T11:59:48.630Z] [PARSER] ✓ Parsed 188 transactions, 0 duplicates within file, 0 errors

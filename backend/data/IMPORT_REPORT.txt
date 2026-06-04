@@ -1,0 +1,87 @@
+TRANSACTION IMPORT REPORT
+Generated: 2026-06-04T11:59:48.632Z
+═══════════════════════════════════════════════════════════════
+
+SUMMARY
+───────────────────────────────────────────────────────────────
+Total Transactions:        188
+From File 1:               188
+From File 2:               188
+Cross-file duplicates:     156
+Within-file duplicates:    1
+Invalid rows:              0
+Valid SQL statements:      188
+
+TRANSACTION BREAKDOWN BY DIRECTION
+───────────────────────────────────────────────────────────────
+CREDIT              :  19
+DEBIT               : 169
+
+TRANSACTION BREAKDOWN BY CATEGORY
+───────────────────────────────────────────────────────────────
+Shopping                      :  90
+Transfer                      :  60
+Transportation                :   9
+Dining                        :   6
+Payment                       :   6
+Groceries                     :   4
+Income                        :   4
+Healthcare                    :   2
+Gas                           :   2
+Fee                           :   2
+Insurance                     :   1
+Entertainment                 :   1
+Utilities                     :   1
+
+DATA QUALITY CHECKS
+───────────────────────────────────────────────────────────────
+✓ All dates validated
+✓ All amounts parsed correctly
+✓ All descriptions cleaned and normalized
+✓ All transactions deduplicated
+✓ All SQL properly escaped
+✓ NULL values handled correctly
+✓ Autoincrement ID used for user_id
+
+SAMPLE TRANSACTIONS
+───────────────────────────────────────────────────────────────
+
+Transaction 1:
+  Date:        2026-06-02
+  Description: PAYPAL INST XFER
+  Amount:      72.1
+  Direction:   DEBIT
+  Category:    Transfer
+  Balance:     -91.02
+
+Transaction 2:
+  Date:        2026-06-02
+  Description: PAYPAL PURCHASE
+  Amount:      36
+  Direction:   DEBIT
+  Category:    Shopping
+  Balance:     -18.92
+
+Transaction 3:
+  Date:        2026-06-02
+  Description: VISA DDA PUR AP 443106 TARGET COM 800 591 3869 * MN
+  Amount:      46.84
+  Direction:   DEBIT
+  Category:    Shopping
+  Balance:     17.08
+
+Transaction 4:
+  Date:        2026-06-01
+  Description: PAYPAL INST XFER
+  Amount:      41.94
+  Direction:   DEBIT
+  Category:    Transfer
+  Balance:     63.92
+
+Transaction 5:
+  Date:        2026-06-01
+  Description: PAYPAL PURCHASE
+  Amount:      6.37
+  Direction:   DEBIT
+  Category:    Shopping
+  Balance:     105.86
