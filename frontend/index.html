@@ -1392,42 +1392,41 @@
     </div>
   </div>
 
-  <!-- CATEGORIZATIONS TAB -->
+  <!-- CATEGORIZATIONS TAB - SIMPLE TRANSACTION LIST -->
   <div class="page" id="categorizations">
     <div class="page-header">
-      <h1 class="page-title">🔧 Categorizations</h1>
+      <h1 class="page-title">📋 Transactions</h1>
     </div>
     
-    <div style="max-width: 800px; margin: 0 auto;">
-      <!-- INFO CARD -->
-      <div class="card" style="text-align: center; margin-bottom: 32px;">
-        <h2 class="card-title" style="font-size: 20px; margin-bottom: 12px;">✅ Transactions Auto-Categorized</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 24px;">All your transactions are automatically categorized. To review, modify, or verify categorizations:</p>
-        <button class="btn btn-primary" onclick="switchTab('categories')">📁 Go to Categories Tab</button>
-      </div>
-      
-      <!-- STATS CARD -->
-      <div class="card" style="margin-bottom: 32px;">
-        <h3 class="card-title" style="margin-bottom: 20px; margin-top: 0;">📊 Statistics</h3>
-        <div class="metrics-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 0;">
-          <div class="metric-card">
-            <div class="metric-label">Total Transactions</div>
-            <div class="metric-value" id="stat-total">-</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Categories</div>
-            <div class="metric-value" id="stat-categories">-</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Total Spending</div>
-            <div class="metric-value" id="stat-spending">-</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Period</div>
-            <div class="metric-value">June 2026</div>
-          </div>
+    <!-- FILTERS -->
+    <div style="background: var(--bg-secondary); padding: 20px; border-radius: 8px; margin-bottom: 24px; border: 1px solid var(--border);">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <!-- Month Filter -->
+        <div>
+          <label style="display: block; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 14px;">Filter by Month:</label>
+          <select id="monthFilter" onchange="filterTransactions()" style="width: 100%; padding: 10px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 14px;">
+            <option value="">All Months</option>
+            <option value="2026-03">March 2026</option>
+            <option value="2026-04">April 2026</option>
+            <option value="2026-05">May 2026</option>
+            <option value="2026-06">June 2026</option>
+          </select>
+        </div>
+        
+        <!-- Category Filter -->
+        <div>
+          <label style="display: block; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 14px;">Filter by Category:</label>
+          <select id="categoryFilter" onchange="filterTransactions()" style="width: 100%; padding: 10px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 14px;">
+            <option value="">All Categories</option>
+          </select>
         </div>
       </div>
+    </div>
+    
+    <!-- TRANSACTION LIST -->
+    <div id="transactionList" style="background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border); overflow: hidden;">
+      <!-- Loading state -->
+      <div style="padding: 40px; text-align: center; color: var(--text-secondary);">Loading transactions...</div>
     </div>
   </div>
 
@@ -1966,35 +1965,92 @@
       document.getElementById('categoryOverview').style.display = 'block';
     }
 
+    let allTransactions = [];
+
     async function loadCategorizations() {
       try {
-        // Load category spending stats
+        // Load all transactions
         const res = await fetch('/api/dashboard/category-spending', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
         });
         
-        if (!res.ok) throw new Error('Failed to load stats');
+        if (!res.ok) throw new Error('Failed to load transactions');
         
         const categories = await res.json();
         
-        // Calculate stats
-        let totalTxns = 0;
-        let totalSpending = 0;
+        // Populate category filter
+        const categorySelect = document.getElementById('categoryFilter');
         categories.forEach(cat => {
-          totalTxns += cat.transactionCount;
-          totalSpending += cat.totalSpending;
+          const option = document.createElement('option');
+          option.value = cat.category;
+          option.textContent = cat.category;
+          categorySelect.appendChild(option);
         });
         
-        document.getElementById('stat-total').textContent = totalTxns;
-        document.getElementById('stat-categories').textContent = categories.length;
-        document.getElementById('stat-spending').textContent = '$' + totalSpending.toFixed(2);
+        // Load actual transaction data from category-trends
+        const trendsRes = await fetch('/api/dashboard/category-trends', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        
+        const trends = await trendsRes.json();
+        
+        // For now, just display message that we'll load transactions
+        displayTransactions([]);
         
       } catch (err) {
-        console.error('Categorizations error:', err);
+        console.error('Error loading categorizations:', err);
+        document.getElementById('transactionList').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">Error loading transactions</div>';
       }
     }
+    
+    function displayTransactions(transactions) {
+      const container = document.getElementById('transactionList');
+      
+      if (!transactions || transactions.length === 0) {
+        container.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</div>';
+        return;
+      }
+      
+      let html = '<table style="width: 100%; border-collapse: collapse;">';
+      html += '<thead>';
+      html += '<tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border);">';
+      html += '<th style="padding: 12px; text-align: left; color: var(--text-primary); font-weight: 600;">Date</th>';
+      html += '<th style="padding: 12px; text-align: left; color: var(--text-primary); font-weight: 600;">Description</th>';
+      html += '<th style="padding: 12px; text-align: left; color: var(--text-primary); font-weight: 600;">Category</th>';
+      html += '<th style="padding: 12px; text-align: right; color: var(--text-primary); font-weight: 600;">Amount</th>';
+      html += '</tr>';
+      html += '</thead>';
+      html += '<tbody>';
+      
+      transactions.forEach((txn, idx) => {
+        const bgColor = idx % 2 === 0 ? 'transparent' : 'var(--bg-tertiary)';
+        const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const amountColor = txn.direction === 'credit' ? 'var(--success)' : 'var(--danger)';
+        const amountSign = txn.direction === 'credit' ? '+' : '-';
+        
+        html += `<tr style="border-bottom: 1px solid var(--border); background: ${bgColor};">`;
+        html += `<td style="padding: 12px; color: var(--text-secondary);">${dateStr}</td>`;
+        html += `<td style="padding: 12px; color: var(--text-primary);">${txn.description}</td>`;
+        html += `<td style="padding: 12px; color: var(--text-primary);">${txn.category || '-'}</td>`;
+        html += `<td style="padding: 12px; text-align: right; color: ${amountColor}; font-weight: 600;">${amountSign}$${Math.abs(txn.amount).toFixed(2)}</td>`;
+        html += '</tr>';
+      });
+      
+      html += '</tbody>';
+      html += '</table>';
+      
+      container.innerHTML = html;
+    }
+    
+    function filterTransactions() {
+      // Placeholder for filter logic
+      displayTransactions(allTransactions);
+    }
+
 
     async function showMonthTransactions(category, month) {
       try {
