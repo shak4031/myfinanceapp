@@ -1896,48 +1896,40 @@
 
     async function loadTransactions() {
       try {
-        // Load all transactions from all months
-        const months = ['2026-03', '2026-04', '2026-05', '2026-06'];
-        allTxnData = [];
+        // Load all transactions
+        const res = await fetch('/api/transactions/test');
+        const data = await res.json();
         
-        for (const month of months) {
-          try {
-            const res = await fetch('/api/dashboard/category-transactions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ month: month })
-            });
-            
-            if (res.ok) {
-              const txns = await res.json();
-              if (Array.isArray(txns)) {
-                allTxnData = allTxnData.concat(txns);
-              }
+        if (data.transactions && Array.isArray(data.transactions)) {
+          allTxnData = data.transactions;
+          
+          // Sort by date descending
+          allTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          // Populate category dropdown with unique categories
+          const categories = new Set();
+          allTxnData.forEach(txn => {
+            if (txn.category && txn.category !== 'Uncategorized') {
+              categories.add(txn.category);
             }
-          } catch (e) {
-            console.error(`Failed to load ${month}:`, e);
+          });
+          
+          const categorySelect = document.getElementById('txnCategoryFilter');
+          // Clear existing options except first two
+          while (categorySelect.options.length > 2) {
+            categorySelect.remove(2);
           }
+          
+          // Add categories in alphabetical order
+          Array.from(categories).sort().forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            categorySelect.appendChild(option);
+          });
+          
+          console.log(`Loaded ${allTxnData.length} transactions with ${categories.size} categories`);
         }
-        
-        // Sort by date descending
-        allTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
-        
-        // Populate category dropdown with unique categories
-        const categories = new Set();
-        allTxnData.forEach(txn => {
-          if (txn.category) {
-            categories.add(txn.category);
-          }
-        });
-        
-        const categorySelect = document.getElementById('txnCategoryFilter');
-        const options = categorySelect.innerHTML; // Keep "All Categories" and "Uncategorized"
-        categories.forEach(cat => {
-          const option = document.createElement('option');
-          option.value = cat;
-          option.textContent = cat;
-          categorySelect.appendChild(option);
-        });
         
         // Initial render
         filterTransactions();
@@ -1950,15 +1942,17 @@
     function filterTransactions() {
       const categoryFilter = document.getElementById('txnCategoryFilter').value;
 
-      filteredTxnData = allTxnData.filter(txn => {
-        if (categoryFilter === 'uncategorized') {
-          return !txn.category || txn.category === '' || txn.category === 'Uncategorized';
-        } else if (categoryFilter) {
-          return txn.category === categoryFilter;
-        }
-        return true;
-      });
+      if (categoryFilter === 'uncategorized') {
+        filteredTxnData = allTxnData.filter(txn => 
+          !txn.category || txn.category === 'Uncategorized'
+        );
+      } else if (categoryFilter) {
+        filteredTxnData = allTxnData.filter(txn => txn.category === categoryFilter);
+      } else {
+        filteredTxnData = [...allTxnData];
+      }
 
+      console.log(`Filtered to ${filteredTxnData.length} transactions`);
       renderTransactionTable();
     }
 

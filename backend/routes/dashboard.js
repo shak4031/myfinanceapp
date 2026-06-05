@@ -500,4 +500,39 @@ router.post('/category-transactions-for-month', async (req, res) => {
   }
 });
 
+// TEST ENDPOINT: Get all transactions with categories
+router.get('/api/transactions/test', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT 
+        id,
+        date,
+        description,
+        amount,
+        direction,
+        category,
+        user_id
+      FROM transactions
+      WHERE user_id = $1
+      ORDER BY date DESC
+      LIMIT 100
+    `, [1]);
+
+    res.json({
+      total: result.length,
+      transactions: result.map(row => ({
+        id: row.id,
+        date: row.date,
+        description: row.description,
+        amount: parseFloat(row.amount),
+        direction: row.direction,
+        category: row.category || 'Uncategorized'
+      }))
+    });
+  } catch (error) {
+    log('DASHBOARD', `Error in test endpoint: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
