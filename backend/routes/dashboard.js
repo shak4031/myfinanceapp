@@ -515,7 +515,6 @@ router.get('/transactions/test', async (req, res) => {
       FROM transactions
       WHERE user_id = $1
       ORDER BY date DESC
-      LIMIT 100
     `, [1]);
 
     res.json({
