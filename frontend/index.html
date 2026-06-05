@@ -1387,11 +1387,12 @@
           <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;">
             <div style="flex: 0 0 auto;">
               <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Category</label>
-              <select id="txnCategoryFilter" onchange="filterTransactions()" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+              <select id="txnCategoryFilter" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
                 <option value="">All Categories</option>
-                <option value="uncategorized">Uncategorized</option>
+                <option value="Uncategorized">Uncategorized</option>
               </select>
             </div>
+            <button onclick="filterTransactions()" style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Apply Filter</button>
           </div>
           <div style="font-size: 13px; color: var(--text-secondary);">Showing <span id="txnCount">0</span> transactions</div>
         </div>
@@ -1897,8 +1898,10 @@
     async function loadTransactions() {
       try {
         // Load all transactions
-        const res = await fetch('/api/dashboard/transactions/test');
+        const res = await fetch('/api/dashboard/all-transactions');
         const data = await res.json();
+        
+        console.log('Loaded transactions:', data);
         
         if (data.transactions && Array.isArray(data.transactions)) {
           allTxnData = data.transactions;
@@ -1928,11 +1931,10 @@
             categorySelect.appendChild(option);
           });
           
-          console.log(`Loaded ${allTxnData.length} transactions with ${categories.size} categories`);
+          console.log(`Loaded ${allTxnData.length} transactions with ${categories.size} categories:`, Array.from(categories));
+        } else {
+          console.error('Invalid response format:', data);
         }
-        
-        // Initial render
-        filterTransactions();
         
       } catch (err) {
         console.error('Error loading transactions:', err);
@@ -1942,7 +1944,10 @@
     function filterTransactions() {
       const categoryFilter = document.getElementById('txnCategoryFilter').value;
 
-      if (categoryFilter === 'uncategorized') {
+      console.log('Filtering by category:', categoryFilter);
+      console.log('Total transactions available:', allTxnData.length);
+
+      if (categoryFilter === 'Uncategorized') {
         filteredTxnData = allTxnData.filter(txn => 
           !txn.category || txn.category === 'Uncategorized'
         );

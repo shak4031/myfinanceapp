@@ -500,6 +500,42 @@ router.post('/category-transactions-for-month', async (req, res) => {
   }
 });
 
+// GET ALL TRANSACTIONS (for filtering by category)
+router.get('/all-transactions', async (req, res) => {
+  try {
+    const result = await db.all(`
+      SELECT 
+        id,
+        date,
+        description,
+        amount,
+        direction,
+        category,
+        user_id
+      FROM transactions
+      WHERE user_id = $1
+      ORDER BY date DESC
+    `, [1]);
+
+    log('DASHBOARD', `Returning ${result.length} total transactions`);
+
+    res.json({
+      total: result.length,
+      transactions: result.map(row => ({
+        id: row.id,
+        date: row.date,
+        description: row.description,
+        amount: parseFloat(row.amount),
+        direction: row.direction,
+        category: row.category || 'Uncategorized'
+      }))
+    });
+  } catch (error) {
+    log('DASHBOARD', `Error fetching all transactions: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // TEST ENDPOINT: Get all transactions with categories
 router.get('/transactions/test', async (req, res) => {
   try {
