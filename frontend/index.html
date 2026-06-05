@@ -1405,7 +1405,9 @@
                 <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border);">
                   <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</th>
                   <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Description</th>
+                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Category</th>
                   <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Type</th>
+                  <th style="padding: 12px 16px; text-align: center; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Edit</th>
                   <th style="padding: 12px 16px; text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Amount</th>
                 </tr>
               </thead>
@@ -1450,6 +1452,30 @@
     </div>
   </div>
 
+  </div>
+
+  <!-- CATEGORY EDIT MODAL -->
+  <div class="modal" id="categoryEditModal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">📝 Edit Transaction Category</div>
+      
+      <div style="margin-bottom: 20px;">
+        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Transaction</div>
+        <div id="editTxnDescription" style="font-size: 13px; color: var(--text-primary); padding: 8px; background: var(--bg-tertiary); border-radius: 4px; word-break: break-word;"></div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">New Category</label>
+        <select id="editCategorySelect" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 13px;">
+          <option value="">-- Select Category --</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveCategoryChange()">Save Changes</button>
+      </div>
+    </div>
   </div>
 
   <!-- IMPORT MODAL -->
@@ -2001,6 +2027,9 @@
         html += `<td style="padding: 0 16px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</td>`;
         html += `<td style="padding: 0 16px; color: var(--text-secondary); font-size: 13px;">${txn.category || 'Uncategorized'}</td>`;
         html += `<td style="padding: 0 16px;"><span style="background: ${badgeColor}; color: ${badgeTextColor}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${badge}</span></td>`;
+        html += `<td style="padding: 0 16px; text-align: right;">`;
+        html += `<button onclick="openCategoryModal(${txn.id}, '${txn.description.replace(/'/g, "\\'")}', '${txn.category || 'Uncategorized'}')" style="padding: 4px 8px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">Edit</button>`;
+        html += `</td>`;
         html += `<td style="padding: 0 16px; text-align: right; color: ${amountColor}; font-weight: 600;">$${absAmount}</td>`;
         html += `</tr>`;
       });
@@ -2037,6 +2066,76 @@
         console.error('Update error:', err);
         alert('Error updating transaction');
       }
+    }
+
+    let editingTxnId = null;
+    let editingTxnDescription = null;
+    let editingTxnOldCategory = null;
+
+    function openCategoryModal(txnId, description, oldCategory) {
+      editingTxnId = txnId;
+      editingTxnDescription = description;
+      editingTxnOldCategory = oldCategory;
+
+      // Show transaction details
+      document.getElementById('editTxnDescription').textContent = description;
+
+      // Populate category dropdown with all unique categories from allTxnData
+      const categories = new Set();
+      allTxnData.forEach(txn => {
+        if (txn.category && txn.category !== 'Uncategorized') {
+          categories.add(txn.category);
+        }
+      });
+
+      const select = document.getElementById('editCategorySelect');
+      // Clear all but first option
+      while (select.options.length > 1) {
+        select.remove(1);
+      }
+
+      // Add Uncategorized first
+      const uncatOption = document.createElement('option');
+      uncatOption.value = 'Uncategorized';
+      uncatOption.textContent = 'Uncategorized';
+      select.appendChild(uncatOption);
+
+      // Add all other categories in alphabetical order
+      Array.from(categories).sort().forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        select.appendChild(option);
+      });
+
+      // Set current category as selected
+      select.value = oldCategory || 'Uncategorized';
+
+      // Show modal
+      document.getElementById('categoryEditModal').classList.add('active');
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('categoryEditModal').classList.remove('active');
+      editingTxnId = null;
+    }
+
+    async function saveCategoryChange() {
+      const newCategory = document.getElementById('editCategorySelect').value;
+
+      if (!newCategory) {
+        alert('Please select a category');
+        return;
+      }
+
+      if (newCategory === editingTxnOldCategory) {
+        alert('No changes made');
+        return;
+      }
+
+      // Call the update function
+      await updateTransactionCategory(editingTxnId, editingTxnDescription, editingTxnOldCategory, newCategory);
+      closeCategoryModal();
     }
 
     async function showCategoryDetail(category) {
