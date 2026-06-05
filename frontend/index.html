@@ -1897,7 +1897,7 @@
     async function loadTransactions() {
       try {
         // Load all transactions
-        const res = await fetch('/api/transactions/test');
+        const res = await fetch('/api/dashboard/transactions/test');
         const data = await res.json();
         
         if (data.transactions && Array.isArray(data.transactions)) {
