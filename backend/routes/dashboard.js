@@ -536,6 +536,47 @@ router.get('/all-transactions', async (req, res) => {
   }
 });
 
+// UPDATE TRANSACTION CATEGORY
+router.post('/update-category', async (req, res) => {
+  try {
+    const { transaction_id, new_category } = req.body;
+
+    if (!transaction_id || !new_category) {
+      log('CATEGORIZE', `❌ Missing required fields: transaction_id=${transaction_id}, new_category=${new_category}`);
+      return res.status(400).json({ error: 'Missing transaction_id or new_category' });
+    }
+
+    // Get old category before update
+    const oldTxn = await db.get('SELECT id, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, 1]);
+    
+    if (!oldTxn) {
+      log('CATEGORIZE', `❌ Transaction not found: ID ${transaction_id}`);
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const oldCategory = oldTxn.category || 'Uncategorized';
+
+    // Update the transaction
+    await db.run('UPDATE transactions SET category = $1 WHERE id = $2 AND user_id = $3', [new_category, transaction_id, 1]);
+
+    log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: "${oldTxn.description}" | ${oldCategory} → ${new_category}`);
+
+    res.json({
+      success: true,
+      message: `Updated category from "${oldCategory}" to "${new_category}"`,
+      transaction: {
+        id: transaction_id,
+        description: oldTxn.description,
+        old_category: oldCategory,
+        new_category: new_category
+      }
+    });
+  } catch (error) {
+    log('CATEGORIZE', `❌ Error updating category: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // TEST ENDPOINT: Get all transactions with categories
 router.get('/transactions/test', async (req, res) => {
   try {

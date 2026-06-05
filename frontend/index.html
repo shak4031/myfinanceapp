@@ -1968,10 +1968,10 @@
       let totalCredits = 0;
       let totalDebits = 0;
       filteredTxnData.forEach(txn => {
-        if (txn.direction === 'credit') {
+        if (txn.direction.toUpperCase() === 'CREDIT') {
           totalCredits += txn.amount;
-        } else {
-          totalDebits += Math.abs(txn.amount);
+        } else if (txn.direction.toUpperCase() === 'DEBIT') {
+          totalDebits += txn.amount;
         }
       });
 
@@ -1982,27 +1982,61 @@
       document.getElementById('txnCount').textContent = filteredTxnData.length;
 
       if (filteredTxnData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</td></tr>';
         return;
       }
 
       let html = '';
       filteredTxnData.forEach(txn => {
         const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-        const badge = txn.direction === 'debit' ? 'Debit' : 'Credit';
-        const badgeColor = txn.direction === 'debit' ? '#ff0000' : '#00ff00';
-        const amountColor = txn.direction === 'debit' ? 'var(--danger)' : 'var(--success)';
-        const absAmount = Math.abs(txn.amount).toFixed(2);
+        const isDebit = txn.direction.toUpperCase() === 'DEBIT';
+        const badge = isDebit ? 'Debit' : 'Credit';
+        const badgeColor = isDebit ? '#ff0000' : '#00ff00';
+        const badgeTextColor = isDebit ? '#fff' : '#000';
+        const amountColor = isDebit ? 'var(--danger)' : 'var(--success)';
+        const absAmount = txn.amount.toFixed(2);
 
         html += `<tr style="border-bottom: 1px solid var(--border); height: 40px;">`;
         html += `<td style="padding: 0 16px; color: var(--primary); white-space: nowrap;">${dateStr}</td>`;
         html += `<td style="padding: 0 16px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</td>`;
-        html += `<td style="padding: 0 16px;"><span style="background: ${badgeColor}; color: ${txn.direction === 'debit' ? '#fff' : '#000'}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${badge}</span></td>`;
+        html += `<td style="padding: 0 16px; color: var(--text-secondary); font-size: 13px;">${txn.category || 'Uncategorized'}</td>`;
+        html += `<td style="padding: 0 16px;"><span style="background: ${badgeColor}; color: ${badgeTextColor}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${badge}</span></td>`;
         html += `<td style="padding: 0 16px; text-align: right; color: ${amountColor}; font-weight: 600;">$${absAmount}</td>`;
         html += `</tr>`;
       });
 
       tbody.innerHTML = html;
+    }
+
+    async function updateTransactionCategory(txnId, description, oldCategory, newCategory) {
+      try {
+        console.log(`Updating transaction ${txnId}: ${oldCategory} → ${newCategory}`);
+        
+        const res = await fetch('/api/dashboard/update-category', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transaction_id: txnId,
+            new_category: newCategory
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          console.log(`✅ Category updated: ${data.message}`);
+          // Reload transactions after update
+          await loadTransactions();
+          filterTransactions();
+          alert(`✅ Updated: ${description}\n${oldCategory} → ${newCategory}`);
+        } else {
+          console.error('❌ Update failed:', data.error);
+          alert(`❌ Error: ${data.error}`);
+        }
+      } catch (err) {
+        console.error('Update error:', err);
+        alert('Error updating transaction');
+      }
     }
 
     async function showCategoryDetail(category) {
