@@ -1261,6 +1261,7 @@
       <nav class="sidebar-nav">
         <button class="sidebar-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
         <button class="sidebar-btn" data-tab="categories" onclick="switchTab('categories')">🏷️ Categories</button>
+        <button class="sidebar-btn" data-tab="transactions" onclick="switchTab('transactions')">💰 Transactions</button>
         <button class="sidebar-btn" data-tab="debts" onclick="switchTab('debts')">💳 Debt Payoff</button>
         <button class="sidebar-btn" data-tab="insights" onclick="switchTab('insights')">💡 Insights</button>
         <button class="sidebar-btn" data-tab="goals" onclick="switchTab('goals')">🎯 Goals</button>
@@ -1354,6 +1355,93 @@
             <div class="card-body" id="categoryTransactionsContainer">
               <div class="loading"><span class="spinner"></span> Loading transactions...</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- TRANSACTIONS TAB -->
+      <div class="page" id="transactions">
+        <div class="page-header">
+          <h1 class="page-title">💰 Transactions</h1>
+        </div>
+        
+        <!-- SUMMARY CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 30px;">
+          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Credits</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--success);" id="txnCredits">$0.00</div>
+          </div>
+          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Debits</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--danger);" id="txnDebits">$0.00</div>
+          </div>
+          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Ending Balance</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--primary);" id="txnBalance">$0.00</div>
+          </div>
+        </div>
+
+        <!-- FILTERS -->
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Date From</label>
+              <input type="date" id="txnDateFrom" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Date To</label>
+              <input type="date" id="txnDateTo" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Description</label>
+              <input type="text" id="txnSearch" placeholder="Search..." onkeyup="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Type</label>
+              <select id="txnTypeFilter" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+                <option value="">All Types</option>
+                <option value="debit">Debit</option>
+                <option value="credit">Credit</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Min Amount</label>
+              <input type="number" id="txnMinAmount" value="0" step="0.01" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Max Amount</label>
+              <input type="number" id="txnMaxAmount" value="9999" step="0.01" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Sort By</label>
+              <select id="txnSortBy" onchange="filterTransactions()" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
+                <option value="date-desc">Date (Newest)</option>
+                <option value="date-asc">Date (Oldest)</option>
+                <option value="amount-desc">Amount (High to Low)</option>
+                <option value="amount-asc">Amount (Low to High)</option>
+              </select>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary);">Showing <span id="txnCount">0</span> transactions</div>
+        </div>
+
+        <!-- TRANSACTIONS TABLE -->
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border);">
+                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</th>
+                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Description</th>
+                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Type</th>
+                  <th style="padding: 12px 16px; text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="txnTableBody">
+                <tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">Loading transactions...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1536,6 +1624,8 @@
           await loadGoals();
         } else if (tab === 'categories') {
           await loadCategories();
+        } else if (tab === 'transactions') {
+          await loadTransactions();
         }
       } catch (err) {
         console.error('Error loading data:', err);
@@ -1829,6 +1919,123 @@
         console.error('Categories error:', err);
         document.getElementById('allCategoriesContainer').innerHTML = '<div class="alert error">Failed to load categories</div>';
       }
+    }
+
+    let allTxnData = [];
+    let filteredTxnData = [];
+
+    async function loadTransactions() {
+      try {
+        // Load all transactions from all months
+        const months = ['2026-03', '2026-04', '2026-05', '2026-06'];
+        allTxnData = [];
+        
+        for (const month of months) {
+          try {
+            const res = await fetch('/api/dashboard/category-transactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ month: month })
+            });
+            
+            if (res.ok) {
+              const txns = await res.json();
+              if (Array.isArray(txns)) {
+                allTxnData = allTxnData.concat(txns);
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to load ${month}:`, e);
+          }
+        }
+        
+        // Sort by date descending
+        allTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
+        filteredTxnData = [...allTxnData];
+        
+        // Render
+        filterTransactions();
+        
+      } catch (err) {
+        console.error('Error loading transactions:', err);
+      }
+    }
+
+    function filterTransactions() {
+      const dateFrom = document.getElementById('txnDateFrom').value;
+      const dateTo = document.getElementById('txnDateTo').value;
+      const search = document.getElementById('txnSearch').value.toLowerCase();
+      const typeFilter = document.getElementById('txnTypeFilter').value;
+      const minAmount = parseFloat(document.getElementById('txnMinAmount').value) || 0;
+      const maxAmount = parseFloat(document.getElementById('txnMaxAmount').value) || 9999;
+      const sortBy = document.getElementById('txnSortBy').value;
+
+      filteredTxnData = allTxnData.filter(txn => {
+        if (dateFrom && txn.date < dateFrom) return false;
+        if (dateTo && txn.date > dateTo) return false;
+        if (search && !txn.description.toLowerCase().includes(search)) return false;
+        if (typeFilter && txn.direction !== typeFilter) return false;
+        const absAmount = Math.abs(txn.amount);
+        if (absAmount < minAmount || absAmount > maxAmount) return false;
+        return true;
+      });
+
+      // Sort
+      if (sortBy === 'date-asc') {
+        filteredTxnData.sort((a, b) => new Date(a.date) - new Date(b.date));
+      } else if (sortBy === 'date-desc') {
+        filteredTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
+      } else if (sortBy === 'amount-desc') {
+        filteredTxnData.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+      } else if (sortBy === 'amount-asc') {
+        filteredTxnData.sort((a, b) => Math.abs(a.amount) - Math.abs(b.amount));
+      }
+
+      renderTransactionTable();
+    }
+
+    function renderTransactionTable() {
+      const tbody = document.getElementById('txnTableBody');
+      
+      // Calculate totals
+      let totalCredits = 0;
+      let totalDebits = 0;
+      filteredTxnData.forEach(txn => {
+        if (txn.direction === 'credit') {
+          totalCredits += txn.amount;
+        } else {
+          totalDebits += Math.abs(txn.amount);
+        }
+      });
+
+      const balance = totalCredits - totalDebits;
+      document.getElementById('txnCredits').textContent = '$' + totalCredits.toFixed(2);
+      document.getElementById('txnDebits').textContent = '$' + totalDebits.toFixed(2);
+      document.getElementById('txnBalance').textContent = '$' + balance.toFixed(2);
+      document.getElementById('txnCount').textContent = filteredTxnData.length;
+
+      if (filteredTxnData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</td></tr>';
+        return;
+      }
+
+      let html = '';
+      filteredTxnData.forEach(txn => {
+        const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+        const badge = txn.direction === 'debit' ? 'Debit' : 'Credit';
+        const badgeColor = txn.direction === 'debit' ? '#ff0000' : '#00ff00';
+        const amountColor = txn.direction === 'debit' ? 'var(--danger)' : 'var(--success)';
+        const absAmount = Math.abs(txn.amount).toFixed(2);
+
+        html += `<tr style="border-bottom: 1px solid var(--border); height: 40px;">`;
+        html += `<td style="padding: 0 16px; color: var(--primary); white-space: nowrap;">${dateStr}</td>`;
+        html += `<td style="padding: 0 16px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</td>`;
+        html += `<td style="padding: 0 16px;"><span style="background: ${badgeColor}; color: ${txn.direction === 'debit' ? '#fff' : '#000'}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${badge}</span></td>`;
+        html += `<td style="padding: 0 16px; text-align: right; color: ${amountColor}; font-weight: 600;">$${absAmount}</td>`;
+        html += `</tr>`;
+      });
+
+      tbody.innerHTML = html;
     }
 
     async function showCategoryDetail(category) {
