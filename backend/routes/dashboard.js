@@ -503,7 +503,7 @@ router.post('/category-transactions-for-month', async (req, res) => {
 // TEST ENDPOINT: Get all transactions with categories
 router.get('/transactions/test', async (req, res) => {
   try {
-    const result = await db.query(`
+    const result = await db.all(`
       SELECT 
         id,
         date,
