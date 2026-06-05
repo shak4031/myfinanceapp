@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a1a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #ffffff;
+        }
+
+        /* SUMMARY CARDS */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .card.credits .card-value {
+            color: #00ff00;
+        }
+
+        .card.debits .card-value {
+            color: #ff0000;
+        }
+
+        .card.balance .card-value {
+            color: #0099ff;
+        }
+
+        /* CONTROLS */
+        .controls {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #00cc00;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #00ff00;
+        }
+
+        .btn-secondary {
+            background: #3a3a3a;
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: #4a4a4a;
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .btn-danger:hover {
+            background: #ff0000;
+            color: #000;
+        }
+
+        /* FILTERS */
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #0099ff;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 16px;
+        }
+
+        /* TRANSACTION TABLE */
+        .transactions {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #1a1a1a;
+            border-bottom: 2px solid #3a3a3a;
+        }
+
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #3a3a3a;
+            font-size: 13px;
+        }
+
+        tbody tr:hover {
+            background: #333;
+        }
+
+        .date {
+            color: #0099ff;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .description {
+            color: #fff;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .badge.debit {
+            background: #ff0000;
+            color: #fff;
+        }
+
+        .badge.credit {
+            background: #00ff00;
+            color: #000;
+        }
+
+        .amount {
+            text-align: right;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .amount.debit {
+            color: #ff0000;
+        }
+
+        .amount.credit {
+            color: #00ff00;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Transaction Viewer</h1>
+
+        <!-- SUMMARY CARDS -->
+        <div class="summary">
+            <div class="card credits">
+                <div>
+                    <div class="card-label">Total Credits</div>
+                    <div class="card-value" id="totalCredits">$0.00</div>
+                </div>
+            </div>
+            <div class="card debits">
+                <div>
+                    <div class="card-label">Total Debits</div>
+                    <div class="card-value" id="totalDebits">$0.00</div>
+                </div>
+            </div>
+            <div class="card balance">
+                <div>
+                    <div class="card-label">Ending Balance</div>
+                    <div class="card-value" id="endingBalance">$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTROLS -->
+        <div class="controls">
+            <div class="button-group">
+                <button class="btn-primary" onclick="loadCSV()">✓ Load CSV File</button>
+                <button class="btn-secondary" onclick="loadSampleData()">⚡ Load Sample Data</button>
+                <button class="btn-danger" onclick="clearData()">Clear</button>
+            </div>
+
+            <!-- FILTERS -->
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Date From</label>
+                    <input type="date" id="dateFrom" onchange="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>Date To</label>
+                    <input type="date" id="dateTo" onchange="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>Description</label>
+                    <input type="text" id="searchDesc" placeholder="Search..." onkeyup="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>Type</label>
+                    <select id="typeFilter" onchange="applyFilters()">
+                        <option value="">All Types</option>
+                        <option value="debit">Debit</option>
+                        <option value="credit">Credit</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Min Amount</label>
+                    <input type="number" id="minAmount" value="0" step="0.01" onchange="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>Max Amount</label>
+                    <input type="number" id="maxAmount" value="9999" step="0.01" onchange="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>Sort By</label>
+                    <select id="sortBy" onchange="applyFilters()">
+                        <option value="date-desc">Date (Newest)</option>
+                        <option value="date-asc">Date (Oldest)</option>
+                        <option value="amount-desc">Amount (High to Low)</option>
+                        <option value="amount-asc">Amount (Low to High)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="status-text">Showing <span id="transactionCount">0</span> transactions</div>
+        </div>
+
+        <!-- TRANSACTION TABLE -->
+        <div class="transactions">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th style="text-align: right;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="transactionBody">
+                    <tr><td colspan="4" class="empty">No transactions yet. Load CSV or sample data.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Hidden CSV input -->
+        <input type="file" id="csvFile" accept=".csv" style="display: none;" onchange="handleCSV(event)">
+    </div>
+
+    <script>
+        let allTransactions = [];
+        let filteredTransactions = [];
+
+        // LOAD CSV
+        function loadCSV() {
+            document.getElementById('csvFile').click();
+        }
+
+        function handleCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const csv = e.target.result;
+                const lines = csv.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+                allTransactions = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim());
+                    if (values.length < 3) continue;
+
+                    const txn = {
+                        date: values[0],
+                        description: values[1],
+                        amount: parseFloat(values[2]),
+                        direction: values[2].startsWith('-') ? 'debit' : 'credit'
+                    };
+
+                    allTransactions.push(txn);
+                }
+
+                allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+                applyFilters();
+            };
+            reader.readAsText(file);
+        }
+
+        // LOAD SAMPLE DATA
+        function loadSampleData() {
+            allTransactions = [
+                { date: '2026-06-01', description: 'Direct Deposit Payroll', amount: 3200, direction: 'credit' },
+                { date: '2026-05-31', description: 'Online Transfer to Savings', amount: -500, direction: 'debit' },
+                { date: '2026-05-30', description: 'Amazon Marketplace', amount: -38.99, direction: 'debit' },
+                { date: '2026-05-29', description: 'Starbucks #4821', amount: -7.85, direction: 'debit' },
+                { date: '2026-05-28', description: 'Netflix.com Monthly', amount: -17.99, direction: 'debit' },
+                { date: '2026-05-27', description: 'TD E-Transfer Received', amount: 250, direction: 'credit' },
+                { date: '2026-05-26', description: 'Shell Gas Station', amount: -72.10, direction: 'debit' },
+                { date: '2026-05-25', description: 'Spotify Premium', amount: -11.99, direction: 'debit' },
+                { date: '2026-05-24', description: 'Whole Foods Market', amount: -127.43, direction: 'debit' },
+                { date: '2026-05-23', description: 'ATM Withdrawal', amount: -100, direction: 'debit' },
+                { date: '2026-05-22', description: 'Electric Bill Payment', amount: -150, direction: 'debit' },
+                { date: '2026-05-21', description: 'Restaurant - Pasta Place', amount: -45.50, direction: 'debit' },
+                { date: '2026-05-20', description: 'Salary Deposit', amount: 3200, direction: 'credit' },
+                { date: '2026-05-19', description: 'Gym Membership', amount: -50, direction: 'debit' },
+                { date: '2026-05-18', description: 'Refund - Target Return', amount: 65.99, direction: 'credit' },
+            ];
+
+            applyFilters();
+        }
+
+        // CLEAR DATA
+        function clearData() {
+            if (confirm('Are you sure? This will clear all transactions.')) {
+                allTransactions = [];
+                filteredTransactions = [];
+                updateUI();
+            }
+        }
+
+        // APPLY FILTERS
+        function applyFilters() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const searchDesc = document.getElementById('searchDesc').value.toLowerCase();
+            const typeFilter = document.getElementById('typeFilter').value;
+            const minAmount = parseFloat(document.getElementById('minAmount').value) || 0;
+            const maxAmount = parseFloat(document.getElementById('maxAmount').value) || 9999;
+            const sortBy = document.getElementById('sortBy').value;
+
+            filteredTransactions = allTransactions.filter(txn => {
+                const txnDate = txn.date;
+                if (dateFrom && txnDate < dateFrom) return false;
+                if (dateTo && txnDate > dateTo) return false;
+                if (searchDesc && !txn.description.toLowerCase().includes(searchDesc)) return false;
+                if (typeFilter && txn.direction !== typeFilter) return false;
+                const absAmount = Math.abs(txn.amount);
+                if (absAmount < minAmount || absAmount > maxAmount) return false;
+                return true;
+            });
+
+            // SORT
+            if (sortBy === 'date-asc') {
+                filteredTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+            } else if (sortBy === 'date-desc') {
+                filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+            } else if (sortBy === 'amount-desc') {
+                filteredTransactions.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+            } else if (sortBy === 'amount-asc') {
+                filteredTransactions.sort((a, b) => Math.abs(a.amount) - Math.abs(b.amount));
+            }
+
+            updateUI();
+        }
+
+        // UPDATE UI
+        function updateUI() {
+            // Calculate totals
+            let totalCredits = 0;
+            let totalDebits = 0;
+            filteredTransactions.forEach(txn => {
+                if (txn.direction === 'credit') {
+                    totalCredits += txn.amount;
+                } else {
+                    totalDebits += Math.abs(txn.amount);
+                }
+            });
+
+            const endingBalance = totalCredits - totalDebits;
+
+            document.getElementById('totalCredits').textContent = '$' + totalCredits.toFixed(2);
+            document.getElementById('totalDebits').textContent = '$' + totalDebits.toFixed(2);
+            document.getElementById('endingBalance').textContent = '$' + endingBalance.toFixed(2);
+            document.getElementById('transactionCount').textContent = filteredTransactions.length;
+
+            // Render table
+            const tbody = document.getElementById('transactionBody');
+            if (filteredTransactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty">No transactions match your filters.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            filteredTransactions.forEach(txn => {
+                const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                const badge = txn.direction === 'debit' ? 'Debit' : 'Credit';
+                const amountDisplay = Math.abs(txn.amount).toFixed(2);
+
+                html += `
+                    <tr>
+                        <td class="date">${dateStr}</td>
+                        <td class="description">${txn.description}</td>
+                        <td><span class="badge ${txn.direction}">${badge}</span></td>
+                        <td class="amount ${txn.direction}">$${amountDisplay}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // Initialize
+        updateUI();
+    </script>
+</body>
+</html>
