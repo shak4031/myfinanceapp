@@ -1261,7 +1261,6 @@
       <nav class="sidebar-nav">
         <button class="sidebar-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
         <button class="sidebar-btn" data-tab="categories" onclick="switchTab('categories')">🏷️ Categories</button>
-        <button class="sidebar-btn" data-tab="categorizations" onclick="switchTab('categorizations')">🔧 Categorizations</button>
         <button class="sidebar-btn" data-tab="debts" onclick="switchTab('debts')">💳 Debt Payoff</button>
         <button class="sidebar-btn" data-tab="insights" onclick="switchTab('insights')">💡 Insights</button>
         <button class="sidebar-btn" data-tab="goals" onclick="switchTab('goals')">🎯 Goals</button>
@@ -1392,68 +1391,6 @@
     </div>
   </div>
 
-  <!-- CATEGORIZATIONS TAB - TRANSACTION SPREADSHEET -->
-  <div class="page" id="categorizations">
-    <div class="page-header">
-      <h1 class="page-title">📊 Transactions Spreadsheet</h1>
-    </div>
-    
-    <!-- FILTERS -->
-    <div style="background: var(--bg-secondary); padding: 24px; border-radius: 8px; margin-bottom: 24px; border: 1px solid var(--border); display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;">
-      <div style="flex: 0 0 auto;">
-        <label style="display: block; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 13px;">Month:</label>
-        <select id="monthFilter" style="padding: 10px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; cursor: pointer;">
-          <option value="">All</option>
-          <option value="2026-03">Mar 2026</option>
-          <option value="2026-04">Apr 2026</option>
-          <option value="2026-05">May 2026</option>
-          <option value="2026-06">Jun 2026</option>
-        </select>
-      </div>
-      
-      <div style="flex: 0 0 auto;">
-        <label style="display: block; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 13px;">Category:</label>
-        <select id="categoryFilter" style="padding: 10px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; cursor: pointer;">
-          <option value="">All</option>
-        </select>
-      </div>
-      
-      <button onclick="applyFilters()" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Apply</button>
-      <button onclick="resetFilters()" style="padding: 10px 20px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Reset</button>
-    </div>
-    
-    <!-- STATS ROW -->
-    <div style="background: var(--bg-secondary); padding: 16px 24px; border-radius: 8px; margin-bottom: 24px; border: 1px solid var(--border); display: flex; gap: 40px; flex-wrap: wrap;">
-      <div>
-        <span style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Total Rows:</span>
-        <span style="color: var(--text-primary); font-size: 16px; font-weight: 700; margin-left: 8px;" id="rowCount">0</span>
-      </div>
-      <div>
-        <span style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Total Amount:</span>
-        <span style="color: var(--primary); font-size: 16px; font-weight: 700; margin-left: 8px;" id="totalAmount">$0.00</span>
-      </div>
-    </div>
-    
-    <!-- SPREADSHEET TABLE -->
-    <div style="background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-      <div id="spreadsheet" style="overflow-x: auto; max-height: 600px; overflow-y: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <thead>
-            <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10;">
-              <th style="padding: 14px 16px; text-align: left; color: var(--text-primary); font-weight: 700; width: 100px;">Date</th>
-              <th style="padding: 14px 16px; text-align: left; color: var(--text-primary); font-weight: 700; min-width: 300px;">Description</th>
-              <th style="padding: 14px 16px; text-align: left; color: var(--text-primary); font-weight: 700; width: 140px;">Category</th>
-              <th style="padding: 14px 16px; text-align: right; color: var(--text-primary); font-weight: 700; width: 120px;">Debit</th>
-              <th style="padding: 14px 16px; text-align: right; color: var(--text-primary); font-weight: 700; width: 120px;">Credit</th>
-              <th style="padding: 14px 16px; text-align: right; color: var(--text-primary); font-weight: 700; width: 120px;">Balance</th>
-            </tr>
-          </thead>
-          <tbody id="transactionRows">
-            <tr><td colspan="6" style="padding: 40px; text-align: center; color: var(--text-secondary);">Loading transactions...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <!-- IMPORT MODAL -->
@@ -1599,8 +1536,6 @@
           await loadGoals();
         } else if (tab === 'categories') {
           await loadCategories();
-        } else if (tab === 'categorizations') {
-          await loadCategorizations();
         }
       } catch (err) {
         console.error('Error loading data:', err);
@@ -1990,165 +1925,6 @@
       document.getElementById('categoryDetail').classList.remove('active');
       document.getElementById('categoryOverview').style.display = 'block';
     }
-
-    let allTransactions = [];
-    let filteredTransactions = [];
-
-    async function loadCategorizations() {
-      try {
-        // Load categories for filter dropdown
-        const catRes = await fetch('/api/dashboard/category-spending', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        
-        if (catRes.ok) {
-          const categories = await catRes.json();
-          const categorySelect = document.getElementById('categoryFilter');
-          categories.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.category;
-            option.textContent = cat.category;
-            categorySelect.appendChild(option);
-          });
-        }
-        
-        // Load all transactions from all months
-        const months = ['2026-03', '2026-04', '2026-05', '2026-06'];
-        allTransactions = [];
-        
-        for (const month of months) {
-          try {
-            const txnRes = await fetch('/api/dashboard/category-transactions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ month: month })
-            });
-            
-            if (txnRes.ok) {
-              const txns = await txnRes.json();
-              if (Array.isArray(txns)) {
-                allTransactions = allTransactions.concat(txns);
-              }
-            }
-          } catch (e) {
-            console.error(`Failed to load ${month}:`, e);
-          }
-        }
-        
-        // Sort by date descending
-        allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-        filteredTransactions = [...allTransactions];
-        
-        // Display all transactions
-        renderSpreadsheet();
-        
-      } catch (err) {
-        console.error('Error loading categorizations:', err);
-        document.getElementById('transactionRows').innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: var(--text-secondary);">Error loading transactions</td></tr>';
-      }
-    }
-    
-    function renderSpreadsheet() {
-      const tbody = document.getElementById('transactionRows');
-      
-      if (!filteredTransactions || filteredTransactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</td></tr>';
-        updateStats([]);
-        return;
-      }
-      
-      let html = '';
-      let runningBalance = 0;
-      let totalAmount = 0;
-      
-      // Calculate running balance
-      const sortedForBalance = [...filteredTransactions].reverse();
-      sortedForBalance.forEach(txn => {
-        if (txn.direction === 'credit') {
-          runningBalance += txn.amount;
-          totalAmount += txn.amount;
-        } else {
-          runningBalance -= txn.amount;
-          totalAmount -= txn.amount;
-        }
-      });
-      
-      filteredTransactions.forEach((txn, idx) => {
-        const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: '2-digit' });
-        const bgColor = idx % 2 === 0 ? 'transparent' : 'rgba(128, 128, 128, 0.03)';
-        
-        const debitAmount = txn.direction === 'debit' ? txn.amount : '';
-        const creditAmount = txn.direction === 'credit' ? txn.amount : '';
-        const debitDisplay = debitAmount ? `$${debitAmount.toFixed(2)}` : '-';
-        const creditDisplay = creditAmount ? `$${creditAmount.toFixed(2)}` : '-';
-        
-        html += `<tr style="border-bottom: 1px solid var(--border); background: ${bgColor}; height: 40px;">`;
-        html += `<td style="padding: 0 16px; color: var(--text-secondary); white-space: nowrap;">${dateStr}</td>`;
-        html += `<td style="padding: 0 16px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</td>`;
-        html += `<td style="padding: 0 16px; color: var(--text-primary);">${txn.category || '-'}</td>`;
-        html += `<td style="padding: 0 16px; text-align: right; color: var(--danger);">${debitDisplay}</td>`;
-        html += `<td style="padding: 0 16px; text-align: right; color: var(--success);">${creditDisplay}</td>`;
-        html += `<td style="padding: 0 16px; text-align: right; color: var(--primary); font-weight: 600;">$${runningBalance.toFixed(2)}</td>`;
-        html += `</tr>`;
-        
-        if (txn.direction === 'debit') {
-          runningBalance += txn.amount;
-        } else {
-          runningBalance -= txn.amount;
-        }
-      });
-      
-      tbody.innerHTML = html;
-      updateStats(filteredTransactions);
-    }
-    
-    function updateStats(txns) {
-      const rowCount = txns.length;
-      let total = 0;
-      txns.forEach(txn => {
-        if (txn.direction === 'credit') {
-          total += txn.amount;
-        } else {
-          total -= txn.amount;
-        }
-      });
-      
-      document.getElementById('rowCount').textContent = rowCount;
-      document.getElementById('totalAmount').textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
-    }
-    
-    function applyFilters() {
-      const monthFilter = document.getElementById('monthFilter').value;
-      const categoryFilter = document.getElementById('categoryFilter').value;
-      
-      filteredTransactions = allTransactions.filter(txn => {
-        let match = true;
-        
-        if (monthFilter) {
-          const txnMonth = txn.date.substring(0, 7);
-          match = match && txnMonth === monthFilter;
-        }
-        
-        if (categoryFilter) {
-          match = match && txn.category === categoryFilter;
-        }
-        
-        return match;
-      });
-      
-      renderSpreadsheet();
-    }
-    
-    function resetFilters() {
-      document.getElementById('monthFilter').value = '';
-      document.getElementById('categoryFilter').value = '';
-      filteredTransactions = [...allTransactions];
-      renderSpreadsheet();
-    }
-
-
 
 
     async function showMonthTransactions(category, month) {
