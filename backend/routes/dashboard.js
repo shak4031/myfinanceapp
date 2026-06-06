@@ -281,6 +281,7 @@ router.post('/upcoming-payments', async (req, res) => {
       }
       
       byCategory[categoryName].items.push({
+        name: p.description,
         dayOfMonth: p.dayOfMonth,
         amount: p.amount,
         frequency: p.frequency,
@@ -299,7 +300,10 @@ router.post('/upcoming-payments', async (req, res) => {
     const grouped = Object.values(byCategory).map(group => ({
       category: group.category,
       totalAmount: group.totalAmount,
-      items: group.items,
+      items: group.items.map(item => ({
+          ...item,
+          name: item.description // Already captured in getRecurringPayments
+      })),
       projectedBalance: currentBalance - group.totalAmount
     })).sort((a, b) => b.totalAmount - a.totalAmount);
 
