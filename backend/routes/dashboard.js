@@ -176,15 +176,18 @@ function categorizeSubscription(description) {
   
   // FIXED BILLS (High Priority)
   
-  // Auto Loans (Moves up to match before generic 'lease')
-  if (/hyundai|santander|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loan', isFixed: true };
+  // Utilities & Internet
+  if (/pseg|electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
+  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
+
+  // Auto Loans
+  if (/hyundai|santander|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loans', isFixed: true };
 
   // Housing
   if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
-  
-  // Utilities & Internet
-  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
-  if (/hyundai.*payment|hyundai.*lease|santander.*consumer|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loans', isFixed: true };
+
+  // Credit Card Payments (Fixed)
+  if (/ollo|credit.*card.*pymt|payment.*thank.*you/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
   
   // Insurance
   if (/insurance|homeowners|renters|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
