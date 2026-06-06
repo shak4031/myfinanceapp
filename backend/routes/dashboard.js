@@ -183,14 +183,17 @@ function categorizeSubscription(description) {
   if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
   if (/electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
   
-  // Auto Loans
-  if (/hyundai.*payment|santander.*consumer|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Payment', isFixed: true };
+  // Auto Loans (Car Loans)
+  if (/hyundai.*payment|hyundai.*lease|santander.*consumer|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loans', isFixed: true };
   
   // Insurance
   if (/insurance|homeowners|renters|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
 
   // STREAMING & RECURRING (Secondary)
   
+  // Dining
+  if (/uber.*eats|doordash|grubhub|seamless|restaurant|starbucks|mcdonalds/i.test(desc)) return { type: 'dining', name: 'Dining', isFixed: false };
+
   // Streaming services
   if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video', isFixed: false };
   if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix', isFixed: false };
