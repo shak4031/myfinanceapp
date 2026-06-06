@@ -174,42 +174,44 @@ async function getRecurringPayments() {
 function categorizeSubscription(description) {
   const desc = description.toLowerCase();
   
+  // FIXED BILLS (High Priority)
+  
+  // Housing
+  if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
+  
+  // Utilities & Internet
+  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
+  if (/electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
+  
+  // Auto Loans
+  if (/hyundai.*payment|santander.*consumer|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Payment', isFixed: true };
+  
+  // Insurance
+  if (/insurance|homeowners|renters|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
+
+  // STREAMING & RECURRING (Secondary)
+  
   // Streaming services
-  if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video' };
-  if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix' };
-  if (/spotify/i.test(desc)) return { type: 'streaming', name: 'Spotify' };
-  if (/hulu/i.test(desc)) return { type: 'streaming', name: 'Hulu' };
-  if (/disney|espn\+|hbo/i.test(desc)) return { type: 'streaming', name: 'Streaming Service' };
-  if (/iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'streaming', name: 'IPTV/Streaming' };
-  
-  // Utilities & Internet  
-  if (/internet|comcast|verizon|at&t|phone|mobile|wireless|cable|broadband/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone' };
-  if (/electricity|gas|water|power|utility|hydro|pepco|eversource/i.test(desc)) return { type: 'utilities', name: 'Utilities' };
-  
-  // Insurance (needs to come BEFORE generic subscription)
-  if (/insurance|homeowners|renters|auto|health|state farm|geico|allstate|usaa|progressive|amica/i.test(desc)) return { type: 'insurance', name: 'Insurance' };
-  
-  // Housing & Auto
-  if (/mortgage|rent|lease|apartment|housing|property/i.test(desc)) return { type: 'housing', name: 'Housing' };
-  if (/car.*payment|auto.*loan|vehicle|bmw|ford|tesla|honda|chevy|payment/i.test(desc)) return { type: 'auto', name: 'Car Payment' };
+  if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video', isFixed: false };
+  if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix', isFixed: false };
+  if (/spotify/i.test(desc)) return { type: 'streaming', name: 'Spotify', isFixed: false };
+  if (/hulu/i.test(desc)) return { type: 'streaming', name: 'Hulu', isFixed: false };
+  if (/disney|espn\+|hbo/i.test(desc)) return { type: 'streaming', name: 'Streaming Service', isFixed: false };
+  if (/iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'streaming', name: 'IPTV/Streaming', isFixed: false };
   
   // Wellness & Fitness
-  if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness' };
-  if (/healthcare|medical|doctor|dentist|dental|pharmacy|cvs|walgreens|chiropractor|physical therapy/i.test(desc)) return { type: 'wellness', name: 'Healthcare' };
+  if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness', isFixed: false };
   
   // Software & Cloud
-  if (/office|microsoft|adobe|dropbox|onedrive|icloud|google one|amazon photos|backup/i.test(desc)) return { type: 'software', name: 'Software/Cloud' };
+  if (/office|microsoft|adobe|dropbox|onedrive|icloud|google one|amazon photos|backup/i.test(desc)) return { type: 'software', name: 'Software/Cloud', isFixed: false };
   
-  // Banking & Finance (fees, overdraft, etc)
-  if (/overdraft|bank fee|atm fee|wire transfer|td bank|chase|wells fargo|bofa|bank of america/i.test(desc)) return { type: 'banking', name: 'Banking Fees' };
+  // Banking & Finance
+  if (/overdraft|bank fee|atm fee|wire transfer|td bank.*fee/i.test(desc)) return { type: 'banking', name: 'Banking Fees', isFixed: false };
   
-  // Business & Professional
-  if (/accounting|bookkeeping|lawyer|legal|consulting|freelance|visa fee|merchant|payment|square|stripe/i.test(desc)) return { type: 'professional', name: 'Professional Services' };
+  // Subscriptions (catch-all)
+  if (/subscription|membership|annual|yearly|monthly|recurring/i.test(desc)) return { type: 'subscription', name: 'Subscription', isFixed: false };
   
-  // Subscriptions (catch-all, last resort)
-  if (/subscription|membership|annual|yearly|monthly|recurring/i.test(desc)) return { type: 'subscription', name: 'Subscription' };
-  
-  return { type: 'subscription', name: 'Recurring Payment' };
+  return { type: 'subscription', name: 'Recurring Payment', isFixed: false };
 }
 
 router.post('/summary', async (req, res) => {
@@ -251,15 +253,20 @@ router.post('/summary', async (req, res) => {
 
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching upcoming payments (subscriptions/bills)');
+    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills Filtering)');
 
     const recurring = await getRecurringPayments();
     
-    // Categorize payments and group by category
     const byCategory = {};
     
     recurring.forEach(p => {
       const categoryInfo = categorizeSubscription(p.description);
+      
+      // STRICTURE: Only include items marked as isFixed: true
+      if (!categoryInfo.isFixed) {
+        return;
+      }
+
       const categoryName = categoryInfo.name;
       
       if (!byCategory[categoryName]) {
@@ -280,14 +287,12 @@ router.post('/upcoming-payments', async (req, res) => {
       byCategory[categoryName].totalAmount += p.amount;
     });
 
-    // Get current balance for projected balance calculations
     const latestBalance = await db.all(
       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
       [1]
     );
     const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // Convert to array and add projected balance
     const grouped = Object.values(byCategory).map(group => ({
       category: group.category,
       totalAmount: group.totalAmount,
@@ -295,7 +300,7 @@ router.post('/upcoming-payments', async (req, res) => {
       projectedBalance: currentBalance - group.totalAmount
     })).sort((a, b) => b.totalAmount - a.totalAmount);
 
-    log('DASHBOARD', `Found ${recurring.length} recurring payments in ${grouped.length} categories`);
+    log('DASHBOARD', `✓ Filtered for fixed bills. Returning ${grouped.length} categories.`);
     res.json(grouped);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
