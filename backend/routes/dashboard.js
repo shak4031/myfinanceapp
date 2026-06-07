@@ -248,25 +248,30 @@ router.post('/upcoming-payments', async (req, res) => {
     );
     const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // Pull directly by FIXED CATEGORIES stored in DB, deduplicated by description
+    // Pull directly by FIXED CATEGORIES stored in DB, deduplicated by label and LATEST month
+    // NEW: Explicitly exclude categories that should NEVER be fixed
     const result = await db.all(
       `SELECT 
-        category,
-        description,
-        amount,
-        MAX(EXTRACT(DAY FROM date::date)) as day_of_month,
-        MAX(date) as last_date,
-        COUNT(*) as frequency
-      FROM transactions
-      WHERE user_id = $1 AND is_fixed = TRUE
-      GROUP BY category, description, amount
-      ORDER BY category ASC, day_of_month ASC`,
+        l.display_label as label_name,
+        c.name as category_name,
+        t.description,
+        t.amount,
+        EXTRACT(DAY FROM t.date::date) as day_of_month
+      FROM transactions t
+      JOIN transaction_labels l ON t.label_id = l.id
+      JOIN categories c ON l.category_id = c.id
+      WHERE t.user_id = $1 
+      AND l.is_fixed = TRUE
+      AND c.name NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
+      AND t.date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+      GROUP BY l.display_label, c.name, t.description, t.amount, EXTRACT(DAY FROM t.date::date)
+      ORDER BY c.name ASC, day_of_month ASC`,
       [1]
     );
 
     const byCategory = {};
     result.forEach(p => {
-      const categoryName = p.category;
+      const categoryName = p.category_name;
       if (!byCategory[categoryName]) {
         byCategory[categoryName] = {
           category: categoryName,
@@ -274,14 +279,16 @@ router.post('/upcoming-payments', async (req, res) => {
           totalAmount: 0
         };
       }
-      byCategory[categoryName].items.push({
-        description: p.description,
-        dayOfMonth: parseInt(p.day_of_month),
-        amount: parseFloat(p.amount),
-        frequency: parseInt(p.frequency),
-        lastDate: p.last_date
-      });
-      byCategory[categoryName].totalAmount += parseFloat(p.amount);
+      // To prevent duplication across months, we only keep the latest one per label
+      if (!byCategory[categoryName].items.find(item => item.label === p.label_name)) {
+        byCategory[categoryName].items.push({
+          label: p.label_name,
+          description: p.description,
+          dayOfMonth: parseInt(p.day_of_month),
+          amount: parseFloat(p.amount)
+        });
+        byCategory[categoryName].totalAmount += parseFloat(p.amount);
+      }
     });
 
     const grouped = Object.values(byCategory).map(group => ({
