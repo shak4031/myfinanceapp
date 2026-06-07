@@ -5,12 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinanceApp v2</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
     :root {
       --primary: #4a9eff;
       --primary-dark: #2e6fc4;
@@ -29,2858 +23,360 @@
       --transition: all 0.2s ease;
     }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      line-height: 1.6;
+      overflow: hidden;
     }
 
-    .container {
-      display: flex;
+    /* APP LAYOUT */
+    .app-container {
+      display: grid;
+      grid-template-columns: 280px 1fr;
       height: 100vh;
     }
 
     /* SIDEBAR */
     .sidebar {
-      width: 280px;
       background: var(--bg-secondary);
       border-right: 1px solid var(--border);
-      overflow-y: auto;
       padding: 24px 16px;
       display: flex;
       flex-direction: column;
+      z-index: 100;
     }
 
     .sidebar-logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 40px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 32px;
-      color: var(--primary);
-      font-weight: 600;
-      font-size: 18px;
+      gap: 10px;
     }
 
-    .sidebar-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      flex: 1;
-    }
-
-    .sidebar-btn {
+    .nav-list { display: flex; flex-direction: column; gap: 10px; list-style: none; }
+    
+    .nav-btn {
+      width: 100%;
       padding: 12px 16px;
       background: transparent;
       border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
       border-radius: 8px;
+      color: var(--text-secondary);
       font-size: 14px;
       font-weight: 500;
-      transition: var(--transition);
       text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: var(--transition);
     }
 
-    .sidebar-btn:hover {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-    }
-
-    .sidebar-btn.active {
-      background: var(--primary);
-      color: white;
-    }
+    .nav-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .nav-btn.active { background: var(--primary); color: white; }
 
     /* MAIN CONTENT */
-    .main {
-      flex: 1;
+    .main-content {
       overflow-y: auto;
-      background: var(--bg-primary);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .page {
-      display: none;
-      animation: fadeIn 0.3s ease;
       padding: 32px;
-      flex: 1;
-    }
-
-    .page.active {
       display: flex;
       flex-direction: column;
+      gap: 32px;
     }
 
-    /* Categorizations page - full viewport */
-    #categorizations {
-      padding: 0 !important;
-      margin: 0 !important;
-      display: flex !important;
-      flex-direction: column !important;
-    }
-
-    #categorizations iframe {
-      flex: 1;
-      width: 100%;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
+    .view { display: none; flex-direction: column; gap: 32px; }
+    .view.active { display: flex; }
 
     /* HEADER */
-    .page-header {
+    .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 32px;
     }
-
-    .page-title {
-      font-size: 32px;
-      font-weight: 700;
-      color: var(--primary);
-    }
-
-    .page-actions {
-      display: flex;
-      gap: 12px;
-    }
+    .header h1 { font-size: 32px; font-weight: 700; }
 
     /* BUTTONS */
     .btn {
       padding: 10px 20px;
       border: none;
       border-radius: 8px;
-      cursor: pointer;
       font-size: 14px;
-      font-weight: 500;
-      transition: var(--transition);
+      font-weight: 600;
+      cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 8px;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-dark);
-      box-shadow: var(--shadow);
-    }
-
-    .btn-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover {
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-    }
-
-    /* DATE FILTER */
-    .date-filter-group {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 32px;
-      flex-wrap: wrap;
-    }
-
-    .date-filter-btn {
-      padding: 8px 16px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
       transition: var(--transition);
     }
+    
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
 
-    .date-filter-btn:hover {
-      border-color: var(--primary);
-      color: var(--text-primary);
-    }
-
-    .date-filter-btn.active {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    /* METRICS GRID */
+    /* METRICS */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 16px;
-      margin-bottom: 40px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
     }
 
     .metric-card {
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-      transition: var(--transition);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .metric-card:hover {
-      border-color: var(--primary);
-      box-shadow: var(--shadow);
-    }
-
-    .metric-label {
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-
-    .metric-value {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--primary);
-      margin-bottom: 4px;
-    }
-
-    .metric-card.positive .metric-value {
-      color: var(--success);
-    }
-
-    .metric-card.negative .metric-value {
-      color: var(--danger);
-    }
-
-    .metric-change {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    /* CARD LAYOUTS */
-    .card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
       padding: 24px;
-      box-shadow: var(--shadow-sm);
-      transition: var(--transition);
-    }
-
-    .card:hover {
-      border-color: var(--primary);
-      box-shadow: var(--shadow);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .card-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .card-subtitle {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .card-body {
       display: flex;
       flex-direction: column;
-      gap: 0;
-    }
-
-    .card-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
-      transition: var(--transition);
-    }
-
-    .card-item:last-child {
-      border-bottom: none;
-    }
-
-    .card-item:hover {
-      color: var(--primary);
-      cursor: pointer;
-      padding-left: 4px;
-    }
-
-    .card-item-label {
-      display: flex;
-      align-items: center;
       gap: 8px;
     }
 
-    .card-amount {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
+    .metric-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
+    .metric-value { font-size: 28px; font-weight: 700; color: var(--primary); }
 
-    .card-amount.debit {
-      color: var(--danger);
-    }
-
-    .card-amount.credit {
-      color: var(--success);
-    }
-
-    /* CATEGORY CARDS */
-    .category-grid {
+    /* 3-PANEL CATEGORIES LAYOUT */
+    .panel-container {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 32px;
-      align-items: stretch;
-    }
-
-    .category-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-      text-align: center;
-      cursor: pointer;
-      transition: var(--transition);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      min-height: 160px;
-    }
-
-    .category-card:hover {
-      border-color: var(--primary);
-      background: var(--bg-tertiary);
-      transform: translateY(-4px);
-      box-shadow: var(--shadow);
-    }
-
-    .category-icon {
-      font-size: 36px;
-      margin-bottom: 12px;
-    }
-
-    .category-name {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-    }
-
-    .category-amount {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--primary);
-    }
-
-    .category-count {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 4px;
-    }
-
-    /* PAYMENT CARDS */
-    .payment-grid {
-      columns: 2; /* Create two columns for masonry-style layout */
-      column-gap: 16px;
-      margin-bottom: 32px;
-      width: 100%;
-    }
-
-    .payment-card {
-      break-inside: avoid; /* Prevent card from being split across columns */
-      display: inline-block; /* Required for the column layout */
-      width: 100%;
-      background: var(--bg-secondary);
-      border: 2px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-      transition: var(--transition);
-      margin-bottom: 16px;
-      height: fit-content;
-    }
-
-    @media (max-width: 1200px) {
-      .payment-grid {
-        columns: 1; /* Single column on smaller screens */
-      }
-    }
-
-    .payment-card:hover {
-      border-color: var(--primary);
-      box-shadow: var(--shadow);
-    }
-
-    .payment-date {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .payment-description {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: 12px;
-    }
-
-    .payment-amount {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--danger);
-      margin-bottom: 12px;
-    }
-
-    .payment-card.income .payment-amount {
-      color: var(--success);
-    }
-
-    .payment-balance {
-      padding: 12px;
-      background: var(--bg-tertiary);
-      border-radius: 8px;
-      margin-bottom: 12px;
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .payment-balance-value {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .payment-status {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .payment-status.safe {
-      background: rgba(81, 207, 102, 0.1);
-      color: var(--success);
-    }
-
-    .payment-status.warning {
-      background: rgba(255, 217, 61, 0.1);
-      color: var(--warning);
-    }
-
-    .payment-status.danger {
-      background: rgba(255, 107, 107, 0.1);
-      color: var(--danger);
-    }
-
-    /* MODAL */
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 32px;
-      max-width: 600px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: var(--shadow);
-    }
-
-    .modal-header {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--primary);
-      margin-bottom: 24px;
-    }
-
-    .form-group {
-      margin-bottom: 20px;
-    }
-
-    .form-label {
-      display: block;
-      margin-bottom: 8px;
-      color: var(--text-primary);
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .form-input,
-    .form-select {
-      width: 100%;
-      padding: 10px 12px;
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-
-    .form-input:focus,
-    .form-select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
-    }
-
-    .file-input-wrapper {
-      position: relative;
-      display: inline-block;
-      width: 100%;
-      cursor: pointer;
-    }
-
-    .file-input-label {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 20px;
-      background: var(--bg-tertiary);
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      color: var(--text-secondary);
-      font-weight: 500;
-      transition: var(--transition);
-    }
-
-    .file-input-label:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-      background: rgba(74, 158, 255, 0.05);
-    }
-
-    .file-input-wrapper input[type="file"] {
-      display: none;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 32px;
-    }
-
-    .modal-actions .btn {
-      flex: 1;
-    }
-
-    /* STATUS/FEEDBACK */
-    .alert {
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-      font-size: 14px;
-    }
-
-    .alert.success {
-      background: rgba(81, 207, 102, 0.1);
-      color: var(--success);
-      border: 1px solid rgba(81, 207, 102, 0.2);
-    }
-
-    .alert.error {
-      background: rgba(255, 107, 107, 0.1);
-      color: var(--danger);
-      border: 1px solid rgba(255, 107, 107, 0.2);
-    }
-
-    .alert.warning {
-      background: rgba(255, 217, 61, 0.1);
-      color: var(--warning);
-      border: 1px solid rgba(255, 217, 61, 0.2);
-    }
-
-    .loading {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: 40px 20px;
-      font-size: 14px;
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid var(--bg-tertiary);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-right: 8px;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    @keyframes slideOut {
-      from {
-        transform: translateX(0);
-        opacity: 1;
-      }
-      to {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-    }
-
-    /* CATEGORY DETAIL VIEW */
-    .category-detail {
-      display: none;
-      margin-top: 20px;
-    }
-
-    .category-detail.active {
-      display: block;
-    }
-
-    .back-btn {
-      margin-bottom: 24px;
-      padding: 8px 16px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-
-    .back-btn:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    .section-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 32px 0 20px 0;
-    }
-
-    .section-title:first-child {
-      margin-top: 0;
-    }
-
-    /* RESPONSIVE */
-    @media (max-width: 768px) {
-      .container {
-        flex-direction: column;
-      }
-
-      .sidebar {
-        width: 100%;
-        padding: 16px;
-        max-height: 60px;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        overflow-x: auto;
-        overflow-y: hidden;
-      }
-
-      .sidebar-nav {
-        flex-direction: row;
-        gap: 4px;
-      }
-
-      .sidebar-btn {
-        padding: 8px 12px;
-        font-size: 12px;
-      }
-
-      .main {
-        padding: 20px;
-      }
-
-      .page-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-      }
-
-      .page-title {
-        font-size: 24px;
-      }
-
-      .metrics-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .payment-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .category-grid {
-        grid-template-columns: repeat(3, 1fr);
-      }
-
-      .date-filter-group {
-        flex-direction: column;
-      }
-
-      .date-filter-btn {
-        width: 100%;
-      }
-    }
-
-    /* CATEGORIZATIONS PAGE STYLES (INTEGRATED) */
-    #categorizations-page {
-      padding: 24px 0;
-      min-height: auto;
-      display: flex;
-      flex-direction: column;
+      grid-template-columns: 280px 1.5fr 1fr;
       gap: 24px;
-      max-height: calc(100vh - 120px);
+      height: 600px;
     }
 
-    #cat-header {
+    .panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    #cat-header h1 {
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0;
-    }
-
-    .cat-stats {
-      display: flex;
-      gap: 20px;
+    .panel-header {
       padding: 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-
-    .cat-stat {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .cat-stat-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin: 0;
-    }
-
-    .cat-stat-value {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--primary);
-      margin: 0;
-    }
-
-    .cat-tabs {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 16px;
-    }
-
-    .cat-tab-btn {
-      padding: 12px 20px;
-      background: transparent;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s ease;
-    }
-
-    .cat-tab-btn:hover {
-      color: var(--text-primary);
-    }
-
-    .cat-tab-btn.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-    }
-
-    .cat-tab-pane {
-      display: none;
-      flex: 1;
-      overflow: hidden;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .cat-tab-pane.active {
-      display: flex;
-    }
-
-    /* TAB 1: REVIEW MODE */
-    #cat-review-table {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-table-header {
-      display: grid;
-      grid-template-columns: 70px 1fr 100px 150px;
-      gap: 12px;
-      padding: 12px;
       background: var(--bg-tertiary);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
       font-weight: 600;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    .cat-table-rows {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-row {
-      display: grid;
-      grid-template-columns: 70px 1fr 100px 150px;
-      gap: 12px;
-      align-items: center;
-      padding: 8px 12px;
-      height: 36px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      background: var(--bg-secondary);
-      transition: background 0.1s ease;
-    }
-
-    .cat-row:hover {
-      background: var(--bg-tertiary);
-    }
-
-    .cat-row:last-child {
-      border-bottom: none;
-    }
-
-    .cat-date {
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .cat-desc {
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .cat-amount {
-      text-align: right;
-      font-weight: 600;
-      color: var(--success);
-    }
-
-    .cat-amount.expense {
-      color: var(--danger);
-    }
-
-    .cat-select {
-      padding: 6px 8px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      border-radius: 4px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .cat-select:hover {
-      border-color: var(--primary);
-    }
-
-    .cat-select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
-    }
-
-    .cat-review-footer {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      padding: 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    /* TAB 2: BULK EDITOR */
-    .cat-bulk-container {
-      display: grid;
-      grid-template-columns: 240px 1fr;
-      gap: 16px;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    .cat-category-list {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-category-item {
-      padding: 12px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: all 0.2s ease;
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
     }
 
-    .cat-category-item:hover {
-      background: var(--bg-tertiary);
-    }
+    .panel-body { flex: 1; overflow-y: auto; }
 
-    .cat-category-item.active {
-      background: var(--primary);
-      color: white;
-    }
-
-    .cat-category-count {
-      font-size: 12px;
-      opacity: 0.7;
-      font-weight: 600;
-    }
-
-    .cat-bulk-right {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      overflow: hidden;
-    }
-
-    .cat-bulk-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    #cat-bulk-table {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-bulk-row {
-      display: grid;
-      grid-template-columns: 30px 70px 1fr 100px;
-      gap: 12px;
-      align-items: center;
-      padding: 8px 12px;
-      height: 36px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      background: var(--bg-secondary);
-      transition: background 0.1s ease;
-    }
-
-    .cat-bulk-row:hover {
-      background: var(--bg-tertiary);
-    }
-
-    /* TAB 3: LEARNING PATTERNS */
-    .cat-patterns-list {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .cat-pattern-card {
+    .list-item {
       padding: 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .cat-pattern-info {
-      flex: 1;
-    }
-
-    .cat-pattern-keyword {
-      font-weight: 600;
-      color: var(--primary);
-      font-size: 15px;
-      margin-bottom: 8px;
-    }
-
-    .cat-pattern-stat {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .cat-pattern-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    /* BUTTONS */
-    .cat-btn {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
+      border-bottom: 1px solid var(--border);
       cursor: pointer;
-      transition: all 0.2s ease;
-      white-space: nowrap;
+      transition: var(--transition);
     }
+    .list-item:hover { background: var(--bg-tertiary); }
+    .list-item.active { border-left: 4px solid var(--primary); background: var(--bg-tertiary); }
 
-    .cat-btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .cat-btn-primary:hover {
-      background: var(--primary-dark);
-    }
-
-    .cat-btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .cat-btn-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-    }
-
-    .cat-btn-secondary:hover {
-      background: var(--border);
-    }
-
-    .cat-btn-sm {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
-    .cat-btn-yes {
-      background: var(--success);
-      color: white;
-    }
-
-    .cat-btn-yes:hover {
-      background: #4ab157;
-    }
-
-    /* SELECT DROPDOWNS */
-    .cat-select-dropdown {
-      flex: 1;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      border-radius: 4px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    /* LOADING & EMPTY STATES */
-    .cat-loading {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    /* TRANSACTION ROW */
+    .txn-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 100px;
       gap: 12px;
+      align-items: center;
     }
+    .txn-amount { text-align: right; font-weight: 700; color: var(--danger); }
+    .txn-amount.income { color: var(--success); }
 
-    .cat-spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--border);
-      border-top: 2px solid var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    .cat-empty {
-      text-align: center;
-      padding: 48px 24px;
-      color: var(--text-secondary);
-    }
-
-    .cat-empty h3 {
-      font-size: 16px;
-      margin-bottom: 8px;
-      color: var(--text-primary);
-    }
-
-    /* TOAST NOTIFICATIONS */
-    .cat-toast {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      padding: 16px 20px;
+    /* TOAST */
+    .toast-container { position: fixed; bottom: 32px; right: 32px; z-index: 1000; }
+    .toast {
+      padding: 16px 24px;
       background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.3s ease;
-      max-width: 350px;
-      z-index: 2000;
-      font-size: 14px;
-    }
-
-    .cat-toast.success {
-      border-left: 4px solid var(--success);
-      color: var(--success);
-    }
-
-    .cat-toast.error {
-      border-left: 4px solid var(--danger);
-      color: var(--danger);
-    }
-
-    .cat-toast.info {
       border-left: 4px solid var(--primary);
-      color: var(--primary);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      margin-top: 12px;
+      animation: slideIn 0.3s ease;
     }
 
-    .cat-info-box {
-      padding: 12px;
-      background: var(--bg-tertiary);
-      border-left: 3px solid var(--primary);
-      border-radius: 4px;
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 12px;
-    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-    @media (prefers-color-scheme: light) {
-      :root {
-        --bg-primary: #f5f5f5;
-        --bg-secondary: #ffffff;
-        --bg-tertiary: #f0f0f0;
-        --text-primary: #1a1a1a;
-        --text-secondary: #666666;
-        --border: #e0e0e0;
-        --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
-      }
-
-      .form-input,
-      .form-select {
-        background: #ffffff;
-        border-color: #e0e0e0;
-      }
-    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- SIDEBAR -->
-    <div class="sidebar">
-      <div class="sidebar-logo">
-        💰 MyFinanceApp
-      </div>
-      <nav class="sidebar-nav">
-        <button class="sidebar-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-        <button class="sidebar-btn" data-tab="categories" onclick="switchTab('categories')">🏷️ Categories</button>
-        <button class="sidebar-btn" data-tab="transactions" onclick="switchTab('transactions')">💰 Transactions</button>
-        <button class="sidebar-btn" data-tab="debts" onclick="switchTab('debts')">💳 Debt Payoff</button>
-        <button class="sidebar-btn" data-tab="insights" onclick="switchTab('insights')">💡 Insights</button>
-        <button class="sidebar-btn" data-tab="goals" onclick="switchTab('goals')">🎯 Goals</button>
-      </nav>
-    </div>
+  <div class="app-container">
+    <!-- NAVIGATION -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">💰 MyFinanceApp</div>
+      <ul class="nav-list">
+        <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
+        <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
+        <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
+      </ul>
+    </aside>
 
-    <!-- MAIN CONTENT -->
-    <div class="main">
-      <!-- DASHBOARD TAB -->
-      <div class="page active" id="dashboard">
-        <div class="page-header">
-          <h1 class="page-title">Dashboard</h1>
-          <div class="page-actions">
-            <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
-          </div>
-        </div>
-
-        <!-- DATE FILTER -->
-        <div class="date-filter-group">
-          <button class="date-filter-btn active" onclick="setDateFilter('current')">Current Month</button>
-          <button class="date-filter-btn" onclick="setDateFilter('last')">Last Month</button>
-          <button class="date-filter-btn" onclick="setDateFilter('ytd')">Year-to-Date</button>
-          <button class="date-filter-btn" onclick="setDateFilter('all')">All Time</button>
-        </div>
-
-        <!-- METRICS -->
-        <div class="metrics-grid" id="metricsContainer">
-          <div class="loading"><span class="spinner"></span> Loading metrics...</div>
-        </div>
-
-        <!-- UPCOMING PAYMENTS -->
-        <h2 class="section-title">📅 Upcoming Payments (Smart Cascade)</h2>
-        <div class="payment-grid" id="paymentContainer">
-          <div class="loading"><span class="spinner"></span> Loading payments...</div>
-        </div>
-
-        <!-- SPENDING BY CATEGORY -->
-        <h2 class="section-title">🏷️ Spending by Category</h2>
-        <div class="category-grid" id="categoryContainer">
-          <div class="loading"><span class="spinner"></span> Loading categories...</div>
-        </div>
-
-
-      </div>
-
-      <!-- CATEGORIES TAB -->
-      <div class="page" id="categories">
-        <div class="page-header">
-          <h1 class="page-title">Spending Categories</h1>
-        </div>
-
-        <!-- CATEGORY OVERVIEW -->
-        <div id="categoryOverview" style="display: block;">
-          <div class="category-grid" id="allCategoriesContainer">
-            <div class="loading"><span class="spinner"></span> Loading categories...</div>
-          </div>
-        </div>
-
-        <!-- CATEGORY DETAIL VIEW -->
-        <div id="categoryDetail" class="category-detail">
-          <button class="back-btn" onclick="goBackToCategories()">← Back to All Categories</button>
-          <h2 id="categoryDetailTitle" class="section-title"></h2>
-          
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-label">Total Spent</div>
-              <div class="metric-value" id="categoryTotalSpent">$0</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Transaction Count</div>
-              <div class="metric-value" id="categoryTxnCount">0</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Average per Transaction</div>
-              <div class="metric-value" id="categoryAverage">$0</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Highest Transaction</div>
-              <div class="metric-value" id="categoryHighest">$0</div>
-            </div>
-          </div>
-
-          <h3 class="section-title">Transactions</h3>
-          <div class="card">
-            <div class="card-body" id="categoryTransactionsContainer">
-              <div class="loading"><span class="spinner"></span> Loading transactions...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <!-- TRANSACTIONS TAB -->
-      <div class="page" id="transactions">
-        <div class="page-header">
-          <h1 class="page-title">💰 Transactions</h1>
-        </div>
-        
-        <!-- SUMMARY CARDS -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 30px;">
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
-            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Credits</div>
-            <div style="font-size: 24px; font-weight: 700; color: var(--success);" id="txnCredits">$0.00</div>
-          </div>
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
-            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Debits</div>
-            <div style="font-size: 24px; font-weight: 700; color: var(--danger);" id="txnDebits">$0.00</div>
-          </div>
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
-            <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Ending Balance</div>
-            <div style="font-size: 24px; font-weight: 700; color: var(--primary);" id="txnBalance">$0.00</div>
-          </div>
-        </div>
-
-        <!-- FILTERS -->
-        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-          <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;">
-            <div style="flex: 0 0 auto;">
-              <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Category</label>
-              <select id="txnCategoryFilter" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px;">
-                <option value="">All Categories</option>
-                <option value="Uncategorized">Uncategorized</option>
-              </select>
-            </div>
-            <button onclick="filterTransactions()" style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Apply Filter</button>
-          </div>
-          <div style="font-size: 13px; color: var(--text-secondary);">Showing <span id="txnCount">0</span> transactions</div>
-        </div>
-
-        <!-- TRANSACTIONS TABLE -->
-        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
-          <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-              <thead>
-                <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border);">
-                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</th>
-                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Description</th>
-                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Category</th>
-                  <th style="padding: 12px 16px; text-align: left; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Type</th>
-                  <th style="padding: 12px 16px; text-align: center; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Edit</th>
-                  <th style="padding: 12px 16px; text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Amount</th>
-                </tr>
-              </thead>
-              <tbody id="txnTableBody">
-                <tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">Loading transactions...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- DEBT TAB -->
-      <div class="page" id="debts">
-        <div class="page-header">
-          <h1 class="page-title">Debt Payoff Plan</h1>
-        </div>
-        <div id="debtsContainer">
-          <div class="loading"><span class="spinner"></span> Loading debts...</div>
-        </div>
-      </div>
-
-      <!-- INSIGHTS TAB -->
-      <div class="page" id="insights">
-        <div class="page-header">
-          <h1 class="page-title">Financial Insights</h1>
-        </div>
-        <div class="card">
-          <div class="card-title">💡 Coming Soon</div>
-          <p style="color: var(--text-secondary); margin-top: 12px;">Advanced financial insights and trends analysis</p>
-        </div>
-      </div>
-
-      <!-- GOALS TAB -->
-      <div class="page" id="goals">
-        <div class="page-header">
-          <h1 class="page-title">Savings Goals</h1>
-        </div>
-        <div id="goalsContainer">
-          <div class="loading"><span class="spinner"></span> Loading goals...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  </div>
-
-  <!-- CATEGORY EDIT MODAL -->
-  <div class="modal" id="categoryEditModal">
-    <div class="modal-content" style="max-width: 400px;">
-      <div class="modal-header">📝 Edit Transaction Category</div>
+    <!-- CONTENT AREA -->
+    <main class="main-content">
       
-      <div style="margin-bottom: 20px;">
-        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Transaction</div>
-        <div id="editTxnDescription" style="font-size: 13px; color: var(--text-primary); padding: 8px; background: var(--bg-tertiary); border-radius: 4px; word-break: break-word;"></div>
-      </div>
+      <!-- DASHBOARD -->
+      <section id="dashboard-view" class="view active">
+        <header class="header">
+          <h1>Dashboard</h1>
+          <button class="btn btn-primary">📥 Import Statements</button>
+        </header>
 
-      <div style="margin-bottom: 20px;">
-        <label style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">New Category</label>
-        <select id="editCategorySelect" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 13px;">
-          <option value="">-- Select Category --</option>
-        </select>
-      </div>
+        <div class="metrics-grid" id="dashboard-metrics"></div>
 
-      <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-        <input type="checkbox" id="editFixedCheck" style="width: auto; margin: 0;">
-        <label for="editFixedCheck" style="font-size: 13px; color: var(--text-primary); cursor: pointer; user-select: none;">Mark as <b>Fixed Bill</b> (Show on Dashboard)</label>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="saveCategoryChange()">Save Changes</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- IMPORT MODAL -->
-  <div class="modal" id="importModal">
-    <div class="modal-content">
-      <div class="modal-header">📥 Import Bank Statements</div>
-
-      <div id="importAlert"></div>
-
-      <form onsubmit="handleImport(event)">
-        <div class="form-group">
-          <label class="form-label">Bank/Source</label>
-          <select id="importSource" class="form-select" required>
-            <option value="td-checking">TD Bank - Checking</option>
-            <option value="td-savings">TD Bank - Savings</option>
-            <option value="td-credit">TD Bank - Credit Card</option>
-            <option value="amex">American Express</option>
-            <option value="capital-one">Capital One</option>
-            <option value="generic">Generic CSV</option>
-          </select>
+        <div>
+          <h2 style="margin-bottom: 20px;">📅 Upcoming Payments</h2>
+          <div class="metrics-grid" id="dashboard-payments"></div>
         </div>
+      </section>
 
-        <div class="form-group">
-          <label class="form-label">Select CSV or PDF File</label>
-          <div class="file-input-wrapper">
-            <label class="file-input-label" id="fileInputLabel">
-              📎 Click to select or drag-and-drop
-            </label>
-            <input type="file" id="importFile" accept=".csv,.pdf" required>
+      <!-- CATEGORIES (REBUILT 3-PANEL) -->
+      <section id="categories-view" class="view">
+        <header class="header">
+          <h1>Categories</h1>
+        </header>
+
+        <div class="panel-container">
+          <!-- PANEL 1: CATEGORY LIST -->
+          <div class="panel">
+            <div class="panel-header">Groups</div>
+            <div class="panel-body" id="cat-list"></div>
           </div>
-          <div id="selectedFileName" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);"></div>
-        </div>
 
-        <div id="importPreview" style="margin: 20px 0; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; display: none;">
-          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Preview</div>
-          <div id="importPreviewContent" style="font-family: monospace; font-size: 12px; color: var(--text-primary); max-height: 200px; overflow-y: auto;"></div>
-        </div>
+          <!-- PANEL 2: TRANSACTIONS -->
+          <div class="panel">
+            <div class="panel-header" id="txn-header">Transactions</div>
+            <div class="panel-body" id="txn-list">
+              <div style="padding: 40px; text-align: center; color: var(--text-secondary);">Select a category to view items</div>
+            </div>
+          </div>
 
-        <div id="importProgress" style="display: none; margin: 20px 0;">
-          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Progress</div>
-          <div style="background: var(--bg-tertiary); border-radius: 4px; height: 24px; overflow: hidden;">
-            <div id="importProgressBar" style="background: var(--primary); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+          <!-- PANEL 3: SUGGESTIONS -->
+          <div class="panel">
+            <div class="panel-header">Suggestions</div>
+            <div class="panel-body" id="suggestion-list"></div>
           </div>
         </div>
+      </section>
 
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="importSubmitBtn">Import</button>
+      <!-- TRANSACTIONS -->
+      <section id="transactions-view" class="view">
+        <header class="header">
+          <h1>Transactions</h1>
+        </header>
+        <!-- Transaction Table Placeholder -->
+        <div class="panel" style="padding: 24px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead style="text-align: left; color: var(--text-secondary);">
+              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
+            </thead>
+            <tbody id="full-txn-table"></tbody>
+          </table>
         </div>
-      </form>
-    </div>
+      </section>
+
+    </main>
   </div>
 
-  <!-- MONTH TRANSACTIONS MODAL -->
-  <div class="modal" id="monthTransactionsModal">
-    <div class="modal-content">
-      <div class="modal-header" id="monthTransactionsHeader">Transactions</div>
-      
-      <div id="monthTransactionsContainer" style="margin-bottom: 20px;">
-        <div class="loading"><span class="spinner"></span> Loading transactions...</div>
-      </div>
-
-      <div style="display: none; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;" id="monthTransactionsToast">
-        <span id="monthTransactionsToastText"></span>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeMonthTransactionsModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toastContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 2000;"></div>
+  <div class="toast-container" id="toasts"></div>
 
   <script>
-    let currentDateFilter = 'current';
-    let currentCategory = null;
-
-    // FILE INPUT HANDLING
-    const fileInput = document.getElementById('importFile');
-    const fileInputLabel = document.getElementById('fileInputLabel');
-    const selectedFileName = document.getElementById('selectedFileName');
-
-    // Click label to open file picker
-    fileInputLabel.addEventListener('click', (e) => {
-      e.preventDefault();
-      fileInput.click();
-    });
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        selectedFileName.textContent = `✓ Selected: ${file.name}`;
-      }
-    });
-
-    fileInputLabel.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      fileInputLabel.style.borderColor = 'var(--primary)';
-      fileInputLabel.style.background = 'rgba(74, 158, 255, 0.1)';
-    });
-
-    fileInputLabel.addEventListener('dragleave', (e) => {
-      e.preventDefault();
-      fileInputLabel.style.borderColor = 'var(--border)';
-      fileInputLabel.style.background = 'transparent';
-    });
-
-    fileInputLabel.addEventListener('drop', (e) => {
-      e.preventDefault();
-      fileInputLabel.style.borderColor = 'var(--border)';
-      fileInputLabel.style.background = 'transparent';
-      if (e.dataTransfer.files.length > 0) {
-        fileInput.files = e.dataTransfer.files;
-        const evt = new Event('change', { bubbles: true });
-        fileInput.dispatchEvent(evt);
-      }
-    });
-
-    function switchTab(tab) {
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(tab).classList.add('active');
-      document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-      loadData(tab);
-    }
-
-    function setDateFilter(filter) {
-      currentDateFilter = filter;
-      document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
-      loadData('dashboard');
-    }
-
-    async function loadData(tab) {
-      try {
-        if (tab === 'dashboard') {
-          await loadDashboard();
-        } else if (tab === 'debts') {
-          await loadDebts();
-        } else if (tab === 'goals') {
-          await loadGoals();
-        } else if (tab === 'categories') {
-          await loadCategories();
-        } else if (tab === 'transactions') {
-          await loadTransactions();
-        }
-      } catch (err) {
-        console.error('Error loading data:', err);
-      }
-    }
-
-    async function loadDashboard() {
-      try {
-        // Load metrics (HISTORICAL AVERAGES + CURRENT BALANCE)
-        const summaryRes = await fetch('/api/dashboard/summary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dateFilter: currentDateFilter })
-        });
-        const summary = await summaryRes.json();
-
-        // Show 3-month historical averages
-        const metricsHtml = `
-          <div class="metric-card positive">
-            <div class="metric-label">💰 Avg Monthly Income</div>
-            <div class="metric-value">$${summary.income.toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
-          </div>
-          <div class="metric-card ${summary.expenses >= 0 ? 'negative' : 'positive'}">
-            <div class="metric-label">💸 Avg Monthly Expenses</div>
-            <div class="metric-value">$${Math.abs(summary.expenses).toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
-          </div>
-          <div class="metric-card ${summary.netCashflow >= 0 ? 'positive' : 'negative'}">
-            <div class="metric-label">📈 Avg Net Cashflow</div>
-            <div class="metric-value">$${summary.netCashflow.toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">3-month average</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">🏦 Current Balance</div>
-            <div class="metric-value">$${summary.balance.toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">Latest</div>
-          </div>
-        `;
-        document.getElementById('metricsContainer').innerHTML = metricsHtml;
-
-        // Load RECURRING PAYMENTS (subscriptions + bills) - NOT future predictions
-        const recurringRes = await fetch('/api/dashboard/upcoming-payments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const recurring = await recurringRes.json();
-
-        let paymentHtml = '';
-        const categoryIcons = {
-          'streaming': '📺',
-          'utilities': '⚡',
-          'insurance': '🛡️',
-          'wellness': '💪',
-          'housing': '🏠',
-          'auto': '🚗',
-          'software': '💻',
-          'subscription': '📦',
-          'credit card payment': '💳'
-        };
-
-
-        if (Array.isArray(recurring) && recurring.length > 0) {
-          recurring.forEach(categoryGroup => {
-            const icon = categoryIcons[categoryGroup.category.toLowerCase()] || '📦';
-            
-            paymentHtml += `
-              <div class="payment-card" style="margin-bottom: 20px;">
-                <div class="card-title">${icon} ${categoryGroup.category.toUpperCase()}</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Monthly: $${categoryGroup.totalAmount.toFixed(2)}</div>
-            `;
-            
-            // Show up to 5 items
-            categoryGroup.items.slice(0, 10).forEach(item => {
-              paymentHtml += `
-                <div class="card-item" style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); overflow: hidden;">
-                  <div style="min-width: 55px; flex-shrink: 0; font-weight: 600; color: var(--primary); font-size: 13px;">Day ${item.dayOfMonth}</div>
-                  <div style="flex: 1; min-width: 0; overflow: hidden;">
-                    <div style="font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary);" title="${item.description || ''}">
-                      ${item.description || 'Fixed Payment'}
-                    </div>
-                  </div>
-                  <div style="text-align: right; min-width: 90px; flex-shrink: 0;">
-                    <div class="card-amount debit" style="font-weight: 700; color: var(--danger); font-size: 13px;">-$${(item.amount || 0).toFixed(2)}</div>
-                  </div>
-                </div>
-              `;
-            });
-            
-            if (categoryGroup.items.length > 5) {
-              paymentHtml += `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">+${categoryGroup.items.length - 5} more payments</div>`;
-            }
-            
-            paymentHtml += `
-              </div>
-            `;
-          });
-        } else {
-          paymentHtml = '<div class="card" style="padding: 20px; color: var(--text-secondary);">No recurring payments detected</div>';
-        }
-
-        document.getElementById('paymentContainer').innerHTML = paymentHtml || '<div class="card" style="padding: 20px; color: var(--text-secondary);">No recurring payments detected</div>';
-
-        // Load CATEGORY SPENDING for selected date range
-        const categoryRes = await fetch('/api/dashboard/category-spending', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dateFilter: currentDateFilter })
-        });
-        const categories = await categoryRes.json();
-
-        const categoryIcons2 = {
-          'Groceries': '🛒',
-          'Utilities': '⚡',
-          'Gas': '⛽',
-          'Dining': '🍽️',
-          'Shopping': '🛍️',
-          'Entertainment': '🎬',
-          'Healthcare': '🏥',
-          'Insurance': '🛡️',
-          'Subscriptions': '📺',
-          'Transportation': '🚗',
-          'Childcare': '👶',
-          'Education': '📚',
-          'Pet Care': '🐾',
-          'Travel': '✈️',
-          'Gifts': '🎁',
-          'Home': '🏠',
-          'Maintenance': '🔧',
-          'Repairs': '🔨',
-          'Professional Services': '💼',
-          'Taxes': '📋',
-          'Salary': '💵',
-          'Bonus': '🎉',
-          'Investments': '📈',
-          'Other': '📦'
-        };
-
-        let categoryHtml = '';
-        categories.slice(0, 8).forEach(cat => {
-          const icon = categoryIcons2[cat.name] || '📦';
-          categoryHtml += `
-            <div class="category-card" onclick="showCategoryDetail('${cat.name}')">
-              <div class="category-icon">${icon}</div>
-              <div class="category-name">${cat.name}</div>
-              <div class="category-amount">$${cat.totalSpending.toFixed(2)}</div>
-              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${cat.transactionCount} transactions</div>
-            </div>
-          `;
-        });
-        document.getElementById('categoryContainer').innerHTML = categoryHtml || '<p style="color: var(--text-secondary); padding: 20px;">No spending data for this period</p>';
-
-        // Load RECENT TRANSACTIONS
-        const transactionsContainer = document.getElementById('transactionsContainer');
-        if (transactionsContainer) {
-          const transRes = await fetch('/api/transactions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dateFilter: currentDateFilter })
-          });
-          const transactions = await transRes.json();
-
-          let transHtml = '';
-          transactions.slice(0, 15).forEach(t => {
-            const sign = t.direction === 'debit' ? '-' : '+';
-            const amountClass = t.direction === 'debit' ? 'debit' : 'credit';
-            const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            transHtml += `
-              <div class="card-item">
-                <div class="card-item-label">
-                  <span>${date}</span>
-                  <span>${t.description}</span>
-                </div>
-                <span class="card-amount ${amountClass}">${sign}$${t.amount.toFixed(2)}</span>
-              </div>
-            `;
-          });
-          transactionsContainer.querySelector('.card-body').innerHTML = transHtml || '<p style="color: var(--text-secondary);">No transactions</p>';
-        }
-
-      } catch (err) {
-        console.error('Dashboard error:', err);
-        document.getElementById('metricsContainer').innerHTML = '<div class="alert error">Failed to load dashboard data</div>';
-      }
-    }
-
-    async function loadCategories() {
-      try {
-        // Load category trends (month-over-month)
-        const trendsRes = await fetch('/api/dashboard/category-trends', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const trends = await trendsRes.json();
-
-        // Calculate totals across all months
-        const categoryTotals = {};
-        let totalSpending = 0;
-        let totalTransactions = 0;
-        
-        Object.entries(trends).forEach(([month, cats]) => {
-          cats.forEach(cat => {
-            if (!categoryTotals[cat.category]) {
-              categoryTotals[cat.category] = { total: 0, count: 0 };
-            }
-            categoryTotals[cat.category].total += cat.spending;
-            categoryTotals[cat.category].count += cat.transactions;
-            totalSpending += cat.spending;
-            totalTransactions += cat.transactions;
-          });
-        });
-
-        const categoryIcons = {
-          'Groceries': '🛒', 'Utilities': '⚡', 'Gas': '⛽', 'Dining': '🍽️', 'Shopping': '🛍️',
-          'Entertainment': '🎬', 'Healthcare': '🏥', 'Insurance': '🛡️', 'Subscriptions': '📺',
-          'Transportation': '🚗', 'Childcare': '👶', 'Education': '📚', 'Pet Care': '🐾',
-          'Travel': '✈️', 'Gifts': '🎁', 'Home': '🏠', 'Maintenance': '🔧', 'Repairs': '🔨',
-          'Professional Services': '💼', 'Taxes': '📋', 'Salary': '💵', 'Bonus': '🎉',
-          'Investments': '📈', 'Other': '📦', 'Credit Card Payment': '💳'
-        };
-
-        // Build summary cards (top 3 categories)
-        const sortedCategories = Object.entries(categoryTotals)
-          .sort((a, b) => b[1].total - a[1].total)
-          .slice(0, 3);
-
-        let summaryHtml = `
-          <h3 style="color: var(--text-primary); margin-bottom: 16px; margin-top: 0;">💡 Summary</h3>
-          <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 32px;">
-        `;
-
-        summaryHtml += `
-          <div class="metric-card">
-            <div class="metric-label">Total Spending</div>
-            <div class="metric-value" style="color: var(--danger);">$${totalSpending.toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Transaction Count</div>
-            <div class="metric-value">${totalTransactions}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Average per Transaction</div>
-            <div class="metric-value">$${totalTransactions > 0 ? (totalSpending / totalTransactions).toFixed(2) : '0.00'}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">All time</div>
-          </div>
-        `;
-
-        summaryHtml += '</div>';
-
-        // Add top 3 categories section
-        summaryHtml += '<h3 style="color: var(--text-primary); margin-bottom: 16px;">🏆 Top 3 Categories</h3>';
-        summaryHtml += '<div style="display: grid; gap: 12px; margin-bottom: 32px;">';
-        
-        sortedCategories.forEach(([cat, data], idx) => {
-          const icon = categoryIcons[cat] || '📦';
-          const percentage = totalSpending > 0 ? ((data.total / totalSpending) * 100).toFixed(1) : 0;
-          summaryHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border);">
-              <div>
-                <span style="font-size: 16px; margin-right: 8px;">${icon}</span>
-                <span style="font-weight: 500;">${cat}</span>
-              </div>
-              <div style="text-align: right;">
-                <div style="color: var(--primary); font-weight: 600;">$${data.total.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${percentage}% of total</div>
-              </div>
-            </div>
-          `;
-        });
-
-        summaryHtml += '</div>';
-
-        // Now add all categories grid
-        summaryHtml += '<h3 style="color: var(--text-primary); margin-bottom: 16px;">📊 All Categories</h3>';
-        
-        let categoryHtml = '';
-        Object.entries(categoryTotals)
-          .sort((a, b) => b[1].total - a[1].total)
-          .forEach(([cat, data]) => {
-            const icon = categoryIcons[cat] || '📦';
-            categoryHtml += `
-              <div class="category-card" onclick="showCategoryDetail('${cat}')">
-                <div class="category-icon">${icon}</div>
-                <div class="category-name">${cat}</div>
-                <div class="category-amount">$${data.total.toFixed(2)}</div>
-                <div class="category-count">${data.count} transactions</div>
-              </div>
-            `;
-          });
-        
-        document.getElementById('allCategoriesContainer').innerHTML = summaryHtml + '<div class="category-grid">' + categoryHtml + '</div>';
-
-      } catch (err) {
-        console.error('Categories error:', err);
-        document.getElementById('allCategoriesContainer').innerHTML = '<div class="alert error">Failed to load categories</div>';
-      }
-    }
-
-    let allTxnData = [];
-    let filteredTxnData = [];
-
-    async function loadTransactions() {
-      try {
-        // Load all categories first to populate dropdown
-        const catRes = await fetch('/api/categories');
-        const categoriesData = await catRes.json();
-        
-        const categorySelect = document.getElementById('txnCategoryFilter');
-        // Clear existing options except first two
-        while (categorySelect.options.length > 2) {
-          categorySelect.remove(2);
-        }
-        
-        // Add categories from database in alphabetical order
-        categoriesData.sort((a, b) => a.name.localeCompare(b.name)).forEach(cat => {
-          const option = document.createElement('option');
-          option.value = cat.name;
-          option.textContent = cat.name;
-          categorySelect.appendChild(option);
-        });
-
-        // Load all transactions
-        const res = await fetch('/api/dashboard/all-transactions');
-        const data = await res.json();
-        
-        console.log('Loaded transactions:', data);
-        
-        if (data.transactions && Array.isArray(data.transactions)) {
-          allTxnData = data.transactions;
-          
-          // Sort by date descending
-          allTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
-          
-          console.log(`Loaded ${allTxnData.length} transactions.`);
-        } else {
-          console.error('Invalid response format:', data);
-        }
-        
-      } catch (err) {
-        console.error('Error loading transactions:', err);
-      }
-    }
-
-    function filterTransactions() {
-      const categoryFilter = document.getElementById('txnCategoryFilter').value;
-
-      console.log('Filtering by category:', categoryFilter);
-      console.log('Total transactions available:', allTxnData.length);
-
-      if (categoryFilter === 'Uncategorized') {
-        filteredTxnData = allTxnData.filter(txn => 
-          !txn.category || txn.category === 'Uncategorized'
-        );
-      } else if (categoryFilter) {
-        filteredTxnData = allTxnData.filter(txn => txn.category === categoryFilter);
-      } else {
-        filteredTxnData = [...allTxnData];
-      }
-
-      console.log(`Filtered to ${filteredTxnData.length} transactions`);
-      renderTransactionTable();
-    }
-
-    function renderTransactionTable() {
-      const tbody = document.getElementById('txnTableBody');
+    // NAVIGATION
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`${viewId}-view`).classList.add('active');
+      const clickedBtn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.textContent.toLowerCase().includes(viewId));
+      if (clickedBtn) clickedBtn.classList.add('active');
       
-      // Calculate totals
-      let totalCredits = 0;
-      let totalDebits = 0;
-      filteredTxnData.forEach(txn => {
-        if (txn.direction.toUpperCase() === 'CREDIT') {
-          totalCredits += txn.amount;
-        } else if (txn.direction.toUpperCase() === 'DEBIT') {
-          totalDebits += txn.amount;
-        }
-      });
-
-      const balance = totalCredits - totalDebits;
-      document.getElementById('txnCredits').textContent = '$' + totalCredits.toFixed(2);
-      document.getElementById('txnDebits').textContent = '$' + totalDebits.toFixed(2);
-      document.getElementById('txnBalance').textContent = '$' + balance.toFixed(2);
-      document.getElementById('txnCount').textContent = filteredTxnData.length;
-
-      if (filteredTxnData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found</td></tr>';
-        return;
-      }
-
-      let html = '';
-      filteredTxnData.forEach(txn => {
-        const dateStr = new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-        const isDebit = txn.direction.toUpperCase() === 'DEBIT';
-        const badge = isDebit ? 'Debit' : 'Credit';
-        const badgeColor = isDebit ? '#ff0000' : '#00ff00';
-        const badgeTextColor = isDebit ? '#fff' : '#000';
-        const amountColor = isDebit ? 'var(--danger)' : 'var(--success)';
-        const absAmount = txn.amount.toFixed(2);
-        
-        // Marker for fixed transactions
-        const fixedMarker = txn.is_fixed ? `<span style="background: var(--bg-tertiary); color: var(--primary); padding: 2px 6px; border: 1px solid var(--primary); border-radius: 4px; font-size: 10px; font-weight: 700; margin-right: 8px; vertical-align: middle;">FIXED</span>` : '';
-
-        html += `<tr style="border-bottom: 1px solid var(--border); height: 40px;">`;
-        html += `<td style="padding: 0 16px; color: var(--primary); white-space: nowrap;">${dateStr}</td>`;
-        html += `<td style="padding: 0 16px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${fixedMarker}${txn.description}</td>`;
-        html += `<td style="padding: 0 16px; color: var(--text-secondary); font-size: 13px;">${txn.category || 'Uncategorized'}</td>`;
-        html += `<td style="padding: 0 16px;"><span style="background: ${badgeColor}; color: ${badgeTextColor}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${badge}</span></td>`;
-        html += `<td style="padding: 0 16px; text-align: right;">`;
-        html += `<button onclick="openCategoryModal(${txn.id}, '${txn.description.replace(/'/g, "\\'")}', '${txn.category || 'Uncategorized'}')" style="padding: 4px 8px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">Edit</button>`;
-        html += `</td>`;
-        html += `<td style="padding: 0 16px; text-align: right; color: ${amountColor}; font-weight: 600;">$${absAmount}</td>`;
-        html += `</tr>`;
-      });
-
-      tbody.innerHTML = html;
+      if (viewId === 'dashboard') loadDashboard();
+      if (viewId === 'categories') loadCategories();
+      if (viewId === 'transactions') loadAllTransactions();
     }
 
-    async function updateTransactionCategory(txnId, description, oldCategory, newCategory) {
-      try {
-        console.log(`Updating transaction ${txnId}: ${oldCategory} → ${newCategory}`);
-        
-        const res = await fetch('/api/dashboard/update-category', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            transaction_id: txnId,
-            new_category: newCategory
-          })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-          console.log(`✅ Category updated: ${data.message}`);
-          // Reload transactions after update
-          await loadTransactions();
-          filterTransactions();
-          alert(`✅ Updated: ${description}\n${oldCategory} → ${newCategory}`);
-        } else {
-          console.error('❌ Update failed:', data.error);
-          alert(`❌ Error: ${data.error}`);
-        }
-      } catch (err) {
-        console.error('Update error:', err);
-        alert('Error updating transaction');
-      }
-    }
-
-    let editingTxnId = null;
-    let editingTxnDescription = null;
-    let editingTxnOldCategory = null;
-
-    async function openCategoryModal(txnId, description, oldCategory) {
-      editingTxnId = txnId;
-      editingTxnDescription = description;
-      editingTxnOldCategory = oldCategory;
-
-      // Find the transaction record in allTxnData to get the fixed status
-      const txnRecord = allTxnData.find(t => t.id === txnId);
-      const isFixed = txnRecord ? txnRecord.is_fixed : false;
-
-      // Show transaction details
-      document.getElementById('editTxnDescription').textContent = description;
-      document.getElementById('editFixedCheck').checked = isFixed;
-
-      // Populate category dropdown with all categories from database
-      const catRes = await fetch('/api/categories');
-      const categoriesData = await catRes.json();
-
-      const select = document.getElementById('editCategorySelect');
-      // Clear all but first option
-      while (select.options.length > 1) {
-        select.remove(1);
-      }
-
-      // Add Uncategorized first
-      const uncatOption = document.createElement('option');
-      uncatOption.value = 'Uncategorized';
-      uncatOption.textContent = 'Uncategorized';
-      select.appendChild(uncatOption);
-
-      // Add all categories in alphabetical order
-      categoriesData.sort((a, b) => a.name.localeCompare(b.name)).forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.name;
-        option.textContent = cat.name;
-        select.appendChild(option);
-      });
-
-      // Set current category as selected
-      select.value = oldCategory || 'Uncategorized';
-
-      // Show modal
-      document.getElementById('categoryEditModal').classList.add('active');
-    }
-
-    function closeCategoryModal() {
-      document.getElementById('categoryEditModal').classList.remove('active');
-      editingTxnId = null;
-    }
-
-    async function saveCategoryChange() {
-      const newCategory = document.getElementById('editCategorySelect').value;
-      const isFixed = document.getElementById('editFixedCheck').checked;
-
-      if (!newCategory) {
-        alert('Please select a category');
-        return;
-      }
-
-      // Find the transaction record in allTxnData to check for changes
-      const txnRecord = allTxnData.find(t => t.id === editingTxnId);
-      const oldIsFixed = txnRecord ? txnRecord.is_fixed : false;
-
-      if (newCategory === editingTxnOldCategory && isFixed === oldIsFixed) {
-        alert('No changes made');
-        return;
-      }
-
-      // Call the update function with the new field
-      await updateTransactionRecord(editingTxnId, editingTxnDescription, newCategory, isFixed);
-      closeCategoryModal();
-    }
-
-    async function updateTransactionRecord(txnId, description, category, isFixed) {
-      try {
-        console.log(`Updating transaction ${txnId}: category=${category}, isFixed=${isFixed}`);
-        
-        const res = await fetch('/api/dashboard/update-transaction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: txnId,
-            category,
-            is_fixed: isFixed
-          })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-          console.log(`✅ Transaction updated: ${data.message}`);
-          // Reload transactions after update
-          await loadTransactions();
-          filterTransactions();
-          alert(`✅ Updated: ${description}`);
-        } else {
-          console.error('❌ Update failed:', data.error);
-          alert(`❌ Error: ${data.error}`);
-        }
-      } catch (err) {
-        console.error('Update error:', err);
-        alert('Error updating transaction');
-      }
-    }
-
-    async function showCategoryDetail(category) {
-      currentCategory = category;
-      document.getElementById('categoryOverview').style.display = 'none';
-      document.getElementById('categoryDetail').classList.add('active');
-
-      const categoryIcons = {
-        'Groceries': '🛒', 'Utilities': '⚡', 'Gas': '⛽', 'Dining': '🍽️', 'Shopping': '🛍️',
-        'Entertainment': '🎬', 'Healthcare': '🏥', 'Insurance': '🛡️', 'Subscriptions': '📺',
-        'Transportation': '🚗', 'Childcare': '👶', 'Education': '📚', 'Pet Care': '🐾',
-        'Travel': '✈️', 'Gifts': '🎁', 'Home': '🏠', 'Maintenance': '🔧', 'Repairs': '🔨',
-        'Professional Services': '💼', 'Taxes': '📋', 'Salary': '💵', 'Bonus': '🎉',
-        'Investments': '📈', 'Other': '📦'
-      };
-
-      const icon = categoryIcons[category] || '📦';
-      document.getElementById('categoryDetailTitle').innerHTML = `${icon} ${category}`;
-
-      try {
-        // Get transactions for this category
-        const transRes = await fetch('/api/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dateFilter: 'all', category: category })
-        });
-        const transactions = await transRes.json();
-
-        // Get trends for month-by-month comparison
-        const trendsRes = await fetch('/api/dashboard/category-trends', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const trends = await trendsRes.json();
-
-        // Calculate stats
-        let totalSpent = 0;
-        let maxAmount = 0;
-        let debitCount = 0;
-        
-        transactions.forEach(t => {
-          if (t.direction === 'debit') {
-            totalSpent += t.amount;
-            maxAmount = Math.max(maxAmount, t.amount);
-            debitCount += 1;
-          }
-        });
-
-        const average = debitCount > 0 ? totalSpent / debitCount : 0;
-
-        document.getElementById('categoryTotalSpent').textContent = `$${totalSpent.toFixed(2)}`;
-        document.getElementById('categoryTxnCount').textContent = debitCount;
-        document.getElementById('categoryAverage').textContent = `$${average.toFixed(2)}`;
-        document.getElementById('categoryHighest').textContent = `$${maxAmount.toFixed(2)}`;
-
-        // Build month-by-month view - MAKE CLICKABLE
-        let monthTrendsHtml = '<div style="margin-bottom: 20px;"><h3 style="color: var(--primary); margin-bottom: 12px;">Monthly Breakdown</h3>';
-        
-        const monthlySpending = {};
-        Object.entries(trends).forEach(([month, cats]) => {
-          const catData = cats.find(c => c.category === category);
-          if (catData) {
-            monthlySpending[month] = catData.spending;
-          }
-        });
-
-        Object.entries(monthlySpending)
-          .sort((a, b) => new Date(b[0]) - new Date(a[0]))
-          .forEach(([month, spending]) => {
-            const monthStr = new Date(month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            monthTrendsHtml += `
-              <div style="display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; border-radius: 6px; transition: all 0.2s ease; background: var(--bg-tertiary);" 
-                   onmouseover="this.style.background='var(--bg-secondary)'; this.style.borderColor='var(--primary)';"
-                   onmouseout="this.style.background='var(--bg-tertiary)'; this.style.borderColor='var(--border)';"
-                   onclick="showMonthTransactions('${category}', '${month}')">
-                <span>${monthStr}</span>
-                <span style="color: var(--primary); font-weight: 600; cursor: pointer;">$${spending.toFixed(2)} →</span>
-              </div>
-            `;
-          });
-        monthTrendsHtml += '</div>';
-
-        // Show only monthly breakdown (removed All Transactions section)
-        document.getElementById('categoryTransactionsContainer').innerHTML = monthTrendsHtml;
-
-      } catch (err) {
-        console.error('Category detail error:', err);
-      }
-    }
-
-    function goBackToCategories() {
-      currentCategory = null;
-      document.getElementById('categoryDetail').classList.remove('active');
-      document.getElementById('categoryOverview').style.display = 'block';
-    }
-
-
-    async function showMonthTransactions(category, month) {
-      try {
-        // Show modal and loading state
-        document.getElementById('monthTransactionsModal').classList.add('active');
-        document.getElementById('monthTransactionsContainer').innerHTML = '<div class="loading"><span class="spinner"></span> Loading transactions...</div>';
-        
-        // Format month for display
-        const monthStr = new Date(month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        document.getElementById('monthTransactionsHeader').innerHTML = `${category} - ${monthStr}`;
-
-        // Fetch transactions for this month
-        const res = await fetch('/api/dashboard/category-transactions-for-month', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: category, month: month })
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        const transactions = await res.json();
-
-        // Build transaction list
-        let html = '';
-        if (transactions.length === 0) {
-          html = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No transactions for this month</p>';
-        } else {
-          html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-          transactions.forEach(t => {
-            const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-            html += `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border);">
-                <div style="flex: 1;">
-                  <div style="color: var(--text-secondary); font-size: 12px;">${date}</div>
-                  <div>${t.description}</div>
-                </div>
-                <div style="text-align: right; margin-left: 16px;">
-                  <div style="color: var(--danger); font-weight: 600;">-$${t.amount.toFixed(2)}</div>
-                  <div style="font-size: 11px; color: var(--text-secondary);">${t.currentCategory}</div>
-                </div>
-              </div>
-            `;
-          });
-          html += '</div>';
-        }
-
-        document.getElementById('monthTransactionsContainer').innerHTML = html;
-      } catch (err) {
-        console.error('Error loading month transactions:', err);
-        document.getElementById('monthTransactionsContainer').innerHTML = '<div class="alert error">Failed to load transactions</div>';
-      }
-    }
-
-    function closeMonthTransactionsModal() {
-      document.getElementById('monthTransactionsModal').classList.remove('active');
-    }
-
-    function showToast(message, duration = 3000) {
-      const toast = document.createElement('div');
-      toast.style.cssText = `
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        color: var(--text-primary);
-        padding: 12px 16px;
-        border-radius: 8px;
-        box-shadow: var(--shadow);
-        animation: slideIn 0.3s ease;
-        margin-bottom: 12px;
-        font-size: 14px;
+    // DASHBOARD LOGIC
+    async function loadDashboard() {
+      const res = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'all'})});
+      const data = await res.json();
+      
+      document.getElementById('dashboard-metrics').innerHTML = `
+        <div class="metric-card"><div class="metric-label">Income</div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Expenses</div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Net</div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
       `;
-      toast.textContent = message;
-      document.getElementById('toastContainer').appendChild(toast);
 
-      setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-      }, duration);
+      const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
+      const payments = await payRes.json();
+      document.getElementById('dashboard-payments').innerHTML = payments.slice(0, 4).map(p => `
+        <div class="metric-card">
+          <div class="metric-label">${p.category}</div>
+          <div class="metric-value" style="font-size: 20px;">$${p.totalAmount.toFixed(2)}</div>
+          <div style="font-size: 11px; color: var(--text-secondary);">${p.items.length} upcoming items</div>
+        </div>
+      `).join('');
     }
 
-    async function loadDebts() {
-      try {
-        const res = await fetch('/api/debts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const debts = await res.json();
-
-        let html = '';
-        debts.forEach(debt => {
-          const progress = ((debt.paid_amount / debt.balance) * 100).toFixed(0);
-          html += `
-            <div class="card">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">💳 ${debt.card_name}</div>
-                  <div class="card-subtitle">APR: ${debt.apr}%</div>
-                </div>
-              </div>
-              <div class="card-body">
-                <div class="card-item">
-                  <span>Current Balance</span>
-                  <span class="card-amount">$${debt.balance.toFixed(2)}</span>
-                </div>
-                <div style="margin: 16px 0;">
-                  <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Progress: ${progress}%</div>
-                  <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${progress}%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width 0.3s ease;"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          `;
-        });
-        document.getElementById('debtsContainer').innerHTML = html || '<div class="alert error">No debts to display</div>';
-      } catch (err) {
-        console.error('Debts error:', err);
-        document.getElementById('debtsContainer').innerHTML = '<div class="alert error">Failed to load debts</div>';
-      }
-    }
-
-    async function loadGoals() {
-      try {
-        const res = await fetch('/api/goals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const goals = await res.json();
-
-        let html = '';
-        goals.forEach(goal => {
-          const progress = ((goal.current_amount / goal.target_amount) * 100).toFixed(0);
-          html += `
-            <div class="card">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">🎯 ${goal.name}</div>
-                  <div class="card-subtitle">Target: $${goal.target_amount.toFixed(2)}</div>
-                </div>
-              </div>
-              <div class="card-body">
-                <div class="card-item">
-                  <span>Current</span>
-                  <span class="card-amount success">$${goal.current_amount.toFixed(2)}</span>
-                </div>
-                <div style="margin: 16px 0;">
-                  <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Progress: ${progress}%</div>
-                  <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${progress}%; height: 100%; background: var(--success); transition: width 0.3s ease;"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          `;
-        });
-        document.getElementById('goalsContainer').innerHTML = html || '<div class="alert error">No goals to display</div>';
-      } catch (err) {
-        console.error('Goals error:', err);
-        document.getElementById('goalsContainer').innerHTML = '<div class="alert error">Failed to load goals</div>';
-      }
-    }
-
-    function openImportModal() {
-      document.getElementById('importModal').classList.add('active');
-    }
-
-    function closeImportModal() {
-      document.getElementById('importModal').classList.remove('active');
-      document.getElementById('importAlert').innerHTML = '';
-      document.getElementById('importFile').value = '';
-      document.getElementById('selectedFileName').textContent = '';
-    }
-
-    async function handleImport(e) {
-      e.preventDefault();
-
-      const source = document.getElementById('importSource').value;
-      const file = document.getElementById('importFile').files[0];
-
-      if (!file) {
-        showAlert('Please select a file', 'error');
-        return;
-      }
-
-      const submitBtn = document.getElementById('importSubmitBtn');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Importing...';
-
-      try {
-        const csvData = await file.text();
-        const response = await fetch('/api/import/import-csv', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvData, source })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          showAlert(`✓ Imported ${result.imported} transactions`, 'success');
-          setTimeout(() => {
-            closeImportModal();
-            loadData('dashboard');
-          }, 1500);
-        } else {
-          showAlert(result.error || 'Import failed', 'error');
-        }
-      } catch (err) {
-        showAlert(err.message, 'error');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Import';
-      }
-    }
-
-    function showAlert(message, type) {
-      const alertDiv = document.getElementById('importAlert');
-      alertDiv.className = `alert ${type}`;
-      alertDiv.textContent = message;
-      alertDiv.style.display = 'block';
-    }
-
-    // Close modal on backdrop click
-    document.getElementById('importModal').addEventListener('click', (e) => {
-      if (e.target.id === 'importModal') {
-        closeImportModal();
-      }
-    });
-
-    // Load initial data
-    loadData('dashboard');
-
-    // ============================================================
-    // CATEGORIZATIONS PAGE JAVASCRIPT (INTEGRATED)
-    // ============================================================
-
-    // STATE
-    const CAT_API_BASE = '/api/categorizations';
-    const CAT_CATEGORIES = [
-      'Groceries', 'Utilities', 'Gas', 'Dining', 'Shopping', 'Entertainment',
-      'Healthcare', 'Insurance', 'Subscriptions', 'Transportation', 'Childcare',
-      'Education', 'Pet Care', 'Travel', 'Gifts', 'Home', 'Maintenance', 'Repairs',
-      'Professional Services', 'Taxes', 'Salary', 'Bonus', 'Investments', 'Income', 'Other'
-    ];
-
-    let pendingChanges = new Map();
-    let selectedCheckboxes = new Set();
-    let currentCatCategory = null;
-    let totalTransactions = 0;
-
-    // UTILITIES
-    function showCatToast(message, type = 'info') {
-      const toast = document.createElement('div');
-      toast.className = `cat-toast ${type}`;
-      toast.textContent = message;
-      document.body.appendChild(toast);
-      setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
-
-    // TAB SWITCHING
-    document.querySelectorAll('.cat-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.cat-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.cat-tab-pane').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`${tab}-pane`).classList.add('active');
-
-        if (tab === 'review') loadCatReview();
-        else if (tab === 'bulk') loadCatBulk();
-        else if (tab === 'learning') loadCatLearning();
-      });
-    });
-
-    // LOAD STATS
-    async function loadCatStats() {
-      try {
-        const res = await fetch(`${CAT_API_BASE}/list?limit=1`, { method: 'POST' });
-        const data = await res.json();
-        document.getElementById('stat-uncategorized').textContent = data.counts.uncategorized;
-        document.getElementById('stat-categorized').textContent = data.counts.categorized;
-        document.getElementById('stat-corrected').textContent = data.counts.recentlyCorrected;
-      } catch (err) {
-        console.error('Error loading stats:', err);
-      }
-    }
-
-    // TAB 1: REVIEW & FIX MODE
-    async function loadCatReview() {
-      try {
-        const res = await fetch(`${CAT_API_BASE}/list?limit=50&offset=0&dateFilter=all`, { method: 'POST' });
-        const data = await res.json();
-        totalTransactions = data.counts.categorized + data.counts.uncategorized;
-        pendingChanges.clear();
-        renderCatReview(data.transactions);
-      } catch (err) {
-        console.error('Error loading review:', err);
-        showCatToast('Error loading transactions', 'error');
-      }
-    }
-
-    function renderCatReview(txns) {
-      const rows = document.getElementById('review-rows');
-      if (!txns.length) {
-        rows.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
-        return;
-      }
-
-      let html = txns.map(txn => {
-        const amount = parseFloat(txn.amount);
-        const isExpense = amount < 0;
-        const displayAmount = Math.abs(amount).toFixed(2);
-        const cat = pendingChanges.get(txn.id) || txn.currentCategory || '';
-
-        return `
-          <div class="cat-row">
-            <div class="cat-date">${txn.date}</div>
-            <div class="cat-desc" title="${txn.description}">${txn.description}</div>
-            <div class="cat-amount ${isExpense ? 'expense' : ''}">$${displayAmount}</div>
-            <select class="cat-select" data-id="${txn.id}" data-orig="${txn.currentCategory || ''}">
-              <option value="">Uncategorized</option>
-              ${CAT_CATEGORIES.map(c => `<option value="${c}" ${cat === c ? 'selected' : ''}>${c}</option>`).join('')}
-            </select>
-          </div>
-        `;
-      }).join('');
-
-      rows.innerHTML = html;
-      updateCatReviewStatus();
-
-      document.querySelectorAll('#review-rows .cat-select').forEach(sel => {
-        sel.addEventListener('change', (e) => {
-          const id = parseInt(e.target.dataset.id);
-          const orig = e.target.dataset.orig;
-          const newVal = e.target.value;
-
-          if (newVal !== orig) {
-            pendingChanges.set(id, newVal);
-          } else {
-            pendingChanges.delete(id);
-          }
-          updateCatReviewStatus();
-        });
-      });
-    }
-
-    function updateCatReviewStatus() {
-      const count = pendingChanges.size;
-      const status = document.getElementById('changes-status');
-      status.textContent = count > 0 ? `${count} change(s) pending - Showing 50 of ${totalTransactions}` : `Showing 50 of ${totalTransactions}`;
-      document.getElementById('save-btn').disabled = count === 0;
-    }
-
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      if (pendingChanges.size === 0) return;
-
-      const updates = Array.from(pendingChanges.entries()).map(([id, newCat]) => ({
-        id,
-        newCategory: newCat
-      }));
-
-      try {
-        const res = await fetch(`${CAT_API_BASE}/update-batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates })
-        });
-
-        const data = await res.json();
-        showCatToast(`✓ Updated ${data.updated} transactions`, 'success');
-        pendingChanges.clear();
-        await loadCatStats();
-        await loadCatReview();
-      } catch (err) {
-        console.error('Error saving:', err);
-        showCatToast('Error saving changes', 'error');
-      }
-    });
-
-    // TAB 2: BULK EDITOR
-    async function loadCatBulk() {
-      try {
-        const res = await fetch(`${CAT_API_BASE}/category-summary`, { method: 'POST' });
-        const data = await res.json();
-        renderCatCategoryList(data.categories);
-        populateCatMoveSelect();
-      } catch (err) {
-        console.error('Error loading bulk:', err);
-        showCatToast('Error loading categories', 'error');
-      }
-    }
-
-    function renderCatCategoryList(cats) {
-      const list = document.getElementById('category-list');
-      let html = cats.map(c => `
-        <div class="cat-category-item" data-category="${c.category || ''}">
-          <span>${c.category || 'Uncategorized'}</span>
-          <span class="cat-category-count">${c.count}</span>
+    // CATEGORIES LOGIC (3-PANEL REWRITE)
+    async function loadCategories() {
+      const res = await fetch('/api/categorizations/category-summary', { method: 'POST' });
+      const data = await res.json();
+      
+      document.getElementById('cat-list').innerHTML = data.categories.map(c => `
+        <div class="list-item" onclick="loadCategoryTransactions('${c.category}')">
+          <div style="font-weight: 600;">${c.category || 'Uncategorized'}</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">${c.count} transactions</div>
         </div>
       `).join('');
 
-      list.innerHTML = html;
-
-      document.querySelectorAll('.cat-category-item').forEach(item => {
-        item.addEventListener('click', () => {
-          document.querySelectorAll('.cat-category-item').forEach(i => i.classList.remove('active'));
-          item.classList.add('active');
-          currentCatCategory = item.dataset.category;
-          loadCatBulkTransactions(currentCatCategory);
-        });
-      });
+      loadSuggestions();
     }
 
-    function populateCatMoveSelect() {
-      const sel = document.getElementById('move-category-select');
-      sel.innerHTML = '<option value="">Move selected to...</option>' +
-        CAT_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
-    }
-
-    async function loadCatBulkTransactions(cat) {
-      try {
-        const res = await fetch(`${CAT_API_BASE}/by-category`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: cat, limit: 100, offset: 0 })
-        });
-        const data = await res.json();
-        renderCatBulkTransactions(data.transactions);
-      } catch (err) {
-        console.error('Error loading bulk txns:', err);
-        showCatToast('Error loading transactions', 'error');
-      }
-    }
-
-    function renderCatBulkTransactions(txns) {
-      const table = document.getElementById('cat-bulk-table');
-      if (!txns.length) {
-        table.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
-        return;
-      }
-
-      let html = txns.map(txn => {
-        const amount = parseFloat(txn.amount);
-        const isExpense = amount < 0;
-        const displayAmount = Math.abs(amount).toFixed(2);
-
-        return `
-          <div class="cat-bulk-row">
-            <input type="checkbox" class="bulk-check" data-id="${txn.id}">
-            <div class="cat-date">${txn.date}</div>
-            <div class="cat-desc">${txn.description}</div>
-            <div class="cat-amount ${isExpense ? 'expense' : ''}">$${displayAmount}</div>
-          </div>
-        `;
-      }).join('');
-
-      table.innerHTML = html;
-      selectedCheckboxes.clear();
-      updateCatBulkButtons();
-
-      document.querySelectorAll('.bulk-check').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            selectedCheckboxes.add(parseInt(e.target.dataset.id));
-          } else {
-            selectedCheckboxes.delete(parseInt(e.target.dataset.id));
-          }
-          updateCatBulkButtons();
-        });
-      });
-    }
-
-    function updateCatBulkButtons() {
-      document.getElementById('bulk-move-btn').disabled = selectedCheckboxes.size === 0;
-    }
-
-    document.getElementById('select-all-btn').addEventListener('click', () => {
-      const cbs = document.querySelectorAll('.bulk-check');
-      const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
-
-      cbs.forEach(cb => {
-        cb.checked = !allChecked;
-        cb.dispatchEvent(new Event('change'));
-      });
-    });
-
-    document.getElementById('bulk-move-btn').addEventListener('click', async () => {
-      const cat = document.getElementById('move-category-select').value;
-      if (!cat || selectedCheckboxes.size === 0) return;
-
-      const updates = Array.from(selectedCheckboxes).map(id => ({
-        id,
-        newCategory: cat
-      }));
-
-      try {
-        const res = await fetch(`${CAT_API_BASE}/update-batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates })
-        });
-
-        const data = await res.json();
-        showCatToast(`✓ Moved ${data.updated} transactions to ${cat}`, 'success');
-        selectedCheckboxes.clear();
-        await loadCatStats();
-        await loadCatBulk();
-      } catch (err) {
-        console.error('Error moving:', err);
-        showCatToast('Error moving transactions', 'error');
-      }
-    });
-
-    // TAB 3: LEARNING PATTERNS
-    async function loadCatLearning() {
-      try {
-        const res = await fetch(`${CAT_API_BASE}/patterns`, { method: 'POST' });
-        const data = await res.json();
-        renderCatPatterns(data.patterns);
-      } catch (err) {
-        console.error('Error loading patterns:', err);
-        showCatToast('Error loading patterns', 'error');
-      }
-    }
-
-    function renderCatPatterns(patterns) {
-      const list = document.getElementById('patterns-list');
-      if (!patterns.length) {
-        list.innerHTML = '<div class="cat-empty"><h3>No patterns found</h3><p>Need 3+ transactions with same description</p></div>';
-        return;
-      }
-
-      let html = patterns.map(p => `
-        <div class="cat-pattern-card">
-          <div class="cat-pattern-info">
-            <div class="cat-pattern-keyword">${p.keyword}</div>
-            <div class="cat-pattern-stat">📊 Appears ${p.count} times</div>
-            <div class="cat-pattern-stat">Suggest: <strong>${p.suggestedCategory}</strong></div>
-          </div>
-          <div class="cat-pattern-actions">
-            <button class="cat-btn cat-btn-sm cat-btn-yes" data-keyword="${p.keyword}" data-category="${p.suggestedCategory}">Yes</button>
-            <button class="cat-btn cat-btn-sm">No</button>
-          </div>
+    async function loadCategoryTransactions(cat) {
+      document.getElementById('txn-header').textContent = `Transactions: ${cat}`;
+      const res = await fetch('/api/categorizations/by-category', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({category: cat, limit: 100})});
+      const data = await res.json();
+      
+      document.getElementById('txn-list').innerHTML = data.transactions.map(t => `
+        <div class="list-item txn-row">
+          <div style="font-size: 11px; color: var(--text-secondary);">${t.date}</div>
+          <div style="font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${t.description}">${t.description}</div>
+          <div class="txn-amount">$${Math.abs(t.amount).toFixed(2)}</div>
         </div>
       `).join('');
-
-      list.innerHTML = html;
-
-      document.querySelectorAll('.cat-btn-yes').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const keyword = e.target.dataset.keyword;
-          const category = e.target.dataset.category;
-
-          try {
-            const res = await fetch(`${CAT_API_BASE}/learn-pattern`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ keyword, suggestedCategory: category })
-            });
-
-            const data = await res.json();
-            showCatToast(`✓ Applied pattern to ${data.updated} transactions`, 'success');
-            await loadCatStats();
-            await loadCatLearning();
-          } catch (err) {
-            console.error('Error learning pattern:', err);
-            showCatToast('Error applying pattern', 'error');
-          }
-        });
-      });
     }
 
-    // INIT CATEGORIZATIONS
-    loadCatStats();
-    loadCatReview();
+    async function loadSuggestions() {
+      const res = await fetch('/api/categorizations/patterns', { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('suggestion-list').innerHTML = data.patterns.map(p => `
+        <div class="list-item">
+          <div style="font-weight: 600; color: var(--primary);">"${p.keyword}"</div>
+          <div style="font-size: 12px; margin-bottom: 8px;">Used in ${p.count} items</div>
+          <button class="btn btn-secondary" style="background: var(--success); color: white; padding: 4px 8px; font-size: 11px;" 
+                  onclick="applyPattern('${p.keyword}', '${p.suggestedCategory}')">Set to ${p.suggestedCategory}</button>
+        </div>
+      `).join('');
+    }
+
+    async function applyPattern(keyword, category) {
+      await fetch('/api/categorizations/learn-pattern', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({keyword, suggestedCategory: category})});
+      notify(`✓ Updated items matching "${keyword}"`);
+      loadCategories();
+    }
+
+    function notify(msg) {
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = msg;
+      document.getElementById('toasts').appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    loadDashboard();
   </script>
 </body>
 </html>
-/* Force redeploy marker: 1780527967 */
+<!-- Redeploy marker: 1780596324 -->
