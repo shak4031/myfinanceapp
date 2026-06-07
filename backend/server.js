@@ -1,3 +1,4 @@
+/* Force redeploy marker: 1780594321 */
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -88,6 +89,3 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 export default app;
-// Force redeploy 1780468671
-// Force Railway redeploy: 1780578746
-// Deployment trigger: 1780583563
