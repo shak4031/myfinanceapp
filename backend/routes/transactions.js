@@ -108,39 +108,69 @@ router.post('/cleanup-database', async (req, res) => {
   try {
     log('TRANSACTIONS', 'Starting database deduplication and cleanup...');
     
-    // 1. Remove exact duplicates (keeping the one with the lowest ID)
+    // 1. Precise Duplication Cleanup: collapsing transactions where date+desc+amount+balance are identical
     await db.run(`
       DELETE FROM transactions 
       WHERE id NOT IN (
         SELECT MIN(id) 
         FROM transactions 
-        GROUP BY date, description, amount, direction
+        GROUP BY date, description, amount, direction, balance
       )
     `);
 
-    // 2. Reset fixed status for everything
-    await db.run('UPDATE transactions SET is_fixed = FALSE');
+    // 2. Clear all fixed flags and labels to start fresh matching
+    await db.run('UPDATE transactions SET is_fixed = FALSE, label_id = NULL');
 
-    // 3. Carefully re-apply fixed status to ONLY the specific monthly bills
-    const fixedRules = [
-      { pattern: 'mortgage|rent|lease|apartment', category: 'Housing' },
-      { pattern: 'hyundai|santander|auto.*loan|car.*payment', category: 'Car Loans' },
-      { pattern: 'pseg|electricity|water|gas|hydro|pepco|eversource|constellation|coned', category: 'Utilities' },
-      { pattern: 'verizon|comcast|xfinity|fios|at&t|t-mobile|internet|cable|phone', category: 'Internet' },
-      { pattern: 'insurance|state farm|geico|allstate|usaa|progressive', category: 'Insurance' },
-      { pattern: 'ollo|credit.*card|visa|mastercard|discover|amex|marriott|capital.*one|chase', category: 'Credit Cards' }
+    // 3. Define the official rules (Single Source of Truth)
+    const fixedLabels = [
+      { pattern: 'mortgage|rent|lease|apartment', label: 'Housing', category: 'Housing', fixed: true },
+      { pattern: 'hyundai|santander|auto.*loan|car.*payment', label: 'Car Loan', category: 'Car Loans', fixed: true },
+      { pattern: 'pseg|electricity|water|gas|hydro|pepco|eversource|constellation|coned', label: 'Power/Utilities', category: 'Utilities', fixed: true },
+      { pattern: 'verizon|comcast|xfinity|fios|at&t|t-mobile|internet|cable|phone', label: 'Network/Internet', category: 'Internet', fixed: true },
+      { pattern: 'insurance|state farm|geico|allstate|usaa|progressive', label: 'Insurance Policy', category: 'Insurance', fixed: true },
+      { pattern: 'ollo|amex|capital.*one|chase|discover|credit.*card|mastercard|visa|marriott', label: 'Credit Card Payment', category: 'Credit Cards', fixed: true }
     ];
 
-    for (const rule of fixedRules) {
+    // Non-fixed rules (explicitly mark FALSE)
+    const nonFixedRules = [
+      { pattern: 'paypal|target|klarna|amazon|walmart|etsy|shopping', category: 'Shopping', fixed: false },
+      { pattern: 'restaurant|cafe|dining|roy rogers|pizza|grubhub|uber.*eats|doordash|starbucks', category: 'Dining', fixed: false }
+    ];
+
+    const allRules = [...fixedLabels, ...nonFixedRules];
+
+    for (const rule of allRules) {
+      // a. Find or create the label record first
+      const catRow = await db.get("SELECT id FROM categories WHERE name = $1", [rule.category]);
+      if (!catRow) continue;
+
+      let labelId;
+      const labelRow = await db.get("SELECT id FROM transaction_labels WHERE pattern = $1", [rule.pattern]);
+      if (labelRow) {
+        labelId = labelRow.id;
+        await db.run(
+            "UPDATE transaction_labels SET display_label = $1, category_id = $2, is_fixed = $3 WHERE id = $4",
+            [rule.label || rule.category, catRow.id, rule.fixed, labelId]
+        );
+      } else {
+        const result = await db.pool.query(
+            "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id",
+            [rule.pattern, rule.label || rule.category, catRow.id, rule.fixed]
+        );
+        labelId = result.rows[0].id;
+      }
+
+      // b. Apply to all historically matching transactions
       await db.run(
-        `UPDATE transactions SET is_fixed = TRUE, category = $1 
-         WHERE description ~* $2 AND user_id = 1`,
-        [rule.category, rule.pattern]
+        `UPDATE transactions 
+         SET category = $1, is_fixed = $2, label_id = $3
+         WHERE description ~* $4 AND user_id = 1`,
+        [rule.category, rule.fixed, labelId, rule.pattern]
       );
     }
 
-    log('TRANSACTIONS', '✓ Database cleanup and deduplication complete');
-    res.json({ success: true, message: 'Database deduplicated and fixed payments recalibrated.' });
+    log('TRANSACTIONS', '✓ Database cleaned and re-aligned with architectural standard');
+    res.json({ success: true, message: 'Database cleaned and labels re-synchronized.' });
   } catch (err) {
     log('TRANSACTIONS', `Error in cleanup: ${err.message}`);
     res.status(500).json({ error: err.message });
