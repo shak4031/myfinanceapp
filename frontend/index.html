@@ -509,8 +509,8 @@
             <td style="padding: 12px; text-align: center;">
               <input type="checkbox" ${t.is_fixed ? 'checked' : ''} onchange="modifyTransaction('${t.id}', '${t.category || ''}', this.checked)" style="cursor: pointer;">
             </td>
-            <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction === 'debit' ? 'var(--danger)' : 'var(--success)'}">
-              ${t.direction === 'debit' ? '-' : '+'}$${t.amount.toFixed(2)}
+            <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction.toLowerCase() === 'debit' ? 'var(--danger)' : 'var(--success)'}">
+              ${t.direction.toLowerCase() === 'debit' ? '-' : '+'}$${Math.abs(t.amount).toFixed(2)}
             </td>
           </tr>
         `).join('');
