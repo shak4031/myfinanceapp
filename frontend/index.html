@@ -418,10 +418,30 @@
       `).join('');
     }
 
-    async function applyPattern(keyword, category) {
-      await fetch('/api/categorizations/learn-pattern', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({keyword, suggestedCategory: category})});
-      notify(`✓ Updated items matching "${keyword}"`);
-      loadCategories();
+    async function loadAllTransactions() {
+      const tbody = document.getElementById('full-txn-table');
+      tbody.innerHTML = '<tr><td colspan="3" style="padding: 24px; text-align: center;">Loading all transactions...</td></tr>';
+      
+      try {
+        const res = await fetch('/api/dashboard/all-transactions');
+        const data = await res.json();
+        const txns = data.transactions || [];
+        
+        tbody.innerHTML = txns.sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${new Date(t.date).toLocaleDateString('en-US', {month: 'short', day: '2-digit', year: 'numeric'})}</td>
+            <td style="padding: 12px; font-weight: 500;">
+              <div style="font-size: 14px;">${t.description}</div>
+              <div style="font-size: 11px; color: var(--primary);">${t.category || 'Uncategorized'}</div>
+            </td>
+            <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction === 'debit' ? 'var(--danger)' : 'var(--success)'}">
+              ${t.direction === 'debit' ? '-' : '+'}$${t.amount.toFixed(2)}
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load transactions</td></tr>';
+      }
     }
 
     function notify(msg) {
