@@ -1930,6 +1930,24 @@
 
     async function loadTransactions() {
       try {
+        // Load all categories first to populate dropdown
+        const catRes = await fetch('/api/categories');
+        const categoriesData = await catRes.json();
+        
+        const categorySelect = document.getElementById('txnCategoryFilter');
+        // Clear existing options except first two
+        while (categorySelect.options.length > 2) {
+          categorySelect.remove(2);
+        }
+        
+        // Add categories from database in alphabetical order
+        categoriesData.sort((a, b) => a.name.localeCompare(b.name)).forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.name;
+          option.textContent = cat.name;
+          categorySelect.appendChild(option);
+        });
+
         // Load all transactions
         const res = await fetch('/api/dashboard/all-transactions');
         const data = await res.json();
@@ -1942,29 +1960,7 @@
           // Sort by date descending
           allTxnData.sort((a, b) => new Date(b.date) - new Date(a.date));
           
-          // Populate category dropdown with unique categories
-          const categories = new Set();
-          allTxnData.forEach(txn => {
-            if (txn.category && txn.category !== 'Uncategorized') {
-              categories.add(txn.category);
-            }
-          });
-          
-          const categorySelect = document.getElementById('txnCategoryFilter');
-          // Clear existing options except first two
-          while (categorySelect.options.length > 2) {
-            categorySelect.remove(2);
-          }
-          
-          // Add categories in alphabetical order
-          Array.from(categories).sort().forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat;
-            option.textContent = cat;
-            categorySelect.appendChild(option);
-          });
-          
-          console.log(`Loaded ${allTxnData.length} transactions with ${categories.size} categories:`, Array.from(categories));
+          console.log(`Loaded ${allTxnData.length} transactions.`);
         } else {
           console.error('Invalid response format:', data);
         }
@@ -2082,7 +2078,7 @@
     let editingTxnDescription = null;
     let editingTxnOldCategory = null;
 
-    function openCategoryModal(txnId, description, oldCategory) {
+    async function openCategoryModal(txnId, description, oldCategory) {
       editingTxnId = txnId;
       editingTxnDescription = description;
       editingTxnOldCategory = oldCategory;
@@ -2095,13 +2091,9 @@
       document.getElementById('editTxnDescription').textContent = description;
       document.getElementById('editFixedCheck').checked = isFixed;
 
-      // Populate category dropdown with all unique categories from allTxnData
-      const categories = new Set();
-      allTxnData.forEach(txn => {
-        if (txn.category && txn.category !== 'Uncategorized') {
-          categories.add(txn.category);
-        }
-      });
+      // Populate category dropdown with all categories from database
+      const catRes = await fetch('/api/categories');
+      const categoriesData = await catRes.json();
 
       const select = document.getElementById('editCategorySelect');
       // Clear all but first option
@@ -2115,11 +2107,11 @@
       uncatOption.textContent = 'Uncategorized';
       select.appendChild(uncatOption);
 
-      // Add all other categories in alphabetical order
-      Array.from(categories).sort().forEach(cat => {
+      // Add all categories in alphabetical order
+      categoriesData.sort((a, b) => a.name.localeCompare(b.name)).forEach(cat => {
         const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
+        option.value = cat.name;
+        option.textContent = cat.name;
         select.appendChild(option);
       });
 
