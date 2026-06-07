@@ -288,18 +288,16 @@ router.post('/import-csv', async (req, res) => {
     log('IMPORT', `✅ CSV import complete in ${duration}ms`);
     log('IMPORT', `  Imported: ${imported}`);
     log('IMPORT', `  Duplicates skipped: ${duplicates}`);
-    log('IMPORT', `  Insert errors: ${insertErrors.length}`);
 
     // Get final count
     const countResult = await db.pool.query('SELECT COUNT(*) as count FROM transactions');
     const totalInDb = parseInt(countResult.rows[0].count);
 
     res.json({
-      success: imported > 0,
+      success: imported > 0 || duplicates > 0,
       imported,
       duplicates,
       total: transactions.length,
-      errors: insertErrors.length,
       totalInDatabase: totalInDb,
       duration,
       message: `Imported ${imported} new transactions (${duplicates} duplicates skipped). Total in database: ${totalInDb}`
