@@ -194,4 +194,33 @@ router.post('/sync-labels', async (req, res) => {
   }
 });
 
+router.post('/bulk-update-category', async (req, res) => {
+  try {
+    const { updates } = req.body;
+    if (!updates || !Array.isArray(updates)) return res.status(400).json({ error: 'updates array is required' });
+
+    for (const update of updates) {
+      const { pattern, category } = update;
+      await db.run(
+        `UPDATE transaction_labels 
+         SET category_id = (SELECT id FROM categories WHERE name = $1) 
+         WHERE pattern ~* $2`,
+        [category, pattern]
+      );
+      
+      // Update existing transactions for immediate UI consistency
+      await db.run(
+        `UPDATE transactions 
+         SET category = $1 
+         WHERE label_id IN (SELECT id FROM transaction_labels WHERE pattern ~* $2)`,
+        [category, pattern]
+      );
+    }
+
+    res.json({ success: true, message: 'Labels and historical transactions updated' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
