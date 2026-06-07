@@ -335,10 +335,10 @@
       };
 
       document.getElementById('dashboard-payments').innerHTML = payments.map(p => `
-        <div class="metric-card" style="height: fit-content;">
+        <div class="metric-card" style="height: fit-content; ${p.isIncome ? 'border-color: var(--success);' : ''}">
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-            <div class="metric-label">${categoryIcons[p.category.toLowerCase()] || '📦'} ${p.category}</div>
-            <div style="font-weight: 700; color: var(--danger);">$${p.totalAmount.toFixed(2)}</div>
+            <div class="metric-label" style="${p.isIncome ? 'color: var(--success);' : ''}">${categoryIcons[p.category.toLowerCase()] || (p.isIncome ? '💰' : '📦')} ${p.category}</div>
+            <div style="font-weight: 700; color: ${p.isIncome ? 'var(--success)' : 'var(--danger)'};">${p.isIncome ? '+' : '-'}$${p.totalAmount.toFixed(2)}</div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 8px;">
             ${p.items.map(item => `
@@ -348,6 +348,10 @@
                 <span style="font-weight: 600;">$${item.amount.toFixed(2)}</span>
               </div>
             `).join('')}
+          </div>
+          <div style="margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Projected Balance</span>
+            <span style="font-weight: 700; color: var(--primary); font-size: 16px;">$${p.projectedBalance.toFixed(2)}</span>
           </div>
         </div>
       `).join('');

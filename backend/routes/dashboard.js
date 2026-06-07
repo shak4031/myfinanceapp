@@ -242,36 +242,70 @@ router.post('/upcoming-payments', async (req, res) => {
   try {
     log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills API-driven)');
 
-    const latestBalance = await db.all(
+    const latestBalanceRes = await db.all(
       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
       [1]
     );
-    const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
+    const currentBalance = latestBalanceRes.length > 0 ? parseFloat(latestBalanceRes[0].balance) : 0;
 
-    // Pull directly by FIXED CATEGORIES stored in DB, deduplicated by label and LATEST month
-    // NEW: Explicitly exclude categories that should NEVER be fixed
+    // Get paycheck info (Wells Fargo Payroll)
+    const paychecks = await db.all(
+      `SELECT description, amount, EXTRACT(DAY FROM date::date) as day_of_month
+       FROM transactions 
+       WHERE description ~* 'WELLS FARGO.*PAYROLL|WELLS FARGO.*DIRECT DEP'
+       AND user_id = 1
+       GROUP BY description, amount, EXTRACT(DAY FROM date::date), date::date
+       ORDER BY date::date DESC
+       LIMIT 2`, // Most recent 2 checks to identify the bi-weekly cycle
+       [1]
+    );
+
+    // Identify bills (Dedicated logic for "Hyundai Lease" and "Santander" to be grouped)
+    // Pull ALL transactions marked as fixed, or that fit the "recurring" pattern
     const result = await db.all(
       `SELECT 
-        l.display_label as label_name,
-        c.name as category_name,
-        t.description,
-        t.amount,
-        EXTRACT(DAY FROM t.date::date) as day_of_month
-      FROM transactions t
-      JOIN transaction_labels l ON t.label_id = l.id
-      JOIN categories c ON l.category_id = c.id
-      WHERE t.user_id = $1 
-      AND l.is_fixed = TRUE
-      AND c.name NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
-      AND t.date::date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')::date
-      GROUP BY l.display_label, c.name, t.description, t.amount, EXTRACT(DAY FROM t.date::date)
-      ORDER BY c.name ASC, day_of_month ASC`,
+        description,
+        category,
+        amount,
+        EXTRACT(DAY FROM date::date) as day_of_month
+      FROM transactions
+      WHERE user_id = $1 
+      AND is_fixed = TRUE
+      AND category NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
+      AND date::date >= (CURRENT_DATE - INTERVAL '35 days')
+      GROUP BY description, category, amount, date::date
+      ORDER BY date::date DESC`,
       [1]
     );
 
     const byCategory = {};
+    const processedLabels = new Set();
+
+    // Add Income Projection first
+    if (paychecks.length > 0) {
+      byCategory['Incomes'] = {
+        category: 'Incomes',
+        isIncome: true,
+        items: [],
+        totalAmount: 0
+      };
+      
+      paychecks.forEach(p => {
+        const label = `Paycheck (${p.day_of_month})`;
+        if(!processedLabels.has(label)) {
+          byCategory['Incomes'].items.push({
+            description: p.description,
+            dayOfMonth: parseInt(p.day_of_month),
+            amount: parseFloat(p.amount)
+          });
+          byCategory['Incomes'].totalAmount += parseFloat(p.amount);
+          processedLabels.add(label);
+        }
+      });
+    }
+
     result.forEach(p => {
-      const categoryName = p.category_name;
+      const categoryName = p.category;
       if (!byCategory[categoryName]) {
         byCategory[categoryName] = {
           category: categoryName,
@@ -279,26 +313,35 @@ router.post('/upcoming-payments', async (req, res) => {
           totalAmount: 0
         };
       }
-      // To prevent duplication across months, we only keep the latest one per label
-      if (!byCategory[categoryName].items.find(item => item.label === p.label_name)) {
+      
+      const label = `${p.description}-${p.amount}`;
+      if (!processedLabels.has(label)) {
         byCategory[categoryName].items.push({
-          label: p.label_name,
           description: p.description,
           dayOfMonth: parseInt(p.day_of_month),
           amount: parseFloat(p.amount)
         });
         byCategory[categoryName].totalAmount += parseFloat(p.amount);
+        processedLabels.add(label);
       }
     });
 
-    const grouped = Object.values(byCategory).map(group => ({
-      category: group.category,
-      totalAmount: group.totalAmount,
-      items: group.items,
-      projectedBalance: currentBalance - group.totalAmount
-    })).sort((a, b) => b.totalAmount - a.totalAmount);
+    let runningBalance = currentBalance;
+    const grouped = Object.values(byCategory).map(group => {
+      if (group.isIncome) {
+        runningBalance += group.totalAmount;
+      } else {
+        runningBalance -= group.totalAmount;
+      }
+      return {
+        ...group,
+        projectedBalance: runningBalance
+      };
+    }).sort((a, b) => {
+      if (a.category === 'Incomes') return -1;
+      return b.totalAmount - a.totalAmount;
+    });
 
-    log('DASHBOARD', `✓ Returning ${grouped.length} fixed categories from database`);
     res.json(grouped);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
