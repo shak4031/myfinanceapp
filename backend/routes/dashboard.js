@@ -190,7 +190,7 @@ function categorizeSubscription(description) {
   if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
 
   // Credit Card Payments (Fixed)
-  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
+  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott|capital.*one|chase/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
   
   // Insurance
   if (/insurance|homeowners|renters|life.*ins|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
