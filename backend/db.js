@@ -98,6 +98,7 @@ export default class Database {
       const migrations = [
         `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_corrected BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_category TEXT`,
+        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_fixed BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMP`,
         `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_fixed BOOLEAN DEFAULT FALSE`
       ];

@@ -133,21 +133,22 @@ async function getHistoricalAverages() {
 
 // Helper: Detect recurring payments (subscriptions, bills) - excluding internal transfers
 async function getRecurringPayments() {
-  try {
-    const result = await db.all(
-      `SELECT 
-        description,
-        amount,
-        EXTRACT(DAY FROM date::date) as day_of_month,
-        COUNT(*) as frequency,
-        MAX(date) as last_date
-      FROM transactions
-      WHERE user_id = $1 AND UPPER(direction) = 'DEBIT'
-      GROUP BY description, amount, EXTRACT(DAY FROM date::date)
-      HAVING COUNT(*) >= 2
-      ORDER BY frequency DESC, last_date DESC`,
-      [1]
-    );
+  const recurring_items = await db.all(
+    `SELECT 
+      description,
+      category,
+      amount,
+      EXTRACT(DAY FROM date::date) as day_of_month,
+      MAX(is_fixed::int)::boolean as is_fixed_flag,
+      COUNT(*) as frequency,
+      MAX(date) as last_date
+    FROM transactions
+    WHERE user_id = $1 AND (UPPER(direction) = 'DEBIT' OR is_fixed = TRUE)
+    GROUP BY description, category, amount, EXTRACT(DAY FROM date::date)
+    HAVING COUNT(*) >= 2 OR MAX(is_fixed::int) = 1
+    ORDER BY frequency DESC, last_date DESC`,
+    [1]
+  );
     
     return result.filter(p => {
       // Exclude internal transfers
