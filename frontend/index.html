@@ -567,6 +567,13 @@
         let effectCount = 0;
         rows.forEach(r => {
           if (r.cells[1].textContent.trim() === description) {
+            // UI SYNC: Update the select dropdown in other rows so user sees the change
+            const rowSelect = r.querySelector('select');
+            if (rowSelect && rowSelect.value !== category) {
+              rowSelect.value = category;
+            }
+
+            // Visual feedback
             r.style.transition = 'background 0.3s ease';
             r.style.background = 'rgba(81, 207, 102, 0.2)';
             effectCount++;
