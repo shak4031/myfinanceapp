@@ -354,44 +354,56 @@
     /* CATEGORY CARDS */
     .category-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
       margin-bottom: 32px;
+      align-items: stretch;
     }
 
     .category-card {
-      background: var(--bg-tertiary);
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
+      border-radius: 12px;
+      padding: 24px;
       text-align: center;
       cursor: pointer;
       transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 160px;
     }
 
     .category-card:hover {
       border-color: var(--primary);
-      background: var(--bg-secondary);
-      transform: translateY(-2px);
+      background: var(--bg-tertiary);
+      transform: translateY(-4px);
       box-shadow: var(--shadow);
     }
 
     .category-icon {
-      font-size: 28px;
-      margin-bottom: 8px;
+      font-size: 36px;
+      margin-bottom: 12px;
     }
 
     .category-name {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 15px;
+      font-weight: 600;
       color: var(--text-primary);
-      margin-bottom: 4px;
+      margin-bottom: 8px;
     }
 
     .category-amount {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
       color: var(--primary);
+    }
+
+    .category-count {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
     }
 
     /* PAYMENT CARDS */
@@ -1922,7 +1934,7 @@
                 <div class="category-icon">${icon}</div>
                 <div class="category-name">${cat}</div>
                 <div class="category-amount">$${data.total.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${data.count} transactions</div>
+                <div class="category-count">${data.count} transactions</div>
               </div>
             `;
           });
