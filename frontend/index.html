@@ -241,7 +241,15 @@
         <div class="panel-container">
           <!-- PANEL 1: CATEGORY LIST -->
           <div class="panel">
-            <div class="panel-header">Groups</div>
+            <div class="panel-header">
+              Groups
+              <button class="btn" style="padding: 2px 8px; font-size: 10px; background: var(--success); color: white;" onclick="toggleFixedCategoryPrompt()">+ Bill</button>
+            </div>
+            <div id="cat-fixed-selector" style="display: none; padding: 12px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border);">
+               <select id="new-fixed-cat-select" style="width: 100%; padding: 6px; margin-bottom: 8px; font-size: 12px; background: var(--bg-primary); color: white; border: 1px solid var(--border);">
+               </select>
+               <button class="btn btn-primary" style="width: 100%; font-size: 11px;" onclick="addCategoryToUpcoming()">Add to Upcoming</button>
+            </div>
             <div class="panel-body" id="cat-list"></div>
           </div>
 
@@ -347,17 +355,53 @@
 
     // CATEGORIES LOGIC (3-PANEL REWRITE)
     async function loadCategories() {
-      const res = await fetch('/api/categorizations/category-summary', { method: 'POST' });
-      const data = await res.json();
+      // Load all available categories from the source of truth
+      const catRes = await fetch('/api/categories');
+      const allCats = await catRes.json();
       
-      document.getElementById('cat-list').innerHTML = data.categories.map(c => `
-        <div class="list-item" onclick="loadCategoryMonths('${c.category}')">
-          <div style="font-weight: 600;">${c.category || 'Uncategorized'}</div>
-          <div style="font-size: 12px; color: var(--text-secondary);">${c.count} transactions</div>
+      const summaryRes = await fetch('/api/categorizations/category-summary', { method: 'POST' });
+      const summaryData = await summaryRes.json();
+      
+      // Populate fixed category selector
+      const fixedSelect = document.getElementById('new-fixed-cat-select');
+      fixedSelect.innerHTML = allCats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+      // Merge data so we show all categories even with 0 transactions
+      const categoryMap = new Map();
+      allCats.forEach(c => categoryMap.set(c.name, 0));
+      summaryData.categories.forEach(c => categoryMap.set(c.category, c.count));
+
+      document.getElementById('cat-list').innerHTML = Array.from(categoryMap.entries())
+        .sort((a,b) => b[1] - a[1]) // Sort by count desc
+        .map(([name, count]) => `
+        <div class="list-item" onclick="loadCategoryMonths('${name}')">
+          <div style="font-weight: 600;">${name || 'Uncategorized'}</div>
+          <div style="font-size: 11px; color: var(--text-secondary);">${count} transactions</div>
         </div>
       `).join('');
 
       loadSuggestions();
+    }
+
+    function toggleFixedCategoryPrompt() {
+      const el = document.getElementById('cat-fixed-selector');
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function addCategoryToUpcoming() {
+      const category = document.getElementById('new-fixed-cat-select').value;
+      try {
+        await fetch('/api/dashboard/update-transaction-by-category', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, is_fixed: true })
+        });
+        notify(`✓ All ${category} items added to Upcoming`);
+        toggleFixedCategoryPrompt();
+        loadDashboard();
+      } catch (err) {
+        notify('❌ Update failed');
+      }
     }
 
     async function loadCategoryMonths(cat) {
