@@ -1,949 +1,430 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transaction Categorizations - MyFinanceApp</title>
-  <style>
-    /* SCOPED CATEGORIZATIONS PAGE STYLES */
-    #categorizations-page {
-      --primary: #4a9eff;
-      --primary-dark: #2e6fc4;
-      --success: #51cf66;
-      --danger: #ff6b6b;
-      --bg-primary: #0f1419;
-      --bg-secondary: #1a1f2e;
-      --bg-tertiary: #2a3f5f;
-      --text-primary: #e0e0e0;
-      --text-secondary: #a0a0a0;
-      --border: #333;
-    }
-
-    #categorizations-page * {
-      box-sizing: border-box;
-    }
-
-    #categorizations-page {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      padding: 24px;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    #cat-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-
-    #cat-header h1 {
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0;
-    }
-
-    .cat-stats {
-      display: flex;
-      gap: 20px;
-      padding: 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-
-    .cat-stat {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .cat-stat-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin: 0;
-    }
-
-    .cat-stat-value {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--primary);
-      margin: 0;
-    }
-
-    .cat-tabs {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 16px;
-    }
-
-    .cat-tab-btn {
-      padding: 12px 20px;
-      background: transparent;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s ease;
-    }
-
-    .cat-tab-btn:hover {
-      color: var(--text-primary);
-    }
-
-    .cat-tab-btn.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-    }
-
-    .cat-tab-pane {
-      display: none;
-      flex: 1;
-      overflow: hidden;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .cat-tab-pane.active {
-      display: flex;
-    }
-
-    /* TAB 1: REVIEW MODE */
-    #cat-review-table {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-table-header {
-      display: grid;
-      grid-template-columns: 70px 1fr 100px 150px;
-      gap: 12px;
-      padding: 12px;
-      background: var(--bg-tertiary);
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    .cat-table-rows {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-row {
-      display: grid;
-      grid-template-columns: 70px 1fr 100px 150px;
-      gap: 12px;
-      align-items: center;
-      padding: 8px 12px;
-      height: 36px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      background: var(--bg-secondary);
-      transition: background 0.1s ease;
-    }
-
-    .cat-row:hover {
-      background: var(--bg-tertiary);
-    }
-
-    .cat-row:last-child {
-      border-bottom: none;
-    }
-
-    .cat-date {
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .cat-desc {
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .cat-amount {
-      text-align: right;
-      font-weight: 600;
-      color: var(--success);
-    }
-
-    .cat-amount.expense {
-      color: var(--danger);
-    }
-
-    .cat-select {
-      padding: 6px 8px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      border-radius: 4px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .cat-select:hover {
-      border-color: var(--primary);
-    }
-
-    .cat-select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
-    }
-
-    .cat-review-footer {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      padding: 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    /* TAB 2: BULK EDITOR */
-    .cat-bulk-container {
-      display: grid;
-      grid-template-columns: 240px 1fr;
-      gap: 16px;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    .cat-category-list {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-category-item {
-      padding: 12px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-    }
-
-    .cat-category-item:hover {
-      background: var(--bg-tertiary);
-    }
-
-    .cat-category-item.active {
-      background: var(--primary);
-      color: white;
-    }
-
-    .cat-category-count {
-      font-size: 12px;
-      opacity: 0.7;
-      font-weight: 600;
-    }
-
-    .cat-bulk-right {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      overflow: hidden;
-    }
-
-    .cat-bulk-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    #cat-bulk-table {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg-secondary);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .cat-bulk-row {
-      display: grid;
-      grid-template-columns: 30px 70px 1fr 100px;
-      gap: 12px;
-      align-items: center;
-      padding: 8px 12px;
-      height: 36px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      background: var(--bg-secondary);
-      transition: background 0.1s ease;
-    }
-
-    .cat-bulk-row:hover {
-      background: var(--bg-tertiary);
-    }
-
-    /* TAB 3: LEARNING PATTERNS */
-    .cat-patterns-list {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .cat-pattern-card {
-      padding: 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .cat-pattern-info {
-      flex: 1;
-    }
-
-    .cat-pattern-keyword {
-      font-weight: 600;
-      color: var(--primary);
-      font-size: 15px;
-      margin-bottom: 8px;
-    }
-
-    .cat-pattern-stat {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .cat-pattern-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    /* BUTTONS */
-    .cat-btn {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-
-    .cat-btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .cat-btn-primary:hover {
-      background: var(--primary-dark);
-    }
-
-    .cat-btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .cat-btn-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-    }
-
-    .cat-btn-secondary:hover {
-      background: var(--border);
-    }
-
-    .cat-btn-sm {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
-    .cat-btn-yes {
-      background: var(--success);
-      color: white;
-    }
-
-    .cat-btn-yes:hover {
-      background: #4ab157;
-    }
-
-    /* SELECT DROPDOWNS */
-    .cat-select-dropdown {
-      flex: 1;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      border-radius: 4px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    /* LOADING & EMPTY STATES */
-    .cat-loading {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-    }
-
-    .cat-spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--border);
-      border-top: 2px solid var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .cat-empty {
-      text-align: center;
-      padding: 48px 24px;
-      color: var(--text-secondary);
-    }
-
-    .cat-empty h3 {
-      font-size: 16px;
-      margin-bottom: 8px;
-      color: var(--text-primary);
-    }
-
-    /* TOAST NOTIFICATIONS */
-    .cat-toast {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      padding: 16px 20px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.3s ease;
-      max-width: 350px;
-      z-index: 2000;
-      font-size: 14px;
-    }
-
-    .cat-toast.success {
-      border-left: 4px solid var(--success);
-      color: var(--success);
-    }
-
-    .cat-toast.error {
-      border-left: 4px solid var(--danger);
-      color: var(--danger);
-    }
-
-    .cat-toast.info {
-      border-left: 4px solid var(--primary);
-      color: var(--primary);
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    .cat-info-box {
-      padding: 12px;
-      background: var(--bg-tertiary);
-      border-left: 3px solid var(--primary);
-      border-radius: 4px;
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 12px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Categorizations - MyFinanceApp</title>
+    <style>
+        :root {
+            --primary: #4a9eff;
+            --primary-dark: #2e6fc4;
+            --success: #51cf66;
+            --danger: #ff6b6b;
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a1f2e;
+            --bg-tertiary: #2a3f5f;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border: #333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-item { display: flex; flex-direction: column; gap: 4px; }
+        .stat-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr 1fr;
+            gap: 20px;
+            min-height: 500px;
+        }
+
+        @media (max-width: 1100px) {
+            .main-layout { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .scrollable {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        /* CARD STYLES */
+        .card {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s ease;
+        }
+        .card:last-child { border-bottom: none; }
+        .card:hover { background: var(--bg-tertiary); }
+
+        /* CATEGORY CARDS */
+        .cat-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .cat-info { display: flex; flex-direction: column; gap: 4px; }
+        .cat-name { font-weight: 600; font-size: 15px; }
+        .cat-count { font-size: 12px; color: var(--text-secondary); }
+        .cat-amount { font-weight: 700; color: var(--primary); }
+
+        /* TRANSACTION CARDS */
+        .txn-card {
+            display: grid;
+            grid-template-columns: 70px 1fr 100px;
+            gap: 12px;
+            align-items: center;
+        }
+        .txn-date { font-size: 12px; color: var(--text-secondary); }
+        .txn-desc { 
+            font-size: 14px; 
+            font-weight: 500; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+        .txn-amount { text-align: right; font-weight: 700; }
+        .txn-amount.expense { color: var(--danger); }
+        .txn-amount.income { color: var(--success); }
+
+        .txn-detail {
+            grid-column: 1 / -1;
+            margin-top: 8px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .category-select {
+            flex: 1;
+            padding: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        /* PATTERN CARDS */
+        .pattern-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .pattern-keyword { font-weight: 600; color: var(--primary); font-size: 15px; }
+        .pattern-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); }
+        .btn-apply {
+            padding: 8px 12px;
+            background: var(--success);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* LOADING */
+        .loading { padding: 40px; text-align: center; color: var(--text-secondary); }
+        
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    </style>
 </head>
 <body>
-  <div id="categorizations-page">
-    <div id="cat-header">
-      <h1>Transaction Categorizations</h1>
-    </div>
-
-    <div class="cat-stats">
-      <div class="cat-stat">
-        <p class="cat-stat-label">Uncategorized</p>
-        <p class="cat-stat-value" id="stat-uncategorized">-</p>
-      </div>
-      <div class="cat-stat">
-        <p class="cat-stat-label">Categorized</p>
-        <p class="cat-stat-value" id="stat-categorized">-</p>
-      </div>
-      <div class="cat-stat">
-        <p class="cat-stat-label">Recently Corrected</p>
-        <p class="cat-stat-value" id="stat-corrected">-</p>
-      </div>
-    </div>
-
-    <div class="cat-info-box">
-      <strong>💡 Tip:</strong> Correcting categories here will automatically update the "Upcoming Payments" section on the dashboard when you refresh.
-    </div>
-
-    <div class="cat-tabs">
-      <button class="cat-tab-btn active" data-tab="review">Review & Fix</button>
-      <button class="cat-tab-btn" data-tab="bulk">Bulk Editor</button>
-      <button class="cat-tab-btn" data-tab="learning">Learning Patterns</button>
-    </div>
-
-    <!-- TAB 1: REVIEW & FIX MODE -->
-    <div class="cat-tab-pane active" id="review-pane">
-      <div id="cat-review-table">
-        <div class="cat-table-header">
-          <div>Date</div>
-          <div>Description</div>
-          <div>Amount</div>
-          <div>Category</div>
+    <div class="container">
+        <div class="header">
+            <h1>Transaction Categorizations</h1>
         </div>
-        <div class="cat-table-rows" id="review-rows">
-          <div class="cat-loading">
-            <div class="cat-spinner"></div>
-            <span>Loading transactions...</span>
-          </div>
-        </div>
-      </div>
-      <div class="cat-review-footer">
-        <button class="cat-btn cat-btn-primary" id="save-btn">Save Changes</button>
-        <span style="color: var(--text-secondary); font-size: 12px;" id="changes-status"></span>
-      </div>
-    </div>
 
-    <!-- TAB 2: BULK EDITOR -->
-    <div class="cat-tab-pane" id="bulk-pane">
-      <div class="cat-bulk-container">
-        <div class="cat-category-list" id="category-list">
-          <div class="cat-loading">
-            <div class="cat-spinner"></div>
-          </div>
-        </div>
-        <div class="cat-bulk-right">
-          <div class="cat-bulk-actions">
-            <button class="cat-btn cat-btn-secondary cat-btn-sm" id="select-all-btn">Select All</button>
-            <select class="cat-select-dropdown" id="move-category-select">
-              <option value="">Move selected to...</option>
-            </select>
-            <button class="cat-btn cat-btn-primary cat-btn-sm" id="bulk-move-btn" disabled>Move</button>
-          </div>
-          <div id="cat-bulk-table">
-            <div class="cat-empty">
-              <h3>No transactions</h3>
-              <p>Select a category from the left panel</p>
+        <div class="stats-bar" id="stats-bar">
+            <div class="stat-item">
+                <div class="stat-label">Uncategorized</div>
+                <div class="stat-value" id="stat-uncategorized">0</div>
             </div>
-          </div>
+            <div class="stat-item">
+                <div class="stat-label">Total Transactions</div>
+                <div class="stat-value" id="stat-total">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Accuracy Rate</div>
+                <div class="stat-value" id="stat-accuracy">0%</div>
+            </div>
         </div>
-      </div>
+
+        <div class="tabs">
+            <button class="tab-btn active">Review & Organize</button>
+        </div>
+
+        <div class="main-layout">
+            <!-- LEFT PANEL: CATEGORY LIST -->
+            <div class="panel">
+                <div class="panel-header">Categories</div>
+                <div class="scrollable" id="category-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+
+            <!-- MIDDLE PANEL: TRANSACTION LIST -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span id="current-view-title">All Transactions</span>
+                    <span id="txn-count" class="cat-count">0 items</span>
+                </div>
+                <div class="scrollable" id="txn-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: SMART PATTERNS -->
+            <div class="panel">
+                <div class="panel-header">Smart Suggestions</div>
+                <div class="scrollable" id="pattern-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- TAB 3: LEARNING PATTERNS -->
-    <div class="cat-tab-pane" id="learning-pane">
-      <div class="cat-patterns-list" id="patterns-list">
-        <div class="cat-loading">
-          <div class="cat-spinner"></div>
-          <span>Analyzing patterns...</span>
-        </div>
-      </div>
-    </div>
-  </div>
+    <script>
+        let allCategories = [];
+        let currentCategory = 'All';
 
-  <script>
-    // STATE
-    const API_BASE = '/api/categorizations';
-    const CATEGORIES = [
-      'Groceries', 'Utilities', 'Gas', 'Dining', 'Shopping', 'Entertainment',
-      'Healthcare', 'Insurance', 'Subscriptions', 'Transportation', 'Childcare',
-      'Education', 'Pet Care', 'Travel', 'Gifts', 'Home', 'Maintenance', 'Repairs',
-      'Professional Services', 'Taxes', 'Salary', 'Bonus', 'Investments', 'Income', 'Other'
-    ];
+        async function init() {
+            await loadSummaries();
+            await loadTransactions();
+            await loadPatterns();
+        }
 
-    let pendingChanges = new Map();
-    let selectedCheckboxes = new Set();
-    let currentCategory = null;
-    let totalTransactions = 0;
+        async function loadSummaries() {
+            try {
+                const res = await fetch('/api/categorizations/list?dateFilter=all', { method: 'POST' });
+                const data = await res.json();
+                
+                const stats = data.counts;
+                const total = stats.uncategorized + stats.categorized;
+                const accuracy = total > 0 ? Math.round((stats.categorized / total) * 100) : 0;
 
-    // UTILITIES
-    function showToast(message, type = 'info') {
-      const toast = document.createElement('div');
-      toast.className = `cat-toast ${type}`;
-      toast.textContent = message;
-      document.body.appendChild(toast);
-      setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
+                document.getElementById('stat-uncategorized').textContent = stats.uncategorized;
+                document.getElementById('stat-total').textContent = total;
+                document.getElementById('stat-accuracy').textContent = accuracy + '%';
 
-    // TAB SWITCHING
-    document.querySelectorAll('.cat-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.cat-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.cat-tab-pane').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`${tab}-pane`).classList.add('active');
+                const summaryRes = await fetch('/api/categorizations/category-summary', { method: 'POST' });
+                const summaryData = await summaryRes.json();
+                
+                allCategories = summaryData.categories;
+                renderCategories(summaryData.categories);
+            } catch (err) {
+                console.error('Stats error:', err);
+            }
+        }
 
-        if (tab === 'review') loadReview();
-        else if (tab === 'bulk') loadBulk();
-        else if (tab === 'learning') loadLearning();
-      });
-    });
+        function renderCategories(categories) {
+            const list = document.getElementById('category-list');
+            list.innerHTML = categories.map(cat => `
+                <div class="card cat-card ${currentCategory === cat.category ? 'active' : ''}" onclick="selectCategory('${cat.category}')">
+                    <div class="cat-info">
+                        <div class="cat-name">${cat.category}</div>
+                        <div class="cat-count">${cat.count} transactions</div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-    // LOAD STATS
-    async function loadStats() {
-      try {
-        const res = await fetch(`${API_BASE}/list?limit=1`, { method: 'POST' });
-        const data = await res.json();
-        document.getElementById('stat-uncategorized').textContent = data.counts.uncategorized;
-        document.getElementById('stat-categorized').textContent = data.counts.categorized;
-        document.getElementById('stat-corrected').textContent = data.counts.recentlyCorrected;
-      } catch (err) {
-        console.error('Error loading stats:', err);
-      }
-    }
+        async function selectCategory(cat) {
+            currentCategory = cat;
+            document.getElementById('current-view-title').textContent = cat;
+            renderCategories(allCategories);
+            await loadTransactions(cat);
+        }
 
-    // TAB 1: REVIEW & FIX MODE
-    async function loadReview() {
-      try {
-        const res = await fetch(`${API_BASE}/list?limit=50&offset=0&dateFilter=all`, { method: 'POST' });
-        const data = await res.json();
-        totalTransactions = data.counts.categorized + data.counts.uncategorized;
-        pendingChanges.clear();
-        renderReview(data.transactions);
-      } catch (err) {
-        console.error('Error loading review:', err);
-        showToast('Error loading transactions', 'error');
-      }
-    }
+        async function loadTransactions(cat = null) {
+            const list = document.getElementById('txn-list');
+            list.innerHTML = '<div class="loading">Loading transactions...</div>';
 
-    function renderReview(txns) {
-      const rows = document.getElementById('review-rows');
-      if (!txns.length) {
-        rows.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
-        return;
-      }
+            try {
+                let url = '/api/categorizations/list?limit=100';
+                let body = {};
+                let res;
 
-      let html = txns.map(txn => {
-        const amount = parseFloat(txn.amount);
-        const isExpense = amount < 0;
-        const displayAmount = Math.abs(amount).toFixed(2);
-        const cat = pendingChanges.get(txn.id) || txn.currentCategory || '';
+                if (cat && cat !== 'All') {
+                    res = await fetch('/api/categorizations/by-category', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ category: cat })
+                    });
+                } else {
+                    res = await fetch(url, { method: 'POST' });
+                }
 
-        return `
-          <div class="cat-row">
-            <div class="cat-date">${txn.date}</div>
-            <div class="cat-desc" title="${txn.description}">${txn.description}</div>
-            <div class="cat-amount ${isExpense ? 'expense' : ''}\">$${displayAmount}</div>
-            <select class="cat-select" data-id="${txn.id}" data-orig="${txn.currentCategory || ''}">
-              <option value="">Uncategorized</option>
-              ${CATEGORIES.map(c => `<option value="${c}" ${cat === c ? 'selected' : ''}>${c}</option>`).join('')}
-            </select>
-          </div>
-        `;
-      }).join('');
+                const data = await res.json();
+                const txns = data.transactions || [];
+                
+                document.getElementById('txn-count').textContent = txns.length + ' items';
+                
+                list.innerHTML = txns.map(t => `
+                    <div class="card txn-card">
+                        <div class="txn-date">${new Date(t.date).toISOString().split('T')[0]}</div>
+                        <div class="txn-desc">${t.description}</div>
+                        <div class="txn-amount ${t.amount < 0 ? 'expense' : 'income'}">
+                            $${Math.abs(t.amount).toFixed(2)}
+                        </div>
+                        <div class="txn-detail">
+                            <select class="category-select" onchange="updateCategory('${t.id}', this.value)">
+                                <option value="">Uncategorized</option>
+                                ${allCategories.map(c => `<option value="${c.category}" ${t.currentcategory === c.category ? 'selected' : ''}>${c.category}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                list.innerHTML = '<div class="loading">Error loading transactions</div>';
+            }
+        }
 
-      rows.innerHTML = html;
-      updateReviewStatus();
+        async function updateCategory(id, newCategory) {
+            try {
+                await fetch('/api/categorizations/update-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: [{ id, newCategory }] })
+                });
+                showToast(`Updated to ${newCategory}`);
+                await loadSummaries();
+            } catch (err) {
+                showToast('Update failed', true);
+            }
+        }
 
-      document.querySelectorAll('#review-rows .cat-select').forEach(sel => {
-        sel.addEventListener('change', (e) => {
-          const id = parseInt(e.target.dataset.id);
-          const orig = e.target.dataset.orig;
-          const newVal = e.target.value;
+        async function loadPatterns() {
+            const list = document.getElementById('pattern-list');
+            try {
+                const res = await fetch('/api/categorizations/patterns', { method: 'POST' });
+                const data = await res.json();
+                
+                list.innerHTML = data.patterns.map(p => `
+                    <div class="card pattern-card">
+                        <div class="pattern-keyword">"${p.keyword}"</div>
+                        <div class="pattern-meta">
+                            <span>Matches ${p.count} items</span>
+                            <span>Suggest: ${p.suggestedCategory}</span>
+                        </div>
+                        <button class="btn-apply" onclick="applyPattern('${p.keyword}', '${p.suggestedCategory}')">Apply to All</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                list.innerHTML = '<div class="loading">No suggestions found</div>';
+            }
+        }
 
-          if (newVal !== orig) {
-            pendingChanges.set(id, newVal);
-          } else {
-            pendingChanges.delete(id);
-          }
-          updateReviewStatus();
-        });
-      });
-    }
+        async function applyPattern(keyword, category) {
+            try {
+                const res = await fetch('/api/categorizations/learn-pattern', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword, suggestedCategory: category })
+                });
+                const data = await res.json();
+                showToast(`Applied to ${data.updated} items!`);
+                await init();
+            } catch (err) {
+                showToast('Action failed', true);
+            }
+        }
 
-    function updateReviewStatus() {
-      const count = pendingChanges.size;
-      const status = document.getElementById('changes-status');
-      status.textContent = count > 0 ? `${count} change(s) pending - Showing 50 of ${totalTransactions}` : `Showing 50 of ${totalTransactions}`;
-      document.getElementById('save-btn').disabled = count === 0;
-    }
+        function showToast(msg, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            if (isError) toast.style.borderLeftColor = 'var(--danger)';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
 
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      if (pendingChanges.size === 0) return;
-
-      const updates = Array.from(pendingChanges.entries()).map(([id, newCat]) => ({
-        id,
-        newCategory: newCat
-      }));
-
-      try {
-        const res = await fetch(`${API_BASE}/update-batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates })
-        });
-
-        const data = await res.json();
-        showToast(`✓ Updated ${data.updated} transactions`, 'success');
-        pendingChanges.clear();
-        await loadStats();
-        await loadReview();
-      } catch (err) {
-        console.error('Error saving:', err);
-        showToast('Error saving changes', 'error');
-      }
-    });
-
-    // TAB 2: BULK EDITOR
-    async function loadBulk() {
-      try {
-        const res = await fetch(`${API_BASE}/category-summary`, { method: 'POST' });
-        const data = await res.json();
-        renderCategoryList(data.categories);
-        populateMoveSelect();
-      } catch (err) {
-        console.error('Error loading bulk:', err);
-        showToast('Error loading categories', 'error');
-      }
-    }
-
-    function renderCategoryList(cats) {
-      const list = document.getElementById('category-list');
-      let html = cats.map(c => `
-        <div class="cat-category-item" data-category="${c.category || ''}">
-          <span>${c.category || 'Uncategorized'}</span>
-          <span class="cat-category-count">${c.count}</span>
-        </div>
-      `).join('');
-
-      list.innerHTML = html;
-
-      document.querySelectorAll('.cat-category-item').forEach(item => {
-        item.addEventListener('click', () => {
-          document.querySelectorAll('.cat-category-item').forEach(i => i.classList.remove('active'));
-          item.classList.add('active');
-          currentCategory = item.dataset.category;
-          loadBulkTransactions(currentCategory);
-        });
-      });
-    }
-
-    function populateMoveSelect() {
-      const sel = document.getElementById('move-category-select');
-      sel.innerHTML = '<option value="">Move selected to...</option>' +
-        CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
-    }
-
-    async function loadBulkTransactions(cat) {
-      try {
-        const res = await fetch(`${API_BASE}/by-category`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: cat, limit: 100, offset: 0 })
-        });
-        const data = await res.json();
-        renderBulkTransactions(data.transactions);
-      } catch (err) {
-        console.error('Error loading bulk txns:', err);
-        showToast('Error loading transactions', 'error');
-      }
-    }
-
-    function renderBulkTransactions(txns) {
-      const table = document.getElementById('cat-bulk-table');
-      if (!txns.length) {
-        table.innerHTML = '<div class="cat-empty"><h3>No transactions</h3></div>';
-        return;
-      }
-
-      let html = txns.map(txn => {
-        const amount = parseFloat(txn.amount);
-        const isExpense = amount < 0;
-        const displayAmount = Math.abs(amount).toFixed(2);
-
-        return `
-          <div class="cat-bulk-row">
-            <input type="checkbox" class="bulk-check" data-id="${txn.id}">
-            <div class="cat-date">${txn.date}</div>
-            <div class="cat-desc">${txn.description}</div>
-            <div class="cat-amount ${isExpense ? 'expense' : ''}\">$${displayAmount}</div>
-          </div>
-        `;
-      }).join('');
-
-      table.innerHTML = html;
-      selectedCheckboxes.clear();
-      updateBulkButtons();
-
-      document.querySelectorAll('.bulk-check').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            selectedCheckboxes.add(parseInt(e.target.dataset.id));
-          } else {
-            selectedCheckboxes.delete(parseInt(e.target.dataset.id));
-          }
-          updateBulkButtons();
-        });
-      });
-    }
-
-    function updateBulkButtons() {
-      document.getElementById('bulk-move-btn').disabled = selectedCheckboxes.size === 0;
-    }
-
-    document.getElementById('select-all-btn').addEventListener('click', () => {
-      const cbs = document.querySelectorAll('.bulk-check');
-      const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
-
-      cbs.forEach(cb => {
-        cb.checked = !allChecked;
-        cb.dispatchEvent(new Event('change'));
-      });
-    });
-
-    document.getElementById('bulk-move-btn').addEventListener('click', async () => {
-      const cat = document.getElementById('move-category-select').value;
-      if (!cat || selectedCheckboxes.size === 0) return;
-
-      const updates = Array.from(selectedCheckboxes).map(id => ({
-        id,
-        newCategory: cat
-      }));
-
-      try {
-        const res = await fetch(`${API_BASE}/update-batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates })
-        });
-
-        const data = await res.json();
-        showToast(`✓ Moved ${data.updated} transactions to ${cat}`, 'success');
-        selectedCheckboxes.clear();
-        await loadStats();
-        await loadBulk();
-      } catch (err) {
-        console.error('Error moving:', err);
-        showToast('Error moving transactions', 'error');
-      }
-    });
-
-    // TAB 3: LEARNING PATTERNS
-    async function loadLearning() {
-      try {
-        const res = await fetch(`${API_BASE}/patterns`, { method: 'POST' });
-        const data = await res.json();
-        renderPatterns(data.patterns);
-      } catch (err) {
-        console.error('Error loading patterns:', err);
-        showToast('Error loading patterns', 'error');
-      }
-    }
-
-    function renderPatterns(patterns) {
-      const list = document.getElementById('patterns-list');
-      if (!patterns.length) {
-        list.innerHTML = '<div class="cat-empty"><h3>No patterns found</h3><p>Need 3+ transactions with same description</p></div>';
-        return;
-      }
-
-      let html = patterns.map(p => `
-        <div class="cat-pattern-card">
-          <div class="cat-pattern-info">
-            <div class="cat-pattern-keyword">${p.keyword}</div>
-            <div class="cat-pattern-stat">📊 Appears ${p.count} times</div>
-            <div class="cat-pattern-stat">Suggest: <strong>${p.suggestedCategory}</strong></div>
-          </div>
-          <div class="cat-pattern-actions">
-            <button class="cat-btn cat-btn-sm cat-btn-yes" data-keyword="${p.keyword}" data-category="${p.suggestedCategory}">Yes</button>
-            <button class="cat-btn cat-btn-sm">No</button>
-          </div>
-        </div>
-      `).join('');
-
-      list.innerHTML = html;
-
-      document.querySelectorAll('.cat-btn-yes').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const keyword = e.target.dataset.keyword;
-          const category = e.target.dataset.category;
-
-          try {
-            const res = await fetch(`${API_BASE}/learn-pattern`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ keyword, suggestedCategory: category })
-            });
-
-            const data = await res.json();
-            showToast(`✓ Applied pattern to ${data.updated} transactions`, 'success');
-            await loadStats();
-            await loadLearning();
-          } catch (err) {
-            console.error('Error learning pattern:', err);
-            showToast('Error applying pattern', 'error');
-          }
-        });
-      });
-    }
-
-    // INIT
-    loadStats();
-    loadReview();
-  </script>
+        init();
+    </script>
 </body>
 </html>
