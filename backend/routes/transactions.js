@@ -108,69 +108,59 @@ router.post('/cleanup-database', async (req, res) => {
   try {
     log('TRANSACTIONS', 'Starting database deduplication and cleanup...');
     
-    // 1. Precise Duplication Cleanup: collapsing transactions where date+desc+amount+balance are identical
-    await db.run(`
-      DELETE FROM transactions 
-      WHERE id NOT IN (
-        SELECT MIN(id) 
-        FROM transactions 
-        GROUP BY date, description, amount, direction, balance
-      )
-    `);
-
-    // 2. Clear all fixed flags and labels to start fresh matching
-    await db.run('UPDATE transactions SET is_fixed = FALSE, label_id = NULL');
-
-    // 3. Define the official rules (Single Source of Truth)
-    const fixedLabels = [
-      { pattern: 'mortgage|rent|lease|apartment', label: 'Housing', category: 'Housing', fixed: true },
-      { pattern: 'hyundai|santander|auto.*loan|car.*payment', label: 'Car Loan', category: 'Car Loans', fixed: true },
-      { pattern: 'pseg|electricity|water|gas|hydro|pepco|eversource|constellation|coned', label: 'Power/Utilities', category: 'Utilities', fixed: true },
-      { pattern: 'verizon|comcast|xfinity|fios|at&t|t-mobile|internet|cable|phone', label: 'Network/Internet', category: 'Internet', fixed: true },
-      { pattern: 'insurance|state farm|geico|allstate|usaa|progressive', label: 'Insurance Policy', category: 'Insurance', fixed: true },
-      { pattern: 'ollo|amex|capital.*one|chase|discover|credit.*card|mastercard|visa|marriott', label: 'Credit Card Payment', category: 'Credit Cards', fixed: true }
-    ];
-
-    // Non-fixed rules (explicitly mark FALSE)
-    const nonFixedRules = [
-      { pattern: 'paypal|target|klarna|amazon|walmart|etsy|shopping', category: 'Shopping', fixed: false },
-      { pattern: 'restaurant|cafe|dining|roy rogers|pizza|grubhub|uber.*eats|doordash|starbucks', category: 'Dining', fixed: false }
-    ];
-
-    const allRules = [...fixedLabels, ...nonFixedRules];
-
-    for (const rule of allRules) {
-      // a. Find or create the label record first
-      const catRow = await db.get("SELECT id FROM categories WHERE name = $1", [rule.category]);
-      if (!catRow) continue;
-
-      let labelId;
-      const labelRow = await db.get("SELECT id FROM transaction_labels WHERE pattern = $1", [rule.pattern]);
-      if (labelRow) {
-        labelId = labelRow.id;
-        await db.run(
-            "UPDATE transaction_labels SET display_label = $1, category_id = $2, is_fixed = $3 WHERE id = $4",
-            [rule.label || rule.category, catRow.id, rule.fixed, labelId]
-        );
-      } else {
-        const result = await db.pool.query(
-            "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id",
-            [rule.pattern, rule.label || rule.category, catRow.id, rule.fixed]
-        );
-        labelId = result.rows[0].id;
+    // 1. Seed Categories (ensure consistent IDs)
+    const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
+    if (categoryCheck.rows[0].count === '0') {
+      const categories = [
+        ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['Gas', '⛽', '#e74c3c'],
+        ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
+        ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
+        ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
+        ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
+        ['Other', '📦', '#424242']
+      ];
+      for (const [name, icon, color] of categories) {
+        await this.pool.query('INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3)', [name, icon, color]);
       }
+      log('DATABASE', '✓ Categories seeded');
+    }
 
-      // b. Apply to all historically matching transactions
-      await db.run(
+    // 2. Clear ALL transaction tags to force a holistic categorization cycle
+    await db.run('UPDATE transactions SET category = NULL, is_fixed = FALSE');
+
+    // 3. Holistic Categorization (Unified Source of Truth logic)
+    const rules = [
+      // BILLS (Fixed)
+      { pattern: 'ollo|credit.*card|payment.*thank|capital.*one|amex|chase|discover|mastercard|visa|marriott', category: 'Credit Cards', fixed: true },
+      { pattern: 'hyundai|santander|car.*payment|auto.*loan', category: 'Car Loans', fixed: true },
+      { pattern: 'mortgage|rent|lease|pennymac', category: 'Home', fixed: true },
+      { pattern: 'pseg|utility|electricity|water|gas', category: 'Utilities', fixed: true },
+      { pattern: 'verizon|comcast|xfinity|fios|t-mobile|internet', category: 'Internet', fixed: true },
+      { pattern: 'state farm|insurance|geico|allstate', category: 'Insurance', fixed: true },
+      
+      // LIFESTYLE (Not Fixed)
+      { pattern: 'paypal|target|klarna|amazon|walmart|etsy|michael|shopping', category: 'Shopping', fixed: false },
+      { pattern: 'restaurant|cafe|dining|roy rogers|pizza|grubhub|uber.*eats|doordash|starbucks|chipotle|five guys|baking|bakery', category: 'Dining', fixed: false },
+      { pattern: 'netflix|hulu|spotify|disney|hbo|youtube|subscriptions', category: 'Subscriptions', fixed: false },
+      { pattern: 'grocery|shoprite|wawa|trader joe|whole foods|instacart|bereket', category: 'Groceries', fixed: false },
+      { pattern: 'pharmacy|cvs|walgreens|healthcare|hospital|medical', category: 'Healthcare', fixed: false },
+      { pattern: 'payroll|salary|wells fargo|bonus|deposit', category: 'Salary', fixed: false }
+    ];
+
+    for (const rule of rules) {
+       await db.run(
         `UPDATE transactions 
-         SET category = $1, is_fixed = $2, label_id = $3
-         WHERE description ~* $4 AND user_id = 1`,
-        [rule.category, rule.fixed, labelId, rule.pattern]
+         SET category = $1, is_fixed = $2
+         WHERE description ~* $3 AND user_id = 1`,
+        [rule.category, rule.fixed, rule.pattern]
       );
     }
 
-    log('TRANSACTIONS', '✓ Database cleaned and re-aligned with architectural standard');
-    res.json({ success: true, message: 'Database cleaned and labels re-synchronized.' });
+    // 4. Backup: Anything still NULL gets 'Other'
+    await db.run("UPDATE transactions SET category = 'Other' WHERE category IS NULL");
+
+    log('TRANSACTIONS', '✓ Holistic database cleanup and categorization complete');
+    res.json({ success: true, message: 'Database successfully re-categorized.' });
   } catch (err) {
     log('TRANSACTIONS', `Error in cleanup: ${err.message}`);
     res.status(500).json({ error: err.message });
