@@ -397,9 +397,10 @@
     /* PAYMENT CARDS */
     .payment-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 16px;
       margin-bottom: 32px;
+      align-items: start; /* Allow cards to have their own height */
     }
 
     .payment-card {
@@ -409,6 +410,7 @@
       padding: 20px;
       box-shadow: var(--shadow-sm);
       transition: var(--transition);
+      height: fit-content; /* Ensure height fits only the content */
     }
 
     .payment-card:hover {
@@ -1685,13 +1687,12 @@
         };
 
 
-        // Response is an array of category groups: [{category, totalAmount, items[], projectedBalance}, ...]
         if (Array.isArray(recurring) && recurring.length > 0) {
           recurring.forEach(categoryGroup => {
             const icon = categoryIcons[categoryGroup.category.toLowerCase()] || '📦';
             
             paymentHtml += `
-              <div class="card" style="margin-bottom: 20px;">
+              <div class="payment-card" style="margin-bottom: 20px;">
                 <div class="card-title">${icon} ${categoryGroup.category.toUpperCase()}</div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Monthly: $${categoryGroup.totalAmount.toFixed(2)}</div>
             `;
