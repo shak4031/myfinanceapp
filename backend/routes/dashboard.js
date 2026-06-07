@@ -177,45 +177,25 @@ async function getRecurringPayments() {
 function categorizeSubscription(description) {
   const desc = description.toLowerCase();
   
-  // FIXED BILLS (High Priority)
-  
-  // Utilities & Internet
-  if (/pseg|electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
-  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
-
-  // Auto Loans
+  // 1. PRIMARY FIXED BILLS (Credit Cards & Loans first to catch 'mobile' in CC payments)
+  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott|capital.*one|chase/i.test(desc)) return { type: 'credit_card', name: 'Credit Cards', isFixed: true };
   if (/hyundai|santander|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loans', isFixed: true };
-
-  // Housing
   if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
 
-  // Credit Card Payments (Fixed)
-  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott|capital.*one|chase/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
+  // 2. UTILITIES
+  if (/pseg|electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
+  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
   
-  // Insurance
+  // 3. INSURANCE
   if (/insurance|homeowners|renters|life.*ins|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
   
-  // Subscriptions & Internet (Mark fixed if essential)
-  if (/internet|comcast|xfinity|fios|verizon|spectrum|cox|t-mobile|phone|wireless/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
-  if (/pseg|electricity|gas|water|sewer|trash|power|utility/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
-
-  // STREAMING & RECURRING (Secondary)
-  
-  // Dining
+  // 4. SECONDARY & SUBSCRIPTIONS
   if (/uber.*eats|doordash|grubhub|seamless|restaurant|starbucks|mcdonalds/i.test(desc)) return { type: 'dining', name: 'Dining', isFixed: false };
-
   if (/netflix|amazon.*prime|prime.*video|spotify|hulu|disney|espn\+|hbo|iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'subscriptions', name: 'Subscriptions', isFixed: false };
-  
-  // Wellness & Fitness
   if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness', isFixed: false };
-  
-  // Software & Cloud
   if (/office|microsoft|adobe|dropbox|onedrive|icloud|google one|amazon photos|backup/i.test(desc)) return { type: 'software', name: 'Software/Cloud', isFixed: false };
-  
-  // Banking & Finance
   if (/overdraft|bank fee|atm fee|wire transfer|td bank.*fee/i.test(desc)) return { type: 'banking', name: 'Banking Fees', isFixed: false };
   
-  // Subscriptions (catch-all)
   if (/subscription|membership|annual|yearly|monthly|recurring/i.test(desc)) return { type: 'subscription', name: 'Subscription', isFixed: false };
   
   return { type: 'subscription', name: 'Recurring Payment', isFixed: false };
