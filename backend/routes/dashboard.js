@@ -187,10 +187,14 @@ function categorizeSubscription(description) {
   if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
 
   // Credit Card Payments (Fixed)
-  if (/ollo|credit.*card.*pymt|payment.*thank.*you/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
+  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott/i.test(desc)) return { type: 'credit_card', name: 'Credit Card Payment', isFixed: true };
   
   // Insurance
-  if (/insurance|homeowners|renters|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
+  if (/insurance|homeowners|renters|life.*ins|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
+  
+  // Subscriptions & Internet (Mark fixed if essential)
+  if (/internet|comcast|xfinity|fios|verizon|spectrum|cox|t-mobile|phone|wireless/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
+  if (/pseg|electricity|gas|water|sewer|trash|power|utility/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
 
   // STREAMING & RECURRING (Secondary)
   
@@ -303,7 +307,7 @@ router.post('/upcoming-payments', async (req, res) => {
     const grouped = Object.values(byCategory).map(group => ({
       category: group.category,
       totalAmount: group.totalAmount,
-      items: group.items,
+      items: group.items.sort((a, b) => a.dayOfMonth - b.dayOfMonth), // Sort items by date within groups
       projectedBalance: currentBalance - group.totalAmount
     })).sort((a, b) => b.totalAmount - a.totalAmount);
 

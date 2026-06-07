@@ -1700,10 +1700,14 @@
             // Show up to 5 items
             categoryGroup.items.slice(0, 10).forEach(item => {
               paymentHtml += `
-                <div class="card-item" style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div class="card-item" style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border);">
                   <div style="min-width: 50px; font-weight: 600; color: var(--primary);">Day ${item.dayOfMonth}</div>
-                  <div style="flex: 1; font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.description || 'Fixed Payment'}</div>
-                  <div class="card-amount debit" style="font-weight: 700; color: var(--danger); min-width: 80px; text-align: right;">-$${(item.amount || 0).toFixed(2)}</div>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary);">${item.description || 'Fixed Payment'}</div>
+                  </div>
+                  <div style="text-align: right; min-width: 100px;">
+                    <div class="card-amount debit" style="font-weight: 700; color: var(--danger);">-$${(item.amount || 0).toFixed(2)}</div>
+                  </div>
                 </div>
               `;
             });
