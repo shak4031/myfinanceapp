@@ -256,8 +256,7 @@ router.post('/upcoming-payments', async (req, res) => {
        AND user_id = 1
        GROUP BY description, amount, EXTRACT(DAY FROM date::date), date::date
        ORDER BY date::date DESC
-       LIMIT 2`, // Most recent 2 checks to identify the bi-weekly cycle
-       [1]
+       LIMIT 2`
     );
 
     // Identify bills (Dedicated logic for "Hyundai Lease" and "Santander" to be grouped)
@@ -269,13 +268,12 @@ router.post('/upcoming-payments', async (req, res) => {
         amount,
         EXTRACT(DAY FROM date::date) as day_of_month
       FROM transactions
-      WHERE user_id = $1 
+      WHERE user_id = 1 
       AND is_fixed = TRUE
       AND category NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
       AND date::date >= (CURRENT_DATE - INTERVAL '35 days')
       GROUP BY description, category, amount, date::date
-      ORDER BY date::date DESC`,
-      [1]
+      ORDER BY date::date DESC`
     );
 
     const byCategory = {};
