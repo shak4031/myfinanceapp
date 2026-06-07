@@ -190,43 +190,98 @@ router.post('/import-csv', async (req, res) => {
       });
     }
 
-    // Check for duplicates and insert
-    let imported = 0;
-    let duplicates = 0;
-    const insertErrors = [];
-
+    /**
+     * STAGE 1: LOAD INTO STAGING
+     */
+    const stagingResults = [];
     for (const txn of transactions) {
       try {
-        // Check if transaction already exists (by date, description, amount)
-        const existCheck = await db.pool.query(
-          `SELECT id FROM transactions 
-           WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4`,
-          [txn.date, txn.description, txn.amount, txn.direction]
+        await db.run(
+          `INSERT INTO staging_transactions (date, description, amount, direction, balance, source, status) 
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+          [txn.date, txn.description, txn.amount, txn.direction, txn.balance, txn.source]
         );
-
-        if (existCheck.rows.length > 0) {
-          duplicates++;
-          continue;
-        }
-
-        // Insert new transaction
-        const result = await db.pool.query(
-          `INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING id`,
-          [txn.date, txn.description, txn.category, txn.amount, txn.direction, txn.balance, txn.source, txn.user_id]
-        );
-
-        if (result.rows.length > 0) {
-          imported++;
-        }
+        stagingResults.push(txn);
       } catch (err) {
-        insertErrors.push({ transaction: txn.description, error: err.message });
-        if (insertErrors.length <= 3) {
-          log('IMPORT', `✗ Insert error: ${err.message}`);
-        }
+        log('IMPORT', `✗ Staging error: ${err.message}`);
       }
     }
+
+    /**
+     * STAGE 2: PROCESS STAGING TO PRODUCTION (with Deduping)
+     */
+    log('IMPORT', '⚙ Processing staging to production...');
+    
+    // Deduplication logic: Check main table before moving from staging
+    const pendingTransactions = await db.all("SELECT * FROM staging_transactions WHERE status = 'pending'");
+    let imported = 0;
+    let duplicates = 0;
+
+        for (const st of pendingTransactions) {
+          try {
+            // Strict Deduplication: date + description + amount + direction + balance
+            const existCheck = await db.pool.query(
+              `SELECT id FROM transactions 
+               WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4 AND (balance = $5 OR (balance IS NULL AND $5 IS NULL))`,
+              [st.date, st.description, st.amount, st.direction, st.balance]
+            );
+    
+            if (existCheck.rows.length > 0) {
+              await db.run("UPDATE staging_transactions SET status = 'duplicate' WHERE id = $1", [st.id]);
+              duplicates++;
+              continue;
+            }
+    
+            // Identify Label (new architectural pattern)
+            const labels = await db.all("SELECT * FROM transaction_labels");
+            let labelId = null;
+            let category = 'Other';
+            
+            for (const l of labels) {
+              const regex = new RegExp(l.pattern, 'i');
+              if (regex.test(st.description)) {
+                if (l.is_excluded) {
+                  await db.run("UPDATE staging_transactions SET status = 'excluded' WHERE id = $1", [st.id]);
+                  continue;
+                }
+                labelId = l.id;
+                const catRow = await db.get("SELECT name FROM categories WHERE id = $1", [l.category_id]);
+                category = catRow ? catRow.name : 'Other';
+                break;
+              }
+            }
+
+            // CREATIVE EXTRACTION: Auto-create label if none exists
+            if (!labelId) {
+                log('IMPORT', `Creating new label for: ${st.description}`);
+                // Clean description for better labeling (remove dates, IDs, extra spaces)
+                const cleanLabel = st.description
+                    .replace(/\s+/g, ' ')
+                    .replace(/\d{4,}/g, '') // remove large strings of digits
+                    .trim();
+                
+                const catResult = await db.get("SELECT id FROM categories WHERE name = 'Other'");
+                const insertLabel = await db.pool.query(
+                    "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, FALSE) RETURNING id",
+                    [cleanLabel, cleanLabel, catResult.id]
+                );
+                labelId = insertLabel.rows[0].id;
+            }
+    
+            // Insert into Production
+            await db.run(
+              `INSERT INTO transactions (date, description, label_id, amount, direction, balance, source, user_id, category) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)`,
+              [st.date, st.description, labelId, st.amount, st.direction, st.balance, st.source, category]
+            );
+    
+            await db.run("UPDATE staging_transactions SET status = 'processed' WHERE id = $1", [st.id]);
+            imported++;
+          } catch (err) {
+            log('IMPORT', `✗ Processing error: ${err.message}`);
+            await db.run("UPDATE staging_transactions SET status = 'error', error_message = $1 WHERE id = $2", [err.message, st.id]);
+          }
+        }
 
     const duration = Date.now() - startTime;
 
