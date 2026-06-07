@@ -194,8 +194,7 @@ router.post('/sync-labels', async (req, res) => {
     const unlabeled = await db.all(`
         SELECT DISTINCT description 
         FROM transactions 
-        WHERE label_id IS NULL 
-        OR label_id NOT IN (SELECT id FROM transaction_labels)
+        WHERE label_id IS NULL
     `);
 
     const otherCat = await db.get("SELECT id FROM categories WHERE name = 'Other'");
