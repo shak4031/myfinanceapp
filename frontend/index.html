@@ -337,8 +337,8 @@
 
     // DASHBOARD LOGIC
     async function loadDashboard() {
-      const res = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'all'})});
-      const data = await res.json();
+      const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
+      const data = await summaryRes.json();
       
       document.getElementById('dashboard-metrics').innerHTML = `
         <div class="metric-card"><div class="metric-label">Income</div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
@@ -347,40 +347,106 @@
         <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
       `;
 
+      // 1. TIMELINE PROJECTION
       const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
-      const payments = await payRes.json();
+      const groups = await payRes.json();
+      
+      // Flatten groups into a timeline of items
+      let timeline = [];
+      groups.forEach(g => {
+        g.items.forEach(item => {
+          timeline.push({ 
+            ...item, 
+            category: g.category, 
+            isIncome: g.isIncome 
+          });
+        });
+      });
+
+      // Sort timeline by day of month
+      const today = new Date().getDate();
+      timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
+
+      // Filter out items already paid this month
+      // logic: if day <= today, it's likely already processed in the current balance
+      const upcoming = timeline.filter(item => item.dayOfMonth > today);
+
+      let runningBalance = data.balance;
+      
+      let timelineHtml = `
+        <div class="panel" style="padding: 0; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--bg-tertiary); color: var(--text-secondary); text-align: left; font-size: 11px; text-transform: uppercase;">
+              <tr>
+                <th style="padding: 12px 16px;">Expected</th>
+                <th>Description</th>
+                <th style="text-align: right;">Amount</th>
+                <th style="text-align: right; padding: 12px 16px;">Projected Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      if (upcoming.length === 0) {
+        timelineHtml += `<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No remaining payments detected for this month</td></tr>`;
+      } else {
+        upcoming.forEach(item => {
+          if (item.isIncome) runningBalance += item.amount;
+          else runningBalance -= item.amount;
+
+          timelineHtml += `
+            <tr style="border-bottom: 1px solid var(--border); background: ${item.isIncome ? 'rgba(81, 207, 102, 0.05)' : 'transparent'}">
+              <td style="padding: 12px 16px; font-weight: 600; color: var(--primary);">Day ${item.dayOfMonth}</td>
+              <td style="padding: 12px 0;">
+                <div style="font-size: 14px; font-weight: 500;">${item.description}</div>
+                <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">${item.category}</div>
+              </td>
+              <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
+                ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
+              </td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: var(--text-primary)">
+                $${runningBalance.toFixed(2)}
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      timelineHtml += '</tbody></table></div>';
+      document.getElementById('dashboard-payments').innerHTML = timelineHtml;
+
+      // 2. CATEGORY SPENDING (Current Month Summary)
+      const catRes = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
+      const categories = await catRes.json();
       
       const categoryIcons = {
-        'utilities': '⚡',
-        'insurance': '🛡️',
-        'car loans': '🚗',
-        'internet': '🌐',
-        'housing': '🏠',
-        'credit cards': '💳',
-        'subscriptions': '📺'
+        'Groceries': '🛒', 'Utilities': '⚡', 'Gas': '⛽', 'Dining': '🍽️', 'Shopping': '🛍️',
+        'Auto': '🚗', 'Internet': '🌐', 'Housing': '🏠', 'Credit Cards': '💳', 'Salary': '💰'
       };
 
-      document.getElementById('dashboard-payments').innerHTML = payments.map(p => `
-        <div class="metric-card" style="height: fit-content; ${p.isIncome ? 'border-color: var(--success);' : ''}">
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-            <div class="metric-label" style="${p.isIncome ? 'color: var(--success);' : ''}">${categoryIcons[p.category.toLowerCase()] || (p.isIncome ? '💰' : '📦')} ${p.category}</div>
-            <div style="font-weight: 700; color: ${p.isIncome ? 'var(--success)' : 'var(--danger)'};">${p.isIncome ? '+' : '-'}$${p.totalAmount.toFixed(2)}</div>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            ${p.items.map(item => `
-              <div style="display: flex; justify-content: space-between; font-size: 13px; border-top: 1px solid var(--border); padding-top: 8px;">
-                <span style="color: var(--primary); font-weight: 600; font-size: 11px;">Day ${item.dayOfMonth}</span>
-                <span style="flex: 1; margin: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary);">${item.description}</span>
-                <span style="font-weight: 600;">$${item.amount.toFixed(2)}</span>
+      let catHtml = `
+        <h2 style="margin: 32px 0 20px 0;">📊 Month-to-Date Spending</h2>
+        <div class="metrics-grid">
+      `;
+      
+      categories.forEach(cat => {
+        const icon = categoryIcons[cat.name] || '📦';
+        catHtml += `
+          <div class="metric-card list-item" onclick="showView('categories'); loadCategoryMonths('${cat.name}');" style="cursor: pointer; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <span style="font-size: 24px;">${icon}</span>
+              <div style="text-align: right;">
+                <div class="metric-label">${cat.name}</div>
+                <div class="metric-value" style="font-size: 18px; color: var(--text-primary)">$${cat.totalSpending.toFixed(2)}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">${cat.transactionCount} txns</div>
               </div>
-            `).join('')}
+            </div>
           </div>
-          <div style="margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Projected Balance</span>
-            <span style="font-weight: 700; color: var(--primary); font-size: 16px;">$${p.projectedBalance.toFixed(2)}</span>
-          </div>
-        </div>
-      `).join('');
+        `;
+      });
+      
+      catHtml += '</div>';
+      document.getElementById('dashboard-payments').insertAdjacentHTML('afterend', catHtml);
     }
 
     // CATEGORIES LOGIC (3-PANEL REWRITE)
