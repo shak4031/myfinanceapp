@@ -157,54 +157,49 @@ export default class Database {
 
   async seedData() {
     try {
-      // Only seed categories (no mock transactions)
+      // 1. Seed Categories
       const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
-      if (categoryCheck.rows[0].count > 0) {
-        log('DATABASE', '✓ Categories already seeded, skipping');
-        return;
+      if (categoryCheck.rows[0].count === '0') {
+        const categories = [
+          ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['Gas', '⛽', '#e74c3c'],
+          ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
+          ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
+          ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
+          ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
+          ['Other', '📦', '#424242']
+        ];
+        for (const [name, icon, color] of categories) {
+          await this.pool.query('INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3)', [name, icon, color]);
+        }
+        log('DATABASE', '✓ Categories seeded');
       }
 
-      // Insert comprehensive categories only
-      const categories = [
-        ['Groceries', '🛒', '#2ecc71'],
-        ['Utilities', '⚡', '#3498db'],
-        ['Gas', '⛽', '#e74c3c'],
-        ['Dining', '🍽️', '#f39c12'],
-        ['Shopping', '🛍️', '#9b59b6'],
-        ['Entertainment', '🎬', '#e91e63'],
-        ['Healthcare', '🏥', '#00bcd4'],
-        ['Insurance', '🛡️', '#673ab7'],
-        ['Subscriptions', '📺', '#ff9800'],
-        ['Transportation', '🚗', '#795548'],
-        ['Childcare', '👶', '#ffc0cb'],
-        ['Education', '📚', '#4caf50'],
-        ['Pet Care', '🐾', '#8bc34a'],
-        ['Travel', '✈️', '#2196f3'],
-        ['Gifts', '🎁', '#ff5722'],
-        ['Home', '🏠', '#cddc39'],
-        ['Maintenance', '🔧', '#9e9e9e'],
-        ['Repairs', '🔨', '#607d8b'],
-        ['Professional Services', '💼', '#3f51b5'],
-        ['Taxes', '📋', '#1a237e'],
-        ['Salary', '💵', '#1b5e20'],
-        ['Bonus', '🎉', '#f57f17'],
-        ['Investments', '📈', '#00695c'],
-        ['Credit Card Payment', '💳', '#e91e63'],
-        ['Credit Cards', '🗂️', '#ff6b6b'],
-        ['Other', '📦', '#424242']
-      ];
+      // 2. Seed Transaction Labels (The "Normalization" Source of Truth)
+      const labelCheck = await this.pool.query('SELECT COUNT(*) FROM transaction_labels');
+      if (labelCheck.rows[0].count === '0') {
+        const labels = [
+          { pattern: 'HYUNDAI', label: 'Hyundai Lease (Car)', cat: 'Car Loans', fixed: true },
+          { pattern: 'SANTANDER', label: 'Santander Auto (Loan)', cat: 'Car Loans', fixed: true },
+          { pattern: 'OLLO', label: 'Ollo Credit Card', cat: 'Credit Cards', fixed: true },
+          { pattern: 'PSEG', label: 'PSEG (Utilities)', cat: 'Utilities', fixed: true },
+          { pattern: 'VERIZON', label: 'Verizon (Internet)', cat: 'Internet', fixed: true },
+          { pattern: 'COMCAST', label: 'Comcast (Internet)', cat: 'Internet', fixed: true },
+          { pattern: 'NETFLIX', label: 'Netflix', cat: 'Subscriptions', fixed: false }
+        ];
 
-      for (const [name, icon, color] of categories) {
-        await this.pool.query(
-          'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3)',
-          [name, icon, color]
-        );
+        for (const l of labels) {
+          const cat = await this.get("SELECT id FROM categories WHERE name = $1", [l.cat]);
+          if (cat) {
+            await this.pool.query(
+              'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4)',
+              [l.pattern, l.label, cat.id, l.fixed]
+            );
+          }
+        }
+        log('DATABASE', '✓ Transaction labels seeded');
       }
-
-      log('DATABASE', '✓ Categories seeded successfully (no mock transactions)');
     } catch (err) {
       log('DATABASE', `❌ Error seeding data: ${err.message}`);
-      throw err;
     }
   }
 
