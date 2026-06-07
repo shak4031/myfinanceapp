@@ -521,14 +521,32 @@
 
     async function modifyTransaction(id, category, isFixed) {
       try {
-        await fetch('/api/dashboard/update-transaction', {
+        const res = await fetch('/api/dashboard/update-transaction', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, category, is_fixed: isFixed })
+          body: JSON.stringify({ id, category, is_fixed: isFixed, apply_to_all: true })
         });
-        notify(`✓ Transaction Updated${isFixed ? ' (Added to Upcoming)' : ' (Removed from Upcoming)'}`);
+        const data = await res.json();
+        
+        // Find the description of the item we just modified
+        const rows = Array.from(document.querySelectorAll('#full-txn-table tr'));
+        const targetRow = rows.find(r => r.querySelector(`select`)?.outerHTML.includes(`'${id}'`));
+        const description = targetRow?.cells[1].textContent.trim();
+
+        // Highlight all rows with this description for 3 seconds
+        let effectCount = 0;
+        rows.forEach(r => {
+          if (r.cells[1].textContent.trim() === description) {
+            r.style.transition = 'background 0.3s ease';
+            r.style.background = 'rgba(81, 207, 102, 0.2)';
+            effectCount++;
+            setTimeout(() => { r.style.background = 'transparent'; }, 3000);
+          }
+        });
+
+        notify(`✓ Applied to ${effectCount} transactions for "${description}"`);
+        
         if(isFixed === false || isFixed === true) {
-           // If we modified fixed status, refresh dashboard in background
            loadDashboard(); 
         }
       } catch (err) {
