@@ -396,21 +396,30 @@
 
     /* PAYMENT CARDS */
     .payment-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 16px;
+      columns: 2; /* Create two columns for masonry-style layout */
+      column-gap: 16px;
       margin-bottom: 32px;
-      align-items: start; /* Allow cards to have their own height */
+      width: 100%;
     }
 
     .payment-card {
+      break-inside: avoid; /* Prevent card from being split across columns */
+      display: inline-block; /* Required for the column layout */
+      width: 100%;
       background: var(--bg-secondary);
       border: 2px solid var(--border);
       border-radius: 12px;
       padding: 20px;
       box-shadow: var(--shadow-sm);
       transition: var(--transition);
-      height: fit-content; /* Ensure height fits only the content */
+      margin-bottom: 16px;
+      height: fit-content;
+    }
+
+    @media (max-width: 1200px) {
+      .payment-grid {
+        columns: 1; /* Single column on smaller screens */
+      }
     }
 
     .payment-card:hover {
