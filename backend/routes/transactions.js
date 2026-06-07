@@ -86,4 +86,22 @@ router.post('/update-transaction', async (req, res) => {
   }
 });
 
+router.post('/delete-description', async (req, res) => {
+  try {
+    const { pattern } = req.body;
+    if (!pattern) return res.status(400).json({ error: 'pattern is required' });
+
+    log('TRANSACTIONS', `Deleting transactions matching: ${pattern}`);
+    await db.run(
+      'DELETE FROM transactions WHERE description LIKE $1 AND user_id = $2',
+      [`%${pattern}%`, 1]
+    );
+
+    res.json({ success: true, message: `Transactions matching ${pattern} deleted` });
+  } catch (err) {
+    log('TRANSACTIONS', `Error deleting transactions: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

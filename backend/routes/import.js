@@ -26,9 +26,22 @@ const CATEGORY_RULES = {
   'Taxes': ['TAX', 'IRS'],
 };
 
+const EXCLUSION_PATTERNS = [
+  'Online Xfer Transfer from CK x5261',
+  'Online Xfer Transfer from CK x5237'
+];
+
 function categorize(description) {
   if (!description) return 'Other';
   const desc = description.toUpperCase();
+
+  // Handle exclusions (return null to signal exclusion)
+  for (const pattern of EXCLUSION_PATTERNS) {
+    if (description.includes(pattern)) {
+      return null;
+    }
+  }
+
   for (const [category, keywords] of Object.entries(CATEGORY_RULES)) {
     for (const keyword of keywords) {
       if (desc.includes(keyword)) {
@@ -141,10 +154,16 @@ router.post('/import-csv', async (req, res) => {
           accountSource = 'savings';
         }
 
+        const category = categorize(description);
+        if (category === null) {
+          log('IMPORT', `⏩ Skipping excluded transaction: ${description}`);
+          continue;
+        }
+
         const transaction = {
           date,
           description: description.trim(),
-          category: categorize(description),
+          category,
           amount,
           direction,
           balance,
