@@ -1777,29 +1777,32 @@
         document.getElementById('categoryContainer').innerHTML = categoryHtml || '<p style="color: var(--text-secondary); padding: 20px;">No spending data for this period</p>';
 
         // Load RECENT TRANSACTIONS
-        const transRes = await fetch('/api/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dateFilter: currentDateFilter })
-        });
-        const transactions = await transRes.json();
+        const transactionsContainer = document.getElementById('transactionsContainer');
+        if (transactionsContainer) {
+          const transRes = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dateFilter: currentDateFilter })
+          });
+          const transactions = await transRes.json();
 
-        let transHtml = '';
-        transactions.slice(0, 15).forEach(t => {
-          const sign = t.direction === 'debit' ? '-' : '+';
-          const amountClass = t.direction === 'debit' ? 'debit' : 'credit';
-          const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          transHtml += `
-            <div class="card-item">
-              <div class="card-item-label">
-                <span>${date}</span>
-                <span>${t.description}</span>
+          let transHtml = '';
+          transactions.slice(0, 15).forEach(t => {
+            const sign = t.direction === 'debit' ? '-' : '+';
+            const amountClass = t.direction === 'debit' ? 'debit' : 'credit';
+            const date = new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            transHtml += `
+              <div class="card-item">
+                <div class="card-item-label">
+                  <span>${date}</span>
+                  <span>${t.description}</span>
+                </div>
+                <span class="card-amount ${amountClass}">${sign}$${t.amount.toFixed(2)}</span>
               </div>
-              <span class="card-amount ${amountClass}">${sign}$${t.amount.toFixed(2)}</span>
-            </div>
-          `;
-        });
-        document.getElementById('transactionsContainer').querySelector('.card-body').innerHTML = transHtml || '<p style="color: var(--text-secondary);">No transactions</p>';
+            `;
+          });
+          transactionsContainer.querySelector('.card-body').innerHTML = transHtml || '<p style="color: var(--text-secondary);">No transactions</p>';
+        }
 
       } catch (err) {
         console.error('Dashboard error:', err);
