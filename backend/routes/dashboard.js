@@ -240,40 +240,7 @@ router.post('/summary', async (req, res) => {
 
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills Filtering)');
-
-    const recurring = await getRecurringPayments();
-    
-    const byCategory = {};
-    
-    recurring.forEach(p => {
-      const categoryInfo = categorizeSubscription(p.description);
-      
-      // STRICTURE: Only include items marked as isFixed: true
-      if (!categoryInfo.isFixed) {
-        return;
-      }
-
-      const categoryName = categoryInfo.name;
-      
-      if (!byCategory[categoryName]) {
-        byCategory[categoryName] = {
-          category: categoryName,
-          items: [],
-          totalAmount: 0
-        };
-      }
-      
-      byCategory[categoryName].items.push({
-        description: p.description,
-        dayOfMonth: p.dayOfMonth,
-        amount: p.amount,
-        frequency: p.frequency,
-        lastDate: p.lastDate
-      });
-      
-      byCategory[categoryName].totalAmount += p.amount;
-    });
+    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills API-driven)');
 
     const latestBalance = await db.all(
       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
@@ -281,14 +248,50 @@ router.post('/upcoming-payments', async (req, res) => {
     );
     const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
+    // Pull directly by FIXED CATEGORIES stored in DB
+    const result = await db.all(
+      `SELECT 
+        category,
+        description,
+        amount,
+        EXTRACT(DAY FROM date::date) as day_of_month,
+        MAX(date) as last_date,
+        COUNT(*) as frequency
+      FROM transactions
+      WHERE user_id = $1 AND is_fixed = TRUE
+      GROUP BY category, description, amount, EXTRACT(DAY FROM date::date)
+      ORDER BY category ASC, day_of_month ASC`,
+      [1]
+    );
+
+    const byCategory = {};
+    result.forEach(p => {
+      const categoryName = p.category;
+      if (!byCategory[categoryName]) {
+        byCategory[categoryName] = {
+          category: categoryName,
+          items: [],
+          totalAmount: 0
+        };
+      }
+      byCategory[categoryName].items.push({
+        description: p.description,
+        dayOfMonth: parseInt(p.day_of_month),
+        amount: parseFloat(p.amount),
+        frequency: parseInt(p.frequency),
+        lastDate: p.last_date
+      });
+      byCategory[categoryName].totalAmount += parseFloat(p.amount);
+    });
+
     const grouped = Object.values(byCategory).map(group => ({
       category: group.category,
       totalAmount: group.totalAmount,
-      items: group.items.sort((a, b) => a.dayOfMonth - b.dayOfMonth), // Sort items by date within groups
+      items: group.items,
       projectedBalance: currentBalance - group.totalAmount
     })).sort((a, b) => b.totalAmount - a.totalAmount);
 
-    log('DASHBOARD', `✓ Filtered for fixed bills. Returning ${grouped.length} categories.`);
+    log('DASHBOARD', `✓ Returning ${grouped.length} fixed categories from database`);
     res.json(grouped);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
