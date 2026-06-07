@@ -66,20 +66,39 @@ router.post('/', async (req, res) => {
 // UPDATE TRANSACTION
 router.post('/update-transaction', async (req, res) => {
   try {
-    const { id, category, is_fixed } = req.body;
+    const { id, category, is_fixed, apply_to_all = true } = req.body;
     
     if (!id) {
       return res.status(400).json({ error: 'Transaction ID is required' });
     }
 
-    log('TRANSACTIONS', `Updating transaction ${id}: category=${category}, is_fixed=${is_fixed}`);
+    log('TRANSACTIONS', `Updating transaction ${id}: category=${category}, is_fixed=${is_fixed}, apply_to_all=${apply_to_all}`);
 
-    await db.run(
-      'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
-      [category, is_fixed, id, 1]
-    );
+    // Get the description of the transaction we're updating
+    const txn = await db.get('SELECT description FROM transactions WHERE id = $1', [id]);
+    
+    if (!txn) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
 
-    res.json({ success: true, message: 'Transaction updated successfully' });
+    if (apply_to_all) {
+      // Update ALL transactions with the same description
+      await db.run(
+        'UPDATE transactions SET category = $1, is_fixed = $2 WHERE description = $3 AND user_id = $4',
+        [category, is_fixed, txn.description, 1]
+      );
+    } else {
+      // Update just this one
+      await db.run(
+        'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
+        [category, is_fixed, id, 1]
+      );
+    }
+
+    res.json({ 
+      success: true, 
+      message: apply_to_all ? 'All matching transactions updated' : 'Transaction updated successfully' 
+    });
   } catch (err) {
     log('TRANSACTIONS', `Error updating transaction: ${err.message}`);
     res.status(500).json({ error: err.message });
