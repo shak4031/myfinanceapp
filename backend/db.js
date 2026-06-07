@@ -39,45 +39,47 @@ export default class Database {
         role TEXT DEFAULT 'admin'
       )`,
       
-      `CREATE TABLE IF NOT EXISTS transactions (
-        id SERIAL PRIMARY KEY,
-        date TEXT,
-        description TEXT,
-        category TEXT,
-        amount REAL,
-        direction TEXT,
-        is_fixed BOOLEAN DEFAULT FALSE,
-        balance REAL,
-        source TEXT,
-        user_id INTEGER REFERENCES users(id),
-        category_corrected BOOLEAN DEFAULT FALSE,
-        previous_category TEXT,
-        correction_timestamp TIMESTAMP
-      )`,
-      
-      `CREATE TABLE IF NOT EXISTS credit_cards (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        balance REAL,
-        "limit" REAL,
-        apr REAL,
-        user_id INTEGER REFERENCES users(id)
-      )`,
-      
-      `CREATE TABLE IF NOT EXISTS savings_goals (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        target REAL,
-        current REAL,
-        deadline TEXT,
-        user_id INTEGER REFERENCES users(id)
-      )`,
-
       `CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
         name TEXT UNIQUE,
         icon TEXT,
         color TEXT
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS transaction_labels (
+        id SERIAL PRIMARY KEY,
+        pattern TEXT UNIQUE,
+        display_label TEXT,
+        category_id INTEGER REFERENCES categories(id),
+        is_fixed BOOLEAN DEFAULT FALSE,
+        is_excluded BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        description TEXT,
+        label_id INTEGER REFERENCES transaction_labels(id),
+        amount REAL,
+        direction TEXT,
+        balance REAL,
+        source TEXT,
+        user_id INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS staging_transactions (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        description TEXT,
+        amount REAL,
+        direction TEXT,
+        balance REAL,
+        source TEXT,
+        status TEXT DEFAULT 'pending',
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -94,30 +96,62 @@ export default class Database {
 
   async migrateSchema() {
     try {
-      // Add new columns if they don't exist
+      // Add new columns to existing schema
       const migrations = [
-        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_corrected BOOLEAN DEFAULT FALSE`,
-        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_category TEXT`,
-        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_fixed BOOLEAN DEFAULT FALSE`,
-        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMP`,
-        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_fixed BOOLEAN DEFAULT FALSE`
+        `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS label_id INTEGER REFERENCES transaction_labels(id)`
       ];
 
       for (const sql of migrations) {
         try {
           await this.pool.query(sql);
         } catch (err) {
-          if (err.message.includes('already exists')) {
-            // Column already exists, skip
-          } else {
-            throw err;
-          }
+          // ignore already exists
         }
       }
       log('DATABASE', '✓ Schema migrations applied');
     } catch (err) {
-      log('DATABASE', `❌ Error migrating schema: ${err.message}`);
-      throw err;
+      log('DATABASE', `❌ Migration error: ${err.message}`);
+    }
+  }
+
+  async processStaging() {
+    try {
+      log('DATABASE', 'Processing staging transactions...');
+      
+      const pending = await this.all("SELECT * FROM staging_transactions WHERE status = 'pending'");
+      
+      for (const st of pending) {
+        try {
+          // 1. Identify label (exact match or pattern)
+          const labels = await this.all("SELECT * FROM transaction_labels");
+          let labelId = null;
+          
+          for (const l of labels) {
+            const regex = new RegExp(l.pattern, 'i');
+            if (regex.test(st.description)) {
+              if (l.is_excluded) {
+                await this.run("UPDATE staging_transactions SET status = 'excluded' WHERE id = $1", [st.id]);
+                continue;
+              }
+              labelId = l.id;
+              break;
+            }
+          }
+
+          // 2. Insert into main table
+          await this.run(
+            `INSERT INTO transactions (date, description, label_id, amount, direction, balance, source, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+            [st.date, st.description, labelId, st.amount, st.direction, st.balance, st.source]
+          );
+
+          await this.run("UPDATE staging_transactions SET status = 'processed' WHERE id = $1", [st.id]);
+        } catch (err) {
+          await this.run("UPDATE staging_transactions SET status = 'error', error_message = $1 WHERE id = $2", [err.message, st.id]);
+        }
+      }
+    } catch (err) {
+      log('DATABASE', `❌ Error processing staging: ${err.message}`);
     }
   }
 
