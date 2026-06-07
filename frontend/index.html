@@ -1471,6 +1471,11 @@
         </select>
       </div>
 
+      <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+        <input type="checkbox" id="editFixedCheck" style="width: auto; margin: 0;">
+        <label for="editFixedCheck" style="font-size: 13px; color: var(--text-primary); cursor: pointer; user-select: none;">Mark as <b>Fixed Bill</b> (Show on Dashboard)</label>
+      </div>
+
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveCategoryChange()">Save Changes</button>
@@ -2080,8 +2085,13 @@
       editingTxnDescription = description;
       editingTxnOldCategory = oldCategory;
 
+      // Find the transaction record in allTxnData to get the fixed status
+      const txnRecord = allTxnData.find(t => t.id === txnId);
+      const isFixed = txnRecord ? txnRecord.is_fixed : false;
+
       // Show transaction details
       document.getElementById('editTxnDescription').textContent = description;
+      document.getElementById('editFixedCheck').checked = isFixed;
 
       // Populate category dropdown with all unique categories from allTxnData
       const categories = new Set();
@@ -2125,20 +2135,57 @@
 
     async function saveCategoryChange() {
       const newCategory = document.getElementById('editCategorySelect').value;
+      const isFixed = document.getElementById('editFixedCheck').checked;
 
       if (!newCategory) {
         alert('Please select a category');
         return;
       }
 
-      if (newCategory === editingTxnOldCategory) {
+      // Find the transaction record in allTxnData to check for changes
+      const txnRecord = allTxnData.find(t => t.id === editingTxnId);
+      const oldIsFixed = txnRecord ? txnRecord.is_fixed : false;
+
+      if (newCategory === editingTxnOldCategory && isFixed === oldIsFixed) {
         alert('No changes made');
         return;
       }
 
-      // Call the update function
-      await updateTransactionCategory(editingTxnId, editingTxnDescription, editingTxnOldCategory, newCategory);
+      // Call the update function with the new field
+      await updateTransactionRecord(editingTxnId, editingTxnDescription, newCategory, isFixed);
       closeCategoryModal();
+    }
+
+    async function updateTransactionRecord(txnId, description, category, isFixed) {
+      try {
+        console.log(`Updating transaction ${txnId}: category=${category}, isFixed=${isFixed}`);
+        
+        const res = await fetch('/api/dashboard/update-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: txnId,
+            category,
+            is_fixed: isFixed
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          console.log(`✅ Transaction updated: ${data.message}`);
+          // Reload transactions after update
+          await loadTransactions();
+          filterTransactions();
+          alert(`✅ Updated: ${description}`);
+        } else {
+          console.error('❌ Update failed:', data.error);
+          alert(`❌ Error: ${data.error}`);
+        }
+      } catch (err) {
+        console.error('Update error:', err);
+        alert('Error updating transaction');
+      }
     }
 
     async function showCategoryDetail(category) {

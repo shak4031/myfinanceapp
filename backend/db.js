@@ -46,6 +46,7 @@ export default class Database {
         category TEXT,
         amount REAL,
         direction TEXT,
+        is_fixed BOOLEAN DEFAULT FALSE,
         balance REAL,
         source TEXT,
         user_id INTEGER REFERENCES users(id),

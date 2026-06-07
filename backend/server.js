@@ -46,6 +46,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', auth);
 app.use('/api/dashboard', dashboard);
 app.use('/api/transactions', transactions);
+app.use('/api/dashboard', transactions); // Alias for update-transaction support
 app.use('/api/debts', debts);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);

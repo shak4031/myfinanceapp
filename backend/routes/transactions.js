@@ -63,4 +63,27 @@ router.post('/', async (req, res) => {
   }
 });
 
+// UPDATE TRANSACTION
+router.post('/update-transaction', async (req, res) => {
+  try {
+    const { id, category, is_fixed } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Transaction ID is required' });
+    }
+
+    log('TRANSACTIONS', `Updating transaction ${id}: category=${category}, is_fixed=${is_fixed}`);
+
+    await db.run(
+      'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
+      [category, is_fixed, id, 1]
+    );
+
+    res.json({ success: true, message: 'Transaction updated successfully' });
+  } catch (err) {
+    log('TRANSACTIONS', `Error updating transaction: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
