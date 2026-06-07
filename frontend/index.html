@@ -325,7 +325,7 @@
       const data = await res.json();
       
       document.getElementById('cat-list').innerHTML = data.categories.map(c => `
-        <div class="list-item" onclick="loadCategoryTransactions('${c.category}')">
+        <div class="list-item" onclick="loadCategoryMonths('${c.category}')">
           <div style="font-weight: 600;">${c.category || 'Uncategorized'}</div>
           <div style="font-size: 12px; color: var(--text-secondary);">${c.count} transactions</div>
         </div>
@@ -334,16 +334,52 @@
       loadSuggestions();
     }
 
-    async function loadCategoryTransactions(cat) {
-      document.getElementById('txn-header').textContent = `Transactions: ${cat}`;
-      const res = await fetch('/api/categorizations/by-category', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({category: cat, limit: 100})});
+    async function loadCategoryMonths(cat) {
+      currentCategory = cat; // Store for the nested click
+      document.getElementById('txn-header').textContent = `Months: ${cat}`;
+      document.getElementById('txn-list').innerHTML = '<div style="padding: 20px;">Calculating trends...</div>';
+      
+      const res = await fetch('/api/dashboard/category-trends', { method: 'POST' });
       const data = await res.json();
       
-      document.getElementById('txn-list').innerHTML = data.transactions.map(t => `
-        <div class="list-item txn-row">
-          <div style="font-size: 11px; color: var(--text-secondary);">${t.date}</div>
-          <div style="font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${t.description}">${t.description}</div>
-          <div class="txn-amount">$${Math.abs(t.amount).toFixed(2)}</div>
+      // Filter the trends for just this category across all months
+      const monthlyData = [];
+      Object.entries(data).forEach(([month, categories]) => {
+        const match = categories.find(c => c.category === cat);
+        if (match) {
+          monthlyData.push({ month, ...match });
+        }
+      });
+
+      document.getElementById('txn-list').innerHTML = monthlyData.sort((a,b) => new Date(b.month) - new Date(a.month)).map(m => `
+        <div class="list-item" onclick="loadMonthTransactions('${cat}', '${m.month}')">
+          <div style="display: flex; justify-content: space-between;">
+            <div style="font-weight: 600;">${new Date(m.month).toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</div>
+            <div style="color: var(--primary); font-weight: 700;">$${m.spending.toFixed(2)}</div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary);">${m.transactions} transactions</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadMonthTransactions(cat, month) {
+      const res = await fetch('/api/dashboard/category-transactions-for-month', { 
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({category: cat, month: month})
+      });
+      const data = await res.json();
+      
+      const panel3 = document.getElementById('suggestion-list');
+      panel3.innerHTML = `
+        <div style="padding: 16px; background: var(--bg-tertiary); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border);">
+          ${cat} - ${new Date(month).toLocaleDateString('en-US', {month: 'short', year: 'numeric'})}
+        </div>
+      ` + data.map(t => `
+        <div class="list-item" style="font-size: 12px;">
+          <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
+          <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${t.description}">${t.description}</div>
+          <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
         </div>
       `).join('');
     }
