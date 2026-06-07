@@ -156,6 +156,7 @@ export default class Database {
         ['Bonus', '🎉', '#f57f17'],
         ['Investments', '📈', '#00695c'],
         ['Credit Card Payment', '💳', '#e91e63'],
+        ['Credit Cards', '🗂️', '#ff6b6b'],
         ['Other', '📦', '#424242']
       ];
 
