@@ -14,7 +14,7 @@ const db = new Database();
 const CATEGORY_RULES = {
   'Groceries': ['GROCERY', 'SAFEWAY', 'WHOLE FOODS', 'TRADER JOE', 'INSTACART', 'WAWA', 'KROGER', 'PUBLIX'],
   'Dining': ['RESTAURANT', 'CAFE', 'CHIPOTLE', 'ROY ROGERS', 'PANERA', 'PIZZA', 'BURGER KING', 'WENDYS', 'SUBWAY', 'PANERA'],
-  'Shopping': ['TARGET', 'AMAZON', 'ETSY', 'WALMART', 'COSTCO', 'KOHLS', 'PAYPAL', 'AFFIRM', 'KLARNA'],
+  'Shopping': ['TARGET', 'AMAZON', 'ETSY', 'WALMART', 'COSTCO', 'KOHLS', 'PAYPAL', 'AFFIRM', 'KLARNA', 'HOME DEPOT'],
   'Entertainment': ['CINEMA', 'NETFLIX', 'SPOTIFY', 'HULU', 'GAME', 'STEAM'],
   'Transportation': ['UBER', 'LYFT', 'TAXI', 'HYUNDAI', 'FORD', 'TESLA', 'LEASE', 'PARKING'],
   'Healthcare': ['PHARMACY', 'DOCTOR', 'HOSPITAL', 'DENTAL', 'CVS', 'WALGREENS', 'MEDICAL'],
@@ -22,7 +22,7 @@ const CATEGORY_RULES = {
   'Insurance': ['STATE FARM', 'ALLSTATE', 'GEICO', 'INSURANCE'],
   'Subscriptions': ['SUBSCRIPTION', 'NETFLIX', 'HULU', 'SPOTIFY'],
   'Childcare': ['DAYCARE', 'SCHOOL', 'NANNY'],
-  'Home': ['MORTGAGE', 'RENT', 'HOME DEPOT', 'LOWES', 'PENNYMAC', 'LEASE'],
+  'Home': ['MORTGAGE', 'RENT', 'LOWES', 'PENNYMAC', 'LEASE'],
   'Taxes': ['TAX', 'IRS'],
 };
 
