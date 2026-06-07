@@ -248,18 +248,18 @@ router.post('/upcoming-payments', async (req, res) => {
     );
     const currentBalance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // Pull directly by FIXED CATEGORIES stored in DB
+    // Pull directly by FIXED CATEGORIES stored in DB, deduplicated by description
     const result = await db.all(
       `SELECT 
         category,
         description,
         amount,
-        EXTRACT(DAY FROM date::date) as day_of_month,
+        MAX(EXTRACT(DAY FROM date::date)) as day_of_month,
         MAX(date) as last_date,
         COUNT(*) as frequency
       FROM transactions
       WHERE user_id = $1 AND is_fixed = TRUE
-      GROUP BY category, description, amount, EXTRACT(DAY FROM date::date)
+      GROUP BY category, description, amount
       ORDER BY category ASC, day_of_month ASC`,
       [1]
     );
