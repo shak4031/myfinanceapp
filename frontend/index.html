@@ -265,12 +265,17 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <h1>Transactions</h1>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <select id="txn-filter-category" onchange="loadAllTransactions()" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+              <option value="">All Categories</option>
+            </select>
+          </div>
         </header>
-        <!-- Transaction Table Placeholder -->
+        
         <div class="panel" style="padding: 24px;">
           <table style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
-              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
+              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
             </thead>
             <tbody id="full-txn-table"></tbody>
           </table>
@@ -420,27 +425,45 @@
 
     async function loadAllTransactions() {
       const tbody = document.getElementById('full-txn-table');
-      tbody.innerHTML = '<tr><td colspan="4" style="padding: 24px; text-align: center;">Loading all transactions...</td></tr>';
+      const filterCat = document.getElementById('txn-filter-category').value;
+      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading...</td></tr>';
       
       try {
-        // Load categories first for the dropdowns
         const catRes = await fetch('/api/categories');
         const categories = await catRes.json();
-        const categoryOptions = categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        
+        // Populate filter dropdown if empty
+        const filterSelect = document.getElementById('txn-filter-category');
+        if (filterSelect.options.length <= 1) {
+          categories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            filterSelect.appendChild(opt);
+          });
+        }
 
         const res = await fetch('/api/dashboard/all-transactions');
         const data = await res.json();
-        const txns = data.transactions || [];
+        let txns = data.transactions || [];
+        
+        // Apply local filter
+        if (filterCat) {
+          txns = txns.filter(t => t.category === filterCat);
+        }
         
         tbody.innerHTML = txns.sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => `
           <tr style="border-bottom: 1px solid var(--border);">
             <td style="padding: 12px; font-size: 12px; color: var(--text-secondary);">${new Date(t.date).toLocaleDateString('en-US', {month: 'short', day: '2-digit', year: 'numeric'})}</td>
             <td style="padding: 12px; font-weight: 500; font-size: 13px;">${t.description}</td>
             <td style="padding: 12px;">
-              <select onchange="updateCategory('${t.id}', this.value)" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
+              <select onchange="modifyTransaction('${t.id}', this.value, ${t.is_fixed})" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
                 <option value="">Uncategorized</option>
                 ${categories.map(c => `<option value="${c.name}" ${t.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
               </select>
+            </td>
+            <td style="padding: 12px; text-align: center;">
+              <input type="checkbox" ${t.is_fixed ? 'checked' : ''} onchange="modifyTransaction('${t.id}', '${t.category || ''}', this.checked)" style="cursor: pointer;">
             </td>
             <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction === 'debit' ? 'var(--danger)' : 'var(--success)'}">
               ${t.direction === 'debit' ? '-' : '+'}$${t.amount.toFixed(2)}
@@ -448,18 +471,22 @@
           </tr>
         `).join('');
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load transactions</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load transactions</td></tr>';
       }
     }
 
-    async function updateCategory(id, newCategory) {
+    async function modifyTransaction(id, category, isFixed) {
       try {
-        await fetch('/api/dashboard/update-category', {
+        await fetch('/api/dashboard/update-transaction', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transaction_id: id, new_category: newCategory })
+          body: JSON.stringify({ id, category, is_fixed: isFixed })
         });
-        notify(`✓ Updated category to ${newCategory || 'Uncategorized'}`);
+        notify(`✓ Transaction Updated${isFixed ? ' (Added to Upcoming)' : ' (Removed from Upcoming)'}`);
+        if(isFixed === false || isFixed === true) {
+           // If we modified fixed status, refresh dashboard in background
+           loadDashboard(); 
+        }
       } catch (err) {
         notify('❌ Update failed');
       }
