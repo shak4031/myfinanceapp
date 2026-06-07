@@ -204,13 +204,7 @@ function categorizeSubscription(description) {
   // Dining
   if (/uber.*eats|doordash|grubhub|seamless|restaurant|starbucks|mcdonalds/i.test(desc)) return { type: 'dining', name: 'Dining', isFixed: false };
 
-  // Streaming services
-  if (/amazon.*prime|prime.*video/i.test(desc)) return { type: 'streaming', name: 'Prime Video', isFixed: false };
-  if (/netflix/i.test(desc)) return { type: 'streaming', name: 'Netflix', isFixed: false };
-  if (/spotify/i.test(desc)) return { type: 'streaming', name: 'Spotify', isFixed: false };
-  if (/hulu/i.test(desc)) return { type: 'streaming', name: 'Hulu', isFixed: false };
-  if (/disney|espn\+|hbo/i.test(desc)) return { type: 'streaming', name: 'Streaming Service', isFixed: false };
-  if (/iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'streaming', name: 'IPTV/Streaming', isFixed: false };
+  if (/netflix|amazon.*prime|prime.*video|spotify|hulu|disney|espn\+|hbo|iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'subscriptions', name: 'Subscriptions', isFixed: false };
   
   // Wellness & Fitness
   if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness', isFixed: false };
