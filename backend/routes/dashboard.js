@@ -263,7 +263,7 @@ router.post('/upcoming-payments', async (req, res) => {
       WHERE t.user_id = $1 
       AND l.is_fixed = TRUE
       AND c.name NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
-      AND t.date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+      AND t.date::date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')::date
       GROUP BY l.display_label, c.name, t.description, t.amount, EXTRACT(DAY FROM t.date::date)
       ORDER BY c.name ASC, day_of_month ASC`,
       [1]
