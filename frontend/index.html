@@ -211,6 +211,7 @@
         <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
         <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
         <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
+        <li><button class="nav-btn" onclick="showView('etl')">⚙️ ETL Staging</button></li>
       </ul>
     </aside>
 
@@ -290,6 +291,30 @@
         </div>
       </section>
 
+      <!-- ETL STAGING -->
+      <section id="etl-view" class="view">
+        <header class="header">
+          <h1>⚙️ ETL Staging (Needs Review)</h1>
+        </header>
+        <div class="panel" style="padding: 24px;">
+          <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
+            These transactions were skipped or flagged by the ETL process (duplicates, errors, or exclusions). Review them here to prevent data loss.
+          </p>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead style="text-align: left; color: var(--text-secondary);">
+              <tr>
+                <th style="padding: 12px;">Date</th>
+                <th>Reason</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th style="text-align: center; padding: 12px;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="etl-staging-table"></tbody>
+          </table>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -307,6 +332,7 @@
       if (viewId === 'dashboard') loadDashboard();
       if (viewId === 'categories') loadCategories();
       if (viewId === 'transactions') loadAllTransactions();
+      if (viewId === 'etl') loadEtlStaging();
     }
 
     // DASHBOARD LOGIC
@@ -556,6 +582,48 @@
       } catch (err) {
         notify('❌ Update failed');
       }
+    }
+
+    async function loadEtlStaging() {
+      const tbody = document.getElementById('etl-staging-table');
+      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading staging area...</td></tr>';
+      
+      try {
+        const res = await fetch('/api/staging/attention');
+        const items = await res.json();
+        
+        if (items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center; color: var(--success); font-weight: 500;">✓ All set! No transactions require attention.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = items.map(t => `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 12px; font-size: 12px;">${t.date}</td>
+            <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${t.status}</span></td>
+            <td style="padding: 12px; font-size: 13px;">${t.description}</td>
+            <td style="padding: 12px; font-weight: 700;">$${Math.abs(t.amount).toFixed(2)}</td>
+            <td style="padding: 12px; text-align: center; display: flex; gap: 8px; justify-content: center;">
+              <button onclick="forcePushStaging('${t.id}')" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
+              <button onclick="dismissStaging('${t.id}')" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load staging items</td></tr>';
+      }
+    }
+
+    async function forcePushStaging(id) {
+       await fetch('/api/staging/force-push', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
+       notify('✓ Transaction pushed to production');
+       loadEtlStaging();
+    }
+
+    async function dismissStaging(id) {
+       await fetch('/api/staging/dismiss', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
+       notify('Transaction dismissed');
+       loadEtlStaging();
     }
 
     function notify(msg) {

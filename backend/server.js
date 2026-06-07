@@ -43,10 +43,15 @@ app.use((req, res, next) => {
   next();
 });
 
+import staging from './routes/staging.js';
+
+// ... existing imports ...
+
 // Routes BEFORE static files
 app.use('/api/auth', auth);
 app.use('/api/dashboard', dashboard);
 app.use('/api/transactions', transactions);
+app.use('/api/staging', staging);
 app.use('/api/dashboard', transactions); // Alias for update-transaction support
 app.use('/api/debts', debts);
 app.use('/api/goals', goals);
