@@ -375,19 +375,8 @@
 
       // 1. TIMELINE PROJECTION (Now properly showing WELLS INCOME)
       const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
-      const groups = await payRes.json();
+      const timeline = await payRes.json();
       
-      let timeline = [];
-      groups.forEach(g => {
-        g.items.forEach(item => {
-          timeline.push({ 
-            ...item, 
-            category: g.category, 
-            isIncome: g.isIncome || g.category === 'Incomes' || item.description?.includes('PAYROLL')
-          });
-        });
-      });
-
       const today = new Date().getDate();
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
