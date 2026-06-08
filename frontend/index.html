@@ -212,6 +212,7 @@
         <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
         <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
         <li><button class="nav-btn" onclick="showView('etl')">⚙️ ETL Staging</button></li>
+        <li><button class="nav-btn" onclick="showView('payoff')">🏔️ Payoff Plan</button></li>
         <li><button class="nav-btn" onclick="showView('insights')">💡 AI Insights</button></li>
       </ul>
     </aside>
@@ -267,6 +268,45 @@
           <div class="panel">
             <div class="panel-header">Suggestions</div>
             <div class="panel-body" id="suggestion-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DEBT PAYOFF PLAN -->
+      <section id="payoff-view" class="view">
+        <header class="header">
+          <h1>🏔️ Debt Avalanche Payoff</h1>
+          <div class="metric-card" style="padding: 10px 20px; flex-direction: row; gap: 20px; align-items: centre;">
+             <div><span class="metric-label">Total Debt:</span> <span id="payoff-total-debt" class="metric-value" style="font-size: 18px;">$0.00</span></div>
+             <div><span class="metric-label">Monthly Goal:</span> <span class="metric-value" style="font-size: 18px; color: var(--success);">$1,342.15</span></div>
+          </div>
+        </header>
+
+        <div style="display: grid; grid-template-columns: 1fr 350px; gap: 32px;">
+          <div class="panel" style="padding: 24px;">
+            <h3 style="margin-bottom: 16px;">Step-by-Step Payment Schedule</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="text-align: left; color: var(--text-secondary); font-size: 12px; border-bottom: 1px solid var(--border);">
+                  <th style="padding: 12px;">Priority</th>
+                  <th>Account</th>
+                  <th style="text-align: right;">Balance</th>
+                  <th style="text-align: right;">This Month's Payment</th>
+                  <th style="text-align: center;">Due Day</th>
+                </tr>
+              </thead>
+              <tbody id="payoff-schedule-body"></tbody>
+            </table>
+          </div>
+
+          <div class="panel" style="padding: 24px; background: var(--bg-tertiary);">
+            <h3 style="margin-bottom: 16px;">🏆 Achievements</h3>
+            <div id="achievements-list" style="display: flex; flex-direction: column; gap: 12px;">
+              <div class="list-item" style="background: var(--bg-secondary); border-radius: 8px;">
+                <div style="font-weight: 700; color: var(--warning);">⭐ Program Goal: Debt Freedom</div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Zero balances on all 5 credit cards within 13 months while building a $1,000/mo savings buffer.</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -354,6 +394,7 @@
       if (viewId === 'categories') loadCategories();
       if (viewId === 'transactions') loadAllTransactions();
       if (viewId === 'etl') loadEtlStaging();
+      if (viewId === 'payoff') loadPayoffPlan();
       if (viewId === 'insights') { /* Initial view state already set */ }
     }
 
@@ -837,6 +878,54 @@
         container.innerHTML = '<p>Financial audit failed. Database connection error.</p>';
         btn.disabled = false;
       }
+    }
+
+    async function loadPayoffPlan() {
+      const scheduleBody = document.getElementById('payoff-schedule-body');
+      const totalDebtEl = document.getElementById('payoff-total-debt');
+      scheduleBody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center;">Calculating payoff sequence...</td></tr>';
+
+      try {
+        const res = await fetch('/api/debts', { method: 'POST' });
+        const debts = await res.json();
+        
+        // Sort by APR (Avalanche) - We need APR from backend. 
+        // The current endpoint /api/debts provides: card_name, balance, apr, limit
+        debts.sort((a,b) => b.apr - a.apr);
+        
+        let totalDebt = 0;
+        let html = '';
+        
+        debts.forEach((d, index) => {
+          totalDebt += d.balance;
+          const isTopPriority = index === 0;
+          const monthlyCommitment = 1342.15;
+          const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
+          const payment = isTopPriority ? (monthlyCommitment - othersMinTotal) : (d.min_payment || 35);
+
+          html += `
+            <tr style="border-bottom: 1px solid var(--border); ${isTopPriority ? 'background: rgba(74, 158, 255, 0.05);' : ''}">
+              <td style="padding: 16px;">
+                <span style="background: ${isTopPriority ? 'var(--primary)' : 'var(--bg-tertiary)'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
+                  ${isTopPriority ? '🚀 ACTIVE ATTACK' : '#' + (index + 1)}
+                </span>
+              </td>
+              <td>
+                <div style="font-weight: 600;">${d.card_name}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">${d.apr}% APR</div>
+              </td>
+              <td style="text-align: right; font-weight: 500;">$${d.balance.toLocaleString()}</td>
+              <td style="text-align: right; font-weight: 700; color: ${isTopPriority ? 'var(--success)' : 'var(--text-primary)'};">
+                $${payment.toFixed(2)}
+              </td>
+              <td style="text-align: center; color: var(--text-secondary); font-size: 12px;">—</td>
+            </tr>
+          `;
+        });
+
+        totalDebtEl.textContent = '$' + totalDebt.toLocaleString(undefined, {minimumFractionDigits: 2});
+        scheduleBody.innerHTML = html;
+      } catch (err) { scheduleBody.innerHTML = '<tr><td colspan="5" style="color: var(--danger)">Failed to load payoff plan</td></tr>'; }
     }
 
     function notify(msg) {
