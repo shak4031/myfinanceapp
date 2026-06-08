@@ -248,43 +248,38 @@ router.post('/upcoming-payments', async (req, res) => {
     );
     const currentBalance = latestBalanceRes.length > 0 ? parseFloat(latestBalanceRes[0].balance) : 0;
 
-    // 1. Get ALL transactions marked as fixed
+    // --- SHARED DATA SOURCE ---
+    // Fetch ALL fixed transactions using the same master logic as the transactions page
     const fixedTransactions = await db.all(
       `SELECT 
+        id,
         description,
         category,
         amount,
+        direction,
         EXTRACT(DAY FROM date::date) as day_of_month,
         date::date as actual_date,
-        direction
+        is_fixed
       FROM transactions
       WHERE user_id = 1 
-      AND is_fixed = TRUE
+      AND (is_fixed = TRUE OR is_fixed = 1)
       ORDER BY date::date DESC`
     );
 
-    // 2. Specialized Logic for Bi-weekly Wells Fargo Income
-    const lastIncome = await db.all(
-      `SELECT date::date, amount, description, category
-       FROM transactions 
-       WHERE user_id = 1 
-       AND (description ~* 'WELLS FARGO.*PAYROLL|WELLS FARGO.*DIRECT DEP' OR is_fixed = TRUE)
-       AND direction = 'CREDIT'
-       ORDER BY date::date DESC
-       LIMIT 1`
-    );
-
-    const timeline = [];
+    // Filter to current month for the timeline
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
-
-    // Add fixed items from this month's records
+    
+    const timeline = [];
     const seenDescriptions = new Set();
+
+    // 1. Add Processed Fixed Items (Actual records from DB)
     fixedTransactions.forEach(tx => {
       const txDate = new Date(tx.actual_date);
-      if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear) {
+      if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear && txDate <= today) {
         timeline.push({
+          id: tx.id,
           description: tx.description,
           category: tx.category,
           amount: parseFloat(tx.amount),
@@ -296,9 +291,9 @@ router.post('/upcoming-payments', async (req, res) => {
       }
     });
 
-    // 5. Add ALL other processed transactions (not just fixed ones) for visual context
+    // 2. Add All Other Processed Transactions (Context)
     const allProcessed = await db.all(
-      `SELECT description, category, amount, EXTRACT(DAY FROM date::date) as day_of_month, direction
+      `SELECT id, description, category, amount, EXTRACT(DAY FROM date::date) as day_of_month, direction
        FROM transactions
        WHERE user_id = 1 
        AND DATE_TRUNC('month', date::date) = DATE_TRUNC('month', CURRENT_DATE)
@@ -309,6 +304,7 @@ router.post('/upcoming-payments', async (req, res) => {
        const key = `${tx.description}-${tx.amount}`;
        if (!seenDescriptions.has(key)) {
          timeline.push({
+           id: tx.id,
            description: tx.description,
            category: tx.category,
            amount: parseFloat(tx.amount),
@@ -320,7 +316,7 @@ router.post('/upcoming-payments', async (req, res) => {
        }
     });
 
-    // 3. Project future occurrences of these fixed items for the rest of the month
+    // 3. Project Future Occurrences (The exact same items marked as fixed)
     const uniqueFixed = [];
     const map = new Map();
     fixedTransactions.forEach(tx => {
@@ -333,6 +329,7 @@ router.post('/upcoming-payments', async (req, res) => {
     uniqueFixed.forEach(tx => {
       const day = parseInt(tx.day_of_month);
       const key = `${tx.description}-${tx.amount}`;
+      // If a fixed item exists in history but hasn't happened yet this month
       if (!seenDescriptions.has(key) && day > today.getDate()) {
         timeline.push({
           description: tx.description,
@@ -346,8 +343,9 @@ router.post('/upcoming-payments', async (req, res) => {
     });
 
     // 4. Bi-weekly Income Projection
-    if (lastIncome.length > 0) {
-      const lastDate = new Date(lastIncome[0].date);
+    const lastIncome = fixedTransactions.find(t => t.direction === 'CREDIT' && /WELLS FARGO/i.test(t.description));
+    if (lastIncome) {
+      const lastDate = new Date(lastIncome.actual_date);
       const nextDate = new Date(lastDate);
       nextDate.setDate(lastDate.getDate() + 14);
 
@@ -355,7 +353,7 @@ router.post('/upcoming-payments', async (req, res) => {
          timeline.push({
            description: 'Projected: Wells Fargo Payroll',
            category: 'Incomes',
-           amount: parseFloat(lastIncome[0].amount),
+           amount: parseFloat(lastIncome.amount),
            dayOfMonth: nextDate.getDate(),
            isIncome: true,
            status: 'projected'
