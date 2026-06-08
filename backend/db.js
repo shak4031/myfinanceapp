@@ -199,6 +199,7 @@ export default class Database {
           ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
           ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
           ['Mortgage', '🏡', '#cddc39'],
+          ['Savings', '🐷', '#2ecc71'],
           ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
           ['Other', '📦', '#424242']
         ];
@@ -238,6 +239,14 @@ export default class Database {
       await this.run("INSERT INTO categories (name, icon, color) VALUES ('Mortgage', '🏡', '#cddc39') ON CONFLICT (name) DO NOTHING");
       await this.run(
         "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('PENNYMAC', 'PennyMac Mortgage', (SELECT id FROM categories WHERE name = 'Mortgage'), TRUE) ON CONFLICT (pattern) DO NOTHING"
+      );
+
+      // Proactively ensure 'Savings' category is in database (if categories were seeded on a previous run)
+      await this.run("INSERT INTO categories (name, icon, color) VALUES ('Savings', '🐷', '#2ecc71') ON CONFLICT (name) DO NOTHING");
+      
+      // Map any transfers explicitly marked as savings like Ally or Zelle Farin as savings 
+      await this.run(
+        "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('ALLY CC MOBILE PAY', 'Ally Savings Transfer', (SELECT id FROM categories WHERE name = 'Savings'), TRUE) ON CONFLICT (pattern) DO NOTHING"
       );
 
       // Proactively ensure PennyMac is marked as a fixed bill in existing transactions
