@@ -361,6 +361,25 @@ router.post('/upcoming-payments', async (req, res) => {
       }
     }
 
+    // 5. Add the active Avalanche Debt Payoff item
+    const debts = await db.all('SELECT * FROM credit_cards');
+    if (debts.length > 0) {
+      // Sort by APR desc (Avalanche)
+      debts.sort((a, b) => b.apr - a.apr);
+      const topPriority = debts[0];
+      const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
+      const attackPayment = 1342.15 - othersMinTotal;
+
+      timeline.push({
+        description: `🚀 Payoff Plan: ${topPriority.name}`,
+        category: 'Debt Payment',
+        amount: attackPayment,
+        dayOfMonth: 15, // Standardize to mid-month (e.g. the 15th) to factor in implications
+        isIncome: false,
+        status: 'projected'
+      });
+    }
+
     timeline.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
     res.json(timeline);
   } catch (error) {
