@@ -262,7 +262,7 @@ router.post('/upcoming-payments', async (req, res) => {
         is_fixed
       FROM transactions
       WHERE user_id = 1 
-      AND (is_fixed = TRUE OR is_fixed = 1)
+      AND (is_fixed = TRUE OR is_fixed::text = '1' OR is_fixed::text = 'true')
       ORDER BY date::date DESC`
     );
 
