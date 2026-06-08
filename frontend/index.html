@@ -392,47 +392,51 @@
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
       // Filter: Only show the FUTURE portion of the month
-      const upcoming = timeline.filter(item => item.dayOfMonth > today);
-
+      // FIX: Today is June 7th. Your income was June 3rd. That's why it vanished.
+      // We should show the full month's timeline but mark the past items as "Done"
+      
       let runningBalance = data.balance;
       let timelineHtml = `
         <div class="panel" style="padding: 0; overflow: hidden;">
           <table style="width: 100%; border-collapse: collapse;">
             <thead style="background: var(--bg-tertiary); color: var(--text-secondary); text-align: left; font-size: 11px; text-transform: uppercase;">
               <tr>
-                <th style="padding: 12px 16px;">Expected</th>
+                <th style="padding: 12px 16px;">Status</th>
                 <th>Description</th>
                 <th style="text-align: right;">Amount</th>
-                <th style="text-align: right; padding: 12px 16px;">New Balance</th>
+                <th style="text-align: right; padding: 12px 16px;">Projected Balance</th>
               </tr>
             </thead>
             <tbody>
       `;
 
-      if (upcoming.length === 0) {
-        timelineHtml += `<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No remaining items this month</td></tr>`;
-      } else {
-        upcoming.forEach(item => {
+      timeline.forEach(item => {
+        const isPaid = item.dayOfMonth <= today;
+        
+        // Project future balance only for upcoming items
+        if (!isPaid) {
           if (item.isIncome) runningBalance += item.amount;
           else runningBalance -= item.amount;
+        }
 
-          timelineHtml += `
-            <tr style="border-bottom: 1px solid var(--border); background: ${item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent'}">
-              <td style="padding: 12px 16px; font-weight: 600; color: var(--primary);">Day ${item.dayOfMonth}</td>
-              <td style="padding: 12px 0;">
-                <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
-                <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">${item.category}</div>
-              </td>
-              <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
-                ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
-              </td>
-              <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: var(--text-primary)">
-                $${runningBalance.toFixed(2)}
-              </td>
-            </tr>
-          `;
-        });
-      }
+        timelineHtml += `
+          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.5' : '1'}; background: ${item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent'}">
+            <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : 'var(--primary)'};">
+              ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
+            </td>
+            <td style="padding: 12px 0;">
+              <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
+              <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">${item.category}</div>
+            </td>
+            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
+              ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
+            </td>
+            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: var(--text-primary)">
+              ${isPaid ? '-' : '$' + runningBalance.toFixed(2)}
+            </td>
+          </tr>
+        `;
+      });
 
       timelineHtml += '</tbody></table></div>';
       paymentsContainer.innerHTML = timelineHtml;
@@ -473,12 +477,24 @@
       paymentsContainer.insertAdjacentHTML('afterend', catHtml);
     }
 
-    // HELPER: Instant Drill-down from Dashboard to specific transactions
-    function drillDownMTD(category, month) {
+    async function drillDownMTD(category, month) {
       showView('categories');
-      loadCategoryMonths(category).then(() => {
-        loadMonthTransactions(category, month);
-      });
+      
+      // Wait for categories to load then find and click the specific category
+      await loadCategories();
+      const catItems = Array.from(document.querySelectorAll('#cat-list .list-item'));
+      const targetCat = catItems.find(i => i.textContent.includes(category));
+      
+      if (targetCat) {
+        targetCat.click();
+        
+        // Wait a small bit for months to render, then click current month
+        setTimeout(() => {
+          const monthItems = Array.from(document.querySelectorAll('#txn-list .list-item'));
+          const targetMonth = monthItems.find(i => i.textContent.includes('June 2026'));
+          if (targetMonth) targetMonth.click();
+        }, 300);
+      }
     }
 
     // CATEGORIES LOGIC (3-PANEL REWRITE)
