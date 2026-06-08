@@ -22,6 +22,7 @@ export default class Database {
       const result = await this.pool.query('SELECT NOW()');
       log('DATABASE', `✓ Connected to PostgreSQL: ${result.rows[0].now}`);
       await this.createTables();
+      await this.dropOldDebtTable(); // TEMPORARY: Wipe and re-create to fix column names
       await this.migrateSchema();
       await this.seedData();
     } catch (err) {
@@ -102,6 +103,17 @@ export default class Database {
     } catch (err) {
       log('DATABASE', `❌ Error creating tables: ${err.message}`);
       throw err;
+    }
+  }
+
+  async dropOldDebtTable() {
+    try {
+      // If the old table exists with wrong columns, we need to fix it.
+      // A cleaner way for a small app is to drop and re-seed if it's the 'fake' one.
+      await this.run('DROP TABLE IF EXISTS credit_cards CASCADE');
+      log('DATABASE', '⚠️ Dropped old credit_cards table for schema update');
+    } catch (err) {
+      log('DATABASE', `❌ Error dropping table: ${err.message}`);
     }
   }
 
