@@ -82,7 +82,16 @@ router.post('/update-transaction', async (req, res) => {
     }
 
     if (apply_to_all) {
-      // Update ALL transactions with the same description
+      // 1. Update the 'Master Blueprint' (transaction_labels table)
+      // This ensures all FUTURE imports are born with the correct fixed/category status
+      await db.run(
+        `UPDATE transaction_labels 
+         SET is_fixed = $1, category_id = (SELECT id FROM categories WHERE name = $2)
+         WHERE pattern = (SELECT pattern FROM transaction_labels WHERE id = (SELECT label_id FROM transactions WHERE id = $3))`,
+        [is_fixed, category, id]
+      );
+
+      // 2. Update ALL historical transactions with the same description
       await db.run(
         'UPDATE transactions SET category = $1, is_fixed = $2 WHERE description = $3 AND user_id = $4',
         [category, is_fixed, txn.description, 1]

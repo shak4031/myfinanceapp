@@ -110,21 +110,23 @@ router.post('/import-csv', async (req, res) => {
         continue;
       }
 
-      // Find Label
-      let labelId = null;
-      const labels = await db.all("SELECT id, pattern FROM transaction_labels");
-      for (const l of labels) {
-        if (new RegExp(l.pattern, 'i').test(t.description)) {
-          labelId = l.id;
-          break;
-        }
+    // Find Label
+    let labelId = null;
+    let isFixed = false;
+    const labels = await db.all("SELECT id, pattern, is_fixed FROM transaction_labels");
+    for (const l of labels) {
+      if (new RegExp(l.pattern, 'i').test(t.description)) {
+        labelId = l.id;
+        isFixed = l.is_fixed === true || l.is_fixed === 1 || l.is_fixed === 'true';
+        break;
       }
+    }
 
-      await db.run(
-        `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category, label_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8)`,
-        [t.date, t.description, t.amount, t.direction, t.balance, t.source, t.category, labelId]
-      );
+    await db.run(
+      `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
+       VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
+      [t.date, t.description, t.amount, t.direction, t.balance, t.source, t.category, labelId, isFixed]
+    );
       imported++;
     }
 
