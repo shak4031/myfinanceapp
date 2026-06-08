@@ -301,4 +301,18 @@ router.post('/bulk-update-category', async (req, res) => {
   }
 });
 
+router.post('/delete-by-id', async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'id is required' });
+
+    log('TRANSACTIONS', `Deleting transaction id: ${id}`);
+    await db.run('DELETE FROM transactions WHERE id = $1 AND user_id = 1', [id]);
+
+    res.json({ success: true, message: `Transaction ${id} deleted` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
