@@ -80,6 +80,17 @@ export default class Database {
         status TEXT DEFAULT 'pending',
         error_message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS credit_cards (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        balance REAL,
+        apr REAL,
+        credit_limit REAL,
+        min_payment REAL,
+        due_date TEXT,
+        user_id INTEGER REFERENCES users(id)
       )`
     ];
 
@@ -197,6 +208,33 @@ export default class Database {
           }
         }
         log('DATABASE', '✓ Transaction labels seeded');
+      }
+
+      // 3. Seed Credit Cards
+      const cardCheck = await this.pool.query('SELECT COUNT(*) FROM credit_cards');
+      if (cardCheck.rows[0].count === '0') {
+        const cards = [
+          ["Ollo Credit Card", 5021.95, 27.74, 7200.0, 169.0],
+          ["Credit One Bank #1", 974.5, 27.49, 1600.0, 49.0],
+          ["Credit One Bank #2", 256.42, 28.74, 500.0, 30.0],
+          ["Amazon Store Card", 3522.49, 29.49, 10000.0, 259.15],
+          ["TD Bank Double Up Visa Signature", 376.44, 28.49, 5500.0, 35.0]
+        ];
+        for (const [name, balance, apr, limit, min] of cards) {
+          await this.pool.query(
+            'INSERT INTO credit_cards (name, balance, apr, credit_limit, min_payment, user_id) VALUES ($1, $2, $3, $4, $5, 1)',
+            [name, balance, apr, limit, min]
+          );
+        }
+        log('DATABASE', '✓ Credit cards seeded');
+      } else {
+        // UPDATE existing cards with latest data from finance.db
+        const cards = [
+          ["Ollo Credit Card", 5072.35, 27.74, 7200.0, 169.0]
+        ];
+        for (const [name, balance, apr, limit, min] of cards) {
+           await this.pool.query('UPDATE credit_cards SET balance = $1 WHERE name = $2', [balance, name]);
+        }
       }
     } catch (err) {
       log('DATABASE', `❌ Error seeding data: ${err.message}`);
