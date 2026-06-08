@@ -198,6 +198,7 @@ export default class Database {
           ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
           ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
           ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
+          ['Mortgage', '🏡', '#cddc39'],
           ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
           ['Other', '📦', '#424242']
         ];
@@ -213,7 +214,7 @@ export default class Database {
         const labels = [
           { pattern: 'HYUNDAI', label: 'Hyundai Lease (Car)', cat: 'Car Loans', fixed: true },
           { pattern: 'SANTANDER', label: 'Santander Auto (Loan)', cat: 'Car Loans', fixed: true },
-          { pattern: 'PENNYMAC', label: 'PennyMac Mortgage', cat: 'Home', fixed: true },
+          { pattern: 'PENNYMAC', label: 'PennyMac Mortgage', cat: 'Mortgage', fixed: true },
           { pattern: 'OLLO', label: 'Ollo Credit Card', cat: 'Credit Cards', fixed: true },
           { pattern: 'PSEG', label: 'PSEG (Utilities)', cat: 'Utilities', fixed: true },
           { pattern: 'VERIZON', label: 'Verizon (Internet)', cat: 'Internet', fixed: true },
@@ -233,12 +234,18 @@ export default class Database {
         log('DATABASE', '✓ Transaction labels seeded');
       }
 
+      // Proactively ensure 'Mortgage' category is in database (if categories were seeded on a previous run)
+      await this.run("INSERT INTO categories (name, icon, color) VALUES ('Mortgage', '🏡', '#cddc39') ON CONFLICT (name) DO NOTHING");
+      await this.run(
+        "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('PENNYMAC', 'PennyMac Mortgage', (SELECT id FROM categories WHERE name = 'Mortgage'), TRUE) ON CONFLICT (pattern) DO NOTHING"
+      );
+
       // Proactively ensure PennyMac is marked as a fixed bill in existing transactions
       try {
         const pennymacLabel = await this.get("SELECT id FROM transaction_labels WHERE pattern = 'PENNYMAC'");
         if (pennymacLabel) {
           await this.run(
-            "UPDATE transactions SET is_fixed = TRUE, label_id = $1, category = 'Home' WHERE description LIKE '%PENNYMAC%'",
+            "UPDATE transactions SET is_fixed = TRUE, label_id = $1, category = 'Mortgage' WHERE description LIKE '%PENNYMAC%'",
             [pennymacLabel.id]
           );
         }
