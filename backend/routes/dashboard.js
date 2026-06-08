@@ -579,23 +579,22 @@ router.get('/all-transactions', async (req, res) => {
         amount,
         direction,
         category,
+        is_fixed,
         user_id
       FROM transactions
       WHERE user_id = $1
       ORDER BY date DESC
     `, [1]);
 
-    log('DASHBOARD', `Returning ${result.length} total transactions`);
+    log('DASHBOARD', `Returning ${result.length} total transactions (including is_fixed)`);
 
     res.json({
       total: result.length,
       transactions: result.map(row => ({
-        id: row.id,
-        date: row.date,
-        description: row.description,
+        ...row,
+        id: row.id.toString(),
         amount: parseFloat(row.amount),
-        direction: row.direction,
-        category: row.category || 'Uncategorized'
+        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true'
       }))
     });
   } catch (error) {
