@@ -355,6 +355,14 @@
 
     // DASHBOARD LOGIC
     async function loadDashboard() {
+      // 0. CLEAR existing containers to prevent duplication on multiple nav clicks
+      const paymentsContainer = document.getElementById('dashboard-payments');
+      paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
+      
+      // Remove any previously injected MTD sections to prevent the "5 repeated sections" bug
+      const existingMtd = document.getElementById('mtd-spending-section');
+      if (existingMtd) existingMtd.remove();
+
       const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
       const data = await summaryRes.json();
       
@@ -365,32 +373,28 @@
         <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
       `;
 
-      // 1. TIMELINE PROJECTION
+      // 1. TIMELINE PROJECTION (Now properly showing WELLS INCOME)
       const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
       const groups = await payRes.json();
       
-      // Flatten groups into a timeline of items
       let timeline = [];
       groups.forEach(g => {
         g.items.forEach(item => {
           timeline.push({ 
             ...item, 
             category: g.category, 
-            isIncome: g.isIncome 
+            isIncome: g.isIncome || g.category === 'Incomes' || item.description?.includes('PAYROLL')
           });
         });
       });
 
-      // Sort timeline by day of month
       const today = new Date().getDate();
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
-      // Filter out items already paid this month
-      // logic: if day <= today, it's likely already processed in the current balance
+      // Filter: Only show the FUTURE portion of the month
       const upcoming = timeline.filter(item => item.dayOfMonth > today);
 
       let runningBalance = data.balance;
-      
       let timelineHtml = `
         <div class="panel" style="padding: 0; overflow: hidden;">
           <table style="width: 100%; border-collapse: collapse;">
@@ -399,24 +403,24 @@
                 <th style="padding: 12px 16px;">Expected</th>
                 <th>Description</th>
                 <th style="text-align: right;">Amount</th>
-                <th style="text-align: right; padding: 12px 16px;">Projected Balance</th>
+                <th style="text-align: right; padding: 12px 16px;">New Balance</th>
               </tr>
             </thead>
             <tbody>
       `;
 
       if (upcoming.length === 0) {
-        timelineHtml += `<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No remaining payments detected for this month</td></tr>`;
+        timelineHtml += `<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--text-secondary);">No remaining items this month</td></tr>`;
       } else {
         upcoming.forEach(item => {
           if (item.isIncome) runningBalance += item.amount;
           else runningBalance -= item.amount;
 
           timelineHtml += `
-            <tr style="border-bottom: 1px solid var(--border); background: ${item.isIncome ? 'rgba(81, 207, 102, 0.05)' : 'transparent'}">
+            <tr style="border-bottom: 1px solid var(--border); background: ${item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent'}">
               <td style="padding: 12px 16px; font-weight: 600; color: var(--primary);">Day ${item.dayOfMonth}</td>
               <td style="padding: 12px 0;">
-                <div style="font-size: 14px; font-weight: 500;">${item.description}</div>
+                <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
                 <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">${item.category}</div>
               </td>
               <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
@@ -431,9 +435,9 @@
       }
 
       timelineHtml += '</tbody></table></div>';
-      document.getElementById('dashboard-payments').innerHTML = timelineHtml;
+      paymentsContainer.innerHTML = timelineHtml;
 
-      // 2. CATEGORY SPENDING (Current Month Summary)
+      // 2. REPEATABLE CATEGORY SPENDING (Endpoint-driven drill-down)
       const catRes = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
       const categories = await catRes.json();
       
@@ -443,14 +447,16 @@
       };
 
       let catHtml = `
-        <h2 style="margin: 32px 0 20px 0;">📊 Month-to-Date Spending</h2>
-        <div class="metrics-grid">
+        <div id="mtd-spending-section">
+          <h2 style="margin: 32px 0 20px 0;">📊 Month-to-Date Spending</h2>
+          <div class="metrics-grid">
       `;
       
       categories.forEach(cat => {
         const icon = categoryIcons[cat.name] || '📦';
+        const currentMonthKey = new Date().toISOString().substring(0, 7) + "-01";
         catHtml += `
-          <div class="metric-card list-item" onclick="showView('categories'); loadCategoryMonths('${cat.name}');" style="cursor: pointer; padding: 20px;">
+          <div class="metric-card list-item" onclick="drillDownMTD('${cat.name}', '${currentMonthKey}')" style="cursor: pointer; padding: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: start;">
               <span style="font-size: 24px;">${icon}</span>
               <div style="text-align: right;">
@@ -463,8 +469,16 @@
         `;
       });
       
-      catHtml += '</div>';
-      document.getElementById('dashboard-payments').insertAdjacentHTML('afterend', catHtml);
+      catHtml += '</div></div>';
+      paymentsContainer.insertAdjacentHTML('afterend', catHtml);
+    }
+
+    // HELPER: Instant Drill-down from Dashboard to specific transactions
+    function drillDownMTD(category, month) {
+      showView('categories');
+      loadCategoryMonths(category).then(() => {
+        loadMonthTransactions(category, month);
+      });
     }
 
     // CATEGORIES LOGIC (3-PANEL REWRITE)
