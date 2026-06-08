@@ -199,7 +199,7 @@ export default class Database {
           ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
           ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
           ['Mortgage', '🏡', '#cddc39'],
-          ['Savings', '🐷', '#2ecc71'],
+          ['Savings', '🐱', '#2ecc71'],
           ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
           ['Other', '📦', '#424242']
         ];
@@ -242,7 +242,8 @@ export default class Database {
       );
 
       // Proactively ensure 'Savings' category is in database (if categories were seeded on a previous run)
-      await this.run("INSERT INTO categories (name, icon, color) VALUES ('Savings', '🐷', '#2ecc71') ON CONFLICT (name) DO NOTHING");
+      await this.run("INSERT INTO categories (name, icon, color) VALUES ('Savings', '🐱', '#2ecc71') ON CONFLICT (name) DO NOTHING");
+      await this.run("UPDATE categories SET icon = '🐱' WHERE name = 'Savings'");
       
       // Map any transfers explicitly marked as savings like Ally or Zelle Farin as savings 
       await this.run(
