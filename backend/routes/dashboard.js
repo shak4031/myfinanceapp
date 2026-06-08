@@ -329,6 +329,26 @@ router.post('/upcoming-payments', async (req, res) => {
     uniqueFixed.forEach(tx => {
       const day = parseInt(tx.day_of_month);
       const key = `${tx.description}-${tx.amount}`;
+      
+      // Direct override for PennyMac: force the projected occurrence to the 1st of the month
+      if (/pennymac/i.test(tx.description)) {
+        // If today is past the 1st, it shouldn't show as a future projected event for this month
+        // because its due date was day 1. However, if it hasn't been spent yet (not in seenDescriptions),
+        // we still want to show it on Day 1 to visually remind the user of the cashflow deficit.
+        const forcedDay = 1;
+        if (!seenDescriptions.has(key)) {
+          timeline.push({
+            description: tx.description,
+            category: tx.category,
+            amount: parseFloat(tx.amount),
+            dayOfMonth: forcedDay,
+            isIncome: tx.direction === 'CREDIT',
+            status: 'projected'
+          });
+          return;
+        }
+      }
+
       // If a fixed item exists in history but hasn't happened yet this month
       if (!seenDescriptions.has(key) && day > today.getDate()) {
         timeline.push({
