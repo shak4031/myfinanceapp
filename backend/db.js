@@ -22,7 +22,6 @@ export default class Database {
       const result = await this.pool.query('SELECT NOW()');
       log('DATABASE', `✓ Connected to PostgreSQL: ${result.rows[0].now}`);
       await this.createTables();
-      await this.dropOldDebtTable(); // TEMPORARY: Wipe and re-create to fix column names
       await this.migrateSchema();
       await this.seedData();
     } catch (err) {
@@ -33,6 +32,17 @@ export default class Database {
 
   async createTables() {
     const statements = [
+      `CREATE TABLE IF NOT EXISTS credit_cards (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        balance REAL,
+        apr REAL,
+        credit_limit REAL,
+        min_payment REAL,
+        due_date TEXT,
+        user_id INTEGER REFERENCES users(id)
+      )`,
+
       `CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name TEXT,
