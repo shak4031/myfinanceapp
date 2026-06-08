@@ -643,16 +643,29 @@
         const catRes = await fetch('/api/categories');
         const categories = await catRes.json();
         
+        // 1. Unified Sync Helper: Populate filter dropdown if empty
+        const filterSelect = document.getElementById('txn-filter-category');
+        if (filterSelect.options.length <= 1) {
+          categories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            filterSelect.appendChild(opt);
+          });
+        }
+
+        // 2. Fetch from main endpoint
         const res = await fetch('/api/dashboard/all-transactions');
         const data = await res.json();
         let txns = data.transactions || [];
         
-        // Apply local filters
+        // 3. Centralized Filtering Logic (Matches Dashboard Timeline)
         if (filterCat) {
           txns = txns.filter(t => t.category === filterCat);
         }
         if (filterFixed) {
-          txns = txns.filter(t => t.is_fixed);
+          // Robust check for boolean truthy values from database
+          txns = txns.filter(t => t.is_fixed === true || t.is_fixed === 1 || t.is_fixed === 'true');
         }
         
         tbody.innerHTML = txns.sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => `
