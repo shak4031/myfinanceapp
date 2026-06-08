@@ -208,29 +208,33 @@ router.post('/summary', async (req, res) => {
 
     log('DASHBOARD', `Summary: ${startDate} to ${endDate}`);
 
-    // Get latest balance (only forward-looking metric)
+    // 1. Get latest balance
     const latestBalance = await db.all(
-      'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
-      [1]
+       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
+       [1]
     );
     const balance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // Get historical averages from past 3 months (NOT period filter)
-    const { avgIncome, avgExpenses, months } = await getHistoricalAverages();
+    // 2. Calculation of ACTUAL totals for the selected period (June)
+    const result = await db.get(
+      `SELECT 
+        SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE 0 END) as total_income,
+        SUM(CASE WHEN direction = 'DEBIT' THEN amount ELSE 0 END) as total_expenses
+      FROM transactions
+      WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      [1, startDate, endDate]
+    );
 
-    log('DASHBOARD', `Historical: Income avg $${avgIncome.toFixed(2)}, Expenses avg $${avgExpenses.toFixed(2)}`);
+    const periodIncome = parseFloat(result.total_income || 0);
+    const periodExpenses = parseFloat(result.total_expenses || 0);
 
     res.json({
-      income: avgIncome,
-      expenses: avgExpenses,
-      netCashflow: avgIncome - avgExpenses,
+      income: periodIncome,
+      expenses: periodExpenses,
+      netCashflow: periodIncome - periodExpenses,
       balance: balance,
       period: { startDate, endDate },
-      historicalMonths: months.map(m => ({
-        month: m.month,
-        income: parseFloat(m.monthly_income || 0),
-        expenses: parseFloat(m.monthly_expenses || 0)
-      }))
+      historicalNotice: "Switched from historical averages to actual period totals for accuracy."
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
