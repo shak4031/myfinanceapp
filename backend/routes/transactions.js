@@ -315,4 +315,19 @@ router.post('/delete-by-id', async (req, res) => {
   }
 });
 
+router.post('/insert-manual', async (req, res) => {
+  try {
+    const { date, description, category, amount, direction, balance, source } = req.body;
+    
+    await db.run(
+      `INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+      [date, description, category, amount, direction, balance, source]
+    );
+    res.json({ success: true, message: 'Manual transaction inserted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
