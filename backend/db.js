@@ -213,6 +213,7 @@ export default class Database {
         const labels = [
           { pattern: 'HYUNDAI', label: 'Hyundai Lease (Car)', cat: 'Car Loans', fixed: true },
           { pattern: 'SANTANDER', label: 'Santander Auto (Loan)', cat: 'Car Loans', fixed: true },
+          { pattern: 'PENNYMAC', label: 'PennyMac Mortgage', cat: 'Home', fixed: true },
           { pattern: 'OLLO', label: 'Ollo Credit Card', cat: 'Credit Cards', fixed: true },
           { pattern: 'PSEG', label: 'PSEG (Utilities)', cat: 'Utilities', fixed: true },
           { pattern: 'VERIZON', label: 'Verizon (Internet)', cat: 'Internet', fixed: true },
@@ -231,6 +232,17 @@ export default class Database {
         }
         log('DATABASE', '✓ Transaction labels seeded');
       }
+
+      // Proactively ensure PennyMac is marked as a fixed bill in existing transactions
+      try {
+        const pennymacLabel = await this.get("SELECT id FROM transaction_labels WHERE pattern = 'PENNYMAC'");
+        if (pennymacLabel) {
+          await this.run(
+            "UPDATE transactions SET is_fixed = TRUE, label_id = $1, category = 'Home' WHERE description LIKE '%PENNYMAC%'",
+            [pennymacLabel.id]
+          );
+        }
+      } catch (err) { /* ignore */ }
 
       // 3. Seed Credit Cards
       const cardCheck = await this.pool.query('SELECT COUNT(*) FROM credit_cards');
