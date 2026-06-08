@@ -291,14 +291,10 @@ router.post('/upcoming-payments', async (req, res) => {
       }
     });
 
-    // 2. Add All Other Processed Transactions (Context)
-    const allProcessed = await db.all(
-      `SELECT id, description, category, amount, EXTRACT(DAY FROM date::date) as day_of_month, direction
-       FROM transactions
-       WHERE user_id = 1 
-       AND DATE_TRUNC('month', date::date) = DATE_TRUNC('month', CURRENT_DATE)
-       AND date::date <= CURRENT_DATE`
-    );
+    // 2. Add All Other Processed Transactions (Context - REMOVED TO ENSURE SYNC)
+    // We are no longer adding non-fixed processed transactions to the timeline
+    // ONLY transactions marked as is_fixed will appear here, plus the projected payroll.
+    const allProcessed = []; 
 
     allProcessed.forEach(tx => {
        const key = `${tx.description}-${tx.amount}`;
