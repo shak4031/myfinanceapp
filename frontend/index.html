@@ -295,6 +295,10 @@
             <select id="txn-filter-category" onchange="loadAllTransactions()" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
               <option value="">All Categories</option>
             </select>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; background: var(--bg-tertiary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);">
+              <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
+              Fixed Bills Only
+            </label>
           </div>
         </header>
         
@@ -632,30 +636,23 @@
     async function loadAllTransactions() {
       const tbody = document.getElementById('full-txn-table');
       const filterCat = document.getElementById('txn-filter-category').value;
+      const filterFixed = document.getElementById('txn-filter-fixed').checked;
       tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading...</td></tr>';
       
       try {
         const catRes = await fetch('/api/categories');
         const categories = await catRes.json();
         
-        // Populate filter dropdown if empty
-        const filterSelect = document.getElementById('txn-filter-category');
-        if (filterSelect.options.length <= 1) {
-          categories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.textContent = c.name;
-            filterSelect.appendChild(opt);
-          });
-        }
-
         const res = await fetch('/api/dashboard/all-transactions');
         const data = await res.json();
         let txns = data.transactions || [];
         
-        // Apply local filter
+        // Apply local filters
         if (filterCat) {
           txns = txns.filter(t => t.category === filterCat);
+        }
+        if (filterFixed) {
+          txns = txns.filter(t => t.is_fixed);
         }
         
         tbody.innerHTML = txns.sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => `
