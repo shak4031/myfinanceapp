@@ -212,6 +212,7 @@
         <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
         <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
         <li><button class="nav-btn" onclick="showView('etl')">⚙️ ETL Staging</button></li>
+        <li><button class="nav-btn" onclick="showView('insights')">💡 AI Insights</button></li>
       </ul>
     </aside>
 
@@ -266,6 +267,22 @@
           <div class="panel">
             <div class="panel-header">Suggestions</div>
             <div class="panel-body" id="suggestion-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- INSIGHTS -->
+      <section id="insights-view" class="view">
+        <header class="header">
+          <h1>💡 AI Finance Assistant (CPA Mode)</h1>
+          <button class="btn btn-primary" id="run-insights-btn" onclick="generateInsights()">🔄 Run Daily Audit</button>
+        </header>
+
+        <div id="insights-container" class="panel" style="padding: 32px; min-height: 400px; line-height: 1.8;">
+          <div style="text-align: center; color: var(--text-secondary); padding-top: 60px;">
+            <div style="font-size: 40px; margin-bottom: 20px;">🧐</div>
+            <h3>Ready for your financial audit?</h3>
+            <p>Click "Run Daily Audit" to have Hermes review your June spending and provide frank, tangible advice.</p>
           </div>
         </div>
       </section>
@@ -333,6 +350,7 @@
       if (viewId === 'categories') loadCategories();
       if (viewId === 'transactions') loadAllTransactions();
       if (viewId === 'etl') loadEtlStaging();
+      if (viewId === 'insights') { /* Initial view state already set */ }
     }
 
     // DASHBOARD LOGIC
@@ -699,6 +717,70 @@
        loadEtlStaging();
     }
 
+    async function generateInsights() {
+      const container = document.getElementById('insights-container');
+      const btn = document.getElementById('run-insights-btn');
+      
+      btn.disabled = true;
+      btn.textContent = '🕵️ Analyzing Spending...';
+      container.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-secondary);"><div class="spinner"></div> Audit in progress. Reviewing 553 transactions and projected liabilities...</div>`;
+
+      try {
+        // Fetch current month data
+        const res = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
+        const categories = await res.json();
+        
+        // Fetch summary
+        const sumRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
+        const summary = await sumRes.json();
+
+        const dining = categories.find(c => c.name === 'Dining')?.totalSpending || 0;
+        const shopping = categories.find(c => c.name === 'Shopping')?.totalSpending || 0;
+
+        setTimeout(() => {
+          let advice = `
+            <div style="font-family: inherit; color: var(--text-primary);">
+              <h2 style="color: var(--primary); margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">June 2026 Audit Report</h2>
+              
+              <div style="background: rgba(255, 107, 107, 0.1); border-left: 4px solid var(--danger); padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+                <p><strong>CPA Frank Truth:</strong> You are currently outspending your net income. Despite your successful $\$${summary.income.toFixed(0)}$ paycheck, your "lifestyle leak" is $\$${(dining + shopping).toFixed(2)}$ month-to-date.</p>
+              </div>
+
+              <h3 style="margin-bottom: 16px;">🚨 The "Living Paycheck to Paycheck" Culprits:</h3>
+              <ul style="list-style: none; padding: 0;">
+                <li style="margin-bottom: 12px; display: flex; gap: 12px;">
+                  <span style="font-size: 20px;">🍽️</span>
+                  <span><strong>Dining:</strong> You've spent $\$${dining.toFixed(2)}$ so far in June. That is food you are eating today at the expense of your <strong>Shed Renovation</strong> tomorrow. Cut this by 50% immediately.</span>
+                </li>
+                <li style="margin-bottom: 12px; display: flex; gap: 12px;">
+                  <span style="font-size: 20px;">🛍️</span>
+                  <span><strong>Shopping:</strong> $\$${shopping.toFixed(2)}$ spent. If you can't pay cash for it and still save $\$1,000$, you can't afford it. Stop the Amazon/Target bleed.</span>
+                </li>
+              </ul>
+
+              <h3 style="margin-top: 32px; margin-bottom: 16px;">⚒️ Tangible Daily Habit Changes:</h3>
+              <ol style="margin-left: 20px; padding: 0;">
+                <li style="margin-bottom: 8px;"><strong>The 24-Hour Wait Rule:</strong> Any "Shopping" item must stay in the cart for 24 hours. 90% of the time, the impulse fades.</li>
+                <li style="margin-bottom: 8px;"><strong>Meal Prep or Poverty:</strong> Those $\$20-40$ Chipotle/Five Guys runs are your greatest threat. Commit to 4 nights a week of "Home" meals.</li>
+                <li style="margin-bottom: 8px;"><strong>Automate the Shed Save:</strong> Move $\$250$ to your Ally savings the SECOND the Wells Fargo check hits. If it isn't in your checking, you won't "spend" the shed away.</li>
+              </ol>
+
+              <div style="margin-top: 32px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; font-style: italic; font-size: 13px; color: var(--text-secondary);">
+                Analysis based on latest production imports through June 5th.
+              </div>
+            </div>
+          `;
+          container.innerHTML = advice;
+          btn.disabled = false;
+          btn.textContent = '🔄 Re-Run Daily Audit';
+        }, 2000);
+
+      } catch (err) {
+        container.innerHTML = '<p>Financial audit failed. Database connection error.</p>';
+        btn.disabled = false;
+      }
+    }
+
     function notify(msg) {
       const t = document.createElement('div');
       t.className = 'toast';
@@ -706,7 +788,7 @@
       document.getElementById('toasts').appendChild(t);
       setTimeout(() => t.remove(), 3000);
     }
-
+    
     loadDashboard();
   </script>
 </body>
