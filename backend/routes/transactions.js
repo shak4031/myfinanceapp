@@ -232,6 +232,37 @@ router.post('/sync-labels', async (req, res) => {
   }
 });
 
+// UPDATE FIXED FLAG
+router.post('/update-fixed', async (req, res) => {
+  try {
+    const { id, is_fixed, apply_to_all = true } = req.body;
+    
+    if (!id) return res.status(400).json({ error: 'Transaction ID is required' });
+
+    log('TRANSACTIONS', `Updating Fixed Flag: txn_id=${id}, is_fixed=${is_fixed}`);
+
+    const txn = await db.get('SELECT description FROM transactions WHERE id = $1', [id]);
+    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+
+    if (apply_to_all) {
+      await db.run(
+        'UPDATE transactions SET is_fixed = $1 WHERE description = $2 AND user_id = 1',
+        [is_fixed, txn.description]
+      );
+    } else {
+      await db.run(
+        'UPDATE transactions SET is_fixed = $1 WHERE id = $2 AND user_id = 1',
+        [is_fixed, id]
+      );
+    }
+
+    res.json({ success: true, message: 'Fixed flag updated' });
+  } catch (err) {
+    log('TRANSACTIONS', `Error updating fixed flag: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/bulk-update-category', async (req, res) => {
   try {
     const { updates } = req.body;

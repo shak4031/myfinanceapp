@@ -240,7 +240,7 @@ router.post('/summary', async (req, res) => {
 
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills API-driven)');
+    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills & Bi-weekly Projection)');
 
     const latestBalanceRes = await db.all(
       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
@@ -248,99 +248,99 @@ router.post('/upcoming-payments', async (req, res) => {
     );
     const currentBalance = latestBalanceRes.length > 0 ? parseFloat(latestBalanceRes[0].balance) : 0;
 
-    // Get paycheck info (Wells Fargo Payroll)
-    const paychecks = await db.all(
-      `SELECT description, amount, EXTRACT(DAY FROM date::date) as day_of_month
-       FROM transactions 
-       WHERE description ~* 'WELLS FARGO.*PAYROLL|WELLS FARGO.*DIRECT DEP'
-       AND user_id = 1
-       GROUP BY description, amount, EXTRACT(DAY FROM date::date), date::date
-       ORDER BY date::date DESC
-       LIMIT 2`
-    );
-
-    // Identify bills (Dedicated logic for "Hyundai Lease" and "Santander" to be grouped)
-    // Pull ALL transactions marked as fixed, or that fit the "recurring" pattern
-    const result = await db.all(
+    // 1. Get ALL transactions marked as fixed
+    const fixedTransactions = await db.all(
       `SELECT 
         description,
         category,
         amount,
-        EXTRACT(DAY FROM date::date) as day_of_month
+        EXTRACT(DAY FROM date::date) as day_of_month,
+        date::date as actual_date,
+        direction
       FROM transactions
       WHERE user_id = 1 
       AND is_fixed = TRUE
-      AND category NOT IN ('Shopping', 'Dining', 'Entertainment', 'Other')
-      AND date::date >= (CURRENT_DATE - INTERVAL '35 days')
-      GROUP BY description, category, amount, date::date
       ORDER BY date::date DESC`
     );
 
-    const byCategory = {};
-    const processedLabels = new Set();
+    // 2. Specialized Logic for Bi-weekly Wells Fargo Income
+    const lastIncome = await db.all(
+      `SELECT date::date, amount, description, category
+       FROM transactions 
+       WHERE user_id = 1 
+       AND (description ~* 'WELLS FARGO.*PAYROLL|WELLS FARGO.*DIRECT DEP' OR is_fixed = TRUE)
+       AND direction = 'CREDIT'
+       ORDER BY date::date DESC
+       LIMIT 1`
+    );
 
-    // Add Income Projection first
-    if (paychecks.length > 0) {
-      byCategory['Incomes'] = {
-        category: 'Incomes',
-        isIncome: true,
-        items: [],
-        totalAmount: 0
-      };
-      
-      paychecks.forEach(p => {
-        const label = `Paycheck (${p.day_of_month})`;
-        if(!processedLabels.has(label)) {
-          byCategory['Incomes'].items.push({
-            description: p.description,
-            dayOfMonth: parseInt(p.day_of_month),
-            amount: parseFloat(p.amount)
-          });
-          byCategory['Incomes'].totalAmount += parseFloat(p.amount);
-          processedLabels.add(label);
-        }
-      });
+    const timeline = [];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    // Add fixed items from this month's records
+    const seenDescriptions = new Set();
+    fixedTransactions.forEach(tx => {
+      const txDate = new Date(tx.actual_date);
+      if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear) {
+        timeline.push({
+          description: tx.description,
+          category: tx.category,
+          amount: parseFloat(tx.amount),
+          dayOfMonth: parseInt(tx.day_of_month),
+          isIncome: tx.direction === 'CREDIT',
+          status: 'processed'
+        });
+        seenDescriptions.add(`${tx.description}-${tx.amount}`);
+      }
+    });
+
+    // 3. Project future occurrences of these fixed items for the rest of the month
+    const uniqueFixed = [];
+    const map = new Map();
+    fixedTransactions.forEach(tx => {
+      if (!map.has(tx.description)) {
+        map.set(tx.description, tx);
+        uniqueFixed.push(tx);
+      }
+    });
+
+    uniqueFixed.forEach(tx => {
+      const day = parseInt(tx.day_of_month);
+      const key = `${tx.description}-${tx.amount}`;
+      if (!seenDescriptions.has(key) && day > today.getDate()) {
+        timeline.push({
+          description: tx.description,
+          category: tx.category,
+          amount: parseFloat(tx.amount),
+          dayOfMonth: day,
+          isIncome: tx.direction === 'CREDIT',
+          status: 'projected'
+        });
+      }
+    });
+
+    // 4. Bi-weekly Income Projection
+    if (lastIncome.length > 0) {
+      const lastDate = new Date(lastIncome[0].date);
+      const nextDate = new Date(lastDate);
+      nextDate.setDate(lastDate.getDate() + 14);
+
+      if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > today.getDate()) {
+         timeline.push({
+           description: 'Projected: Wells Fargo Payroll',
+           category: 'Incomes',
+           amount: parseFloat(lastIncome[0].amount),
+           dayOfMonth: nextDate.getDate(),
+           isIncome: true,
+           status: 'projected'
+         });
+      }
     }
 
-    result.forEach(p => {
-      const categoryName = p.category;
-      if (!byCategory[categoryName]) {
-        byCategory[categoryName] = {
-          category: categoryName,
-          items: [],
-          totalAmount: 0
-        };
-      }
-      
-      const label = `${p.description}-${p.amount}`;
-      if (!processedLabels.has(label)) {
-        byCategory[categoryName].items.push({
-          description: p.description,
-          dayOfMonth: parseInt(p.day_of_month),
-          amount: parseFloat(p.amount)
-        });
-        byCategory[categoryName].totalAmount += parseFloat(p.amount);
-        processedLabels.add(label);
-      }
-    });
-
-    let runningBalance = currentBalance;
-    const grouped = Object.values(byCategory).map(group => {
-      if (group.isIncome) {
-        runningBalance += group.totalAmount;
-      } else {
-        runningBalance -= group.totalAmount;
-      }
-      return {
-        ...group,
-        projectedBalance: runningBalance
-      };
-    }).sort((a, b) => {
-      if (a.category === 'Incomes') return -1;
-      return b.totalAmount - a.totalAmount;
-    });
-
-    res.json(grouped);
+    timeline.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+    res.json(timeline);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });
