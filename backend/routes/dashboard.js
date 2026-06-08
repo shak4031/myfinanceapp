@@ -296,6 +296,30 @@ router.post('/upcoming-payments', async (req, res) => {
       }
     });
 
+    // 5. Add ALL other processed transactions (not just fixed ones) for visual context
+    const allProcessed = await db.all(
+      `SELECT description, category, amount, EXTRACT(DAY FROM date::date) as day_of_month, direction
+       FROM transactions
+       WHERE user_id = 1 
+       AND DATE_TRUNC('month', date::date) = DATE_TRUNC('month', CURRENT_DATE)
+       AND date::date <= CURRENT_DATE`
+    );
+
+    allProcessed.forEach(tx => {
+       const key = `${tx.description}-${tx.amount}`;
+       if (!seenDescriptions.has(key)) {
+         timeline.push({
+           description: tx.description,
+           category: tx.category,
+           amount: parseFloat(tx.amount),
+           dayOfMonth: parseInt(tx.day_of_month),
+           isIncome: tx.direction === 'CREDIT',
+           status: 'processed'
+         });
+         seenDescriptions.add(key);
+       }
+    });
+
     // 3. Project future occurrences of these fixed items for the rest of the month
     const uniqueFixed = [];
     const map = new Map();

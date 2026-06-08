@@ -466,23 +466,28 @@
     }
 
     async function drillDownMTD(category, month) {
-      // 1. Fetch current month's transactions for this category specifically
+      // 1. Switch to Categories View first
+      showView('categories');
+      
+      // 2. Clear previous content and show loading
+      const txnList = document.getElementById('txn-list');
+      const txnHeader = document.getElementById('txn-header');
+      txnHeader.textContent = `${category} - June 2026`;
+      txnList.innerHTML = '<div style="padding: 20px; text-align: center;">Loading June items...</div>';
+
+      // 3. Force FETCH for June 2026 specifically
       const res = await fetch('/api/dashboard/category-transactions-for-month', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ category, month })
+        body: JSON.stringify({ 
+          category: category, 
+          month: '2026-06-01' // Explicitly force June
+        })
       });
       const transactions = await res.json();
       
-      // 2. Switch to Categories View
-      showView('categories');
-      
-      // 3. Populate P2 (txn-list) directly with these transactions instead of hunting for clicks
-      const txnList = document.getElementById('txn-list');
-      document.getElementById('txn-header').textContent = `${category} - ${new Date(month).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
-      
       if (transactions.length === 0) {
-        txnList.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found.</div>';
+        txnList.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found for June.</div>';
         return;
       }
       
