@@ -82,7 +82,7 @@ async function get90DayAverages() {
     })).sort((a, b) => b.month.localeCompare(a.month));
 
     if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0 };
+      return { avgIncome: 0, avgExpenses: 0, debug: { reason: 'all_filtered', rowCount: rows.length, filteredOut, firstRows, startDate, endDate } };
     }
 
     const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
@@ -90,7 +90,8 @@ async function get90DayAverages() {
 
     return {
       avgIncome: totalIncome / months.length,
-      avgExpenses: totalExpenses / months.length
+      avgExpenses: totalExpenses / months.length,
+      debug: { months, startDate, endDate, rowCount: rows.length, filteredOut }
     };
   } catch (error) {
     log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
@@ -312,7 +313,7 @@ router.post('/summary', async (req, res) => {
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
     // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, months } = await get90DayAverages();
+    const { avgIncome, avgExpenses, debug } = await get90DayAverages();
 
     res.json({
       income: avgIncome,
@@ -322,6 +323,7 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
+      debug90day: debug,
       historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
