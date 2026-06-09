@@ -223,19 +223,25 @@ async function calculateGoalFunding(goal) {
       monthsUntil = Math.max(1, (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth()));
     }
 
-    const remaining = Math.max(0, parseFloat(goal.target_amount) - parseFloat(goal.current_amount || 0));
+    const targetAmount = parseFloat(goal.target_amount) || 0;
+    const currentAmount = parseFloat(goal.current_amount) || 0;
+    const remaining = Math.max(0, targetAmount - currentAmount);
 
     // Calculate suggested monthly contribution
-    const suggestedMonthly = remaining / monthsUntil;
+    const suggestedMonthly = monthsUntil > 0 ? remaining / monthsUntil : 0;
 
     // Is it achievable?
     const achievable = suggestedMonthly <= monthlyDiscretionary;
-    const monthlyShortfall = achievable ? 0 : suggestedMonthly - monthlyDiscretionary;
+    const monthlyShortfall = achievable ? 0 : Math.max(0, suggestedMonthly - monthlyDiscretionary);
 
     // Projected completion date based on available discretionary
-    const projectedMonths = monthlyDiscretionary > 0 ? Math.ceil(remaining / monthlyDiscretionary) : 999;
+    const projectedMonths = (monthlyDiscretionary > 0 && remaining > 0) ? Math.ceil(remaining / monthlyDiscretionary) : (remaining <= 0 ? 0 : 999);
     const projectedDate = new Date();
-    projectedDate.setMonth(projectedDate.getMonth() + projectedMonths);
+    if (remaining <= 0) {
+      projectedDate.setDate(projectedDate.getDate());
+    } else {
+      projectedDate.setMonth(projectedDate.getMonth() + projectedMonths);
+    }
 
     return {
       monthly_income: parseFloat(avgIncome.toFixed(2)),
@@ -245,7 +251,7 @@ async function calculateGoalFunding(goal) {
       achievable,
       monthly_shortfall: parseFloat(monthlyShortfall.toFixed(2)),
       projected_months: projectedMonths,
-      projected_date: projectedDate.toISOString().split('T')[0],
+      projected_date: remaining <= 0 ? new Date().toISOString().split('T')[0] : projectedDate.toISOString().split('T')[0],
       months_until_target: monthsUntil
     };
 

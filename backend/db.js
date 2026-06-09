@@ -172,6 +172,23 @@ export default class Database {
       for (const sql of savingsGoalsMigrations) {
         try { await this.pool.query(sql); } catch (e) { /* ignore */ }
       }
+      // Rename old savings_goals columns if they exist (prior schema used target/current/deadline)
+      try {
+        await this.pool.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'savings_goals' AND column_name = 'target')
+              THEN ALTER TABLE savings_goals RENAME COLUMN target TO target_amount;
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'savings_goals' AND column_name = 'current')
+              THEN ALTER TABLE savings_goals RENAME COLUMN current TO current_amount;
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'savings_goals' AND column_name = 'deadline')
+              THEN ALTER TABLE savings_goals RENAME COLUMN deadline TO target_date;
+            END IF;
+          END $$;
+        `);
+      } catch (e) {}
       log('DATABASE', '✓ Schema migrations applied');
     } catch (err) {
       log('DATABASE', `❌ Migration error: ${err.message}`);
