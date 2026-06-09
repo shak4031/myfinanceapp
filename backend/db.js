@@ -147,6 +147,20 @@ export default class Database {
       const migrations = [
         `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS label_id INTEGER REFERENCES transaction_labels(id)`
       ];
+ 
+       // Ensure savings_goals columns exist (for tables created before this schema)
+       const savingsGoalsMigrations = [
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS user_id INTEGER`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS name TEXT`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS target_amount REAL`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS current_amount REAL`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS target_date TEXT`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 1`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '🎯'`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#4a9eff'`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS notes TEXT`,
+         `ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+       ];
 
       for (const sql of migrations) {
         try {
@@ -154,6 +168,9 @@ export default class Database {
         } catch (err) {
           // ignore already exists
         }
+      }
+      for (const sql of savingsGoalsMigrations) {
+        try { await this.pool.query(sql); } catch (e) { /* ignore */ }
       }
       log('DATABASE', '✓ Schema migrations applied');
     } catch (err) {
