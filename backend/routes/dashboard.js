@@ -450,7 +450,24 @@ router.post('/upcoming-payments', async (req, res) => {
       }
     });
 
-    // 4. Bi-weekly Income Projection
+    // 2.5 Inject: Affirm Credit Card Auto-Payment (Fixed 6-payment obligation)
+    const todayDay = today.getDate();
+    const affirmPayment = 738.36;
+    const affirmDay = 15; // Mid-month payment date
+    if (!seenDescriptions.has(`Affirm-${affirmPayment}`)) {
+      // Check if not already processed this month
+      const alreadyPaidThisMonth = timeline.some(t => /affirm/i.test(t.description) && t.status === 'processed');
+      if (!alreadyPaidThisMonth) {
+        timeline.push({
+          description: 'Affirm Credit Card Payment',
+          category: 'Credit Cards',
+          amount: affirmPayment,
+          dayOfMonth: affirmDay,
+          isIncome: false,
+          status: 'projected'
+        });
+      }
+    }
     const lastIncome = fixedTransactions.find(t => t.direction === 'CREDIT' && /WELLS FARGO/i.test(t.description));
     if (lastIncome) {
       const lastDate = new Date(lastIncome.actual_date);
