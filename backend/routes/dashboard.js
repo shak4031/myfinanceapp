@@ -44,17 +44,23 @@ async function get90DayAverages() {
     );
 
     if (rows.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0, months: [] };
+      return { avgIncome: 0, avgExpenses: 0, months: [], debug: { reason: 'no_rows', startDate, endDate, rowCount: 0 } };
     }
 
     // Group by calendar month
     const monthGroups = new Map();
+    let filteredOut = 0;
+    let firstRows = [];
 
-    for (const tx of rows) {
+    for (const [i, tx] of rows.entries()) {
       const desc = (tx.description || '').toLowerCase();
       const isInternal = INTERNAL_TRANSFER_KEYWORDS.some(kw => desc.includes(kw));
-      if (isInternal) continue;
-      if (/\b(x5261|x5237)\b/.test(desc)) continue;
+      if (isInternal) { filteredOut++; continue; }
+      if (/\b(x5261|x5237)\b/.test(desc)) { filteredOut++; continue; }
+
+      if (firstRows.length < 5) {
+        firstRows.push({ date: tx.txn_date, amount: tx.amount, direction: tx.direction, description: tx.description });
+      }
 
       const monthKey = tx.txn_date.substring(0, 7); // YYYY-MM
       if (!monthGroups.has(monthKey)) {
@@ -74,7 +80,7 @@ async function get90DayAverages() {
     })).sort((a, b) => b.month.localeCompare(a.month));
 
     if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0, months: [] };
+      return { avgIncome: 0, avgExpenses: 0, months: [], debug: { reason: 'all_filtered', startDate, endDate, rowCount: rows.length, filteredOut, firstRows } };
     }
 
     const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
@@ -83,7 +89,8 @@ async function get90DayAverages() {
     return {
       avgIncome: totalIncome / months.length,
       avgExpenses: totalExpenses / months.length,
-      months
+      months,
+      debug: { startDate, endDate, rowCount: rows.length, filteredOut, firstRows }
     };
   } catch (error) {
     log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
@@ -305,7 +312,7 @@ router.post('/summary', async (req, res) => {
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
     // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, months } = await get90DayAverages();
+    const { avgIncome, avgExpenses, months, debug } = await get90DayAverages();
 
     res.json({
       income: avgIncome,
@@ -315,6 +322,8 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
+      monthlyBreakdown: months,
+      debug90day: debug,
       historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
