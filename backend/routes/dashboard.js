@@ -21,10 +21,12 @@ async function get90DayAverages() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const ninetyDaysAgo = new Date(today);
-    ninetyDaysAgo.setDate(today.getDate() - 90);
+    // Anchor to the end of the current month so we capture all available data in the current period
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const ninetyDaysAgo = new Date(monthEnd);
+    ninetyDaysAgo.setDate(monthEnd.getDate() - 90);
     const startDate = ninetyDaysAgo.toISOString().split('T')[0];
-    const endDate = today.toISOString().split('T')[0];
+    const endDate = monthEnd.toISOString().split('T')[0];
 
     log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}`);
 
@@ -313,10 +315,6 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
-      ninetyDayStart: (() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().split('T')[0]; })(),
-      ninetyDayEnd: new Date().toISOString().split('T')[0],
-      monthsUsed: months.length,
-      debugMonths: months,
       historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
