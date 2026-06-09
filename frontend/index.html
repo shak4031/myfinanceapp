@@ -213,6 +213,7 @@
         <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
         <li><button class="nav-btn" onclick="showView('etl')">⚙️ ETL Staging</button></li>
         <li><button class="nav-btn" onclick="showView('payoff')">🏔️ Payoff Plan</button></li>
+        <li><button class="nav-btn" onclick="showView('goals')">🎯 Goals</button></li>
         <li><button class="nav-btn" onclick="showView('insights')">💡 AI Insights</button></li>
       </ul>
     </aside>
@@ -224,7 +225,7 @@
       <section id="dashboard-view" class="view active">
         <header class="header">
           <h1>Dashboard</h1>
-          <button class="btn btn-primary">📥 Import Statements</button>
+          <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
         </header>
 
         <div class="metrics-grid" id="dashboard-metrics"></div>
@@ -385,7 +386,129 @@
         </div>
       </section>
 
+      <!-- GOALS -->
+      <section id="goals-view" class="view">
+        <header class="header">
+          <h1>🎯 Savings Goals</h1>
+          <button class="btn btn-primary" onclick="openAddGoalModal()">+ New Goal</button>
+        </header>
+
+        <!-- Funding Overview -->
+        <div id="goals-funding-overview" class="panel" style="padding: 20px; margin-bottom: 16px;"></div>
+
+        <!-- Goals Grid -->
+        <div id="goals-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px;"></div>
+      </section>
+
     </main>
+  </div>
+
+  <!-- IMPORT MODAL -->
+  <div id="import-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow);">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 18px;">📥 Import Statements</h2>
+        <button onclick="closeImportModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display: flex; border-bottom: 1px solid var(--border);">
+        <button id="tab-csv" onclick="switchImportTab('csv')" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600;">CSV Bank Export</button>
+        <button id="tab-pdf" onclick="switchImportTab('pdf')" style="flex: 1; padding: 12px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; cursor: pointer; font-weight: 500;">PDF Statement</button>
+      </div>
+
+      <div style="padding: 24px;">
+        <!-- CSV Import Panel -->
+        <div id="import-csv-panel">
+          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
+            Paste your TD Bank CSV export below. Supports any bank format with automatic column detection.
+          </p>
+          <textarea id="csv-input" placeholder="Date,Description,Debit,Credit,Balance..." style="width: 100%; height: 200px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+          <div style="margin-top: 16px; display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="importCSV()" style="flex: 1;">🚀 Import CSV</button>
+            <select id="csv-source-select" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+              <option value="checking">Checking Account</option>
+              <option value="savings">Savings Account</option>
+              <option value="credit_card">Credit Card</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- PDF Import Panel -->
+        <div id="import-pdf-panel" style="display: none;">
+          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
+            Upload a PDF bank statement. Supports TD Bank checking, savings, and credit card statements.
+          </p>
+          <input type="file" id="pdf-input" accept=".pdf" style="display: none;" onchange="onPdfSelected(event)">
+          <div id="pdf-dropzone" onclick="document.getElementById('pdf-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
+               ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
+               ondragleave="this.style.borderColor='var(--border)';"
+               ondrop="handlePdfDrop(event)">
+            <div style="font-size: 32px; margin-bottom: 12px;">📄</div>
+            <div style="font-weight: 600;">Click or drag a PDF statement here</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Maximum 10MB per file</div>
+          </div>
+          <div id="pdf-file-list" style="margin-top: 16px;"></div>
+          <div style="margin-top: 16px;">
+            <button class="btn btn-primary" onclick="importPDF()" style="width: 100%;" disabled id="pdf-import-btn">🚀 Import PDF</button>
+          </div>
+        </div>
+
+        <div id="import-result" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD GOAL MODAL -->
+  <div id="add-goal-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 480px; box-shadow: var(--shadow);">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 18px;">🎯 New Savings Goal</h2>
+        <button onclick="closeAddGoalModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+      </div>
+      <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Goal Name</label>
+          <input id="goal-name" type="text" placeholder="e.g., Emergency Fund" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Amount ($)</label>
+            <input id="goal-target" type="number" placeholder="5000" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Current Savings ($)</label>
+            <input id="goal-current" type="number" placeholder="0" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Date</label>
+            <input id="goal-date" type="date" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Priority (1=Highest)</label>
+            <input id="goal-priority" type="number" min="1" max="10" value="1" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Icon</label>
+          <select id="goal-icon" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+            <option value="🎯">🎯 General</option>
+            <option value="🛡️">🛡️ Emergency</option>
+            <option value="🚗">🚗 Car</option>
+            <option value="🏠">🏠 House</option>
+            <option value="✈️">✈️ Travel</option>
+            <option value="🎓">🎓 Education</option>
+            <option value="💍">💍 Wedding</option>
+            <option value="🏖️">🏖️ Vacation</option>
+            <option value="💻">💻 Tech</option>
+            <option value="🎮">🎮 Entertainment</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="saveGoal()" style="width: 100%; margin-top: 8px;">Create Goal</button>
+      </div>
+    </div>
   </div>
 
   <div class="toast-container" id="toasts"></div>
@@ -1017,7 +1140,321 @@
       document.getElementById('toasts').appendChild(t);
       setTimeout(() => t.remove(), 3000);
     }
-    
+
+    // ===========================================
+    // IMPORT MODAL
+    // ===========================================
+    function openImportModal() {
+      document.getElementById('import-modal').style.display = 'flex';
+    }
+    function closeImportModal() {
+      document.getElementById('import-modal').style.display = 'none';
+      document.getElementById('import-result').style.display = 'none';
+    }
+
+    function switchImportTab(tab) {
+      document.getElementById('import-csv-panel').style.display = tab === 'csv' ? 'block' : 'none';
+      document.getElementById('import-pdf-panel').style.display = tab === 'pdf' ? 'block' : 'none';
+      document.getElementById('tab-csv').style.background = tab === 'csv' ? 'var(--primary)' : 'var(--bg-tertiary)';
+      document.getElementById('tab-csv').style.color = tab === 'csv' ? 'white' : 'var(--text-secondary)';
+      document.getElementById('tab-pdf').style.background = tab === 'pdf' ? 'var(--primary)' : 'var(--bg-tertiary)';
+      document.getElementById('tab-pdf').style.color = tab === 'pdf' ? 'white' : 'var(--text-secondary)';
+    }
+
+    async function importCSV() {
+      const csvData = document.getElementById('csv-input').value;
+      if (!csvData.trim()) { notify('Paste CSV data first'); return; }
+
+      const resultDiv = document.getElementById('import-result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div style="color: var(--primary)">Processing CSV...</div>';
+      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+
+      try {
+        const res = await fetch('/api/import/import-csv', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csvData, source: document.getElementById('csv-source-select').value })
+        });
+        const data = await res.json();
+        if (data.success) {
+          resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
+          resultDiv.innerHTML = `
+            <div style="color: var(--success); font-weight: 700;">✅ Import Complete</div>
+            <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
+              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
+            </div>
+          `;
+          document.getElementById('csv-input').value = '';
+          loadDashboard();
+        } else {
+          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
+          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${data.error}</div>`;
+        }
+      } catch (err) {
+        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
+        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${err.message}</div>`;
+      }
+    }
+
+    let pendingPdfFile = null;
+    function onPdfSelected(e) {
+      if (e.target.files.length > 0) {
+        pendingPdfFile = e.target.files[0];
+        document.getElementById('pdf-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📄</span><span>${pendingPdfFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingPdfFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('pdf-import-btn').disabled = false;
+      }
+    }
+    function handlePdfDrop(e) {
+      e.preventDefault();
+      e.currentTarget.style.borderColor = 'var(--border)';
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type === 'application/pdf') {
+        pendingPdfFile = files[0];
+        document.getElementById('pdf-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📄</span><span>${pendingPdfFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingPdfFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('pdf-import-btn').disabled = false;
+      }
+    }
+
+    async function importPDF() {
+      if (!pendingPdfFile) { notify('Select a PDF first'); return; }
+
+      const resultDiv = document.getElementById('import-result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div style="color: var(--primary)">Reading PDF...</div>';
+      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+
+      try {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(pendingPdfFile);
+        });
+
+        resultDiv.innerHTML = '<div style="color: var(--primary)">Parsing transactions...</div>';
+
+        const res = await fetch('/api/import/import-pdf', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdfBase64: base64, source: 'pdf_statement', statementType: 'td-checking' })
+        });
+        const data = await res.json();
+        if (data.success) {
+          resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
+          resultDiv.innerHTML = `
+            <div style="color: var(--success); font-weight: 700;">✅ PDF Import Complete</div>
+            <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
+              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.totalInFile} found in PDF
+            </div>
+          `;
+          pendingPdfFile = null;
+          document.getElementById('pdf-file-list').innerHTML = '';
+          document.getElementById('pdf-import-btn').disabled = true;
+          loadDashboard();
+        } else {
+          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
+          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${data.error}</div>`;
+        }
+      } catch (err) {
+        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
+        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${err.message}</div>`;
+      }
+    }
+
+    // ===========================================
+    // GOALS PAGE
+    // ===========================================
+    function openAddGoalModal() {
+      document.getElementById('add-goal-modal').style.display = 'flex';
+    }
+    function closeAddGoalModal() {
+      document.getElementById('add-goal-modal').style.display = 'none';
+      document.getElementById('goal-name').value = '';
+      document.getElementById('goal-target').value = '';
+      document.getElementById('goal-current').value = '';
+      document.getElementById('goal-date').value = '';
+      document.getElementById('goal-priority').value = '1';
+    }
+
+    async function saveGoal() {
+      const name = document.getElementById('goal-name').value.trim();
+      const target = parseFloat(document.getElementById('goal-target').value);
+      const current = parseFloat(document.getElementById('goal-current').value) || 0;
+      const targetDate = document.getElementById('goal-date').value;
+      const priority = parseInt(document.getElementById('goal-priority').value) || 1;
+      const icon = document.getElementById('goal-icon').value;
+
+      if (!name || !target) { notify('Name and target amount required'); return; }
+
+      try {
+        const res = await fetch('/api/goals', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, target_amount: target, current_amount: current, target_date: targetDate, priority, icon })
+        });
+        const data = await res.json();
+        if (data.success) {
+          notify(`✓ Goal "${name}" created!`);
+          closeAddGoalModal();
+          loadGoals();
+        } else {
+          notify(`❌ ${data.error}`);
+        }
+      } catch (err) { notify('❌ Failed to save goal'); }
+    }
+
+    async function deleteGoal(id) {
+      if (!confirm('Delete this goal?')) return;
+      try {
+        await fetch(`/api/goals/${id}`, { method: 'DELETE' });
+        notify('Goal deleted');
+        loadGoals();
+      } catch (err) { notify('❌ Delete failed'); }
+    }
+
+    async function contributeToGoal(id) {
+      const amount = prompt('Amount to contribute ($):');
+      if (!amount || isNaN(amount) || amount <= 0) return;
+      try {
+        const res = await fetch(`/api/goals/${id}/contribute`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: parseFloat(amount) })
+        });
+        const data = await res.json();
+        if (data.success) {
+          notify(`✓ Contributed $${amount}`);
+          loadGoals();
+        }
+      } catch (err) { notify('❌ Contribution failed'); }
+    }
+
+    async function loadGoals() {
+      try {
+        // Load goals with projection data
+        const res = await fetch('/api/goals');
+        const goals = await res.json();
+
+        // Load funding summary
+        const summaryRes = await fetch('/api/goals/funding-analysis');
+        const summary = await summaryRes.json();
+
+        // Render summary banner
+        const overviewEl = document.getElementById('goals-funding-overview');
+        if (summary.total_goals) {
+          const isOk = summary.gap <= 0;
+          overviewEl.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+              <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                <div>
+                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Monthly Income</div>
+                  <div style="font-size: 20px; font-weight: 700; color: var(--success);">$${summary.total_discretionary ? summary.total_discretionary.toLocaleString() : '0'}</div>
+                </div>
+                <div>
+                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Suggested Contributions</div>
+                  <div style="font-size: 20px; font-weight: 700; color: var(--primary);">$${summary.total_suggested_monthly ? summary.total_suggested_monthly.toLocaleString() : '0'}</div>
+                </div>
+                <div>
+                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total Remaining</div>
+                  <div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">$${summary.total_remaining ? summary.total_remaining.toLocaleString() : '0'}</div>
+                </div>
+              </div>
+              <div style="font-size: 13px; color: ${isOk ? 'var(--success)' : 'var(--warning)'}; font-weight: 600; text-align: right; max-width: 300px;">
+                ${summary.summary || ''}
+              </div>
+            </div>
+          `;
+        }
+
+        // Render goals grid
+        const listEl = document.getElementById('goals-list');
+        if (goals.length === 0) {
+          listEl.innerHTML = `<div style="grid-column: 1/-1; padding: 60px; text-align: center; color: var(--text-secondary);"><div style="font-size: 32px; margin-bottom: 12px;">🎯</div><h3>No goals yet</h3><p>Click "+ New Goal" to start saving!</p></div>`;
+          return;
+        }
+
+        listEl.innerHTML = goals.map(g => {
+          const progress = parseFloat(g.progress_pct) || 0;
+          const achievable = g.achievable;
+          const daysUntil = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / (1000*60*60*24)) : null;
+
+          return `
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;">
+              <div style="padding: 20px; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 32px;">${g.icon}</span>
+                    <div>
+                      <div style="font-weight: 700; font-size: 16px;">${g.name}</div>
+                      <div style="font-size: 11px; color: var(--text-secondary);">Priority #${g.priority}${g.target_date ? ' &middot; Due ' + new Date(g.target_date).toLocaleDateString() : ''}</div>
+                    </div>
+                  </div>
+                  <button onclick="deleteGoal(${g.id})" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; padding: 4px;">&times;</button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                  <div><span style="font-size: 24px; font-weight: 700; color: var(--primary);">$${(g.current_amount || 0).toLocaleString()}</span><span style="color: var(--text-secondary);"> / $${(g.target_amount || 0).toLocaleString()}</span></div>
+                  <div style="font-weight: 700; color: ${progress >= 100 ? 'var(--success)' : 'var(--primary)'};">${progress}%</div>
+                </div>
+
+                <div style="height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden;">
+                  <div style="height: 100%; width: ${Math.min(progress, 100)}%; background: ${progress >= 100 ? 'var(--success)' : g.color || 'var(--primary)'}; border-radius: 4px; transition: width 0.5s ease;"></div>
+                </div>
+              </div>
+
+              <div style="padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                ${g.target_date ? `
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px;">📅</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">${daysUntil > 0 ? daysUntil + ' days' : 'Overdue'} remaining</span>
+                  </div>
+                ` : ''}
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 12px;">💰</span>
+                  <span style="font-size: 12px; color: var(--text-secondary);">Need $${(g.remaining || 0).toLocaleString()} more</span>
+                </div>
+                ${g.suggested_monthly > 0 ? `
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px;">📊</span>
+                    <span style="font-size: 12px; color: ${achievable ? 'var(--success)' : 'var(--warning)'};">
+                      Suggest $${g.suggested_monthly}/mo${achievable ? '' : ' (short $' + g.monthly_shortfall + ')'}
+                    </span>
+                  </div>
+                ` : ''}
+                ${g.projected_date ? `
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px;">🎯</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">Projected: ${new Date(g.projected_date).toLocaleDateString()}</span>
+                  </div>
+                ` : ''}
+
+                <div style="margin-top: auto; padding-top: 12px; display: flex; gap: 8px;">
+                  <button onclick="contributeToGoal(${g.id})" class="btn btn-primary" style="flex: 1; font-size: 12px; padding: 8px;">+ Add Funds</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (err) {
+        document.getElementById('goals-list').innerHTML = `<div style="padding: 40px; text-align: center; color: var(--danger);">Failed to load goals</div>`;
+      }
+    }
+
+    // Update showView to include goals
+    const _origShowView = showView;
+    showView = function(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`${viewId}-view`).classList.add('active');
+      const clickedBtn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.textContent.toLowerCase().includes(viewId));
+      if (clickedBtn) clickedBtn.classList.add('active');
+
+      if (viewId === 'dashboard') loadDashboard();
+      if (viewId === 'categories') loadCategories();
+      if (viewId === 'transactions') loadAllTransactions();
+      if (viewId === 'etl') loadEtlStaging();
+      if (viewId === 'payoff') loadPayoffPlan();
+      if (viewId === 'goals') loadGoals();
+    }
+
     loadDashboard();
   </script>
 </body>

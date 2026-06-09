@@ -102,6 +102,20 @@ export default class Database {
         min_payment REAL,
         due_date TEXT,
         user_id INTEGER REFERENCES users(id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS savings_goals (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        name TEXT NOT NULL,
+        target_amount REAL NOT NULL DEFAULT 0,
+        current_amount REAL NOT NULL DEFAULT 0,
+        target_date TEXT,
+        priority INTEGER DEFAULT 1,
+        icon TEXT DEFAULT '\u{1f3af}',
+        color TEXT DEFAULT '#4a9eff',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -286,6 +300,23 @@ export default class Database {
         for (const [name, balance, apr, limit, min] of cards) {
            await this.pool.query('UPDATE credit_cards SET balance = $1 WHERE name = $2', [balance, name]);
         }
+      }
+
+      // 4. Seed default goals if none exist
+      const goalsCheck = await this.pool.query('SELECT COUNT(*) FROM savings_goals');
+      if (parseInt(goalsCheck.rows[0].count) === 0) {
+        const defaultGoals = [
+          { name: 'Emergency Fund', target: 10000, current: 2000, date: '2026-12-31', priority: 1, icon: '\u{1f6e1}', color: '#e74c3c' },
+          { name: 'Car Down Payment', target: 5000, current: 800, date: '2027-03-31', priority: 2, icon: '\u{1f3ce}', color: '#f39c12' },
+          { name: 'Family Vacation', target: 3000, current: 400, date: '2027-06-30', priority: 3, icon: '\u{1f334}', color: '#2ecc71' }
+        ];
+        for (const g of defaultGoals) {
+          await this.pool.query(
+            'INSERT INTO savings_goals (user_id, name, target_amount, current_amount, target_date, priority, icon, color) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [1, g.name, g.target, g.current, g.date, g.priority, g.icon, g.color]
+          );
+        }
+        log('DATABASE', '✓ Default savings goals seeded');
       }
     } catch (err) {
       log('DATABASE', `❌ Error seeding data: ${err.message}`);
