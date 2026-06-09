@@ -44,7 +44,7 @@ async function get90DayAverages() {
     );
 
     if (rows.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0, months: [], debug: { reason: 'no_rows', startDate, endDate, rowCount: 0 } };
+      return { avgIncome: 0, avgExpenses: 0 };
     }
 
     // Group by calendar month
@@ -62,7 +62,9 @@ async function get90DayAverages() {
         firstRows.push({ date: tx.txn_date, amount: tx.amount, direction: tx.direction, description: tx.description });
       }
 
-      const monthKey = tx.txn_date.substring(0, 7); // YYYY-MM
+      // date::date returns a Date object from pg driver... convert to string
+      const dateStr = tx.txn_date instanceof Date ? tx.txn_date.toISOString().split('T')[0] : String(tx.txn_date).split('T')[0];
+      const monthKey = dateStr.substring(0, 7); // YYYY-MM
       if (!monthGroups.has(monthKey)) {
         monthGroups.set(monthKey, { income: 0, expenses: 0 });
       }
@@ -80,7 +82,7 @@ async function get90DayAverages() {
     })).sort((a, b) => b.month.localeCompare(a.month));
 
     if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0, months: [], debug: { reason: 'all_filtered', startDate, endDate, rowCount: rows.length, filteredOut, firstRows } };
+      return { avgIncome: 0, avgExpenses: 0 };
     }
 
     const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
@@ -88,9 +90,7 @@ async function get90DayAverages() {
 
     return {
       avgIncome: totalIncome / months.length,
-      avgExpenses: totalExpenses / months.length,
-      months,
-      debug: { startDate, endDate, rowCount: rows.length, filteredOut, firstRows }
+      avgExpenses: totalExpenses / months.length
     };
   } catch (error) {
     log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
@@ -312,7 +312,7 @@ router.post('/summary', async (req, res) => {
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
     // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, months, debug } = await get90DayAverages();
+    const { avgIncome, avgExpenses, months } = await get90DayAverages();
 
     res.json({
       income: avgIncome,
@@ -322,8 +322,6 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
-      monthlyBreakdown: months,
-      debug90day: debug,
       historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
