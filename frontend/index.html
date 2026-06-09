@@ -544,9 +544,9 @@
       const data = await summaryRes.json();
       
       document.getElementById('dashboard-metrics').innerHTML = `
-        <div class="metric-card"><div class="metric-label">Income</div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Expenses</div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Net</div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
         <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
       `;
 

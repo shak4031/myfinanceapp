@@ -15,6 +15,80 @@ function isInternalTransfer(description) {
   return INTERNAL_TRANSFER_KEYWORDS.some(keyword => desc.includes(keyword));
 }
 
+// Helper: Calculate 90-day rolling monthly averages (excluding internal transfers)
+async function get90DayAverages() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const ninetyDaysAgo = new Date(today);
+    ninetyDaysAgo.setDate(today.getDate() - 90);
+    const startDate = ninetyDaysAgo.toISOString().split('T')[0];
+    const endDate = today.toISOString().split('T')[0];
+
+    log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}`);
+
+    // Get transactions in 90-day window, excluding internal transfers and specific accounts
+    const rows = await db.all(
+      `SELECT
+        date::date as txn_date,
+        amount,
+        direction,
+        description
+      FROM transactions
+      WHERE user_id = $1 AND date >= $2 AND date <= $3
+      ORDER BY date::date`,
+      [1, startDate, endDate]
+    );
+
+    if (rows.length === 0) {
+      return { avgIncome: 0, avgExpenses: 0, months: [] };
+    }
+
+    // Group by calendar month
+    const monthGroups = new Map();
+
+    for (const tx of rows) {
+      const desc = (tx.description || '').toLowerCase();
+      const isInternal = INTERNAL_TRANSFER_KEYWORDS.some(kw => desc.includes(kw));
+      if (isInternal) continue;
+      if (/\b(x5261|x5237)\b/.test(desc)) continue;
+
+      const monthKey = tx.txn_date.substring(0, 7); // YYYY-MM
+      if (!monthGroups.has(monthKey)) {
+        monthGroups.set(monthKey, { income: 0, expenses: 0 });
+      }
+      const bucket = monthGroups.get(monthKey);
+      const amt = parseFloat(tx.amount) || 0;
+      const dir = (tx.direction || '').toUpperCase();
+      if (dir === 'CREDIT') bucket.income += amt;
+      else if (dir === 'DEBIT') bucket.expenses += amt;
+    }
+
+    const months = Array.from(monthGroups.entries()).map(([month, vals]) => ({
+      month,
+      monthly_income: vals.income,
+      monthly_expenses: vals.expenses
+    })).sort((a, b) => b.month.localeCompare(a.month));
+
+    if (months.length === 0) {
+      return { avgIncome: 0, avgExpenses: 0, months: [] };
+    }
+
+    const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
+    const totalExpenses = months.reduce((s, m) => s + m.monthly_expenses, 0);
+
+    return {
+      avgIncome: totalIncome / months.length,
+      avgExpenses: totalExpenses / months.length,
+      months
+    };
+  } catch (error) {
+    log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
+    return { avgIncome: 0, avgExpenses: 0, months: [] };
+  }
+}
+
 // Helper: Get date range based on filter
 function getDateRange(filter) {
   const today = new Date();
@@ -215,7 +289,7 @@ router.post('/summary', async (req, res) => {
     );
     const balance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
 
-    // 2. Calculation of ACTUAL totals for the selected period (June)
+    // 2. Calculation of ACTUAL totals for the selected period (used for charts / AI analysis)
     const result = await db.get(
       `SELECT 
         SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE 0 END) as total_income,
@@ -228,13 +302,18 @@ router.post('/summary', async (req, res) => {
     const periodIncome = parseFloat(result.total_income || 0);
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
+    // 3. 90-day rolling monthly averages for the top cards
+    const { avgIncome, avgExpenses } = await get90DayAverages();
+
     res.json({
-      income: periodIncome,
-      expenses: periodExpenses,
-      netCashflow: periodIncome - periodExpenses,
+      income: avgIncome,
+      expenses: avgExpenses,
+      netCashflow: avgIncome - avgExpenses,
       balance: balance,
       period: { startDate, endDate },
-      historicalNotice: "Switched from historical averages to actual period totals for accuracy."
+      periodIncome,
+      periodExpenses,
+      historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
