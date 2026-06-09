@@ -15,22 +15,22 @@ function isInternalTransfer(description) {
   return INTERNAL_TRANSFER_KEYWORDS.some(keyword => desc.includes(keyword));
 }
 
-// Helper: Calculate 90-day rolling monthly averages (excluding internal transfers)
+// Helper: Calculate 90-day rolling monthly averages (excluding internal transfers & incomplete months)
 async function get90DayAverages() {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Anchor to the end of the current month so we capture all available data in the current period
+    // Anchor to the end of the current month
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     const ninetyDaysAgo = new Date(monthEnd);
     ninetyDaysAgo.setDate(monthEnd.getDate() - 90);
     const startDate = ninetyDaysAgo.toISOString().split('T')[0];
     const endDate = monthEnd.toISOString().split('T')[0];
+    const currentMonth = today.toISOString().slice(0, 7); // YYYY-MM
 
-    log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}`);
+    log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}, excluding current month ${currentMonth}`);
 
-    // Get transactions in 90-day window, excluding internal transfers and specific accounts
     const rows = await db.all(
       `SELECT
         date::date as txn_date,
@@ -47,24 +47,22 @@ async function get90DayAverages() {
       return { avgIncome: 0, avgExpenses: 0 };
     }
 
-    // Group by calendar month
     const monthGroups = new Map();
-    let filteredOut = 0;
-    let firstRows = [];
 
-    for (const [i, tx] of rows.entries()) {
+    for (const tx of rows) {
       const desc = (tx.description || '').toLowerCase();
       const isInternal = INTERNAL_TRANSFER_KEYWORDS.some(kw => desc.includes(kw));
-      if (isInternal) { filteredOut++; continue; }
-      if (/\b(x5261|x5237)\b/.test(desc)) { filteredOut++; continue; }
-
-      if (firstRows.length < 5) {
-        firstRows.push({ date: tx.txn_date, amount: tx.amount, direction: tx.direction, description: tx.description });
-      }
+      if (isInternal) continue;
+      if (/\b(x5261|x5237)\b/.test(desc)) continue;
 
       // date::date returns a Date object from pg driver... convert to string
       const dateStr = tx.txn_date instanceof Date ? tx.txn_date.toISOString().split('T')[0] : String(tx.txn_date).split('T')[0];
       const monthKey = dateStr.substring(0, 7); // YYYY-MM
+
+      // Exclude the current incomplete month from averages
+      // It would distort the average since partial-month income is always lower
+      if (monthKey === currentMonth) continue;
+
       if (!monthGroups.has(monthKey)) {
         monthGroups.set(monthKey, { income: 0, expenses: 0 });
       }
@@ -82,7 +80,7 @@ async function get90DayAverages() {
     })).sort((a, b) => b.month.localeCompare(a.month));
 
     if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0, debug: { reason: 'all_filtered', rowCount: rows.length, filteredOut, firstRows, startDate, endDate } };
+      return { avgIncome: 0, avgExpenses: 0 };
     }
 
     const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
@@ -91,11 +89,11 @@ async function get90DayAverages() {
     return {
       avgIncome: totalIncome / months.length,
       avgExpenses: totalExpenses / months.length,
-      debug: { months, startDate, endDate, rowCount: rows.length, filteredOut }
+      monthsUsed: months.length
     };
   } catch (error) {
     log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
-    return { avgIncome: 0, avgExpenses: 0, months: [] };
+    return { avgIncome: 0, avgExpenses: 0 };
   }
 }
 
@@ -313,7 +311,7 @@ router.post('/summary', async (req, res) => {
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
     // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, debug } = await get90DayAverages();
+    const { avgIncome, avgExpenses, monthsUsed } = await get90DayAverages();
 
     res.json({
       income: avgIncome,
@@ -323,8 +321,8 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
-      debug90day: debug,
-      historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
+      monthsAveraged: monthsUsed,
+      historicalNotice: "Income & Expenses are 90-day monthly averages excluding the current incomplete month."
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
