@@ -303,7 +303,7 @@ router.post('/summary', async (req, res) => {
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
     // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses } = await get90DayAverages();
+    const { avgIncome, avgExpenses, months } = await get90DayAverages();
 
     res.json({
       income: avgIncome,
@@ -313,6 +313,10 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
+      ninetyDayStart: (() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().split('T')[0]; })(),
+      ninetyDayEnd: new Date().toISOString().split('T')[0],
+      monthsUsed: months.length,
+      debugMonths: months,
       historicalNotice: "Income & Expenses show 90-day monthly averages (excludes internal transfers). Net reflects the average."
     });
   } catch (error) {
