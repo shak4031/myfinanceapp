@@ -1,0 +1,316 @@
+[2026-06-02 00:36:33.760] [API            ] [INFO ] Database path: /opt/data/financeapp/finance.db
+[2026-06-02 00:36:33.763] [API            ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:36:33.763] [API            ] [INFO ] Starting MyFinanceApp Backend Server
+[2026-06-02 00:36:33.764] [API            ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:36:33.764] [API            ] [INFO ] Database: /opt/data/financeapp/finance.db
+[2026-06-02 00:36:33.764] [API            ] [INFO ] Version: 1.0.0
+[2026-06-02 00:36:33.764] [API            ] [INFO ] LOGGING: ✓ ENABLED (all categories active, no debug flag needed)
+[2026-06-02 00:36:33.764] [API            ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:36:33.764] [API            ] [INFO ] Starting Flask server on port 7890
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:7890
+ * Running on http://10.218.240.101:7890
+[33mPress CTRL+C to quit[0m
+[2026-06-02 00:56:55.424] [API            ] [INFO ] → ENTER login()
+[2026-06-02 00:56:55.425] [LOGIN          ] [INFO ] Login attempt for username: shak
+[2026-06-02 00:56:55.425] [API            ] [INFO ] Opening database: /opt/data/financeapp/finance.db
+[2026-06-02 00:56:55.425] [API            ] [INFO ] ✓ Database connection established
+[2026-06-02 00:56:55.425] [LOGIN          ] [INFO ] Querying database for user: shak
+[2026-06-02 00:56:55.425] [LOGIN          ] [INFO ] ✓ User found: Shak (ID: 1)
+[2026-06-02 00:56:55.425] [LOGIN          ] [INFO ] Verifying password for user: shak
+[2026-06-02 00:56:55.425] [API            ] [INFO ] Hashing password
+[2026-06-02 00:56:55.425] [API            ] [INFO ] ✓ Password hashed
+[2026-06-02 00:56:55.425] [LOGIN          ] [INFO ] ✓ Password verified for user: shak
+/opt/data/financeapp/app.py:181: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  expires = datetime.utcnow() + timedelta(days=30)
+[2026-06-02 00:56:55.426] [SESSION        ] [INFO ] Creating new session for user_id: 1
+[2026-06-02 00:56:55.426] [SESSION        ] [INFO ]   Token: J2F9faryfLnNTNCOETi5... (truncated)
+[2026-06-02 00:56:55.426] [SESSION        ] [INFO ]   Expires at: 2026-07-02 00:56:55.426350
+/opt/data/financeapp/app.py:187: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+  cursor.execute('''
+[2026-06-02 00:56:55.432] [LOGIN          ] [INFO ] ✓ Login successful for user: shak (user_id: 1)
+[2026-06-02 00:56:55.432] [SESSION        ] [INFO ] ✓ Session created and stored in database
+[2026-06-02 00:56:55.432] [API            ] [INFO ] ← EXIT login() → success=True
+[2026-06-02 00:56:55.432] [API            ] [INFO ] Processing response headers for application/json
+127.0.0.1 - - [02/Jun/2026 00:56:55] "POST /api/login HTTP/1.1" 200 -
+[2026-06-02 00:56:58.129] [API            ] [INFO ] → ENTER login()
+[2026-06-02 00:56:58.129] [LOGIN          ] [INFO ] Login attempt for username: shak
+[2026-06-02 00:56:58.129] [API            ] [INFO ] Opening database: /opt/data/financeapp/finance.db
+[2026-06-02 00:56:58.129] [API            ] [INFO ] ✓ Database connection established
+[2026-06-02 00:56:58.129] [LOGIN          ] [INFO ] Querying database for user: shak
+[2026-06-02 00:56:58.130] [LOGIN          ] [INFO ] ✓ User found: Shak (ID: 1)
+[2026-06-02 00:56:58.130] [LOGIN          ] [INFO ] Verifying password for user: shak
+[2026-06-02 00:56:58.130] [API            ] [INFO ] Hashing password
+[2026-06-02 00:56:58.130] [API            ] [INFO ] ✓ Password hashed
+[2026-06-02 00:56:58.130] [LOGIN          ] [INFO ] ✓ Password verified for user: shak
+[2026-06-02 00:56:58.130] [SESSION        ] [INFO ] Creating new session for user_id: 1
+[2026-06-02 00:56:58.130] [SESSION        ] [INFO ]   Token: q9e0F17iZ77L5TqEfbJP... (truncated)
+[2026-06-02 00:56:58.130] [SESSION        ] [INFO ]   Expires at: 2026-07-02 00:56:58.130148
+[2026-06-02 00:56:58.135] [LOGIN          ] [INFO ] ✓ Login successful for user: shak (user_id: 1)
+[2026-06-02 00:56:58.135] [SESSION        ] [INFO ] ✓ Session created and stored in database
+[2026-06-02 00:56:58.135] [API            ] [INFO ] ← EXIT login() → success=True
+[2026-06-02 00:56:58.135] [API            ] [INFO ] Processing response headers for application/json
+127.0.0.1 - - [02/Jun/2026 00:56:58] "POST /api/login HTTP/1.1" 200 -
+[2026-06-02 00:56:58.145] [TOKEN          ] [INFO ] → Token verification requested
+[2026-06-02 00:56:58.145] [TOKEN          ] [INFO ]   Token provided: YES
+[2026-06-02 00:56:58.145] [API            ] [INFO ] Opening database: /opt/data/financeapp/finance.db
+[2026-06-02 00:56:58.145] [API            ] [INFO ] ✓ Database connection established
+[2026-06-02 00:56:58.145] [TOKEN          ] [INFO ] Querying session for token (first 10 chars): q9e0F17iZ7...
+[2026-06-02 00:56:58.146] [TOKEN          ] [INFO ] ✓ Token validated successfully for user_id: 1
+[2026-06-02 00:56:58.146] [API            ] [INFO ] → ENTER get_upcoming_payments()
+[2026-06-02 00:56:58.146] [API            ] [INFO ] 📥 Request received: start=2026-06-01, end=2026-06-30
+[2026-06-02 00:56:58.146] [API            ] [INFO ] ✓ Connected to database at /opt/data/financeapp/finance.db
+[2026-06-02 00:56:58.146] [API            ] [INFO ] → ENTER detect_biweekly_income(end_date='2026-06-30')
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] Found 4 potential income transactions (amount > $1000)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.68 on 2026-05-20 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.66 on 2026-05-06 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.67 on 2026-04-22 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.68 on 2026-04-08 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] Days between last 2 paychecks: 14
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] ✓ DETECTED BIWEEKLY INCOME PATTERN (interval: 14 days)
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] ✓ Projected paycheck 1: $6211.68 on 2026-06-03
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] ✓ Projected paycheck 2: $6211.68 on 2026-06-17
+[2026-06-02 00:56:58.149] [API            ] [INFO ] ← EXIT detect_biweekly_income() → projected_count=2
+[2026-06-02 00:56:58.149] [API            ] [INFO ] ✓ Biweekly income items detected: 2
+[2026-06-02 00:56:58.149] [DETECT_INCOME  ] [INFO ] ACTUAL INCOME TRANSACTIONS in range [2026-06-01, 2026-06-30]:
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ] Found 20 recurring transaction patterns
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ] DETECTED BILLS/RECURRING EXPENSES:
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - WELLS FARGO BANK PAYROLL: $6211.68 (2x, direction=credit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - PENNYMAC         ONLINE PMT: $1185.65 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - SANTANDER CONSUM ONLINE PMT: $513.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - AMZ_STORECRD_PMT PAYMENT: $500.00 (3x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - STATE FARM RO 27 SFPP: $457.46 (3x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - HYUNDAI LEASE    ONLINE PMT: $443.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - PAYPAL           TRANSFER: $300.00 (3x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - CREDIT ONE BANK  PAYMENT: $250.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - AFFIRM.COM PAYME AFFIRM.COM: $158.26 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - COMCAST-XFINITY  CABLE SVCS: $85.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - VENMO            ADDFUNDS: $50.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - VISA DDA PUR AP 401134     EVERWASH 215 618 8808  : $49.05 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $41.95 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $41.76 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - VISA DDA PUR AP 401134     HUMAN APPEAL USA       : $30.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - MAINTENANCE FEE: $15.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - AFFIRM.COM PAYME AFFIRM.COM: $14.78 (3x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $12.25 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - VISA DDA PUR AP 449216     MARUFDALLAS COM        : $11.00 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BILLS          ] [INFO ]   - VISA DDA PUR AP 406466     VALET TIPS             : $8.50 (2x, direction=debit)
+[2026-06-02 00:56:58.149] [BALANCE        ] [INFO ] Current balance: $339.01
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: WELLS FARGO BANK PAYROLL ($6211.68, is_income=True)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: WELLS FARGO BANK PAYROLL ($6211.68) on 2026-06-19
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: PENNYMAC         ONLINE PMT ($1185.65, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: PENNYMAC         ONLINE PMT ($1185.65) on 2026-06-21
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: SANTANDER CONSUM ONLINE PMT ($513.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: SANTANDER CONSUM ONLINE PMT ($513.00) on 2026-06-21
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: AMZ_STORECRD_PMT PAYMENT ($500.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: AMZ_STORECRD_PMT PAYMENT ($500.00) on 2026-06-25
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: STATE FARM RO 27 SFPP ($457.46, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: STATE FARM RO 27 SFPP ($457.46) on 2026-06-28
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: HYUNDAI LEASE    ONLINE PMT ($443.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: HYUNDAI LEASE    ONLINE PMT ($443.00) on 2026-06-04
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: PAYPAL           TRANSFER ($300.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           TRANSFER - next occurrence 2026-05-27 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: CREDIT ONE BANK  PAYMENT ($250.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: CREDIT ONE BANK  PAYMENT - next occurrence 2026-05-24 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: AFFIRM.COM PAYME AFFIRM.COM ($158.26, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Including: AFFIRM.COM PAYME AFFIRM.COM ($158.26) on 2026-06-10
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: COMCAST-XFINITY  CABLE SVCS ($85.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: COMCAST-XFINITY  CABLE SVCS - next occurrence 2026-05-30 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: VENMO            ADDFUNDS ($50.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: VENMO            ADDFUNDS - next occurrence 2026-05-06 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 401134     EVERWASH 215 618 8808   ($49.05, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 401134     EVERWASH 215 618 8808   - next occurrence 2026-05-30 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($41.95, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER - next occurrence 2026-05-29 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($41.76, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER ($41.76) - amount too small
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 401134     HUMAN APPEAL USA        ($30.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 401134     HUMAN APPEAL USA        ($30.00) - amount too small
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: MAINTENANCE FEE ($15.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: MAINTENANCE FEE ($15.00) - amount too small
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: AFFIRM.COM PAYME AFFIRM.COM ($14.78, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: AFFIRM.COM PAYME AFFIRM.COM ($14.78) - amount too small
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($12.25, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER - next occurrence 2026-05-27 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 449216     MARUFDALLAS COM         ($11.00, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 449216     MARUFDALLAS COM         ($11.00) - amount too small
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 406466     VALET TIPS              ($8.50, is_income=False)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 406466     VALET TIPS              - next occurrence 2026-05-10 outside range
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] Removing duplicate bills (found 6 before dedup)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: PENNYMAC         ONLINE PMT ($1185.65)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: SANTANDER CONSUM ONLINE PMT ($513.00)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: AMZ_STORECRD_PMT PAYMENT ($500.00)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: STATE FARM RO 27 SFPP ($457.46)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: HYUNDAI LEASE    ONLINE PMT ($443.00)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ]   ✓ Keeping: AFFIRM.COM PAYME AFFIRM.COM ($158.26)
+[2026-06-02 00:56:58.150] [BILLS          ] [INFO ] ✓ Final bill list: 6 bills
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] Removing duplicate income (found 1 before dedup)
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ]   ✓ Keeping: WELLS FARGO BANK PAYROLL ($6211.68)
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] ✓ Final recurring income list: 1 items
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] 
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] CRITICAL DECISION: Income source selection
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ]   Actual income transactions in range: 0
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ]   Biweekly projected paychecks: 2
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ]   Recurring income from patterns: 1
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] ✓ USING BIWEEKLY PROJECTIONS (most reliable future forecast)
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ]   ✗ EXCLUDING actual past income to avoid duplication
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] Final decision: Using 2 income items
+[2026-06-02 00:56:58.150] [DETECT_INCOME  ] [INFO ] 
+[2026-06-02 00:56:58.150] [API            ] [INFO ] ✓ Sorted 8 items by due_date
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] INCOME: Paycheck (Biweekly) $6211.68 on 2026-06-03 → Balance: $6550.69
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: HYUNDAI LEASE    ONLINE PMT $443.00 on 2026-06-04 → Balance: $6107.69
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: AFFIRM.COM PAYME AFFIRM.COM $158.26 on 2026-06-10 → Balance: $5949.43
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] INCOME: Paycheck (Biweekly) $6211.68 on 2026-06-17 → Balance: $12161.11
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: PENNYMAC         ONLINE PMT $1185.65 on 2026-06-21 → Balance: $10975.46
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: SANTANDER CONSUM ONLINE PMT $513.00 on 2026-06-21 → Balance: $10462.46
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: AMZ_STORECRD_PMT PAYMENT $500.00 on 2026-06-25 → Balance: $9962.46
+[2026-06-02 00:56:58.150] [BALANCE        ] [INFO ] EXPENSE: STATE FARM RO 27 SFPP $457.46 on 2026-06-28 → Balance: $9505.00
+[2026-06-02 00:56:58.150] [API            ] [INFO ] ✓ Total income: $12423.36, Total expenses: $3257.37, Projected balance: $9505.00
+[2026-06-02 00:56:58.150] [API            ] [INFO ] ← EXIT get_upcoming_payments() → items=8
+[2026-06-02 00:56:58.150] [API            ] [INFO ] Processing response headers for application/json
+127.0.0.1 - - [02/Jun/2026 00:56:58] "POST /api/upcoming-payments HTTP/1.1" 200 -
+[2026-06-02 00:57:00.811] [API            ] [INFO ] → ENTER login()
+[2026-06-02 00:57:00.811] [LOGIN          ] [INFO ] Login attempt for username: shak
+[2026-06-02 00:57:00.811] [API            ] [INFO ] Opening database: /opt/data/financeapp/finance.db
+[2026-06-02 00:57:00.811] [API            ] [INFO ] ✓ Database connection established
+[2026-06-02 00:57:00.811] [LOGIN          ] [INFO ] Querying database for user: shak
+[2026-06-02 00:57:00.812] [LOGIN          ] [INFO ] ✓ User found: Shak (ID: 1)
+[2026-06-02 00:57:00.812] [LOGIN          ] [INFO ] Verifying password for user: shak
+[2026-06-02 00:57:00.812] [API            ] [INFO ] Hashing password
+[2026-06-02 00:57:00.812] [API            ] [INFO ] ✓ Password hashed
+[2026-06-02 00:57:00.812] [LOGIN          ] [INFO ] ✓ Password verified for user: shak
+[2026-06-02 00:57:00.812] [SESSION        ] [INFO ] Creating new session for user_id: 1
+[2026-06-02 00:57:00.812] [SESSION        ] [INFO ]   Token: KIa3UK8iTuoN_1xZe0FD... (truncated)
+[2026-06-02 00:57:00.812] [SESSION        ] [INFO ]   Expires at: 2026-07-02 00:57:00.812116
+[2026-06-02 00:57:00.817] [LOGIN          ] [INFO ] ✓ Login successful for user: shak (user_id: 1)
+[2026-06-02 00:57:00.817] [SESSION        ] [INFO ] ✓ Session created and stored in database
+[2026-06-02 00:57:00.817] [API            ] [INFO ] ← EXIT login() → success=True
+[2026-06-02 00:57:00.817] [API            ] [INFO ] Processing response headers for application/json
+127.0.0.1 - - [02/Jun/2026 00:57:00] "POST /api/login HTTP/1.1" 200 -
+[2026-06-02 00:57:00.826] [TOKEN          ] [INFO ] → Token verification requested
+[2026-06-02 00:57:00.826] [TOKEN          ] [INFO ]   Token provided: YES
+[2026-06-02 00:57:00.826] [API            ] [INFO ] Opening database: /opt/data/financeapp/finance.db
+[2026-06-02 00:57:00.827] [API            ] [INFO ] ✓ Database connection established
+[2026-06-02 00:57:00.827] [TOKEN          ] [INFO ] Querying session for token (first 10 chars): KIa3UK8iTu...
+[2026-06-02 00:57:00.827] [TOKEN          ] [INFO ] ✓ Token validated successfully for user_id: 1
+[2026-06-02 00:57:00.827] [API            ] [INFO ] → ENTER get_upcoming_payments()
+[2026-06-02 00:57:00.827] [API            ] [INFO ] 📥 Request received: start=2026-06-01, end=2026-06-30
+[2026-06-02 00:57:00.827] [API            ] [INFO ] ✓ Connected to database at /opt/data/financeapp/finance.db
+[2026-06-02 00:57:00.827] [API            ] [INFO ] → ENTER detect_biweekly_income(end_date='2026-06-30')
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] Found 4 potential income transactions (amount > $1000)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.68 on 2026-05-20 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.66 on 2026-05-06 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.67 on 2026-04-22 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ]   Income transaction: $6211.68 on 2026-04-08 (WELLS FARGO BANK PAYROLL)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] Days between last 2 paychecks: 14
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] ✓ DETECTED BIWEEKLY INCOME PATTERN (interval: 14 days)
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] ✓ Projected paycheck 1: $6211.68 on 2026-06-03
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] ✓ Projected paycheck 2: $6211.68 on 2026-06-17
+[2026-06-02 00:57:00.827] [API            ] [INFO ] ← EXIT detect_biweekly_income() → projected_count=2
+[2026-06-02 00:57:00.827] [API            ] [INFO ] ✓ Biweekly income items detected: 2
+[2026-06-02 00:57:00.827] [DETECT_INCOME  ] [INFO ] ACTUAL INCOME TRANSACTIONS in range [2026-06-01, 2026-06-30]:
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Found 20 recurring transaction patterns
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] DETECTED BILLS/RECURRING EXPENSES:
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - WELLS FARGO BANK PAYROLL: $6211.68 (2x, direction=credit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - PENNYMAC         ONLINE PMT: $1185.65 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - SANTANDER CONSUM ONLINE PMT: $513.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - AMZ_STORECRD_PMT PAYMENT: $500.00 (3x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - STATE FARM RO 27 SFPP: $457.46 (3x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - HYUNDAI LEASE    ONLINE PMT: $443.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - PAYPAL           TRANSFER: $300.00 (3x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - CREDIT ONE BANK  PAYMENT: $250.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - AFFIRM.COM PAYME AFFIRM.COM: $158.26 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - COMCAST-XFINITY  CABLE SVCS: $85.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - VENMO            ADDFUNDS: $50.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - VISA DDA PUR AP 401134     EVERWASH 215 618 8808  : $49.05 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $41.95 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $41.76 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - VISA DDA PUR AP 401134     HUMAN APPEAL USA       : $30.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - MAINTENANCE FEE: $15.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - AFFIRM.COM PAYME AFFIRM.COM: $14.78 (3x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - PAYPAL           INST XFER: $12.25 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - VISA DDA PUR AP 449216     MARUFDALLAS COM        : $11.00 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   - VISA DDA PUR AP 406466     VALET TIPS             : $8.50 (2x, direction=debit)
+[2026-06-02 00:57:00.828] [BALANCE        ] [INFO ] Current balance: $339.01
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: WELLS FARGO BANK PAYROLL ($6211.68, is_income=True)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: WELLS FARGO BANK PAYROLL ($6211.68) on 2026-06-19
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: PENNYMAC         ONLINE PMT ($1185.65, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: PENNYMAC         ONLINE PMT ($1185.65) on 2026-06-21
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: SANTANDER CONSUM ONLINE PMT ($513.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: SANTANDER CONSUM ONLINE PMT ($513.00) on 2026-06-21
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: AMZ_STORECRD_PMT PAYMENT ($500.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: AMZ_STORECRD_PMT PAYMENT ($500.00) on 2026-06-25
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: STATE FARM RO 27 SFPP ($457.46, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: STATE FARM RO 27 SFPP ($457.46) on 2026-06-28
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: HYUNDAI LEASE    ONLINE PMT ($443.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: HYUNDAI LEASE    ONLINE PMT ($443.00) on 2026-06-04
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: PAYPAL           TRANSFER ($300.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           TRANSFER - next occurrence 2026-05-27 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: CREDIT ONE BANK  PAYMENT ($250.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: CREDIT ONE BANK  PAYMENT - next occurrence 2026-05-24 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: AFFIRM.COM PAYME AFFIRM.COM ($158.26, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Including: AFFIRM.COM PAYME AFFIRM.COM ($158.26) on 2026-06-10
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: COMCAST-XFINITY  CABLE SVCS ($85.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: COMCAST-XFINITY  CABLE SVCS - next occurrence 2026-05-30 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: VENMO            ADDFUNDS ($50.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: VENMO            ADDFUNDS - next occurrence 2026-05-06 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 401134     EVERWASH 215 618 8808   ($49.05, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 401134     EVERWASH 215 618 8808   - next occurrence 2026-05-30 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($41.95, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER - next occurrence 2026-05-29 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($41.76, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER ($41.76) - amount too small
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 401134     HUMAN APPEAL USA        ($30.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 401134     HUMAN APPEAL USA        ($30.00) - amount too small
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: MAINTENANCE FEE ($15.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: MAINTENANCE FEE ($15.00) - amount too small
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: AFFIRM.COM PAYME AFFIRM.COM ($14.78, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: AFFIRM.COM PAYME AFFIRM.COM ($14.78) - amount too small
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: PAYPAL           INST XFER ($12.25, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: PAYPAL           INST XFER - next occurrence 2026-05-27 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 449216     MARUFDALLAS COM         ($11.00, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 449216     MARUFDALLAS COM         ($11.00) - amount too small
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Processing item: VISA DDA PUR AP 406466     VALET TIPS              ($8.50, is_income=False)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✗ Skipping: VISA DDA PUR AP 406466     VALET TIPS              - next occurrence 2026-05-10 outside range
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] Removing duplicate bills (found 6 before dedup)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: PENNYMAC         ONLINE PMT ($1185.65)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: SANTANDER CONSUM ONLINE PMT ($513.00)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: AMZ_STORECRD_PMT PAYMENT ($500.00)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: STATE FARM RO 27 SFPP ($457.46)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: HYUNDAI LEASE    ONLINE PMT ($443.00)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ]   ✓ Keeping: AFFIRM.COM PAYME AFFIRM.COM ($158.26)
+[2026-06-02 00:57:00.828] [BILLS          ] [INFO ] ✓ Final bill list: 6 bills
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] Removing duplicate income (found 1 before dedup)
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ]   ✓ Keeping: WELLS FARGO BANK PAYROLL ($6211.68)
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] ✓ Final recurring income list: 1 items
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] 
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] CRITICAL DECISION: Income source selection
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ]   Actual income transactions in range: 0
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ]   Biweekly projected paychecks: 2
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ]   Recurring income from patterns: 1
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] ✓ USING BIWEEKLY PROJECTIONS (most reliable future forecast)
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ]   ✗ EXCLUDING actual past income to avoid duplication
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] ═════════════════════════════════════════════════════════════════
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] Final decision: Using 2 income items
+[2026-06-02 00:57:00.828] [DETECT_INCOME  ] [INFO ] 
+[2026-06-02 00:57:00.828] [API            ] [INFO ] ✓ Sorted 8 items by due_date
+[2026-06-02 00:57:00.828] [BALANCE        ] [INFO ] INCOME: Paycheck (Biweekly) $6211.68 on 2026-06-03 → Balance: $6550.69
+[2026-06-02 00:57:00.828] [BALANCE        ] [INFO ] EXPENSE: HYUNDAI LEASE    ONLINE PMT $443.00 on 2026-06-04 → Balance: $6107.69
+[2026-06-02 00:57:00.828] [BALANCE        ] [INFO ] EXPENSE: AFFIRM.COM PAYME AFFIRM.COM $158.26 on 2026-06-10 → Balance: $5949.43
+[2026-06-02 00:57:00.829] [BALANCE        ] [INFO ] INCOME: Paycheck (Biweekly) $6211.68 on 2026-06-17 → Balance: $12161.11
+[2026-06-02 00:57:00.829] [BALANCE        ] [INFO ] EXPENSE: PENNYMAC         ONLINE PMT $1185.65 on 2026-06-21 → Balance: $10975.46
+[2026-06-02 00:57:00.829] [BALANCE        ] [INFO ] EXPENSE: SANTANDER CONSUM ONLINE PMT $513.00 on 2026-06-21 → Balance: $10462.46
+[2026-06-02 00:57:00.829] [BALANCE        ] [INFO ] EXPENSE: AMZ_STORECRD_PMT PAYMENT $500.00 on 2026-06-25 → Balance: $9962.46
+[2026-06-02 00:57:00.829] [BALANCE        ] [INFO ] EXPENSE: STATE FARM RO 27 SFPP $457.46 on 2026-06-28 → Balance: $9505.00
+[2026-06-02 00:57:00.829] [API            ] [INFO ] ✓ Total income: $12423.36, Total expenses: $3257.37, Projected balance: $9505.00
+[2026-06-02 00:57:00.829] [API            ] [INFO ] ← EXIT get_upcoming_payments() → items=8
+[2026-06-02 00:57:00.829] [API            ] [INFO ] Processing response headers for application/json
+127.0.0.1 - - [02/Jun/2026 00:57:00] "POST /api/upcoming-payments HTTP/1.1" 200 -
