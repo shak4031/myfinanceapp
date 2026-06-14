@@ -274,8 +274,14 @@
       }
       /* Dashboard payments — full-width cards */
       #dashboard-payments {
-        grid-template-columns: 1fr !important;
+        width: 100%;
+        overflow-x: auto;
       }
+      /* Override inline overflow:hidden on the dynamically-created table wrapper */
+      #dashboard-payments > div[style*="overflow: hidden"] {
+        overflow: auto !important;
+      }
+      #dashboard-payments table { min-width: 600px; }
       .metric-card { padding: 16px; }
       .metric-value { font-size: 20px; }
 
