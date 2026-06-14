@@ -302,15 +302,17 @@
       .metric-card { padding: 16px; }
       .metric-value { font-size: 20px; }
 
-      /* 3-panel categories → stacked on mobile */
+      /* 3-panel categories → 2-column on mobile: narrow groups + wide transactions */
       .panel-container {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 2fr;
         height: auto;
-        gap: 16px;
+        gap: 12px;
       }
-      .panel { overflow-y: visible; }
-      .panel-body { overflow-y: visible; max-height: none; }
-      /* No reordering — Groups (categories) stay on top where users can see them */
+      .panel {
+        overflow-y: visible;
+        max-height: 70vh;
+      }
+      .panel-body { overflow-y: auto; max-height: none; }
 
       /* Tables → scrollable */
       .panel table,
