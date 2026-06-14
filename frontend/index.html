@@ -144,7 +144,7 @@
       display: grid;
       grid-template-columns: 220px 1fr;
       gap: 24px;
-      height: 600px;
+      min-height: 0;
     }
 
     .panel {
@@ -302,19 +302,15 @@
       .metric-card { padding: 16px; }
       .metric-value { font-size: 20px; }
 
-      /* 3-panel categories → stacked */
+      /* 3-panel categories → stacked on mobile */
       .panel-container {
         grid-template-columns: 1fr;
         height: auto;
         gap: 16px;
       }
-      .panel {
-        max-height: 260px;
-        overflow-y: auto;
-      }
-      /* Reorder: Transactions (panel 2) on top, Groups (panel 1) below */
-      .panel-container > .panel:nth-child(2) { order: 0; }
-      .panel-container > .panel:nth-child(1) { order: 1; }
+      .panel { overflow-y: visible; }
+      .panel-body { overflow-y: visible; max-height: none; }
+      /* No reordering — Groups (categories) stay on top where users can see them */
 
       /* Tables → scrollable */
       .panel table,
