@@ -262,6 +262,7 @@
         padding-top: 60px;
         gap: 20px;
       }
+      .view.active { overflow-y: auto; flex: 1; min-height: 0; }
 
       .header { flex-wrap: wrap; gap: 12px; }
       .header h1 { font-size: 22px; }
@@ -284,7 +285,13 @@
         height: auto;
         gap: 16px;
       }
-      .panel { max-height: 400px; }
+      .panel {
+        max-height: 260px;
+        overflow-y: auto;
+      }
+      /* Reorder: Transactions (panel 2) on top, Groups (panel 1) below */
+      .panel-container > .panel:nth-child(2) { order: 0; }
+      .panel-container > .panel:nth-child(1) { order: 1; }
 
       /* Tables → scrollable */
       .panel table,
