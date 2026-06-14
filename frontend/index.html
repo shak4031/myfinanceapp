@@ -272,48 +272,32 @@
         grid-template-columns: 1fr 1fr;
         gap: 12px;
       }
-      /* Dashboard payments — full-width cards */
+      /* Dashboard payments — naturally scrollable on mobile */
       #dashboard-payments {
         width: 100%;
-        overflow-x: hidden;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }
-      /* Override inline overflow:hidden on the dynamically-created table wrapper */
-      #dashboard-payments > div[style*="overflow: hidden"] {
+      /* Override the inline overflow:hidden on the JS-generated wrapper */
+      #dashboard-payments .panel,
+      #dashboard-payments div[style*="overflow"] {
         overflow: visible !important;
       }
-      /* Compact payment table for mobile */
+      /* Compact payment table for mobile — let it scroll naturally */
       #dashboard-payments table {
-        width: 100%;
+        min-width: auto;
         font-size: 12px;
       }
       #dashboard-payments th,
       #dashboard-payments td {
-        padding: 8px !important;
-        white-space: normal;
-        word-break: break-word;
-      }
-      #dashboard-payments td:first-child {
-        width: 60px;
-        font-size: 11px;
-      }
-      #dashboard-payments td:nth-child(2) {
-        max-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        padding: 8px 10px !important;
+        white-space: nowrap;
       }
       #dashboard-payments td:nth-child(2) div:first-child {
         font-size: 12px !important;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
       #dashboard-payments td:nth-child(2) div:last-child {
         font-size: 10px !important;
-      }
-      #dashboard-payments td:nth-child(3),
-      #dashboard-payments td:nth-child(4) {
-        width: 80px;
-        font-size: 12px !important;
       }
       .metric-card { padding: 16px; }
       .metric-value { font-size: 20px; }
