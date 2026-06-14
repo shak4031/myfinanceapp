@@ -142,7 +142,7 @@
     /* 3-PANEL CATEGORIES LAYOUT */
     .panel-container {
       display: grid;
-      grid-template-columns: 280px 1.5fr 1fr;
+      grid-template-columns: 220px 1fr;
       gap: 24px;
       height: 600px;
     }
@@ -265,12 +265,7 @@
             </div>
           </div>
 
-          <!-- PANEL 3: SUGGESTIONS -->
-          <div class="panel">
-            <div class="panel-header">Suggestions</div>
-            <div class="panel-body" id="suggestion-list"></div>
           </div>
-        </div>
       </section>
 
       <!-- DEBT PAYOFF PLAN -->
@@ -728,8 +723,6 @@
           <div style="font-size: 11px; color: var(--text-secondary);">${count} transactions</div>
         </div>
       `).join('');
-
-      loadSuggestions();
     }
 
     function toggleFixedCategoryPrompt() {
@@ -789,29 +782,12 @@
       });
       const data = await res.json();
       
-      const panel3 = document.getElementById('suggestion-list');
-      panel3.innerHTML = `
-        <div style="padding: 16px; background: var(--bg-tertiary); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border);">
-          ${cat} - ${new Date(month).toLocaleDateString('en-US', {month: 'short', year: 'numeric'})}
-        </div>
-      ` + data.map(t => `
+      document.getElementById('txn-header').textContent = `${cat} - ${new Date(month).toLocaleDateString('en-US', {month: 'short', year: 'numeric'})}`;
+      document.getElementById('txn-list').innerHTML = data.map(t => `
         <div class="list-item" style="font-size: 12px;">
           <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
           <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${t.description}">${t.description}</div>
           <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
-        </div>
-      `).join('');
-    }
-
-    async function loadSuggestions() {
-      const res = await fetch('/api/categorizations/patterns', { method: 'POST' });
-      const data = await res.json();
-      document.getElementById('suggestion-list').innerHTML = data.patterns.map(p => `
-        <div class="list-item">
-          <div style="font-weight: 600; color: var(--primary);">"${p.keyword}"</div>
-          <div style="font-size: 12px; margin-bottom: 8px;">Used in ${p.count} items</div>
-          <button class="btn btn-secondary" style="background: var(--success); color: white; padding: 4px 8px; font-size: 11px;" 
-                  onclick="applyPattern('${p.keyword}', '${p.suggestedCategory}')">Set to ${p.suggestedCategory}</button>
         </div>
       `).join('');
     }
