@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
+import { normalizeDescription, dedupWhereClause } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
@@ -326,6 +327,102 @@ router.post('/insert-manual', async (req, res) => {
     );
     res.json({ success: true, message: 'Manual transaction inserted successfully' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/transactions/dedup
+ * 
+ * Deduplicate the entire transactions table by normalizing descriptions
+ * (collapsing whitespace) and removing duplicate transactions.
+ * 
+ * Strategy per group (date, normalized desc, amount, direction):
+ *   1. Keep the row with the longest description (most complete data)
+ *   2. Keep the row with the most recent created_at (if descriptions same length)
+ *   3. Delete extras
+ * 
+ * Safe for repeat runs — idempotent.
+ */
+router.post('/dedup', async (req, res) => {
+  try {
+    log('DEDUP', '🔍 Starting full database deduplication...');
+
+    // Find duplicates using normalized descriptions
+    const duplicates = await db.all(`
+      WITH normalized AS (
+        SELECT 
+          id, date, 
+          regexp_replace(description, '\\s+', ' ', 'g') AS norm_desc,
+          description,
+          amount, direction,
+          created_at
+        FROM transactions
+        WHERE user_id = 1
+      ),
+      ranked AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY date, norm_desc, amount, direction
+            ORDER BY LENGTH(description) DESC, created_at DESC NULLS LAST
+          ) AS rn
+        FROM normalized
+      )
+      SELECT id, date, description, norm_desc, amount, direction, rn
+      FROM ranked
+      WHERE rn > 1
+      ORDER BY date, norm_desc
+    `);
+
+    if (duplicates.length === 0) {
+      log('DEDUP', '✅ No duplicates found — database is clean');
+      return res.json({ success: true, removed: 0, message: 'No duplicates found' });
+    }
+
+    const dupIds = duplicates.map(d => d.id);
+    log('DEDUP', `📊 Found ${duplicates.length} duplicate rows to remove`);
+
+    // Log sample duplicates for audit
+    const sampleGroups = {};
+    for (const d of duplicates) {
+      const key = `${d.date}|${d.norm_desc}|${d.amount}|${d.direction}`;
+      if (!sampleGroups[key]) sampleGroups[key] = [];
+      sampleGroups[key].push(d);
+    }
+    const groupEntries = Object.entries(sampleGroups);
+    log('DEDUP', `📋 ${groupEntries.length} unique duplicate groups detected`);
+    for (const [key, rows] of groupEntries.slice(0, 5)) {
+      const [date, desc, amt, dir] = key.split('|');
+      log('DEDUP', `  Group: ${date} | $${amt} ${dir} | "${desc.substring(0, 40)}" → ${rows.length + 1} total (keeping 1, removing ${rows.length})`);
+    }
+
+    // Delete duplicates in batches (Postgres has limits on IN clause size)
+    const BATCH_SIZE = 100;
+    let totalRemoved = 0;
+    for (let i = 0; i < dupIds.length; i += BATCH_SIZE) {
+      const batch = dupIds.slice(i, i + BATCH_SIZE);
+      const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(',');
+      const result = await db.run(
+        `DELETE FROM transactions WHERE id IN (${placeholders})`,
+        batch
+      );
+      totalRemoved += batch.length;
+    }
+
+    log('DEDUP', `✅ Dedup complete: ${totalRemoved} duplicate rows removed`);
+
+    // Return audit trail
+    res.json({
+      success: true,
+      removed: totalRemoved,
+      groups: groupEntries.length,
+      sampleGroups: groupEntries.slice(0, 10).map(([key, rows]) => {
+        const [date, desc, amt, dir] = key.split('|');
+        return { date, description: desc, amount: parseFloat(amt), direction: dir, removed: rows.length };
+      })
+    });
+  } catch (err) {
+    log('DEDUP', `❌ Dedup failed: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });

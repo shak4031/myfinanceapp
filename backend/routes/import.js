@@ -3,6 +3,7 @@ import { log } from '../utils/logger.js';
 import Database from '../db.js';
 import { TransactionCSVParser, categorizeTransaction } from '../utils/transaction-parser.js';
 import PDFParser from '../utils/pdfParser.js';
+import { normalizeDescription, dedupWhereClause } from '../utils/normalize.js';
 
 const router = express.Router();
 const db = new Database();
@@ -64,10 +65,13 @@ router.post('/import-csv', async (req, res) => {
     let duplicates = 0;
 
     for (const t of validTransactions) {
-      // Check for existing duplicate in DB
+      // NORMALIZED DEDUP: Compare by normalized description to catch whitespace variants
+      const normalized = normalizeDescription(t.description);
       const exist = await db.get(
-        "SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4",
-        [t.date, t.description, t.amount, t.direction]
+        `SELECT id FROM transactions 
+         WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+         AND amount = $3 AND direction = $4`,
+        [t.date, normalized, t.amount, t.direction]
       );
 
       if (exist) {
@@ -153,10 +157,13 @@ router.post('/import-pdf', async (req, res) => {
       // Categorize based on description
       const category = categorizeTransaction(t.description, t.direction);
 
-      // Check for existing duplicate
+      // NORMALIZED DEDUP: Compare by normalized description to catch whitespace variants
+      const normalized = normalizeDescription(t.description);
       const exist = await db.get(
-        "SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4",
-        [t.date, t.description, t.amount, t.direction]
+        `SELECT id FROM transactions 
+         WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+         AND amount = $3 AND direction = $4`,
+        [t.date, normalized, t.amount, t.direction.toUpperCase()]
       );
 
       if (exist) {
@@ -221,9 +228,13 @@ router.post('/import-batch', async (req, res) => {
         let imported = 0, duplicates = 0;
         for (const t of parsed.transactions) {
           if (isExcluded(t.description)) continue;
+          // NORMALIZED DEDUP
+          const normalized = normalizeDescription(t.description);
           const exist = await db.get(
-            "SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4",
-            [t.date, t.description, t.amount, t.direction]
+            `SELECT id FROM transactions 
+             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             AND amount = $3 AND direction = $4`,
+            [t.date, normalized, t.amount, t.direction]
           );
           if (exist) { duplicates++; continue; }
 
@@ -259,9 +270,13 @@ router.post('/import-batch', async (req, res) => {
         let imported = 0, duplicates = 0;
         for (const t of transactions) {
           if (isExcluded(t.description)) continue;
+          // NORMALIZED DEDUP
+          const normalized = normalizeDescription(t.description);
           const exist = await db.get(
-            "SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3 AND direction = $4",
-            [t.date, t.description, t.amount, t.direction]
+            `SELECT id FROM transactions 
+             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             AND amount = $3 AND direction = $4`,
+            [t.date, normalized, t.amount, t.direction.toUpperCase()]
           );
           if (exist) { duplicates++; continue; }
 

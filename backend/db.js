@@ -393,10 +393,13 @@ export default class Database {
 
       for (const txn of transactions) {
         try {
-          // Check for duplicate
+          // NORMALIZED DEDUP: Compare by normalized description to catch whitespace variants
+          const normalized = txn.description ? txn.description.replace(/\s+/g, ' ').trim().toUpperCase() : '';
           const existing = await this.pool.query(
-            'SELECT id FROM transactions WHERE date = $1 AND description = $2 AND amount = $3',
-            [txn.date, txn.description, txn.amount]
+            `SELECT id FROM transactions 
+             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             AND amount = $3`,
+            [txn.date, normalized, txn.amount]
           );
 
           if (existing.rows.length > 0) {
