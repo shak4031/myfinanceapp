@@ -66,7 +66,7 @@ export function fingerprintTransaction(txn) {
 export function dedupWhereClause(txn) {
   const normalized = normalizeDescription(txn.description || '');
   return {
-    clause: `date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 AND amount = $3 AND direction = $4`,
+    clause: `date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 AND amount = $3 AND direction = $4`,
     params: [txn.date, normalized, txn.amount, (txn.direction || '').toUpperCase()]
   };
 }
@@ -81,7 +81,7 @@ export const FINGERPRINT_SQL = `
   CREATE OR REPLACE FUNCTION txn_fingerprint(p_date TEXT, p_desc TEXT, p_amount REAL, p_direction TEXT)
   RETURNS TEXT AS $$
   BEGIN
-    RETURN p_date || '|' || regexp_replace(upper(trim(p_desc)), '\\s+', ' ', 'g') || '|' || p_amount::TEXT || '|' || upper(trim(p_direction));
+    RETURN p_date || '|' || regexp_replace(upper(trim(p_desc)), '[[:space:]]+', ' ', 'g') || '|' || p_amount::TEXT || '|' || upper(trim(p_direction));
   END;
   $$ LANGUAGE plpgsql IMMUTABLE;
 `;

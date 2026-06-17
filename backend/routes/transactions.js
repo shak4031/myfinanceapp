@@ -353,7 +353,7 @@ router.post('/dedup', async (req, res) => {
       WITH normalized AS (
               SELECT 
                 id, date, 
-                regexp_replace(description, '\s+', ' ', 'g') AS norm_desc,
+                regexp_replace(description, '[[:space:]]+', ' ', 'g') AS norm_desc,
                 description,
                 amount, direction
               FROM transactions

@@ -69,7 +69,7 @@ router.post('/import-csv', async (req, res) => {
       const normalized = normalizeDescription(t.description);
       const exist = await db.get(
         `SELECT id FROM transactions 
-         WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+         WHERE date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 
          AND amount = $3 AND direction = $4`,
         [t.date, normalized, t.amount, t.direction]
       );
@@ -161,7 +161,7 @@ router.post('/import-pdf', async (req, res) => {
       const normalized = normalizeDescription(t.description);
       const exist = await db.get(
         `SELECT id FROM transactions 
-         WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+         WHERE date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 
          AND amount = $3 AND direction = $4`,
         [t.date, normalized, t.amount, t.direction.toUpperCase()]
       );
@@ -232,7 +232,7 @@ router.post('/import-batch', async (req, res) => {
           const normalized = normalizeDescription(t.description);
           const exist = await db.get(
             `SELECT id FROM transactions 
-             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             WHERE date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 
              AND amount = $3 AND direction = $4`,
             [t.date, normalized, t.amount, t.direction]
           );
@@ -274,7 +274,7 @@ router.post('/import-batch', async (req, res) => {
           const normalized = normalizeDescription(t.description);
           const exist = await db.get(
             `SELECT id FROM transactions 
-             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             WHERE date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 
              AND amount = $3 AND direction = $4`,
             [t.date, normalized, t.amount, t.direction.toUpperCase()]
           );

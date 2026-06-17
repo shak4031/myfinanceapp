@@ -397,7 +397,7 @@ export default class Database {
           const normalized = txn.description ? txn.description.replace(/\s+/g, ' ').trim().toUpperCase() : '';
           const existing = await this.pool.query(
             `SELECT id FROM transactions 
-             WHERE date = $1 AND regexp_replace(description, '\\s+', ' ', 'g') = $2 
+             WHERE date = $1 AND regexp_replace(description, '[[:space:]]+', ' ', 'g') = $2 
              AND amount = $3`,
             [txn.date, normalized, txn.amount]
           );
