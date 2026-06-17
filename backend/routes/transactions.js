@@ -351,23 +351,22 @@ router.post('/dedup', async (req, res) => {
     // Find duplicates using normalized descriptions
     const duplicates = await db.all(`
       WITH normalized AS (
-        SELECT 
-          id, date, 
-          regexp_replace(description, '\\s+', ' ', 'g') AS norm_desc,
-          description,
-          amount, direction,
-          created_at
-        FROM transactions
-        WHERE user_id = 1
-      ),
-      ranked AS (
-        SELECT *,
-          ROW_NUMBER() OVER (
-            PARTITION BY date, norm_desc, amount, direction
-            ORDER BY LENGTH(description) DESC, created_at DESC NULLS LAST
-          ) AS rn
-        FROM normalized
-      )
+              SELECT 
+                id, date, 
+                regexp_replace(description, '\s+', ' ', 'g') AS norm_desc,
+                description,
+                amount, direction
+              FROM transactions
+              WHERE user_id = 1
+            ),
+            ranked AS (
+              SELECT *,
+                ROW_NUMBER() OVER (
+                  PARTITION BY date, norm_desc, amount, direction
+                  ORDER BY LENGTH(description) DESC, id DESC
+                ) AS rn
+              FROM normalized
+            )
       SELECT id, date, description, norm_desc, amount, direction, rn
       FROM ranked
       WHERE rn > 1
