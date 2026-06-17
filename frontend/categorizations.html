@@ -81,7 +81,7 @@
 
         .main-layout {
             display: grid;
-            grid-template-columns: 1fr 1.5fr 1fr;
+            grid-template-columns: 0.75fr 2fr;
             gap: 20px;
             min-height: 500px;
         }
@@ -258,14 +258,6 @@
                     <div class="loading">Loading...</div>
                 </div>
             </div>
-
-            <!-- RIGHT PANEL: SMART PATTERNS -->
-            <div class="panel">
-                <div class="panel-header">Smart Suggestions</div>
-                <div class="scrollable" id="pattern-list">
-                    <div class="loading">Loading...</div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -276,7 +268,6 @@
         async function init() {
             await loadSummaries();
             await loadTransactions();
-            await loadPatterns();
         }
 
         async function loadSummaries() {
@@ -401,18 +392,7 @@
         }
 
         async function applyPattern(keyword, category) {
-            try {
-                const res = await fetch('/api/categorizations/learn-pattern', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ keyword, suggestedCategory: category })
-                });
-                const data = await res.json();
-                showToast(`Applied to ${data.updated} items!`);
-                await init();
-            } catch (err) {
-                showToast('Action failed', true);
-            }
+            showToast('Suggestions have been removed.');
         }
 
         function showToast(msg, isError = false) {
