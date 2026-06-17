@@ -204,4 +204,4 @@ router.get('/suggestions', async (req, res) => {
 // router.post('/category-summary', async (req, res) => { ... });
 // router.post('/by-category', async (req, res) => { ... });
 
-module.exports = router;
+export default router;
