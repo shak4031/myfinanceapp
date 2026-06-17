@@ -1,207 +1,305 @@
-const router = require('express').Router();
+import { Router } from 'express';
+import Database from '../db.js';
+import { log } from '../utils/logger.js';
 
-// Placeholder for database access, assuming db.js or similar module exists
-// async function getRecentTransactions(limit = 500) { ... } // Assume this is defined and fetches data
+const router = Router();
+const db = new Database();
 
-// --- Mock Data & Helper Functions ---
-const MOCK_TRANSACTIONS = [
-    { id: 1, date: '2024-06-01', description: 'STARBUCKS COFFEE', amount: -5.50, currentCategory: 'Dining', previousCategory: null },
-    { id: 2, date: '2024-06-01', description: 'AMAZON.COM* AB123', amount: -25.99, currentCategory: 'Shopping', previousCategory: null },
-    { id: 3, date: '2024-06-01', description: 'NETFLIX.COM 8889', amount: -15.99, currentCategory: 'Entertainment', previousCategory: null }, // Potential Subscription
-    { id: 4, date: '2024-06-02', description: 'STRIPE* WHOLE FOODS', amount: -55.20, currentCategory: 'Groceries', previousCategory: null },
-    { id: 5, date: '2024-06-02', description: 'KLARNA* ORDER XYZ', amount: -30.00, currentCategory: 'Shopping', previousCategory: null }, // BNPL
-    { id: 6, date: '2024-06-03', description: 'T-MOBILE 555-1234', amount: -70.00, currentCategory: 'Utilities', previousCategory: null }, // Potential Subscription
-    { id: 7, date: '2024-06-03', description: 'ONLINE TRANSFER FROM CHASE', amount: 500.00, currentCategory: 'Transfer', previousCategory: null }, // Internal Transfer
-    { id: 8, date: '2024-06-04', description: 'AMAZON.COM* CD456', amount: -12.50, currentCategory: 'Shopping', previousCategory: null },
-    { id: 9, date: '2024-06-04', description: 'STARBUCKS COFFEE', amount: -4.80, currentCategory: 'Groceries', previousCategory: null }, // Inconsistent category for Starbucks
-    { id: 10, date: '2024-06-04', description: 'KLARNA* PURCHASE UVW', amount: -45.00, currentCategory: 'Shopping', previousCategory: null }, // BNPL
-    { id: 11, date: '2024-06-05', description: 'T-MOBILE 555-1234', amount: -70.00, currentCategory: 'Subscriptions', previousCategory: null }, // Consistent but recurring
-    { id: 12, date: '2024-06-05', description: 'XFER TO SAVINGS', amount: -200.00, currentCategory: 'Transfer', previousCategory: null }, // Internal Transfer
-    { id: 13, date: '2024-06-05', description: 'SPOTIFY USA GHIJK', amount: -9.99, currentCategory: 'Entertainment', previousCategory: null }, // Potential Subscription
-    { id: 14, date: '2024-06-05', description: 'PAYPAL *KLARNA XYZ', amount: -60.00, currentCategory: 'Shopping', previousCategory: null }, // BNPL
-    { id: 15, date: '2024-06-06', description: 'AMAZON DIGITAL SERVICES', amount: -1.99, currentCategory: 'Entertainment', previousCategory: null }, // Potential Subscription
-    { id: 16, date: '2024-06-06', description: 'KLARNA* ITEM DEF', amount: -15.00, currentCategory: 'Shopping', previousCategory: null }, // BNPL
-    { id: 17, date: '2024-06-06', description: 'STARBUCKS LOCATION 2', amount: -5.00, currentCategory: 'Dining', previousCategory: null },
-    { id: 18, date: '2024-06-06', description: 'TRANSFER TO savings', amount: -100.00, currentCategory: 'Transfer', previousCategory: null }, // Transfer
-    { id: 19, date: '2024-06-07', description: 'AMAZON.COM* GH789', amount: -8.99, currentCategory: 'Shopping', previousCategory: null },
-    { id: 20, date: '2024-06-07', description: 'NETFLIX.COM 9999', amount: -15.99, currentCategory: 'Subscriptions', previousCategory: null }, // Consistent Subscription
-];
+// Helper: Get date range based on filter
+function getDateRange(filter) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let startDate, endDate = new Date(today);
+  endDate.setHours(23, 59, 59, 999);
 
-// Fetches recent transactions (replace with actual DB call if not using mock)
-async function getRecentTransactions(limit = 500) {
-    console.log(`[Categorizations] Simulating fetching ${limit} recent transactions.`);
-    // In a real app: return await db.query('SELECT * FROM transactions ORDER BY date DESC LIMIT ?', [limit]);
-    return MOCK_TRANSACTIONS.slice(-limit); // Return the most recent 'limit' transactions
+  if (filter === 'current') {
+    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+  } else if (filter === 'last') {
+    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    endDate = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+  } else if (filter === 'ytd') {
+    startDate = new Date(today.getFullYear(), 0, 1);
+    endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  } else if (filter === 'all') {
+    startDate = new Date('2000-01-01');
+    endDate = new Date('2099-12-31');
+  } else {
+    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+  }
+
+  return {
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0]
+  };
 }
 
-// --- Suggestion Logic ---
-function generateSuggestions() {
-    const transactions = getRecentTransactions();
-    const suggestions = [];
-    
-    const keywordCategoryMap = {}; 
-    const descriptionRecurrenceMap = {}; 
-    const recurringPaymentThreshold = 2; 
+// POST /api/categorizations/list - Get all transactions with current category
+router.post('/list', async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, dateFilter = 'all' } = req.query;
+    const { startDate, endDate } = getDateRange(dateFilter);
 
-    const bnplKeywords = ['KLARNA', 'AFTERPAY', 'AFFIRM', 'PAYPAL *KLARNA'];
-    const transferKeywords = ['TRANSFER', 'XFER', 'PAYMENT FROM', 'PAYMENT TO', 'ONLINE TRANSFER'];
+    log('CATEGORIZATIONS', `Fetching transactions: limit=${limit}, offset=${offset}, dateFilter=${dateFilter}`);
 
-    // --- Analysis Pass ---
-    transactions.forEach(tx => {
-        const description = tx.description.toUpperCase();
-        const category = tx.currentCategory;
-        
-        // --- 1. Categorization Inconsistency / Keyword Analysis ---
-        const commonWords = new Set(['THE', 'AND', 'OF', 'IN', 'FOR', 'ON', 'WITH', 'A', 'AN', 'TO', 'FROM', 'BY', 'IS', 'IT', 'AM', 'ARE', 'WAS', 'WERE', 'BE', 'BEEN', 'THIS', 'THAT', 'YOU', 'YOUR', 'HAS', 'HAVE', 'DO', 'USE', 'USED', 'AT', 'ALSO', 'MORE', 'THAN', 'LIKE', 'NEW']);
-        const descriptiveWords = description.split(/[\s*.-]+/);
-        
-        descriptiveWords.forEach(word => {
-            if (word.length > 3 && isNaN(word) && !commonWords.has(word) && !transferKeywords.some(tk => description.includes(tk)) && !bnplKeywords.some(bk => description.includes(bk))) {
-                if (!keywordCategoryMap[word]) {
-                    keywordCategoryMap[word] = new Set();
-                }
-                if (category && category !== 'Transfer' && category !== 'Uncategorized') { 
-                    keywordCategoryMap[word].add(category);
-                }
-            }
-        });
+    const query = `
+      SELECT 
+        id, date, description, amount, category as currentCategory, previous_category as previousCategory
+      FROM transactions 
+      WHERE user_id = $1 AND date >= $2 AND date <= $3
+      ORDER BY date DESC
+      LIMIT $4 OFFSET $5
+    `;
 
-        // --- 2. Recurrence / Subscription Identification ---
-        let normalizedDescription = description;
-        if (normalizedDescription.startsWith('STRIPE* ') || normalizedDescription.startsWith('PAYPAL* ') || normalizedDescription.startsWith('AMAZON.COM* ')) {
-             normalizedDescription = normalizedDescription.substring(normalizedDescription.indexOf('*') + 1).trim();
-        }
-        if (normalizedDescription.endsWith(' USA')) {
-            normalizedDescription = normalizedDescription.slice(0, -4).trim();
-        }
-        normalizedDescription = normalizedDescription.replace(/\d{5,}-?\d{3,}-?\d{3,}/g, '###NUMBER###'); 
-        normalizedDescription = normalizedDescription.replace(/[0-9a-fA-F]{5,}/g, '###CODE###'); 
+    const transactions = await db.all(query, [1, startDate, endDate, parseInt(limit), parseInt(offset)]);
 
-        if (!descriptionRecurrenceMap[normalizedDescription]) {
-            descriptionRecurrenceMap[normalizedDescription] = { count: 0, firstTxn: null, sampleCategories: new Set() };
-        }
-        descriptionRecurrenceMap[normalizedDescription].count++;
-        if (!descriptionRecurrenceMap[normalizedDescription].firstTxn) {
-            descriptionRecurrenceMap[normalizedDescription].firstTxn = tx;
-        }
-        if (category && category !== 'Transfer' && category !== 'Uncategorized') {
-            descriptionRecurrenceMap[normalizedDescription].sampleCategories.add(category);
-        }
+    // Get counts
+    const countsQuery = `
+      SELECT 
+        COALESCE(SUM(CASE WHEN category IS NULL OR category = '' THEN 1 ELSE 0 END), 0) as uncategorized,
+        COALESCE(SUM(CASE WHEN category IS NOT NULL AND category != '' THEN 1 ELSE 0 END), 0) as categorized,
+        COALESCE(SUM(CASE WHEN category_corrected = TRUE THEN 1 ELSE 0 END), 0) as recentlyCorrected
+      FROM transactions 
+      WHERE user_id = $1
+    `;
+
+    const counts = await db.get(countsQuery, [1]);
+
+    log('CATEGORIZATIONS', `Fetched ${transactions.length} transactions with counts:`, counts);
+
+    res.json({
+      transactions,
+      counts: {
+        uncategorized: parseInt(counts.uncategorized),
+        categorized: parseInt(counts.categorized),
+        recentlyCorrected: parseInt(counts.recentlyCorrected)
+      }
     });
-
-    // --- Suggestion Generation ---
-
-    // Suggestion Type A: Categorization Inconsistency
-    const inconsistencyThreshold = 2; 
-    for (const word in keywordCategoryMap) {
-        if (keywordCategoryMap[word].size > inconsistencyThreshold) {
-            suggestions.push({
-                type: 'categorization_inconsistency',
-                keyword: word,
-                detail: `The keyword "${word}" appears in multiple categories: ${Array.from(keywordCategoryMap[word]).join(', ')}. Consider standardizing to one primary category for better tracking.`,
-                detail_short: `"${word}" is in ${Array.from(keywordCategoryMap[word]).length} categories. Standardize?`,
-                action: 'Standardize Category',
-                categories: Array.from(keywordCategoryMap[word])
-            });
-        }
-    }
-
-    // Suggestion Type B: Potential Subscriptions / Recurring Payments
-    for (const description in descriptionRecurrenceMap) {
-        const data = descriptionRecurrenceMap[description];
-        const isAlreadyFlaggedAsTransferOrBNPL = transferKeywords.some(tk => description.toUpperCase().includes(tk)) || bnplKeywords.some(bk => description.toUpperCase().includes(bk));
-
-        if (data.count >= recurringPaymentThreshold && !isAlreadyFlaggedAsTransferOrBNPL) {
-            const categoriesString = Array.from(data.sampleCategories).join(', ') || 'Uncategorized';
-            
-            let suggestedCategory = 'Review';
-            if (data.sampleCategories.size === 1) {
-                suggestedCategory = Array.from(data.sampleCategories)[0];
-            }
-
-            suggestions.push({
-                type: 'potential_subscription',
-                keyword: description, 
-                detail: `Recurring transaction "${description}" detected ${data.count} times. It's currently categorized as: ${categoriesString}. Review to ensure it's still needed.`,
-                detail_short: `"${description}" recurs ${data.count} times. Currently: ${categoriesString}. Review?`,
-                action: 'Review Recurrence',
-                suggestedCategory: suggestedCategory,
-                recurrenceCount: data.count
-            });
-        }
-    }
-
-    // Suggestion Type C: BNPL Alerts
-    transactions.forEach(tx => {
-        const descriptionUpper = tx.description.toUpperCase();
-        bnplKeywords.forEach(bnplKeyword => {
-            if (descriptionUpper.includes(bnplKeyword)) {
-                suggestions.push({
-                    type: 'bnpl_alert',
-                    keyword: bnplKeyword, 
-                    detail: `BNPL payment detected for transaction: "${tx.description}". Ensure this installment fits your upcoming budget.`,
-                    detail_short: `BNPL payment (${bnplKeyword}). Check budget.`,
-                    transactionId: tx.id, 
-                    action: 'Check Budget'
-                });
-            }
-        });
-    });
-
-    // Suggestion Type D: Transfer Awareness
-    const transferTxsFound = transactions.filter(tx =>
-        transferKeywords.some(tk => tx.description.toUpperCase().includes(tk))
-    );
-    if (transferTxsFound.length > 0) {
-        suggestions.push({
-            type: 'transfer_awareness',
-            keyword: 'Internal Transfers',
-            detail: `Found ${transferTxsFound.length} transactions that appear to be internal transfers. Ensure these align with your savings goals and overall cash flow plan.`,
-            detail_short: `${transferTxsFound.length} transfers found. Align with goals?`,
-            action: 'Review Transfers'
-        });
-    }
-
-    // --- Deduplicate & Refine ---
-    const uniqueSuggestions = [];
-    const seen = new Set();
-    suggestions.forEach(s => {
-        const key = `${s.type}_${s.keyword}`;
-        if (s.type === 'bnpl_alert') {
-            uniqueSuggestions.push(s); 
-        } else if (!seen.has(key)) {
-            uniqueSuggestions.push(s);
-            seen.add(key);
-        }
-    });
-
-    uniqueSuggestions.sort((a, b) => {
-        const priority = { 'bnpl_alert': 1, 'transfer_awareness': 2, 'potential_subscription': 3, 'categorization_inconsistency': 4 };
-        return (priority[a.type] || 99) - (priority[b.type] || 99);
-    });
-
-    return uniqueSuggestions;
-}
-
-
-// --- API Endpoint ---
-router.get('/suggestions', async (req, res) => {
-    try {
-        const suggestions = generateSuggestions();
-        res.json(suggestions);
-    } catch (error) {
-        console.error("[Categorizations API] Error generating suggestions:", error);
-        res.status(500).json({ message: "Failed to generate suggestions", error: error.message });
-    }
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// --- Existing Routes (Example placeholders) ---
-// Add your other routes here. Example:
-// router.post('/list', async (req, res) => { ... });
-// router.post('/update-batch', async (req, res) => { ... });
-// router.post('/patterns', async (req, res) => { ... });
-// router.post('/learn-pattern', async (req, res) => { ... });
-// router.post('/category-summary', async (req, res) => { ... });
-// router.post('/by-category', async (req, res) => { ... });
+// POST /api/categorizations/update-batch - Bulk update categories
+router.post('/update-batch', async (req, res) => {
+  try {
+    const { updates } = req.body;
+
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: 'updates must be an array' });
+    }
+
+    log('CATEGORIZATIONS', `Batch updating ${updates.length} transactions`);
+
+    let successCount = 0;
+    const errors = [];
+
+    for (const { id, newCategory } of updates) {
+      try {
+        // Get current category for previous_category tracking
+        const current = await db.get(
+          'SELECT category FROM transactions WHERE id = $1',
+          [id]
+        );
+
+        if (!current) {
+          errors.push({ id, error: 'Transaction not found' });
+          continue;
+        }
+
+        // Update with correction tracking
+        await db.run(
+          `UPDATE transactions 
+           SET category = $1, 
+               category_corrected = TRUE, 
+               previous_category = $2,
+               correction_timestamp = NOW()
+           WHERE id = $3`,
+          [newCategory, current.category, id]
+        );
+
+        successCount++;
+      } catch (err) {
+        errors.push({ id, error: err.message });
+      }
+    }
+
+    log('CATEGORIZATIONS', `Batch update complete: ${successCount} updated, ${errors.length} errors`);
+
+    res.json({
+      success: true,
+      updated: successCount,
+      errors
+    });
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/categorizations/patterns - Get keyword patterns
+router.post('/patterns', async (req, res) => {
+  try {
+    log('CATEGORIZATIONS', 'Fetching keyword patterns');
+
+    // Extract keywords from transactions and find patterns
+    const query = `
+      SELECT 
+        description, category, COUNT(*) as count
+      FROM transactions 
+      WHERE user_id = $1 AND description IS NOT NULL
+      GROUP BY description, category
+      ORDER BY count DESC
+      LIMIT 50
+    `;
+
+    const results = await db.all(query, [1]);
+
+    // Group by keywords and aggregate categories
+    const patterns = {};
+
+    for (const row of results) {
+      const keywords = row.description.split(/[\s\-_(),\.]/i)
+        .filter(w => w.length > 3)
+        .map(w => w.toUpperCase());
+
+      for (const keyword of keywords) {
+        if (!patterns[keyword]) {
+          patterns[keyword] = {
+            keyword,
+            count: 0,
+            currentCategories: {},
+            suggestedCategory: null
+          };
+        }
+
+        patterns[keyword].count += row.count;
+
+        if (row.category) {
+          patterns[keyword].currentCategories[row.category] =
+            (patterns[keyword].currentCategories[row.category] || 0) + row.count;
+        }
+      }
+    }
+
+    // Find suggested category (most common for each keyword)
+    const patternArray = Object.values(patterns)
+      .filter(p => p.count >= 3) // Only patterns with 3+ transactions
+      .map(p => ({
+        ...p,
+        suggestedCategory: Object.keys(p.currentCategories).length > 0
+          ? Object.entries(p.currentCategories).sort(([, a], [, b]) => b - a)[0][0]
+          : 'Uncategorized'
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    log('CATEGORIZATIONS', `Found ${patternArray.length} patterns`);
+
+    res.json({ patterns: patternArray });
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/categorizations/learn-pattern - Save pattern learning
+router.post('/learn-pattern', async (req, res) => {
+  try {
+    const { keyword, suggestedCategory } = req.body;
+
+    if (!keyword || !suggestedCategory) {
+      return res.status(400).json({ error: 'keyword and suggestedCategory required' });
+    }
+
+    log('CATEGORIZATIONS', `Learning pattern: "${keyword}" -> "${suggestedCategory}"`);
+
+    // Find all transactions matching keyword and update them
+    const query = `
+      UPDATE transactions 
+      SET 
+        category = $1,
+        category_corrected = TRUE,
+        previous_category = category,
+        correction_timestamp = NOW()
+      WHERE user_id = $2 
+        AND UPPER(description) LIKE $3
+        AND category != $1
+      RETURNING id
+    `;
+
+    const pattern = `%${keyword}%`;
+    const result = await db.pool.query(query, [suggestedCategory, 1, pattern]);
+    const updated = result.rowCount || 0;
+
+    log('CATEGORIZATIONS', `Pattern learning complete: ${updated} transactions updated`);
+
+    res.json({
+      success: true,
+      updated,
+      message: `Applied pattern to ${updated} transactions`
+    });
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/categorizations/category-summary - Get counts by category
+router.post('/category-summary', async (req, res) => {
+  try {
+    log('CATEGORIZATIONS', 'Fetching category summary');
+
+    const query = `
+      SELECT 
+        COALESCE(category, 'Uncategorized') as category,
+        COUNT(*) as count
+      FROM transactions 
+      WHERE user_id = $1
+      GROUP BY category
+      ORDER BY count DESC
+    `;
+
+    const categories = await db.all(query, [1]);
+
+    log('CATEGORIZATIONS', `Category summary: ${categories.length} categories`);
+
+    res.json({ categories });
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/categorizations/by-category - Get transactions for specific category
+router.post('/by-category', async (req, res) => {
+  try {
+    const { category, limit = 100, offset = 0 } = req.body;
+
+    log('CATEGORIZATIONS', `Fetching transactions for category: ${category}`);
+
+    const query = `
+      SELECT 
+        id, date, description, amount, category as currentCategory, previous_category as previousCategory
+      FROM transactions 
+      WHERE user_id = $1 
+        AND (category = $2 OR ($2 = 'Uncategorized' AND (category IS NULL OR category = '')))
+      ORDER BY date DESC
+      LIMIT $3 OFFSET $4
+    `;
+
+    const transactions = await db.all(query, [1, category, parseInt(limit), parseInt(offset)]);
+
+    log('CATEGORIZATIONS', `Fetched ${transactions.length} transactions for category`);
+
+    res.json({ transactions });
+  } catch (err) {
+    log('CATEGORIZATIONS', `Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;
