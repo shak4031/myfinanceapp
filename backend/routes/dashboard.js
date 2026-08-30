@@ -267,6 +267,7 @@ function categorizeSubscription(description) {
   // 2. UTILITIES
   if (/pseg|electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
   if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
+  if (/chargepoint|tesla\s?(supercharger|charging)|supercharger|blink|ev\s?charging|plugshare|electric\s?vehicle\s?charging/i.test(desc)) return { type: 'ev_charging', name: 'EV Charging', isFixed: false };
   
   // 3. INSURANCE
   if (/insurance|homeowners|renters|life.*ins|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };

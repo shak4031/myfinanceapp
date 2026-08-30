@@ -141,7 +141,7 @@ router.post('/cleanup-database', async (req, res) => {
     const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
     if (categoryCheck.rows[0].count === '0') {
       const categories = [
-        ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['Gas', '⛽', '#e74c3c'],
+        ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['EV Charging', '🔌', '#00bcd4'], ['Gas', '⛽', '#e74c3c'],
         ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
         ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
         ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
@@ -166,6 +166,7 @@ router.post('/cleanup-database', async (req, res) => {
       { pattern: 'pseg|utility|electricity|water|gas', category: 'Utilities', fixed: true },
       { pattern: 'verizon|comcast|xfinity|fios|t-mobile|internet', category: 'Internet', fixed: true },
       { pattern: 'state farm|insurance|geico|allstate', category: 'Insurance', fixed: true },
+      { pattern: 'chargepoint|tesla|supercharger|blink|ev charging|plugshare|electric vehicle charging', category: 'EV Charging', fixed: false },
       
       // LIFESTYLE (Not Fixed)
       { pattern: 'paypal|target|klarna|amazon|walmart|etsy|michael|shopping', category: 'Shopping', fixed: false },

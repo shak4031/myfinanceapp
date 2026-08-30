@@ -17,6 +17,10 @@ const CATEGORY_PATTERNS = {
     /electric/i, /water\s?(and\s?)?sewer/i, /gas\s?(and\s)?electric/i,
     /verizon/i, /comcast/i, /internet/i, /phone\s?service/i
   ],
+  'EV Charging': [
+    /chargepoint/i, /tesla\s?(supercharger|charging)/i, /ev\s?charging/i,
+    /blink\s?charging/i, /plugshare/i, /electric\s?vehicle\s?charging/i
+  ],
   'Gas': [
     /shell|chevron|exxon|bp|mobil|citgo|sunoco/i, /gas\s?station/i, /fuel/i
   ],

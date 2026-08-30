@@ -103,6 +103,7 @@ router.get('/transactions', (req, res) => {
                     'Gifts & Charity',
                     'Travel',
                     'Auto & Fuel',
+                    'EV Charging',
                     'Utilities',
                     'Insurance',
                     'Other'
@@ -192,7 +193,7 @@ router.post('/transaction/:txn_id/modify', (req, res) => {
       'Groceries', 'Dining & Restaurants', 'Shopping & Online', 'Electronics',
       'Clothing & Fashion', 'Subscriptions', 'Home & Garden', 'Personal Care',
       'Medical & Vet', 'Education & Kids', 'Entertainment', 'Gifts & Charity',
-      'Travel', 'Auto & Fuel', 'Utilities', 'Insurance', 'Other'
+      'Travel', 'Auto & Fuel', 'EV Charging', 'Utilities', 'Insurance', 'Other'
     ];
 
     if (!category || !CATEGORIES.includes(category)) {

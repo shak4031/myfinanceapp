@@ -242,7 +242,7 @@ export default class Database {
       const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
       if (categoryCheck.rows[0].count === '0') {
         const categories = [
-          ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['Gas', '⛽', '#e74c3c'],
+          ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['EV Charging', '🔌', '#00bcd4'], ['Gas', '⛽', '#e74c3c'],
           ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
           ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
           ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
