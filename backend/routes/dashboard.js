@@ -450,9 +450,17 @@ router.post('/upcoming-payments', async (req, res) => {
         is_fixed
       FROM transactions
       WHERE user_id = 1 
-      AND (is_fixed = TRUE OR is_fixed::text = '1' OR is_fixed::text = 'true')
-      ORDER BY date DESC, id DESC`
+      AND (is_fixed = TRUE OR is_fixed::text = '1' OR is_fixed::text = 'true')`
     );
+
+    // Sort chronologically descending by real timestamp (prevents string sort bugs)
+    fixedTransactions.sort((a, b) => {
+      const pa = parseTxDate(a.date);
+      const pb = parseTxDate(b.date);
+      const ta = pa ? new Date(pa.year, pa.month, pa.day).getTime() : 0;
+      const tb = pb ? new Date(pb.year, pb.month, pb.day).getTime() : 0;
+      return tb - ta;
+    });
 
     const today = new Date();
     const currentMonth = today.getMonth(); // 0-indexed
@@ -489,7 +497,7 @@ router.post('/upcoming-payments', async (req, res) => {
     }
 
     // 2. Identify all recurring fixed bill templates (distinct by canonical merchant)
-    // Because fixedTransactions is sorted ORDER BY date DESC, the first time we see a canonicalKey,
+    // Because fixedTransactions is sorted chronologically DESC, the first time we see a canonicalKey,
     // it reflects its most recent payment date (e.g. paid on the 28th in July -> Day 28 due date).
     const fixedTemplates = new Map();
     for (const tx of fixedTransactions) {

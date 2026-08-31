@@ -83,45 +83,31 @@ router.post('/update-transaction', async (req, res) => {
     }
 
     if (apply_to_all) {
-      const labelId = await db.get(
-        'SELECT label_id FROM transactions WHERE id = $1',
-        [id]
-      );
-
-      const pattern = labelId?.label_id
-        ? await db.get('SELECT pattern FROM transaction_labels WHERE id = $1', [labelId.label_id])
-        : null;
-
-      const canonicalPattern = pattern?.pattern || buildLabelPattern(txn.description);
+      // ALWAYS build clean, specific pattern from the actual transaction description
+      const canonicalPattern = buildLabelPattern(txn.description);
       const coreMerchant = extractMerchantCore(txn.description) || txn.description;
 
       const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [category]);
       const catId = catRow?.id || null;
 
-      let targetLabelId = labelId?.label_id;
-      if (!targetLabelId) {
-        const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
-        if (existingLabel) {
-          targetLabelId = existingLabel.id;
-          await db.run(
-            'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
-            [is_fixed, catId, targetLabelId]
-          );
-        } else {
-          const insertRes = await db.pool.query(
-            'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
-            [canonicalPattern, coreMerchant, catId, is_fixed]
-          );
-          targetLabelId = insertRes.rows[0]?.id;
-        }
-      } else {
+      // Find or insert specific label for this merchant pattern
+      let targetLabelId;
+      const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
+      if (existingLabel) {
+        targetLabelId = existingLabel.id;
         await db.run(
-          'UPDATE transaction_labels SET pattern = $1, is_fixed = $2, category_id = $3 WHERE id = $4',
-          [canonicalPattern, is_fixed, catId, targetLabelId]
+          'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
+          [is_fixed, catId, targetLabelId]
         );
+      } else {
+        const insertRes = await db.pool.query(
+          'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
+          [canonicalPattern, coreMerchant, catId, is_fixed]
+        );
+        targetLabelId = insertRes.rows[0]?.id;
       }
 
-      // Update ALL historical transactions matching this pattern (PUR, REF, different auth codes, etc.)
+      // Update ONLY transactions matching this specific merchant pattern
       await db.run(
         'UPDATE transactions SET category = $1, is_fixed = $2, label_id = $3 WHERE description ~* $4 AND user_id = $5',
         [category, is_fixed, targetLabelId, canonicalPattern, 1]
@@ -284,42 +270,30 @@ router.post('/update-fixed', async (req, res) => {
     if (!txn) return res.status(404).json({ error: 'Transaction not found' });
 
     if (apply_to_all) {
-      const labelId = await db.get('SELECT label_id FROM transactions WHERE id = $1', [id]);
-      const pattern = labelId?.label_id
-        ? await db.get('SELECT pattern FROM transaction_labels WHERE id = $1', [labelId.label_id])
-        : null;
-
-      const canonicalPattern = pattern?.pattern || buildLabelPattern(txn.description);
+      const canonicalPattern = buildLabelPattern(txn.description);
       const coreMerchant = extractMerchantCore(txn.description) || txn.description;
 
       const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [txn.category]);
       const catId = catRow?.id || null;
 
       // 1. Update or create label in transaction_labels
-      let targetLabelId = labelId?.label_id;
-      if (!targetLabelId) {
-        const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
-        if (existingLabel) {
-          targetLabelId = existingLabel.id;
-          await db.run(
-            'UPDATE transaction_labels SET is_fixed = $1 WHERE id = $2',
-            [isFixedBool, targetLabelId]
-          );
-        } else {
-          const insertRes = await db.pool.query(
-            'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
-            [canonicalPattern, coreMerchant, catId, isFixedBool]
-          );
-          targetLabelId = insertRes.rows[0]?.id;
-        }
-      } else {
+      let targetLabelId;
+      const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
+      if (existingLabel) {
+        targetLabelId = existingLabel.id;
         await db.run(
           'UPDATE transaction_labels SET is_fixed = $1 WHERE id = $2',
           [isFixedBool, targetLabelId]
         );
+      } else {
+        const insertRes = await db.pool.query(
+          'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
+          [canonicalPattern, coreMerchant, catId, isFixedBool]
+        );
+        targetLabelId = insertRes.rows[0]?.id;
       }
 
-      // 2. Propagate is_fixed and label_id to ALL historical & future transactions matching this merchant
+      // 2. Propagate is_fixed and label_id to ONLY transactions matching this specific merchant
       await db.run(
         'UPDATE transactions SET is_fixed = $1, label_id = $2 WHERE description ~* $3 AND user_id = 1',
         [isFixedBool, targetLabelId, canonicalPattern]

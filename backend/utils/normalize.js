@@ -31,6 +31,12 @@ export function normalizeDescription(desc) {
     .toUpperCase();          // Case-insensitive comparison
 }
 
+const DISALLOWED_PATTERNS = new Set([
+  'VISA', 'DDA', 'PUR', 'REF', 'AP', 'CARD', 'PURCHASE', 'PAYMENT', 
+  'DEBIT', 'CREDIT', 'CHECK', 'ONLINE', 'PMT', 'TRANSFER', 'XFER',
+  'OTHER', 'UNCATEGORIZED', 'THE', 'AND', 'FOR', 'WITH', 'INC', 'LLC', 'CORP', 'CO'
+]);
+
 export function escapeRegex(value = '') {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -90,8 +96,39 @@ export function parseTxDate(rawDate) {
 }
 
 /**
+ * Strict prefix stripper - only strips proven bank prefixes, never eats merchant names
+ */
+export function stripBankPrefix(description) {
+  if (!description) return '';
+  let s = description.replace(/\s+/g, ' ').trim();
+
+  // Zelle
+  if (/\bZELLE\b/i.test(s)) {
+    const lastZelle = s.lastIndexOf(' ZELLE ');
+    if (lastZelle !== -1) {
+      return s.slice(lastZelle + ' ZELLE '.length).trim();
+    }
+    const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
+    if (match && match[1]) return match[1].trim();
+  }
+
+  // Explicit Card & DDA Prefixes (with mandatory prefix tokens)
+  // 1. "VISA DDA PUR AP 123456 " or "VISA DDA REF AP 123456 " or "VISA DDA PUR "
+  s = s.replace(/^VISA\s+DDA\s+(?:PUR|REF|RETURN|CREDIT)?(?:\s+AP\s+[A-Z0-9xX]+)?\s+/i, '');
+  // 2. "DDA PURCHASE AP 123456 " or "DDA PURCHASE " or "DDA PUR AP 123456 "
+  s = s.replace(/^DDA\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)?(?:\s+AP\s+[A-Z0-9xX]+)?\s+/i, '');
+  // 3. "POS DEBIT AP 123456 " or "POS PURCHASE "
+  s = s.replace(/^POS\s+(?:DEBIT|PURCHASE|PUR|REF)?(?:\s+AP\s+[A-Z0-9xX]+)?\s+/i, '');
+  // 4. "CHECK CARD PURCHASE AP 123456 " or "CHECK CARD "
+  s = s.replace(/^CHECK\s+CARD(?:\s+PURCHASE|\s+PUR)?(?:\s+AP\s+[A-Z0-9xX]+)?\s+/i, '');
+  // 5. "DEBIT CARD PURCHASE - "
+  s = s.replace(/^DEBIT\s+CARD(?:\s+PURCHASE)?\s*[-:]?\s*/i, '');
+
+  return s.trim();
+}
+
+/**
  * Extract the core merchant identifier from messy bank transaction descriptions.
- * Handles card prefixes (VISA DDA, PUR, REF, AP auth-codes), Zelle transfers, etc.
  */
 export function extractMerchantCore(description) {
   return getCanonicalMerchant(description);
@@ -102,80 +139,95 @@ export function extractMerchantCore(description) {
  */
 export function getCanonicalMerchant(description) {
   if (!description) return '';
-  let s = description.replace(/\s+/g, ' ').trim().toUpperCase();
+  let s = stripBankPrefix(description);
 
-  // 1. Zelle handling: extract payee name
-  if (/\bZELLE\b/i.test(s)) {
-    const lastZelle = s.lastIndexOf(' ZELLE ');
-    if (lastZelle !== -1) {
-      s = s.slice(lastZelle + ' ZELLE '.length).trim();
-    } else {
-      const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
-      if (match && match[1]) s = match[1].trim();
-    }
-  }
+  // Remove phone numbers: 833 6322778, 800-591-3869, 888-731-5396, 800 436 7734, 610 358 8000
+  s = s.replace(/\b\d{3}[-\s.]?\d{3}[-\s.]?\d{4}\b/g, '');
+  s = s.replace(/\b\d{3}[-\s.]\d{7}\b/g, '');
 
-  // 2. Remove standard bank card and transaction noise prefixes
-  s = s.replace(/^(?:VISA\s+)?(?:DDA|POS|DEBIT(?:\s+CARD)?|CHECK\s+CARD)\s+(?:PUR(?:CHASE)?|REF(?:UND)?|RETURN|CREDIT|PMT|PAYMENT)?(?:\s+AP)?(?:\s+[A-Z0-9xX]{3,12})?\s+/i, '');
-  s = s.replace(/^(?:DDA|VISA|POS)\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)\s+(?:AP\s+)?(?:[A-Z0-9xX]{3,12}\s+)?/i, '');
+  // Remove trailing state codes & asterisks (* VA, * MN, * CA, * NJ, * MD, * DE)
+  s = s.replace(/[\*#]\s*[A-Z]{2}\s*$/i, '');
+  s = s.replace(/\b[A-Z]{2}\s*$/i, '');
 
-  // 3. Remove phone numbers (e.g. 888-731-5396, 888 731 5396, 800-436-7734)
-  s = s.replace(/\b\d{3}[-\s]\d{3}[-\s]\d{4}\b/g, '');
+  const upper = s.toUpperCase().trim();
 
-  // 4. Remove trailing state codes (e.g. * NJ, * MD, * CA, NJ, MD, CA at end of line)
-  s = s.replace(/\*\s*[A-Z]{2}$/i, '');
-  s = s.replace(/\b[A-Z]{2}$/i, '');
+  // Specific high-frequency merchants
+  if (/ELECTRIFY\s*AMERICA/i.test(upper)) return 'ELECTRIFY AMERICA';
+  if (/CHARGEPOINT/i.test(upper)) return 'CHARGEPOINT';
+  if (/TESLA\s*(?:SUPERCHARGER|CHARGING)/i.test(upper)) return 'TESLA SUPERCHARGER';
+  if (/BLINK\s*CHARGING/i.test(upper)) return 'BLINK CHARGING';
+  if (/PLUGSHARE/i.test(upper)) return 'PLUGSHARE';
+  if (/EVGO/i.test(upper)) return 'EVGO';
+  if (/\bTARGET\b/i.test(upper)) return 'TARGET';
+  if (/\bINSTACART\b/i.test(upper)) return 'INSTACART';
+  if (/\bNETFLIX\b/i.test(upper)) return 'NETFLIX';
+  if (/\bWAWA\b/i.test(upper)) return 'WAWA';
+  if (/TRADER\s*JOE/i.test(upper)) return 'TRADER JOE';
+  if (/WHOLE\s*FOODS/i.test(upper)) return 'WHOLE FOODS';
+  if (/HOME\s*DEPOT/i.test(upper)) return 'THE HOME DEPOT';
+  if (/UBER\s*EATS/i.test(upper)) return 'UBER EATS';
+  if (/MUSIC\s*&?\s*ARTS/i.test(upper)) return 'MUSIC & ARTS';
+  if (/STATE\s*FARM/i.test(upper)) return 'STATE FARM';
+  if (/PENNYMAC/i.test(upper)) return 'PENNYMAC';
+  if (/SANTANDER/i.test(upper)) return 'SANTANDER AUTO';
+  if (/HYUNDAI/i.test(upper)) return 'HYUNDAI LEASE';
+  if (/PSEG|PUBLIC\s*SERVICE/i.test(upper)) return 'PSEG';
+  if (/\bVERIZON\b/i.test(upper)) return 'VERIZON';
+  if (/COMCAST|XFINITY/i.test(upper)) return 'COMCAST-XFINITY';
+  if (/\b(?:AT&T|ATT)\b/i.test(upper) || /^ATT\b/i.test(upper)) return 'AT&T';
+  if (/ROCKET\s*(?:MONEY|PREMIUM)?/i.test(upper)) return 'ROCKET MONEY';
 
-  // 5. Special known merchant normalizations
-  if (/MUSIC\s*&?\s*ARTS/i.test(s)) return 'MUSIC & ARTS';
-  if (/STATE\s+FARM/i.test(s)) return 'STATE FARM';
-  if (/PENNYMAC/i.test(s)) return 'PENNYMAC';
-  if (/NETFLIX/i.test(s)) return 'NETFLIX';
-  if (/SANTANDER/i.test(s)) return 'SANTANDER AUTO';
-  if (/HYUNDAI/i.test(s)) return 'HYUNDAI LEASE';
-  if (/PSEG|PUBLIC\s+SERVICE/i.test(s)) return 'PSEG';
-  if (/VERIZON/i.test(s)) return 'VERIZON';
-  if (/COMCAST|XFINITY/i.test(s)) return 'COMCAST-XFINITY';
-  if (/TRADER\s+JOE/i.test(s)) return 'TRADER JOES';
-  if (/WHOLE\s+FOODS/i.test(s)) return 'WHOLE FOODS';
-  if (/HOME\s+DEPOT/i.test(s)) return 'THE HOME DEPOT';
-  if (/UBER\s*EATS/i.test(s)) return 'UBER EATS';
-
-  // 6. Generic cleanup: remove web domain suffixes, noise words
+  // Generic cleaning: strip URLs, noise words
   s = s.replace(/\.COM\b|\.CO\b|\.NET\b|\.ORG\b|\bCOM\b/gi, '');
   s = s.replace(/\b(?:ONLINE\s+PMT|PAYMENTREC|PAYMENT|AUTOPAY|SFPP|DIR\s+DEP|PURCHASE|PENDING)\b/gi, '');
-  s = s.replace(/[^\w\s&]/g, ' '); // remove special chars except &
+  s = s.replace(/[^\w\s&]/g, ' ');
   s = s.replace(/\s+/g, ' ').trim();
+
+  if (!s || s.length < 2 || DISALLOWED_PATTERNS.has(s.toUpperCase())) {
+    return description.replace(/\s+/g, ' ').trim();
+  }
 
   return s;
 }
 
 /**
  * Build a stable regex pattern for transaction labels.
+ * GUARANTEED to never match generic boilerplate words like VISA or DDA.
  */
 export function buildLabelPattern(description) {
-  const canonical = getCanonicalMerchant(description);
-  if (!canonical) return escapeRegex(description.replace(/\s+/g, ' ').trim());
+  const merchant = getCanonicalMerchant(description);
+  if (!merchant) return escapeRegex(description.replace(/\s+/g, ' ').trim());
 
-  if (canonical === 'MUSIC & ARTS') return 'MUSIC\\s*&?\\s*ARTS';
-  if (canonical === 'STATE FARM') return 'STATE\\s+FARM';
-  if (canonical === 'PENNYMAC') return 'PENNYMAC';
-  if (canonical === 'NETFLIX') return 'NETFLIX';
-  if (canonical === 'SANTANDER AUTO') return 'SANTANDER';
-  if (canonical === 'HYUNDAI LEASE') return 'HYUNDAI';
-  if (canonical === 'PSEG') return 'PSEG|PUBLIC\\s+SERVICE';
-  if (canonical === 'VERIZON') return 'VERIZON';
-  if (canonical === 'COMCAST-XFINITY') return 'COMCAST|XFINITY';
-  if (canonical === 'TRADER JOES') return 'TRADER\\s+JOE';
-  if (canonical === 'WHOLE FOODS') return 'WHOLE\\s+FOODS';
-  if (canonical === 'THE HOME DEPOT') return 'HOME\\s+DEPOT';
-  if (canonical === 'UBER EATS') return 'UBER\\s*EATS';
+  if (merchant === 'ELECTRIFY AMERICA') return 'ELECTRIFY\\s*AMERICA';
+  if (merchant === 'CHARGEPOINT') return 'CHARGEPOINT';
+  if (merchant === 'TESLA SUPERCHARGER') return 'TESLA';
+  if (merchant === 'BLINK CHARGING') return 'BLINK';
+  if (merchant === 'PLUGSHARE') return 'PLUGSHARE';
+  if (merchant === 'EVGO') return 'EVGO';
+  if (merchant === 'TARGET') return '\\bTARGET\\b';
+  if (merchant === 'INSTACART') return '\\bINSTACART\\b';
+  if (merchant === 'NETFLIX') return '\\bNETFLIX\\b';
+  if (merchant === 'WAWA') return '\\bWAWA\\b';
+  if (merchant === 'TRADER JOE') return 'TRADER\\s*JOE';
+  if (merchant === 'WHOLE FOODS') return 'WHOLE\\s*FOODS';
+  if (merchant === 'THE HOME DEPOT') return 'HOME\\s*DEPOT';
+  if (merchant === 'UBER EATS') return 'UBER\\s*EATS';
+  if (merchant === 'MUSIC & ARTS') return 'MUSIC\\s*&?\\s*ARTS';
+  if (merchant === 'STATE FARM') return 'STATE\\s*FARM';
+  if (merchant === 'PENNYMAC') return 'PENNYMAC';
+  if (merchant === 'SANTANDER AUTO') return 'SANTANDER';
+  if (merchant === 'HYUNDAI LEASE') return 'HYUNDAI';
+  if (merchant === 'PSEG') return 'PSEG|PUBLIC\\s*SERVICE';
+  if (merchant === 'VERIZON') return '\\bVERIZON\\b';
+  if (merchant === 'COMCAST-XFINITY') return 'COMCAST|XFINITY';
+  if (merchant === 'AT&T') return 'AT&?T\\b|ATT\\b';
+  if (merchant === 'ROCKET MONEY') return 'ROCKET\\s*(?:MONEY|PREMIUM)?';
 
-  const words = canonical.split(/\s+/).filter(Boolean);
-  if (words.length > 1) {
+  const words = merchant.split(/\s+/).filter(w => w.length > 1 && !DISALLOWED_PATTERNS.has(w.toUpperCase()));
+  if (words.length > 0) {
     return words.map(w => escapeRegex(w)).join('\\s+');
   }
-  return escapeRegex(canonical);
+  return escapeRegex(description.replace(/\s+/g, ' ').trim());
 }
 
 /**

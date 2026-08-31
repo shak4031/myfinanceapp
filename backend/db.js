@@ -312,6 +312,38 @@ export default class Database {
         }
       } catch (err) { /* ignore */ }
 
+      // Proactively clean up any overly-broad or corrupted transaction labels
+      try {
+        await this.run("DELETE FROM transaction_labels WHERE pattern ~* '^(VISA|DDA|PUR|REF|AP|CARD|PAYMENT|DEBIT|CREDIT|CHECK)$' OR LENGTH(TRIM(pattern)) <= 2");
+        
+        // Repair any transactions falsely marked as 'EV Charging'
+        await this.run(`
+          UPDATE transactions 
+          SET category = 'Shopping' 
+          WHERE category = 'EV Charging' AND description ~* 'TARGET|AMAZON|WALMART|ETSY|MICHAEL'
+        `);
+        await this.run(`
+          UPDATE transactions 
+          SET category = 'Groceries' 
+          WHERE category = 'EV Charging' AND description ~* 'INSTACART|WAWA|TRADER\\s*JOE|WHOLE\\s*FOODS|SHOPRITE|GROCERY'
+        `);
+        await this.run(`
+          UPDATE transactions 
+          SET category = 'Subscriptions' 
+          WHERE category = 'EV Charging' AND description ~* 'NETFLIX|HULU|SPOTIFY|DISNEY|ROCKET'
+        `);
+        await this.run(`
+          UPDATE transactions 
+          SET category = 'Dining' 
+          WHERE category = 'EV Charging' AND description ~* 'UBER\\s*EATS|DOORDASH|GRUBHUB|STARBUCKS|CHIPOTLE|RESTAURANT'
+        `);
+        await this.run(`
+          UPDATE transactions 
+          SET category = 'Home' 
+          WHERE category = 'EV Charging' AND description ~* 'HOME\\s*DEPOT|LOWES'
+        `);
+      } catch (err) { /* ignore */ }
+
       // 3. Seed Credit Cards
       const cardCheck = await this.pool.query('SELECT COUNT(*) FROM credit_cards');
       if (cardCheck.rows[0].count === '0') {
