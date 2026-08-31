@@ -930,15 +930,20 @@
     }
 
     async function toggleFixed(txnId, isFixed) {
-      const res = await fetch('/api/transactions/update-fixed', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ id: txnId, is_fixed: isFixed, apply_to_all: true })
-      });
-      const data = await res.json();
-      if (data.success) {
-          notify(isFixed ? '✓ Marked as Fixed Bill (all matches)' : 'Unmarked');
-          loadDashboard(); // Refresh timeline immediately
+      try {
+        const res = await fetch('/api/transactions/update-fixed', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ id: txnId, is_fixed: isFixed, apply_to_all: true })
+        });
+        const data = await res.json();
+        if (data.success) {
+            notify(isFixed ? '✓ Marked as Fixed Bill (all matching months)' : '✓ Unmarked Fixed Bill');
+            await loadAllTransactions();
+            loadDashboard(); // Refresh timeline immediately
+        }
+      } catch (err) {
+        notify('❌ Update failed');
       }
     }
 

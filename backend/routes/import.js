@@ -171,11 +171,25 @@ router.post('/import-pdf', async (req, res) => {
         continue;
       }
 
+      // Find matching label
+      let labelId = null;
+      let isFixed = false;
+      try {
+        const labels = await db.all("SELECT id, pattern, is_fixed FROM transaction_labels");
+        for (const l of labels) {
+          if (new RegExp(l.pattern, 'i').test(t.description)) {
+            labelId = l.id;
+            isFixed = l.is_fixed === true || l.is_fixed === 1 || l.is_fixed === 'true';
+            break;
+          }
+        }
+      } catch (e) { /* labels table might not exist yet */ }
+
       await db.run(
         `INSERT INTO transactions 
          (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
          VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-        [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'pdf_import', category, null, false]
+        [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'pdf_import', category, labelId, isFixed]
       );
       imported++;
     }
@@ -280,11 +294,22 @@ router.post('/import-batch', async (req, res) => {
           );
           if (exist) { duplicates++; continue; }
 
+          let labelId = null, isFixed = false;
+          try {
+            const labels = await db.all("SELECT id, pattern, is_fixed FROM transaction_labels");
+            for (const l of labels) {
+              if (new RegExp(l.pattern, 'i').test(t.description)) {
+                labelId = l.id; isFixed = l.is_fixed === true || l.is_fixed === 1 || l.is_fixed === 'true';
+                break;
+              }
+            }
+          } catch (e) {}
+
           const category = categorizeTransaction(t.description, t.direction);
           await db.run(
             `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
              VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-            [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'batch_pdf', category, null, false]
+            [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'batch_pdf', category, labelId, isFixed]
           );
           imported++;
         }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
+import { extractMerchantCore } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
@@ -342,148 +343,116 @@ router.post('/upcoming-payments', async (req, res) => {
     const currentBalance = latestBalanceRes.length > 0 ? parseFloat(latestBalanceRes[0].balance) : 0;
 
     // --- SHARED DATA SOURCE ---
-    // Fetch ALL fixed transactions using the same master logic as the transactions page
+    // Fetch ALL fixed transactions
     const fixedTransactions = await db.all(
       `SELECT 
         id,
+        date,
         description,
         category,
         amount,
         direction,
-        EXTRACT(DAY FROM date::date) as day_of_month,
-        date::date as actual_date,
+        label_id,
         is_fixed
       FROM transactions
       WHERE user_id = 1 
       AND (is_fixed = TRUE OR is_fixed::text = '1' OR is_fixed::text = 'true')
-      ORDER BY date::date DESC`
+      ORDER BY date DESC, id DESC`
     );
 
-    // Filter to current month for the timeline
     const today = new Date();
-    const currentMonth = today.getMonth();
+    const currentMonth = today.getMonth(); // 0-indexed
     const currentYear = today.getFullYear();
-    
+    const currentDay = today.getDate();
+
     const timeline = [];
-    const seenDescriptions = new Set();
+    const paidMerchantKeys = new Set();
+    const seenTxIds = new Set();
 
-    // 1. Add Processed Fixed Items (Actual records from DB)
-    fixedTransactions.forEach(tx => {
-      const txDate = new Date(tx.actual_date);
-      if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear && txDate <= today) {
-        timeline.push({
-          id: tx.id,
-          description: tx.description,
-          category: tx.category,
-          amount: parseFloat(tx.amount),
-          dayOfMonth: parseInt(tx.day_of_month),
-          isIncome: tx.direction === 'CREDIT',
-          status: 'processed'
-        });
-        seenDescriptions.add(`${tx.description}-${tx.amount}`);
-      }
-    });
+    // 1. Add all fixed transactions that were PAID in the current calendar month
+    for (const tx of fixedTransactions) {
+      if (!tx.date) continue;
+      const parts = tx.date.split('-');
+      if (parts.length < 3) continue;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1; // 0-indexed
+      const d = parseInt(parts[2], 10);
 
-    // 2. Add All Other Processed Transactions (Context - REMOVED TO ENSURE SYNC)
-    // We are no longer adding non-fixed processed transactions to the timeline
-    // ONLY transactions marked as is_fixed will appear here, plus the projected payroll.
-    const allProcessed = []; 
-
-    allProcessed.forEach(tx => {
-       const key = `${tx.description}-${tx.amount}`;
-       if (!seenDescriptions.has(key)) {
-         timeline.push({
-           id: tx.id,
-           description: tx.description,
-           category: tx.category,
-           amount: parseFloat(tx.amount),
-           dayOfMonth: parseInt(tx.day_of_month),
-           isIncome: tx.direction === 'CREDIT',
-           status: 'processed'
-         });
-         seenDescriptions.add(key);
-       }
-    });
-
-    // 3. Project Future Occurrences (The exact same items marked as fixed)
-    const uniqueFixed = [];
-    const map = new Map();
-    fixedTransactions.forEach(tx => {
-      if (!map.has(tx.description)) {
-        map.set(tx.description, tx);
-        uniqueFixed.push(tx);
-      }
-    });
-
-    uniqueFixed.forEach(tx => {
-      const day = parseInt(tx.day_of_month);
-      const key = `${tx.description}-${tx.amount}`;
-      
-      // Direct override for PennyMac: force the projected occurrence to the 1st of the month
-      if (/pennymac/i.test(tx.description)) {
-        // If today is past the 1st, it shouldn't show as a future projected event for this month
-        // because its due date was day 1. However, if it hasn't been spent yet (not in seenDescriptions),
-        // we still want to show it on Day 1 to visually remind the user of the cashflow deficit.
-        const forcedDay = 1;
-        if (!seenDescriptions.has(key)) {
+      if (y === currentYear && m === currentMonth) {
+        const merchantKey = (extractMerchantCore(tx.description) || tx.description).toUpperCase();
+        if (!seenTxIds.has(tx.id)) {
+          seenTxIds.add(tx.id);
           timeline.push({
+            id: tx.id,
             description: tx.description,
-            category: tx.category,
+            category: tx.category || 'Other',
             amount: parseFloat(tx.amount),
-            dayOfMonth: forcedDay,
-            isIncome: tx.direction === 'CREDIT',
-            status: 'projected'
+            dayOfMonth: d,
+            isIncome: (tx.direction || '').toUpperCase() === 'CREDIT',
+            status: 'processed'
           });
-          return;
+          paidMerchantKeys.add(merchantKey);
         }
       }
+    }
 
-      // If a fixed item exists in history but hasn't happened yet this month
-      if (!seenDescriptions.has(key) && day > today.getDate()) {
-        timeline.push({
+    // 2. Identify all recurring fixed bill templates (distinct by merchant)
+    const fixedTemplates = new Map();
+    for (const tx of fixedTransactions) {
+      const merchantKey = (extractMerchantCore(tx.description) || tx.description).toUpperCase();
+      if (!fixedTemplates.has(merchantKey)) {
+        let day = 1;
+        if (tx.date) {
+          const parts = tx.date.split('-');
+          if (parts.length >= 3) {
+            day = parseInt(parts[2], 10) || 1;
+          }
+        }
+        fixedTemplates.set(merchantKey, {
           description: tx.description,
-          category: tx.category,
+          category: tx.category || 'Other',
           amount: parseFloat(tx.amount),
           dayOfMonth: day,
-          isIncome: tx.direction === 'CREDIT',
-          status: 'projected'
-        });
-      }
-    });
-
-    // 2.5 Inject: Affirm Credit Card Auto-Payment (Fixed 6-payment obligation)
-    const todayDay = today.getDate();
-    const affirmPayment = 738.36;
-    const affirmDay = 15; // Mid-month payment date
-    if (!seenDescriptions.has(`Affirm-${affirmPayment}`)) {
-      // Check if not already processed this month
-      const alreadyPaidThisMonth = timeline.some(t => /affirm/i.test(t.description) && t.status === 'processed');
-      if (!alreadyPaidThisMonth) {
-        timeline.push({
-          description: 'Affirm Credit Card Payment',
-          category: 'Credit Cards',
-          amount: affirmPayment,
-          dayOfMonth: affirmDay,
-          isIncome: false,
-          status: 'projected'
+          isIncome: (tx.direction || '').toUpperCase() === 'CREDIT'
         });
       }
     }
-    const lastIncome = fixedTransactions.find(t => t.direction === 'CREDIT' && /WELLS FARGO/i.test(t.description));
-    if (lastIncome) {
-      const lastDate = new Date(lastIncome.actual_date);
+
+    // 3. For any fixed bill NOT yet paid in the current month, add as 'projected' (Upcoming)
+    for (const [merchantKey, template] of fixedTemplates.entries()) {
+      // Don't project if already paid this month
+      if (paidMerchantKeys.has(merchantKey)) continue;
+
+      // Don't project income items as regular bills (handled separately below)
+      if (template.isIncome || /payroll|salary|wells fargo/i.test(template.description)) continue;
+
+      timeline.push({
+        description: template.description,
+        category: template.category,
+        amount: template.amount,
+        dayOfMonth: template.dayOfMonth,
+        isIncome: template.isIncome,
+        status: 'projected'
+      });
+    }
+
+    // 4. Bi-weekly / regular payroll projection
+    const lastIncome = fixedTransactions.find(t => (t.direction || '').toUpperCase() === 'CREDIT' && /WELLS FARGO|PAYROLL|SALARY/i.test(t.description));
+    if (lastIncome && lastIncome.date) {
+      const [iy, im, iday] = lastIncome.date.split('-').map(Number);
+      const lastDate = new Date(iy, im - 1, iday);
       const nextDate = new Date(lastDate);
       nextDate.setDate(lastDate.getDate() + 14);
 
-      if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > today.getDate()) {
-         timeline.push({
-           description: 'Projected: Wells Fargo Payroll',
-           category: 'Incomes',
-           amount: parseFloat(lastIncome.amount),
-           dayOfMonth: nextDate.getDate(),
-           isIncome: true,
-           status: 'projected'
-         });
+      if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > currentDay) {
+        timeline.push({
+          description: 'Projected: Payroll Deposit',
+          category: 'Salary',
+          amount: parseFloat(lastIncome.amount),
+          dayOfMonth: nextDate.getDate(),
+          isIncome: true,
+          status: 'projected'
+        });
       }
     }
 
@@ -494,13 +463,13 @@ router.post('/upcoming-payments', async (req, res) => {
       debts.sort((a, b) => b.apr - a.apr);
       const topPriority = debts[0];
       const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
-      const attackPayment = 1342.15 - othersMinTotal;
+      const attackPayment = Math.max(0, 1342.15 - othersMinTotal);
 
       timeline.push({
         description: `🚀 Payoff Plan: ${topPriority.name}`,
         category: 'Debt Payment',
         amount: attackPayment,
-        dayOfMonth: 15, // Standardize to mid-month (e.g. the 15th) to factor in implications
+        dayOfMonth: 15,
         isIncome: false,
         status: 'projected'
       });

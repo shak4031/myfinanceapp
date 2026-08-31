@@ -1,42 +1,10 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
-import { normalizeDescription, dedupWhereClause } from '../utils/normalize.js';
+import { normalizeDescription, dedupWhereClause, extractMerchantCore, buildLabelPattern, escapeRegex } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
-
-function escapeRegex(value = '') {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function extractMerchantCore(description) {
-  if (!description) return '';
-  let s = description.replace(/\s+/g, ' ').trim();
-
-  // 1. Zelle handling: extract payee name
-  if (/\bZELLE\b/i.test(s)) {
-    const lastZelle = s.lastIndexOf(' ZELLE ');
-    if (lastZelle !== -1) {
-      const payee = s.slice(lastZelle + ' ZELLE '.length).trim();
-      if (payee) return payee;
-    }
-    const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
-    if (match && match[1]) return match[1].trim();
-  }
-
-  // 2. Bank card boilerplate prefixes (PUR, REF, RETURN, CREDIT, AP <auth-code>)
-  s = s.replace(/^(?:VISA\s+)?(?:DDA|POS|DEBIT(?:\s+CARD)?|CHECK\s+CARD)\s+(?:PUR(?:CHASE)?|REF(?:UND)?|RETURN|CREDIT|PMT|PAYMENT)?(?:\s+AP)?(?:\s+[A-Z0-9xX]{3,12})?\s+/i, '');
-  s = s.replace(/^(?:DDA|VISA|POS)\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)\s+(?:AP\s+)?(?:[A-Z0-9xX]{3,12}\s+)?/i, '');
-
-  return s.trim();
-}
-
-function buildLabelPattern(description) {
-  const core = extractMerchantCore(description);
-  if (!core) return escapeRegex(description.replace(/\s+/g, ' ').trim());
-  return escapeRegex(core);
-}
 
 // Helper: Get date range based on filter
 function getDateRange(filter) {
@@ -309,24 +277,61 @@ router.post('/update-fixed', async (req, res) => {
     
     if (!id) return res.status(400).json({ error: 'Transaction ID is required' });
 
-    log('TRANSACTIONS', `Updating Fixed Flag: txn_id=${id}, is_fixed=${is_fixed}`);
+    const isFixedBool = is_fixed === true || is_fixed === 'true' || is_fixed === 1 || is_fixed === '1';
+    log('TRANSACTIONS', `Updating Fixed Flag: txn_id=${id}, is_fixed=${isFixedBool}, apply_to_all=${apply_to_all}`);
 
-    const txn = await db.get('SELECT description FROM transactions WHERE id = $1', [id]);
+    const txn = await db.get('SELECT description, category FROM transactions WHERE id = $1', [id]);
     if (!txn) return res.status(404).json({ error: 'Transaction not found' });
 
     if (apply_to_all) {
+      const labelId = await db.get('SELECT label_id FROM transactions WHERE id = $1', [id]);
+      const pattern = labelId?.label_id
+        ? await db.get('SELECT pattern FROM transaction_labels WHERE id = $1', [labelId.label_id])
+        : null;
+
+      const canonicalPattern = pattern?.pattern || buildLabelPattern(txn.description);
+      const coreMerchant = extractMerchantCore(txn.description) || txn.description;
+
+      const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [txn.category]);
+      const catId = catRow?.id || null;
+
+      // 1. Update or create label in transaction_labels
+      let targetLabelId = labelId?.label_id;
+      if (!targetLabelId) {
+        const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
+        if (existingLabel) {
+          targetLabelId = existingLabel.id;
+          await db.run(
+            'UPDATE transaction_labels SET is_fixed = $1 WHERE id = $2',
+            [isFixedBool, targetLabelId]
+          );
+        } else {
+          const insertRes = await db.pool.query(
+            'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
+            [canonicalPattern, coreMerchant, catId, isFixedBool]
+          );
+          targetLabelId = insertRes.rows[0]?.id;
+        }
+      } else {
+        await db.run(
+          'UPDATE transaction_labels SET is_fixed = $1 WHERE id = $2',
+          [isFixedBool, targetLabelId]
+        );
+      }
+
+      // 2. Propagate is_fixed and label_id to ALL historical & future transactions matching this merchant
       await db.run(
-        'UPDATE transactions SET is_fixed = $1 WHERE description = $2 AND user_id = 1',
-        [is_fixed, txn.description]
+        'UPDATE transactions SET is_fixed = $1, label_id = $2 WHERE description ~* $3 AND user_id = 1',
+        [isFixedBool, targetLabelId, canonicalPattern]
       );
     } else {
       await db.run(
         'UPDATE transactions SET is_fixed = $1 WHERE id = $2 AND user_id = 1',
-        [is_fixed, id]
+        [isFixedBool, id]
       );
     }
 
-    res.json({ success: true, message: 'Fixed flag updated' });
+    res.json({ success: true, message: 'Fixed flag updated for all matching transactions' });
   } catch (err) {
     log('TRANSACTIONS', `Error updating fixed flag: ${err.message}`);
     res.status(500).json({ error: err.message });

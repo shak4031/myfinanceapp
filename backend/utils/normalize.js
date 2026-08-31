@@ -31,6 +31,45 @@ export function normalizeDescription(desc) {
     .toUpperCase();          // Case-insensitive comparison
 }
 
+export function escapeRegex(value = '') {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Extract the core merchant identifier from messy bank transaction descriptions.
+ * Handles card prefixes (VISA DDA, PUR, REF, AP auth-codes), Zelle transfers, etc.
+ */
+export function extractMerchantCore(description) {
+  if (!description) return '';
+  let s = description.replace(/\s+/g, ' ').trim();
+
+  // 1. Zelle handling: extract payee name
+  if (/\bZELLE\b/i.test(s)) {
+    const lastZelle = s.lastIndexOf(' ZELLE ');
+    if (lastZelle !== -1) {
+      const payee = s.slice(lastZelle + ' ZELLE '.length).trim();
+      if (payee) return payee;
+    }
+    const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
+    if (match && match[1]) return match[1].trim();
+  }
+
+  // 2. Bank card boilerplate prefixes (PUR, REF, RETURN, CREDIT, AP <auth-code>)
+  s = s.replace(/^(?:VISA\s+)?(?:DDA|POS|DEBIT(?:\s+CARD)?|CHECK\s+CARD)\s+(?:PUR(?:CHASE)?|REF(?:UND)?|RETURN|CREDIT|PMT|PAYMENT)?(?:\s+AP)?(?:\s+[A-Z0-9xX]{3,12})?\s+/i, '');
+  s = s.replace(/^(?:DDA|VISA|POS)\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)\s+(?:AP\s+)?(?:[A-Z0-9xX]{3,12}\s+)?/i, '');
+
+  return s.trim();
+}
+
+/**
+ * Build a stable regex pattern for transaction labels.
+ */
+export function buildLabelPattern(description) {
+  const core = extractMerchantCore(description);
+  if (!core) return escapeRegex(description.replace(/\s+/g, ' ').trim());
+  return escapeRegex(core);
+}
+
 /**
  * Generate a stable hash-based fingerprint for a transaction.
  * This can serve as a dedup key for future import gating without storing
