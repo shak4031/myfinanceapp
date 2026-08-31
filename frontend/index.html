@@ -1104,32 +1104,10 @@
         });
         const data = await res.json();
         
-        // Find the description of the item we just modified
-        const rows = Array.from(document.querySelectorAll('#full-txn-table tr'));
-        const targetRow = rows.find(r => r.querySelector(`select`)?.outerHTML.includes(`'${id}'`));
-        const description = targetRow?.cells[1].textContent.trim();
-
-        // Highlight all rows with this description for 3 seconds
-        let effectCount = 0;
-        rows.forEach(r => {
-          if (r.cells[1].textContent.trim() === description) {
-            // UI SYNC: Update the select dropdown in other rows so user sees the change
-            const rowSelect = r.querySelector('select');
-            if (rowSelect && rowSelect.value !== category) {
-              rowSelect.value = category;
-            }
-
-            // Visual feedback
-            r.style.transition = 'background 0.3s ease';
-            r.style.background = 'rgba(81, 207, 102, 0.2)';
-            effectCount++;
-            setTimeout(() => { r.style.background = 'transparent'; }, 3000);
-          }
-        });
-
-        notify(`✓ Applied to ${effectCount} transactions for "${description}"`);
+        await loadAllTransactions();
+        notify(`✓ Updated category to "${category}"`);
         
-        if(isFixed === false || isFixed === true) {
+        if (isFixed === false || isFixed === true) {
            loadDashboard(); 
         }
       } catch (err) {

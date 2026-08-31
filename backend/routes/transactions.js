@@ -10,25 +10,32 @@ function escapeRegex(value = '') {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildLabelPattern(description) {
+function extractMerchantCore(description) {
   if (!description) return '';
+  let s = description.replace(/\s+/g, ' ').trim();
 
-  const normalized = description.replace(/\s+/g, ' ').trim();
-
-  // Zelle transfers often include a changing numeric reference code before the payee name.
-  // Example: TD ZELLE SENT 624000J06DC7 ZELLE CRISTIANE DE LIMA S
-  // We want a stable pattern: TD ZELLE SENT .* ZELLE CRISTIANE DE LIMA S
-  if (/\bZELLE\b/i.test(normalized) && /\bSENT\b/i.test(normalized)) {
-    const payeeStart = normalized.lastIndexOf(' ZELLE ');
-    if (payeeStart !== -1) {
-      const payee = normalized.slice(payeeStart + ' ZELLE '.length).trim();
-      if (payee) {
-        return `TD ZELLE SENT .* ZELLE ${escapeRegex(payee)}`;
-      }
+  // 1. Zelle handling: extract payee name
+  if (/\bZELLE\b/i.test(s)) {
+    const lastZelle = s.lastIndexOf(' ZELLE ');
+    if (lastZelle !== -1) {
+      const payee = s.slice(lastZelle + ' ZELLE '.length).trim();
+      if (payee) return payee;
     }
+    const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
+    if (match && match[1]) return match[1].trim();
   }
 
-  return normalized;
+  // 2. Bank card boilerplate prefixes (PUR, REF, RETURN, CREDIT, AP <auth-code>)
+  s = s.replace(/^(?:VISA\s+)?(?:DDA|POS|DEBIT(?:\s+CARD)?|CHECK\s+CARD)\s+(?:PUR(?:CHASE)?|REF(?:UND)?|RETURN|CREDIT|PMT|PAYMENT)?(?:\s+AP)?(?:\s+[A-Z0-9xX]{3,12})?\s+/i, '');
+  s = s.replace(/^(?:DDA|VISA|POS)\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)\s+(?:AP\s+)?(?:[A-Z0-9xX]{3,12}\s+)?/i, '');
+
+  return s.trim();
+}
+
+function buildLabelPattern(description) {
+  const core = extractMerchantCore(description);
+  if (!core) return escapeRegex(description.replace(/\s+/g, ' ').trim());
+  return escapeRegex(core);
 }
 
 // Helper: Get date range based on filter
@@ -118,27 +125,39 @@ router.post('/update-transaction', async (req, res) => {
         : null;
 
       const canonicalPattern = pattern?.pattern || buildLabelPattern(txn.description);
+      const coreMerchant = extractMerchantCore(txn.description) || txn.description;
 
-      // 1. Update the label to a stable pattern so future imports with the same payee
-      // but different Zelle reference codes still match.
-      if (canonicalPattern) {
+      const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [category]);
+      const catId = catRow?.id || null;
+
+      let targetLabelId = labelId?.label_id;
+      if (!targetLabelId) {
+        const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
+        if (existingLabel) {
+          targetLabelId = existingLabel.id;
+          await db.run(
+            'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
+            [is_fixed, catId, targetLabelId]
+          );
+        } else {
+          const insertRes = await db.pool.query(
+            'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
+            [canonicalPattern, coreMerchant, catId, is_fixed]
+          );
+          targetLabelId = insertRes.rows[0]?.id;
+        }
+      } else {
         await db.run(
-          `UPDATE transaction_labels
-           SET pattern = $1,
-               is_fixed = $2,
-               category_id = (SELECT id FROM categories WHERE name = $3)
-           WHERE id = (SELECT label_id FROM transactions WHERE id = $4)`,
-          [canonicalPattern, is_fixed, category, id]
+          'UPDATE transaction_labels SET pattern = $1, is_fixed = $2, category_id = $3 WHERE id = $4',
+          [canonicalPattern, is_fixed, catId, targetLabelId]
         );
       }
 
-      // 2. Update ALL historical transactions matching the same pattern, not just the exact text.
-      if (canonicalPattern) {
-        await db.run(
-          'UPDATE transactions SET category = $1, is_fixed = $2 WHERE description ~* $3 AND user_id = $4',
-          [category, is_fixed, canonicalPattern, 1]
-        );
-      }
+      // Update ALL historical transactions matching this pattern (PUR, REF, different auth codes, etc.)
+      await db.run(
+        'UPDATE transactions SET category = $1, is_fixed = $2, label_id = $3 WHERE description ~* $4 AND user_id = $5',
+        [category, is_fixed, targetLabelId, canonicalPattern, 1]
+      );
     } else {
       // Update just this one
       await db.run(
@@ -255,6 +274,7 @@ router.post('/sync-labels', async (req, res) => {
 
     for (const t of unlabeled) {
         const cleanLabel = buildLabelPattern(t.description);
+        const displayLabel = extractMerchantCore(t.description) || cleanLabel;
         
         // Check if label already exists (prevent duplicates in label table)
         const exists = await db.get("SELECT id FROM transaction_labels WHERE pattern = $1", [cleanLabel]);
@@ -263,7 +283,7 @@ router.post('/sync-labels', async (req, res) => {
         if (!exists) {
             const result = await db.pool.query(
                 "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, FALSE) RETURNING id",
-                [cleanLabel, cleanLabel, otherCat.id]
+                [cleanLabel, displayLabel, otherCat.id]
             );
             labelId = result.rows[0].id;
             createdCount++;
@@ -271,8 +291,8 @@ router.post('/sync-labels', async (req, res) => {
             labelId = exists.id;
         }
 
-        // Link the transactions
-        await db.run("UPDATE transactions SET label_id = $1 WHERE description = $2", [labelId, t.description]);
+        // Link all transactions matching this pattern
+        await db.run("UPDATE transactions SET label_id = $1 WHERE description ~* $2 AND user_id = 1", [labelId, cleanLabel]);
     }
 
     res.json({ success: true, message: `Synced ${unlabeled.length} descriptions, created ${createdCount} new unique labels.` });
