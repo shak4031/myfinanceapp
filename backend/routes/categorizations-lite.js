@@ -1,15 +1,21 @@
 import { Router } from 'express';
 import sqlite3 from 'sqlite3';
+import fs from 'fs';
+import path from 'path';
 import { log } from '../utils/logger.js';
 
 const router = Router();
 
-// Initialize SQLite database
-const DB_PATH = '/opt/data/finance.db';
+// Initialize SQLite database (ensure directory exists if local SQLite is used)
+const DB_PATH = process.env.SQLITE_DB_PATH || path.join(process.cwd(), 'data', 'finance.db');
 let db;
 
 function initDB() {
   return new Promise((resolve, reject) => {
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     db = new sqlite3.Database(DB_PATH, (err) => {
       if (err) reject(err);
       else resolve();

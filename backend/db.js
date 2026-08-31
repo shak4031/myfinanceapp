@@ -289,6 +289,9 @@ export default class Database {
         "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('PENNYMAC', 'PennyMac Mortgage', (SELECT id FROM categories WHERE name = 'Mortgage'), TRUE) ON CONFLICT (pattern) DO NOTHING"
       );
 
+      // Proactively ensure 'EV Charging' category is in database
+      await this.run("INSERT INTO categories (name, icon, color) VALUES ('EV Charging', '🔌', '#00bcd4') ON CONFLICT (name) DO NOTHING");
+
       // Proactively ensure 'Savings' category is in database (if categories were seeded on a previous run)
       await this.run("INSERT INTO categories (name, icon, color) VALUES ('Savings', '🐱', '#2ecc71') ON CONFLICT (name) DO NOTHING");
       await this.run("UPDATE categories SET icon = '🐱' WHERE name = 'Savings'");
