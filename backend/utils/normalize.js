@@ -40,34 +40,86 @@ export function escapeRegex(value = '') {
  * Handles card prefixes (VISA DDA, PUR, REF, AP auth-codes), Zelle transfers, etc.
  */
 export function extractMerchantCore(description) {
+  return getCanonicalMerchant(description);
+}
+
+/**
+ * Get canonical normalized merchant name for grouping and display.
+ */
+export function getCanonicalMerchant(description) {
   if (!description) return '';
-  let s = description.replace(/\s+/g, ' ').trim();
+  let s = description.replace(/\s+/g, ' ').trim().toUpperCase();
 
   // 1. Zelle handling: extract payee name
   if (/\bZELLE\b/i.test(s)) {
     const lastZelle = s.lastIndexOf(' ZELLE ');
     if (lastZelle !== -1) {
-      const payee = s.slice(lastZelle + ' ZELLE '.length).trim();
-      if (payee) return payee;
+      s = s.slice(lastZelle + ' ZELLE '.length).trim();
+    } else {
+      const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
+      if (match && match[1]) s = match[1].trim();
     }
-    const match = s.match(/\bZELLE\s+(?:TO|FROM|SENT|RECEIVED)?\s*(?:[A-Z0-9xX]+)?\s*(.+)$/i);
-    if (match && match[1]) return match[1].trim();
   }
 
-  // 2. Bank card boilerplate prefixes (PUR, REF, RETURN, CREDIT, AP <auth-code>)
+  // 2. Remove standard bank card and transaction noise prefixes
   s = s.replace(/^(?:VISA\s+)?(?:DDA|POS|DEBIT(?:\s+CARD)?|CHECK\s+CARD)\s+(?:PUR(?:CHASE)?|REF(?:UND)?|RETURN|CREDIT|PMT|PAYMENT)?(?:\s+AP)?(?:\s+[A-Z0-9xX]{3,12})?\s+/i, '');
   s = s.replace(/^(?:DDA|VISA|POS)\s+(?:PURCHASE|PUR|REF|RETURN|CREDIT)\s+(?:AP\s+)?(?:[A-Z0-9xX]{3,12}\s+)?/i, '');
 
-  return s.trim();
+  // 3. Remove phone numbers (e.g. 888-731-5396, 888 731 5396, 800-436-7734)
+  s = s.replace(/\b\d{3}[-\s]\d{3}[-\s]\d{4}\b/g, '');
+
+  // 4. Remove trailing state codes (e.g. * NJ, * MD, * CA, NJ, MD, CA at end of line)
+  s = s.replace(/\*\s*[A-Z]{2}$/i, '');
+  s = s.replace(/\b[A-Z]{2}$/i, '');
+
+  // 5. Special known merchant normalizations
+  if (/MUSIC\s*&?\s*ARTS/i.test(s)) return 'MUSIC & ARTS';
+  if (/STATE\s+FARM/i.test(s)) return 'STATE FARM';
+  if (/PENNYMAC/i.test(s)) return 'PENNYMAC';
+  if (/NETFLIX/i.test(s)) return 'NETFLIX';
+  if (/HYUNDAI/i.test(s)) return 'HYUNDAI LEASE';
+  if (/PSEG|PUBLIC\s+SERVICE/i.test(s)) return 'PSEG';
+  if (/VERIZON/i.test(s)) return 'VERIZON';
+  if (/COMCAST|XFINITY/i.test(s)) return 'COMCAST-XFINITY';
+  if (/TRADER\s+JOE/i.test(s)) return 'TRADER JOES';
+  if (/WHOLE\s+FOODS/i.test(s)) return 'WHOLE FOODS';
+  if (/HOME\s+DEPOT/i.test(s)) return 'THE HOME DEPOT';
+  if (/UBER\s*EATS/i.test(s)) return 'UBER EATS';
+
+  // 6. Generic cleanup: remove web domain suffixes, noise words
+  s = s.replace(/\.COM\b|\.CO\b|\.NET\b|\.ORG\b|\bCOM\b/gi, '');
+  s = s.replace(/\b(?:ONLINE\s+PMT|PAYMENTREC|PAYMENT|AUTOPAY|SFPP|DIR\s+DEP|PURCHASE|PENDING)\b/gi, '');
+  s = s.replace(/[^\w\s&]/g, ' '); // remove special chars except &
+  s = s.replace(/\s+/g, ' ').trim();
+
+  return s;
 }
 
 /**
  * Build a stable regex pattern for transaction labels.
  */
 export function buildLabelPattern(description) {
-  const core = extractMerchantCore(description);
-  if (!core) return escapeRegex(description.replace(/\s+/g, ' ').trim());
-  return escapeRegex(core);
+  const canonical = getCanonicalMerchant(description);
+  if (!canonical) return escapeRegex(description.replace(/\s+/g, ' ').trim());
+
+  if (canonical === 'MUSIC & ARTS') return 'MUSIC\\s*&?\\s*ARTS';
+  if (canonical === 'STATE FARM') return 'STATE\\s+FARM';
+  if (canonical === 'PENNYMAC') return 'PENNYMAC';
+  if (canonical === 'NETFLIX') return 'NETFLIX';
+  if (canonical === 'HYUNDAI LEASE') return 'HYUNDAI';
+  if (canonical === 'PSEG') return 'PSEG|PUBLIC\\s+SERVICE';
+  if (canonical === 'VERIZON') return 'VERIZON';
+  if (canonical === 'COMCAST-XFINITY') return 'COMCAST|XFINITY';
+  if (canonical === 'TRADER JOES') return 'TRADER\\s+JOE';
+  if (canonical === 'WHOLE FOODS') return 'WHOLE\\s+FOODS';
+  if (canonical === 'THE HOME DEPOT') return 'HOME\\s+DEPOT';
+  if (canonical === 'UBER EATS') return 'UBER\\s*EATS';
+
+  const words = canonical.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words.map(w => escapeRegex(w)).join('\\s+');
+  }
+  return escapeRegex(canonical);
 }
 
 /**

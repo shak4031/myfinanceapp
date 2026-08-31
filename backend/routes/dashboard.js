@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
-import { extractMerchantCore } from '../utils/normalize.js';
+import { extractMerchantCore, getCanonicalMerchant } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
@@ -364,6 +364,7 @@ router.post('/upcoming-payments', async (req, res) => {
     const currentMonth = today.getMonth(); // 0-indexed
     const currentYear = today.getFullYear();
     const currentDay = today.getDate();
+    const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     const timeline = [];
     const paidMerchantKeys = new Set();
@@ -378,8 +379,8 @@ router.post('/upcoming-payments', async (req, res) => {
       const m = parseInt(parts[1], 10) - 1; // 0-indexed
       const d = parseInt(parts[2], 10);
 
+      const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
       if (y === currentYear && m === currentMonth) {
-        const merchantKey = (extractMerchantCore(tx.description) || tx.description).toUpperCase();
         if (!seenTxIds.has(tx.id)) {
           seenTxIds.add(tx.id);
           timeline.push({
@@ -391,16 +392,18 @@ router.post('/upcoming-payments', async (req, res) => {
             isIncome: (tx.direction || '').toUpperCase() === 'CREDIT',
             status: 'processed'
           });
-          paidMerchantKeys.add(merchantKey);
+          paidMerchantKeys.add(canonicalKey);
         }
       }
     }
 
-    // 2. Identify all recurring fixed bill templates (distinct by merchant)
+    // 2. Identify all recurring fixed bill templates (distinct by canonical merchant)
+    // Because fixedTransactions is sorted ORDER BY date DESC, the first time we see a canonicalKey,
+    // it reflects its most recent payment date (e.g. paid on the 28th last month -> Day 28 due date).
     const fixedTemplates = new Map();
     for (const tx of fixedTransactions) {
-      const merchantKey = (extractMerchantCore(tx.description) || tx.description).toUpperCase();
-      if (!fixedTemplates.has(merchantKey)) {
+      const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
+      if (!fixedTemplates.has(canonicalKey)) {
         let day = 1;
         if (tx.date) {
           const parts = tx.date.split('-');
@@ -408,8 +411,10 @@ router.post('/upcoming-payments', async (req, res) => {
             day = parseInt(parts[2], 10) || 1;
           }
         }
-        fixedTemplates.set(merchantKey, {
-          description: tx.description,
+        day = Math.min(day, daysInCurrentMonth);
+
+        fixedTemplates.set(canonicalKey, {
+          description: canonicalKey,
           category: tx.category || 'Other',
           amount: parseFloat(tx.amount),
           dayOfMonth: day,
@@ -419,9 +424,9 @@ router.post('/upcoming-payments', async (req, res) => {
     }
 
     // 3. For any fixed bill NOT yet paid in the current month, add as 'projected' (Upcoming)
-    for (const [merchantKey, template] of fixedTemplates.entries()) {
+    for (const [canonicalKey, template] of fixedTemplates.entries()) {
       // Don't project if already paid this month
-      if (paidMerchantKeys.has(merchantKey)) continue;
+      if (paidMerchantKeys.has(canonicalKey)) continue;
 
       // Don't project income items as regular bills (handled separately below)
       if (template.isIncome || /payroll|salary|wells fargo/i.test(template.description)) continue;
