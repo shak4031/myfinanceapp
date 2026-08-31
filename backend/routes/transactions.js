@@ -6,6 +6,31 @@ import { normalizeDescription, dedupWhereClause } from '../utils/normalize.js';
 const router = Router();
 const db = new Database();
 
+function escapeRegex(value = '') {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildLabelPattern(description) {
+  if (!description) return '';
+
+  const normalized = description.replace(/\s+/g, ' ').trim();
+
+  // Zelle transfers often include a changing numeric reference code before the payee name.
+  // Example: TD ZELLE SENT 624000J06DC7 ZELLE CRISTIANE DE LIMA S
+  // We want a stable pattern: TD ZELLE SENT .* ZELLE CRISTIANE DE LIMA S
+  if (/\bZELLE\b/i.test(normalized) && /\bSENT\b/i.test(normalized)) {
+    const payeeStart = normalized.lastIndexOf(' ZELLE ');
+    if (payeeStart !== -1) {
+      const payee = normalized.slice(payeeStart + ' ZELLE '.length).trim();
+      if (payee) {
+        return `TD ZELLE SENT .* ZELLE ${escapeRegex(payee)}`;
+      }
+    }
+  }
+
+  return normalized;
+}
+
 // Helper: Get date range based on filter
 function getDateRange(filter) {
   const today = new Date();
@@ -83,20 +108,37 @@ router.post('/update-transaction', async (req, res) => {
     }
 
     if (apply_to_all) {
-      // 1. Update the 'Master Blueprint' (transaction_labels table)
-      // This ensures all FUTURE imports are born with the correct fixed/category status
-      await db.run(
-        `UPDATE transaction_labels 
-         SET is_fixed = $1, category_id = (SELECT id FROM categories WHERE name = $2)
-         WHERE pattern = (SELECT pattern FROM transaction_labels WHERE id = (SELECT label_id FROM transactions WHERE id = $3))`,
-        [is_fixed, category, id]
+      const labelId = await db.get(
+        'SELECT label_id FROM transactions WHERE id = $1',
+        [id]
       );
 
-      // 2. Update ALL historical transactions with the same description
-      await db.run(
-        'UPDATE transactions SET category = $1, is_fixed = $2 WHERE description = $3 AND user_id = $4',
-        [category, is_fixed, txn.description, 1]
-      );
+      const pattern = labelId?.label_id
+        ? await db.get('SELECT pattern FROM transaction_labels WHERE id = $1', [labelId.label_id])
+        : null;
+
+      const canonicalPattern = pattern?.pattern || buildLabelPattern(txn.description);
+
+      // 1. Update the label to a stable pattern so future imports with the same payee
+      // but different Zelle reference codes still match.
+      if (canonicalPattern) {
+        await db.run(
+          `UPDATE transaction_labels
+           SET pattern = $1,
+               is_fixed = $2,
+               category_id = (SELECT id FROM categories WHERE name = $3)
+           WHERE id = (SELECT label_id FROM transactions WHERE id = $4)`,
+          [canonicalPattern, is_fixed, category, id]
+        );
+      }
+
+      // 2. Update ALL historical transactions matching the same pattern, not just the exact text.
+      if (canonicalPattern) {
+        await db.run(
+          'UPDATE transactions SET category = $1, is_fixed = $2 WHERE description ~* $3 AND user_id = $4',
+          [category, is_fixed, canonicalPattern, 1]
+        );
+      }
     } else {
       // Update just this one
       await db.run(
@@ -212,10 +254,7 @@ router.post('/sync-labels', async (req, res) => {
     let createdCount = 0;
 
     for (const t of unlabeled) {
-        const cleanLabel = t.description
-            .replace(/\s+/g, ' ')
-            .replace(/\d{4,}/g, '')
-            .trim();
+        const cleanLabel = buildLabelPattern(t.description);
         
         // Check if label already exists (prevent duplicates in label table)
         const exists = await db.get("SELECT id FROM transaction_labels WHERE pattern = $1", [cleanLabel]);
