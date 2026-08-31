@@ -36,6 +36,60 @@ export function escapeRegex(value = '') {
 }
 
 /**
+ * Universal date parser that reliably parses any date format
+ * (YYYY-MM-DD, MM/DD/YYYY, ISO timestamps, Date objects)
+ * into { year, month (0-11), day, iso }.
+ */
+export function parseTxDate(rawDate) {
+  if (!rawDate) return null;
+  if (rawDate instanceof Date) {
+    return {
+      year: rawDate.getFullYear(),
+      month: rawDate.getMonth(), // 0-indexed
+      day: rawDate.getDate(),
+      iso: rawDate.toISOString().split('T')[0]
+    };
+  }
+  const s = String(rawDate).trim();
+  // YYYY-MM-DD or YYYY-MM-DDTHH... or YYYY/MM/DD
+  const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10) - 1;
+    const d = parseInt(isoMatch[3], 10);
+    return {
+      year: y,
+      month: m,
+      day: d,
+      iso: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    };
+  }
+  // MM/DD/YYYY or MM-DD-YYYY
+  const usMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (usMatch) {
+    const y = parseInt(usMatch[3], 10);
+    const m = parseInt(usMatch[1], 10) - 1;
+    const d = parseInt(usMatch[2], 10);
+    return {
+      year: y,
+      month: m,
+      day: d,
+      iso: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    };
+  }
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return {
+      year: parsed.getFullYear(),
+      month: parsed.getMonth(),
+      day: parsed.getDate(),
+      iso: parsed.toISOString().split('T')[0]
+    };
+  }
+  return null;
+}
+
+/**
  * Extract the core merchant identifier from messy bank transaction descriptions.
  * Handles card prefixes (VISA DDA, PUR, REF, AP auth-codes), Zelle transfers, etc.
  */
@@ -77,6 +131,7 @@ export function getCanonicalMerchant(description) {
   if (/STATE\s+FARM/i.test(s)) return 'STATE FARM';
   if (/PENNYMAC/i.test(s)) return 'PENNYMAC';
   if (/NETFLIX/i.test(s)) return 'NETFLIX';
+  if (/SANTANDER/i.test(s)) return 'SANTANDER AUTO';
   if (/HYUNDAI/i.test(s)) return 'HYUNDAI LEASE';
   if (/PSEG|PUBLIC\s+SERVICE/i.test(s)) return 'PSEG';
   if (/VERIZON/i.test(s)) return 'VERIZON';
@@ -106,6 +161,7 @@ export function buildLabelPattern(description) {
   if (canonical === 'STATE FARM') return 'STATE\\s+FARM';
   if (canonical === 'PENNYMAC') return 'PENNYMAC';
   if (canonical === 'NETFLIX') return 'NETFLIX';
+  if (canonical === 'SANTANDER AUTO') return 'SANTANDER';
   if (canonical === 'HYUNDAI LEASE') return 'HYUNDAI';
   if (canonical === 'PSEG') return 'PSEG|PUBLIC\\s+SERVICE';
   if (canonical === 'VERIZON') return 'VERIZON';

@@ -458,11 +458,45 @@
           <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
         </header>
 
+        <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
+        <div class="panel" style="padding: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h2 style="font-size: 20px; margin: 0;">📈 Monthly Income vs Expense History</h2>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track patterns, seasonal trends, and net cashflow across months and years</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <label for="cashflow-year-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Year:</label>
+              <select id="cashflow-year-select" onchange="changeCashflowYear(this.value)" style="padding: 8px 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+              </select>
+            </div>
+          </div>
+
+          <!-- Key Metrics Badges for Selected Year -->
+          <div id="cashflow-year-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;"></div>
+
+          <!-- Bar Chart Container -->
+          <div id="cashflow-chart-container" style="overflow-x: auto; padding-bottom: 8px;"></div>
+
+          <!-- Legend -->
+          <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-size: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--success); border-radius: 3px; display: inline-block;"></span> <span>Income</span></div>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--danger); border-radius: 3px; display: inline-block;"></span> <span>Expenses</span></div>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px; display: inline-block;"></span> <span>Net Cashflow</span></div>
+          </div>
+        </div>
+
         <div class="metrics-grid" id="dashboard-metrics"></div>
 
         <div>
-          <h2 style="margin-bottom: 20px;">📅 Upcoming Payments</h2>
-          <div class="metrics-grid" id="dashboard-payments"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h2 style="margin: 0;">📅 Upcoming Payments & Projected Runway</h2>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track required funding for fixed bills and identify potential cashflow deficits</div>
+            </div>
+            <div id="cashflow-safety-badge"></div>
+          </div>
+          <div id="dashboard-payments"></div>
         </div>
       </section>
 
@@ -780,15 +814,112 @@
       if (viewId === 'insights') { /* Initial view state already set */ }
     }
 
+    // MONTHLY CASHFLOW HISTORY LOGIC
+    let cashflowDataCache = null;
+
+    async function loadCashflowChart() {
+      const chartContainer = document.getElementById('cashflow-chart-container');
+      const yearSelect = document.getElementById('cashflow-year-select');
+      const summaryContainer = document.getElementById('cashflow-year-summary');
+      if (!chartContainer || !yearSelect) return;
+
+      try {
+        const res = await fetch('/api/dashboard/monthly-cashflow');
+        const data = await res.json();
+        if (!data.success) return;
+        cashflowDataCache = data;
+
+        // Populate years in dropdown
+        const currentVal = yearSelect.value;
+        yearSelect.innerHTML = data.years.map(y => `<option value="${y}" ${y === (currentVal ? parseInt(currentVal) : data.defaultYear) ? 'selected' : ''}>${y}</option>`).join('');
+
+        const selectedYear = yearSelect.value || data.defaultYear;
+        renderCashflowYear(selectedYear);
+      } catch (err) {
+        if (chartContainer) chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Unable to load cashflow chart</div>';
+      }
+    }
+
+    function changeCashflowYear(year) {
+      if (!cashflowDataCache) return;
+      renderCashflowYear(year);
+    }
+
+    function renderCashflowYear(year) {
+      if (!cashflowDataCache) return;
+      const yearNum = parseInt(year);
+      const months = cashflowDataCache.yearData[yearNum] || [];
+      const summary = cashflowDataCache.summaryByYear[yearNum] || { totalIncome: 0, totalExpenses: 0, netSavings: 0 };
+      
+      const summaryContainer = document.getElementById('cashflow-year-summary');
+      const chartContainer = document.getElementById('cashflow-chart-container');
+
+      // 1. KPI Badges
+      summaryContainer.innerHTML = `
+        <div class="metric-card" style="padding: 16px;">
+          <div class="metric-label">${yearNum} Total Income</div>
+          <div class="metric-value" style="font-size: 22px; color: var(--success);">$${summary.totalIncome.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        </div>
+        <div class="metric-card" style="padding: 16px;">
+          <div class="metric-label">${yearNum} Total Expenses</div>
+          <div class="metric-value" style="font-size: 22px; color: var(--danger);">$${summary.totalExpenses.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        </div>
+        <div class="metric-card" style="padding: 16px;">
+          <div class="metric-label">${yearNum} Net Cashflow</div>
+          <div class="metric-value" style="font-size: 22px; color: ${summary.netSavings >= 0 ? 'var(--success)' : 'var(--danger)'};">${summary.netSavings >= 0 ? '+' : ''}$${summary.netSavings.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        </div>
+      `;
+
+      // 2. Compute Max Value for Scale
+      const maxVal = Math.max(...months.map(m => Math.max(m.income, m.expenses)), 1000);
+
+      // 3. Render Responsive 12-Month Bar Chart
+      let chartHtml = `
+        <div style="display: grid; grid-template-columns: repeat(12, minmax(60px, 1fr)); gap: 12px; min-width: 780px; align-items: end; height: 220px; padding: 20px 8px 10px 8px; border-bottom: 1px solid var(--border);">
+      `;
+
+      months.forEach(m => {
+        const incHeight = Math.max(2, Math.round((m.income / maxVal) * 160));
+        const expHeight = Math.max(2, Math.round((m.expenses / maxVal) * 160));
+        const hasData = m.income > 0 || m.expenses > 0;
+
+        chartHtml += `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative;" title="${m.monthName} ${yearNum}: Income $${m.income.toFixed(2)} | Expenses $${m.expenses.toFixed(2)} | Net $${m.net.toFixed(2)}">
+            <!-- Bars Group -->
+            <div style="display: flex; gap: 4px; align-items: flex-end; width: 100%; justify-content: center; height: 170px;">
+              <!-- Income Bar -->
+              <div style="width: 40%; max-width: 22px; height: ${hasData && m.income > 0 ? incHeight : 2}px; background: var(--success); border-radius: 4px 4px 0 0; transition: height 0.4s ease; opacity: ${m.income > 0 ? '1' : '0.2'};"></div>
+              <!-- Expense Bar -->
+              <div style="width: 40%; max-width: 22px; height: ${hasData && m.expenses > 0 ? expHeight : 2}px; background: var(--danger); border-radius: 4px 4px 0 0; transition: height 0.4s ease; opacity: ${m.expenses > 0 ? '1' : '0.2'};"></div>
+            </div>
+            
+            <!-- Month Label -->
+            <div style="margin-top: 8px; font-size: 11px; font-weight: 600; color: ${hasData ? 'var(--text-primary)' : 'var(--text-secondary)'}; text-align: center;">${m.monthName}</div>
+            
+            <!-- Net Label -->
+            <div style="font-size: 9px; font-weight: 700; color: ${m.net > 0 ? 'var(--success)' : (m.net < 0 ? 'var(--danger)' : 'var(--text-secondary)')}; margin-top: 2px;">
+              ${hasData ? (m.net > 0 ? '+' : '') + '$' + Math.round(m.net).toLocaleString() : '—'}
+            </div>
+          </div>
+        `;
+      });
+
+      chartHtml += `</div>`;
+      chartContainer.innerHTML = chartHtml;
+    }
+
     // DASHBOARD LOGIC
     async function loadDashboard() {
       // 0. CLEAR existing containers to prevent duplication on multiple nav clicks
       const paymentsContainer = document.getElementById('dashboard-payments');
       paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
       
-      // Remove any previously injected MTD sections to prevent the "5 repeated sections" bug
+      // Remove any previously injected MTD sections to prevent the "repeated sections" bug
       const existingMtd = document.getElementById('mtd-spending-section');
       if (existingMtd) existingMtd.remove();
+
+      // Load Cashflow History Chart
+      loadCashflowChart();
 
       const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
       const data = await summaryRes.json();
@@ -800,18 +931,53 @@
         <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
       `;
 
-      // 1. TIMELINE PROJECTION (Now properly showing WELLS INCOME)
+      // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
       const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
       const timeline = await payRes.json();
       
-      const today = new Date().getDate();
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
-      // Filter: Only show the FUTURE portion of the month
-      // FIX: Today is June 7th. Your income was June 3rd. That's why it vanished.
-      // We should show the full month's timeline but mark the past items as "Done"
-      
       let runningBalance = data.balance;
+      let minProjectedBalance = data.balance;
+      let deficitDay = null;
+      let deficitBill = null;
+
+      // Scan through to find min balance & jeopardy
+      timeline.forEach(item => {
+        if (item.status !== 'processed') {
+          if (item.isIncome) runningBalance += item.amount;
+          else runningBalance -= item.amount;
+
+          if (runningBalance < minProjectedBalance) {
+            minProjectedBalance = runningBalance;
+            if (runningBalance < 0 && deficitDay === null) {
+              deficitDay = item.dayOfMonth;
+              deficitBill = item.description;
+            }
+          }
+        }
+      });
+
+      // Update Cashflow Safety Status Badge
+      const safetyBadge = document.getElementById('cashflow-safety-badge');
+      if (safetyBadge) {
+        if (minProjectedBalance < 0) {
+          safetyBadge.innerHTML = `
+            <div style="background: rgba(235, 87, 87, 0.15); border: 1px solid var(--danger); color: var(--danger); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              <span>🚨 DEFICIT ALERT:</span> Balance projected at -$${Math.abs(minProjectedBalance).toFixed(2)} on Day ${deficitDay} (${deficitBill})
+            </div>
+          `;
+        } else {
+          safetyBadge.innerHTML = `
+            <div style="background: rgba(81, 207, 102, 0.15); border: 1px solid var(--success); color: var(--success); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+              <span>🛡️ All Bills Fully Funded</span> (Min Projected: $${minProjectedBalance.toFixed(2)})
+            </div>
+          `;
+        }
+      }
+
+      // Re-run for row-by-row rendering
+      runningBalance = data.balance;
       let timelineHtml = `
         <div class="panel" style="padding: 0; overflow: hidden;">
           <table style="width: 100%; border-collapse: collapse;">
@@ -834,10 +1000,13 @@
           else runningBalance -= item.amount;
         }
 
+        const isDeficit = !isPaid && runningBalance < 0;
+
         timelineHtml += `
-          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.6' : '1'}; background: ${item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent'}">
-            <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : 'var(--primary)'};">
+          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.65' : '1'}; background: ${isDeficit ? 'rgba(235, 87, 87, 0.12)' : (item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent')}">
+            <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : (isDeficit ? 'var(--danger)' : 'var(--primary)')};">
               ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
+              ${isDeficit ? '<span style="display: block; font-size: 10px; color: var(--danger); font-weight: 700;">⚠️ AT RISK</span>' : ''}
             </td>
             <td style="padding: 12px 0;">
               <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
@@ -846,8 +1015,8 @@
             <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
               ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
             </td>
-            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: var(--text-primary)">
-              ${isPaid ? '—' : '$' + runningBalance.toFixed(2)}
+            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: ${isPaid ? 'var(--text-secondary)' : (runningBalance < 0 ? 'var(--danger)' : 'var(--text-primary)')}">
+              ${isPaid ? '—' : (runningBalance < 0 ? '-' : '') + '$' + Math.abs(runningBalance).toFixed(2)}
             </td>
           </tr>
         `;

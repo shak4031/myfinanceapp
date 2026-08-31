@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
-import { extractMerchantCore, getCanonicalMerchant } from '../utils/normalize.js';
+import { extractMerchantCore, getCanonicalMerchant, parseTxDate } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
@@ -332,6 +332,100 @@ router.post('/summary', async (req, res) => {
   }
 });
 
+router.get('/monthly-cashflow', async (req, res) => {
+  try {
+    log('DASHBOARD', 'Fetching monthly cashflow (income vs expense by year)');
+    const rows = await db.all(
+      `SELECT date, amount, direction, description 
+       FROM transactions 
+       WHERE user_id = $1 
+       ORDER BY date ASC, id ASC`,
+      [1]
+    );
+
+    const yearData = {};
+    const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    for (const tx of rows) {
+      if (isInternalTransfer(tx.description)) continue;
+      if (/\b(x5261|x5237)\b/i.test(tx.description || '')) continue;
+
+      const parsed = parseTxDate(tx.date);
+      if (!parsed) continue;
+
+      const y = parsed.year;
+      const m = parsed.month; // 0-11
+      if (y < 2000 || y > 2100) continue;
+
+      if (!yearData[y]) {
+        yearData[y] = Array.from({ length: 12 }, (_, i) => ({
+          monthNum: i + 1,
+          monthName: monthsNames[i],
+          income: 0,
+          expenses: 0,
+          net: 0,
+          txCount: 0
+        }));
+      }
+
+      const amt = parseFloat(tx.amount) || 0;
+      const dir = (tx.direction || '').toUpperCase();
+      if (dir === 'CREDIT') {
+        yearData[y][m].income += amt;
+      } else if (dir === 'DEBIT') {
+        yearData[y][m].expenses += amt;
+      }
+      yearData[y][m].txCount++;
+    }
+
+    // Calculate net and annual totals
+    const years = Object.keys(yearData).map(Number).sort((a, b) => b - a);
+    const summaryByYear = {};
+
+    for (const y of years) {
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      yearData[y].forEach(m => {
+        m.income = Math.round(m.income * 100) / 100;
+        m.expenses = Math.round(m.expenses * 100) / 100;
+        m.net = Math.round((m.income - m.expenses) * 100) / 100;
+        totalIncome += m.income;
+        totalExpenses += m.expenses;
+      });
+      summaryByYear[y] = {
+        totalIncome: Math.round(totalIncome * 100) / 100,
+        totalExpenses: Math.round(totalExpenses * 100) / 100,
+        netSavings: Math.round((totalIncome - totalExpenses) * 100) / 100
+      };
+    }
+
+    const currentYear = new Date().getFullYear();
+    if (!years.includes(currentYear)) {
+      years.unshift(currentYear);
+      yearData[currentYear] = Array.from({ length: 12 }, (_, i) => ({
+        monthNum: i + 1,
+        monthName: monthsNames[i],
+        income: 0,
+        expenses: 0,
+        net: 0,
+        txCount: 0
+      }));
+      summaryByYear[currentYear] = { totalIncome: 0, totalExpenses: 0, netSavings: 0 };
+    }
+
+    res.json({
+      success: true,
+      years,
+      yearData,
+      summaryByYear,
+      defaultYear: years.includes(currentYear) ? currentYear : years[0]
+    });
+  } catch (error) {
+    log('DASHBOARD', `Error in monthly-cashflow: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/upcoming-payments', async (req, res) => {
   try {
     log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills & Bi-weekly Projection)');
@@ -373,14 +467,11 @@ router.post('/upcoming-payments', async (req, res) => {
     // 1. Add all fixed transactions that were PAID in the current calendar month
     for (const tx of fixedTransactions) {
       if (!tx.date) continue;
-      const parts = tx.date.split('-');
-      if (parts.length < 3) continue;
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10) - 1; // 0-indexed
-      const d = parseInt(parts[2], 10);
+      const parsed = parseTxDate(tx.date);
+      if (!parsed) continue;
 
       const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
-      if (y === currentYear && m === currentMonth) {
+      if (parsed.year === currentYear && parsed.month === currentMonth) {
         if (!seenTxIds.has(tx.id)) {
           seenTxIds.add(tx.id);
           timeline.push({
@@ -388,7 +479,7 @@ router.post('/upcoming-payments', async (req, res) => {
             description: tx.description,
             category: tx.category || 'Other',
             amount: parseFloat(tx.amount),
-            dayOfMonth: d,
+            dayOfMonth: parsed.day,
             isIncome: (tx.direction || '').toUpperCase() === 'CREDIT',
             status: 'processed'
           });
@@ -399,18 +490,13 @@ router.post('/upcoming-payments', async (req, res) => {
 
     // 2. Identify all recurring fixed bill templates (distinct by canonical merchant)
     // Because fixedTransactions is sorted ORDER BY date DESC, the first time we see a canonicalKey,
-    // it reflects its most recent payment date (e.g. paid on the 28th last month -> Day 28 due date).
+    // it reflects its most recent payment date (e.g. paid on the 28th in July -> Day 28 due date).
     const fixedTemplates = new Map();
     for (const tx of fixedTransactions) {
       const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
       if (!fixedTemplates.has(canonicalKey)) {
-        let day = 1;
-        if (tx.date) {
-          const parts = tx.date.split('-');
-          if (parts.length >= 3) {
-            day = parseInt(parts[2], 10) || 1;
-          }
-        }
+        const parsed = parseTxDate(tx.date);
+        let day = parsed ? parsed.day : 1;
         day = Math.min(day, daysInCurrentMonth);
 
         fixedTemplates.set(canonicalKey, {
@@ -444,20 +530,22 @@ router.post('/upcoming-payments', async (req, res) => {
     // 4. Bi-weekly / regular payroll projection
     const lastIncome = fixedTransactions.find(t => (t.direction || '').toUpperCase() === 'CREDIT' && /WELLS FARGO|PAYROLL|SALARY/i.test(t.description));
     if (lastIncome && lastIncome.date) {
-      const [iy, im, iday] = lastIncome.date.split('-').map(Number);
-      const lastDate = new Date(iy, im - 1, iday);
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(lastDate.getDate() + 14);
+      const parsedInc = parseTxDate(lastIncome.date);
+      if (parsedInc) {
+        const lastDate = new Date(parsedInc.year, parsedInc.month, parsedInc.day);
+        const nextDate = new Date(lastDate);
+        nextDate.setDate(lastDate.getDate() + 14);
 
-      if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > currentDay) {
-        timeline.push({
-          description: 'Projected: Payroll Deposit',
-          category: 'Salary',
-          amount: parseFloat(lastIncome.amount),
-          dayOfMonth: nextDate.getDate(),
-          isIncome: true,
-          status: 'projected'
-        });
+        if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > currentDay) {
+          timeline.push({
+            description: 'Projected: Payroll Deposit',
+            category: 'Salary',
+            amount: parseFloat(lastIncome.amount),
+            dayOfMonth: nextDate.getDate(),
+            isIncome: true,
+            status: 'projected'
+          });
+        }
       }
     }
 
