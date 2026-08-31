@@ -1251,7 +1251,7 @@
             <td style="padding: 12px; font-size: 12px; color: var(--text-secondary);">${localDate(t.date).toLocaleDateString('en-US', {month: 'short', day: '2-digit', year: 'numeric'})}</td>
             <td style="padding: 12px; font-weight: 500; font-size: 13px;">${t.description}</td>
             <td style="padding: 12px;">
-              <select onchange="modifyTransaction('${t.id}', this.value, ${t.is_fixed})" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
+              <select onchange="modifyTransaction('${t.id}', this.value)" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
                 <option value="">Uncategorized</option>
                 ${categories.map(c => `<option value="${c.name}" ${t.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
               </select>
@@ -1269,21 +1269,17 @@
       }
     }
 
-    async function modifyTransaction(id, category, isFixed) {
+    async function modifyTransaction(id, category) {
       try {
         const res = await fetch('/api/dashboard/update-transaction', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, category, is_fixed: isFixed, apply_to_all: true })
+          body: JSON.stringify({ id, category, apply_to_all: true })
         });
         const data = await res.json();
         
         await loadAllTransactions();
         notify(`✓ Updated category to "${category}"`);
-        
-        if (isFixed === false || isFixed === true) {
-           loadDashboard(); 
-        }
       } catch (err) {
         notify('❌ Update failed');
       }

@@ -82,6 +82,9 @@ router.post('/update-transaction', async (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
+    const hasFixedParam = typeof is_fixed === 'boolean' || is_fixed === 'true' || is_fixed === 'false';
+    const isFixedBool = is_fixed === true || is_fixed === 'true';
+
     if (apply_to_all) {
       // ALWAYS build clean, specific pattern from the actual transaction description
       const canonicalPattern = buildLabelPattern(txn.description);
@@ -95,29 +98,50 @@ router.post('/update-transaction', async (req, res) => {
       const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
       if (existingLabel) {
         targetLabelId = existingLabel.id;
-        await db.run(
-          'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
-          [is_fixed, catId, targetLabelId]
-        );
+        if (hasFixedParam) {
+          await db.run(
+            'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
+            [isFixedBool, catId, targetLabelId]
+          );
+        } else {
+          await db.run(
+            'UPDATE transaction_labels SET category_id = $1 WHERE id = $2',
+            [catId, targetLabelId]
+          );
+        }
       } else {
         const insertRes = await db.pool.query(
           'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
-          [canonicalPattern, coreMerchant, catId, is_fixed]
+          [canonicalPattern, coreMerchant, catId, hasFixedParam ? isFixedBool : false]
         );
         targetLabelId = insertRes.rows[0]?.id;
       }
 
       // Update ONLY transactions matching this specific merchant pattern
-      await db.run(
-        'UPDATE transactions SET category = $1, is_fixed = $2, label_id = $3 WHERE description ~* $4 AND user_id = $5',
-        [category, is_fixed, targetLabelId, canonicalPattern, 1]
-      );
+      if (hasFixedParam) {
+        await db.run(
+          'UPDATE transactions SET category = $1, is_fixed = $2, label_id = $3 WHERE description ~* $4 AND user_id = $5',
+          [category, isFixedBool, targetLabelId, canonicalPattern, 1]
+        );
+      } else {
+        await db.run(
+          'UPDATE transactions SET category = $1, label_id = $2 WHERE description ~* $3 AND user_id = $4',
+          [category, targetLabelId, canonicalPattern, 1]
+        );
+      }
     } else {
       // Update just this one
-      await db.run(
-        'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
-        [category, is_fixed, id, 1]
-      );
+      if (hasFixedParam) {
+        await db.run(
+          'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
+          [category, isFixedBool, id, 1]
+        );
+      } else {
+        await db.run(
+          'UPDATE transactions SET category = $1 WHERE id = $2 AND user_id = $3',
+          [category, id, 1]
+        );
+      }
     }
 
     res.json({ 

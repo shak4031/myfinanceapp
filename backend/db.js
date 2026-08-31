@@ -312,11 +312,11 @@ export default class Database {
         }
       } catch (err) { /* ignore */ }
 
-      // Proactively clean up any overly-broad or corrupted transaction labels
+      // Proactively clean up any overly-broad or corrupted transaction labels and heal is_fixed
       try {
-        await this.run("DELETE FROM transaction_labels WHERE pattern ~* '^(VISA|DDA|PUR|REF|AP|CARD|PAYMENT|DEBIT|CREDIT|CHECK)$' OR LENGTH(TRIM(pattern)) <= 2");
+        await this.run("DELETE FROM transaction_labels WHERE pattern ~* '^(VISA|DDA|PUR|REF|AP|CARD|PAYMENT|DEBIT|CREDIT|CHECK|OTHER|UNCATEGORIZED)$' OR LENGTH(TRIM(pattern)) <= 2");
         
-        // Repair any transactions falsely marked as 'EV Charging'
+        // 1. Repair any transactions falsely marked as 'EV Charging'
         await this.run(`
           UPDATE transactions 
           SET category = 'Shopping' 
@@ -342,7 +342,50 @@ export default class Database {
           SET category = 'Home' 
           WHERE category = 'EV Charging' AND description ~* 'HOME\\s*DEPOT|LOWES'
         `);
-      } catch (err) { /* ignore */ }
+
+        // 2. Heal is_fixed: Reset all variable categories and card purchases to is_fixed = FALSE
+        await this.run(`
+          UPDATE transactions 
+          SET is_fixed = FALSE 
+          WHERE category IN ('Groceries', 'Dining', 'Shopping', 'EV Charging', 'Gas', 'Healthcare', 'Salary', 'Income')
+          OR description ~* 'TARGET|WALMART|AMAZON|INSTACART|WAWA|TRADER\\s*JOE|WHOLE\\s*FOODS|SHOPRITE|STARBUCKS|CHIPOTLE|UBER\\s*EATS|DOORDASH|GRUBHUB|ELECTRIFY\\s*AMERICA|CHARGEPOINT|PAYROLL|SALARY'
+        `);
+
+        // 3. Ensure true recurring fixed bills are accurately flagged as is_fixed = TRUE
+        const verifiedFixedPatterns = [
+          'PENNYMAC|MORTGAGE',
+          'HYUNDAI|SANTANDER|AUTO\\s*LOAN|CAR\\s*PAYMENT|CAR\\s*LEASE',
+          'OLLO|CREDIT\\s*CARD|PAYMENT.*THANK|CAPITAL\\s*ONE|CHASE|DISCOVER|AMEX',
+          'PSEG|ELECTRIC|WATER|GAS\\s*CO|HYDRO',
+          'VERIZON|COMCAST|XFINITY|FIOS|T-MOBILE|AT&?T\\b|ATT\\b',
+          'STATE\\s*FARM|GEICO|ALLSTATE|PROGRESSIVE|INSURANCE',
+          'NETFLIX|HULU|SPOTIFY|DISNEY|HBO|ROCKET\\s*(?:MONEY|PREMIUM)?|MUSIC\\s*&?\\s*ARTS|ANTHROPIC'
+        ];
+
+        for (const pattern of verifiedFixedPatterns) {
+          await this.run(
+            `UPDATE transactions SET is_fixed = TRUE WHERE description ~* $1 AND user_id = 1`,
+            [pattern]
+          );
+        }
+
+        // 4. Align transaction_labels is_fixed flags
+        await this.run(`
+          UPDATE transaction_labels 
+          SET is_fixed = FALSE 
+          WHERE pattern ~* 'TARGET|WALMART|AMAZON|INSTACART|WAWA|TRADER|WHOLE\\s*FOODS|STARBUCKS|CHIPOTLE|UBER|ELECTRIFY|CHARGEPOINT|PAYROLL'
+        `);
+        for (const pattern of verifiedFixedPatterns) {
+          await this.run(
+            `UPDATE transaction_labels SET is_fixed = TRUE WHERE pattern ~* $1`,
+            [pattern]
+          );
+        }
+
+        log('DATABASE', '✓ Fixed bill flags and transaction categories successfully healed');
+      } catch (err) {
+        log('DATABASE', `⚠️ Schema repair notice: ${err.message}`);
+      }
 
       // 3. Seed Credit Cards
       const cardCheck = await this.pool.query('SELECT COUNT(*) FROM credit_cards');
