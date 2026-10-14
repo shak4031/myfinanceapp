@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { normalizeDescription, dedupWhereClause, extractMerchantCore, buildLabelPattern, escapeRegex } from '../utils/normalize.js';
+import { getFixedBillCategory } from '../utils/fixedPayments.js';
 
 const router = Router();
 const db = new Database();
@@ -198,13 +199,6 @@ router.post('/cleanup-database', async (req, res) => {
 
     // 3. Holistic Categorization (Unified Source of Truth logic)
     const rules = [
-      // BILLS (Fixed)
-      { pattern: 'ollo|credit.*card|payment.*thank|capital.*one|amex|chase|discover|mastercard|visa|marriott', category: 'Credit Cards', fixed: true },
-      { pattern: 'hyundai|santander|car.*payment|auto.*loan', category: 'Car Loans', fixed: true },
-      { pattern: 'mortgage|rent|lease|pennymac', category: 'Home', fixed: true },
-      { pattern: 'pseg|utility|electricity|water|gas', category: 'Utilities', fixed: true },
-      { pattern: 'verizon|comcast|xfinity|fios|t-mobile|internet', category: 'Internet', fixed: true },
-      { pattern: 'state farm|insurance|geico|allstate', category: 'Insurance', fixed: true },
       { pattern: 'chargepoint|tesla|supercharger|blink|ev charging|plugshare|electric vehicle charging', category: 'EV Charging', fixed: false },
       
       // LIFESTYLE (Not Fixed)
@@ -223,6 +217,14 @@ router.post('/cleanup-database', async (req, res) => {
          WHERE description ~* $3 AND user_id = 1`,
         [rule.category, rule.fixed, rule.pattern]
       );
+    }
+
+    const transactions = await db.all('SELECT id, description, direction FROM transactions WHERE user_id = 1');
+    for (const tx of transactions) {
+      const category = getFixedBillCategory(tx.description);
+      if (category && String(tx.direction).toUpperCase() === 'DEBIT') {
+        await db.run('UPDATE transactions SET category = $1, is_fixed = TRUE WHERE id = $2 AND user_id = 1', [category, tx.id]);
+      }
     }
 
     // 4. Backup: Anything still NULL gets 'Other'

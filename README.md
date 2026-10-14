@@ -106,6 +106,30 @@
 - Spending by category (top 8 with icons)
 - Recent transactions (last 15)
 
+#### Upcoming fixed payments
+
+- The current month's schedule uses fixed **debit** payments from the immediately
+  preceding calendar month, not older historical transactions.
+- Each bill uses its most recent payment day and amount from that month. A day
+  that does not exist in the current month is moved to the month's final day.
+- Payments matched in the current month appear greyed out as **Paid**, even if
+  the imported payment is missing its fixed flag or has a different amount.
+  Matching uses the merchant/label and distinguishes masked account numbers.
+- Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
+  with past due days remain in the projection and are labelled overdue.
+  Assumed payroll deposits and optional debt-payoff-plan payments are not added.
+- Ordinary card purchases, variable spending, savings transfers, and income are
+  not monthly fixed bills. Automatic cleanup uses specific bill/payment patterns,
+  not generic words such as VISA, CHASE, or gas. Startup does not automatically
+  re-enable fixed bills that were deselected.
+- Use the transaction's Fixed Bill checkbox to manage recurring bills. New bills
+  need a payment in the previous month before they can supply a monthly template.
+  The projection is based on imported records, not verified bank due dates; keep
+  imports up to date. Missing balance/payment data is shown explicitly, never as
+  a fully funded result.
+
+Run focused regression tests with `node --test backend\utils\fixedPayments.test.js`.
+
 ### Categories Tab ✅ (NEW)
 - Grid view of all 24 categories
 - Clickable drill-down to category details

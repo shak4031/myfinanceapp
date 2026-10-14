@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
-import { extractMerchantCore, getCanonicalMerchant, parseTxDate } from '../utils/normalize.js';
+import { parseTxDate } from '../utils/normalize.js';
+import { buildUpcomingPayments } from '../utils/fixedPayments.js';
 
 const router = Router();
 const db = new Database();
@@ -294,10 +295,11 @@ router.post('/summary', async (req, res) => {
 
     // 1. Get latest balance
     const latestBalance = await db.all(
-       'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
+       'SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1',
        [1]
     );
-    const balance = latestBalance.length > 0 ? parseFloat(latestBalance[0].balance) : 0;
+    const balance = latestBalance.length > 0 ? Number(latestBalance[0].balance) : null;
+    if (balance !== null && !Number.isFinite(balance)) throw new Error('Invalid account balance');
 
     // 2. Calculation of ACTUAL totals for the selected period (used for charts / AI analysis)
     const result = await db.get(
@@ -428,17 +430,11 @@ router.get('/monthly-cashflow', async (req, res) => {
 
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching upcoming payments (Strict Fixed Bills & Bi-weekly Projection)');
-
-    const latestBalanceRes = await db.all(
-      'SELECT balance FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT 1',
-      [1]
-    );
-    const currentBalance = latestBalanceRes.length > 0 ? parseFloat(latestBalanceRes[0].balance) : 0;
-
-    // --- SHARED DATA SOURCE ---
-    // Fetch ALL fixed transactions
-    const fixedTransactions = await db.all(
+    log('DASHBOARD', 'Fetching monthly fixed payments based on the previous month');
+    const today = new Date();
+    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const transactions = await db.all(
       `SELECT 
         id,
         date,
@@ -449,135 +445,10 @@ router.post('/upcoming-payments', async (req, res) => {
         label_id,
         is_fixed
       FROM transactions
-      WHERE user_id = 1 
-      AND (is_fixed = TRUE OR is_fixed::text = '1' OR is_fixed::text = 'true')`
+      WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
+      [1, dateString(previousMonth), dateString(today)]
     );
-
-    // Sort chronologically descending by real timestamp (prevents string sort bugs)
-    fixedTransactions.sort((a, b) => {
-      const pa = parseTxDate(a.date);
-      const pb = parseTxDate(b.date);
-      const ta = pa ? new Date(pa.year, pa.month, pa.day).getTime() : 0;
-      const tb = pb ? new Date(pb.year, pb.month, pb.day).getTime() : 0;
-      return tb - ta;
-    });
-
-    const today = new Date();
-    const currentMonth = today.getMonth(); // 0-indexed
-    const currentYear = today.getFullYear();
-    const currentDay = today.getDate();
-    const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-    const timeline = [];
-    const paidMerchantKeys = new Set();
-    const seenTxIds = new Set();
-
-    // 1. Add all fixed transactions that were PAID in the current calendar month
-    for (const tx of fixedTransactions) {
-      if (!tx.date) continue;
-      const parsed = parseTxDate(tx.date);
-      if (!parsed) continue;
-
-      const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
-      if (parsed.year === currentYear && parsed.month === currentMonth) {
-        if (!seenTxIds.has(tx.id)) {
-          seenTxIds.add(tx.id);
-          timeline.push({
-            id: tx.id,
-            description: tx.description,
-            category: tx.category || 'Other',
-            amount: parseFloat(tx.amount),
-            dayOfMonth: parsed.day,
-            isIncome: (tx.direction || '').toUpperCase() === 'CREDIT',
-            status: 'processed'
-          });
-          paidMerchantKeys.add(canonicalKey);
-        }
-      }
-    }
-
-    // 2. Identify all recurring fixed bill templates (distinct by canonical merchant)
-    // Because fixedTransactions is sorted chronologically DESC, the first time we see a canonicalKey,
-    // it reflects its most recent payment date (e.g. paid on the 28th in July -> Day 28 due date).
-    const fixedTemplates = new Map();
-    for (const tx of fixedTransactions) {
-      const canonicalKey = getCanonicalMerchant(tx.description) || tx.description;
-      if (!fixedTemplates.has(canonicalKey)) {
-        const parsed = parseTxDate(tx.date);
-        let day = parsed ? parsed.day : 1;
-        day = Math.min(day, daysInCurrentMonth);
-
-        fixedTemplates.set(canonicalKey, {
-          description: canonicalKey,
-          category: tx.category || 'Other',
-          amount: parseFloat(tx.amount),
-          dayOfMonth: day,
-          isIncome: (tx.direction || '').toUpperCase() === 'CREDIT'
-        });
-      }
-    }
-
-    // 3. For any fixed bill NOT yet paid in the current month, add as 'projected' (Upcoming)
-    for (const [canonicalKey, template] of fixedTemplates.entries()) {
-      // Don't project if already paid this month
-      if (paidMerchantKeys.has(canonicalKey)) continue;
-
-      // Don't project income items as regular bills (handled separately below)
-      if (template.isIncome || /payroll|salary|wells fargo/i.test(template.description)) continue;
-
-      timeline.push({
-        description: template.description,
-        category: template.category,
-        amount: template.amount,
-        dayOfMonth: template.dayOfMonth,
-        isIncome: template.isIncome,
-        status: 'projected'
-      });
-    }
-
-    // 4. Bi-weekly / regular payroll projection
-    const lastIncome = fixedTransactions.find(t => (t.direction || '').toUpperCase() === 'CREDIT' && /WELLS FARGO|PAYROLL|SALARY/i.test(t.description));
-    if (lastIncome && lastIncome.date) {
-      const parsedInc = parseTxDate(lastIncome.date);
-      if (parsedInc) {
-        const lastDate = new Date(parsedInc.year, parsedInc.month, parsedInc.day);
-        const nextDate = new Date(lastDate);
-        nextDate.setDate(lastDate.getDate() + 14);
-
-        if (nextDate.getMonth() === currentMonth && nextDate.getFullYear() === currentYear && nextDate.getDate() > currentDay) {
-          timeline.push({
-            description: 'Projected: Payroll Deposit',
-            category: 'Salary',
-            amount: parseFloat(lastIncome.amount),
-            dayOfMonth: nextDate.getDate(),
-            isIncome: true,
-            status: 'projected'
-          });
-        }
-      }
-    }
-
-    // 5. Add the active Avalanche Debt Payoff item
-    const debts = await db.all('SELECT * FROM credit_cards');
-    if (debts.length > 0) {
-      // Sort by APR desc (Avalanche)
-      debts.sort((a, b) => b.apr - a.apr);
-      const topPriority = debts[0];
-      const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
-      const attackPayment = Math.max(0, 1342.15 - othersMinTotal);
-
-      timeline.push({
-        description: `🚀 Payoff Plan: ${topPriority.name}`,
-        category: 'Debt Payment',
-        amount: attackPayment,
-        dayOfMonth: 15,
-        isIncome: false,
-        status: 'projected'
-      });
-    }
-
-    timeline.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
-    res.json(timeline);
+    res.json(buildUpcomingPayments(transactions, today));
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });

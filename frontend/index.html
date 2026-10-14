@@ -492,7 +492,7 @@
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
             <div>
               <h2 style="margin: 0;">📅 Upcoming Payments & Projected Runway</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track required funding for fixed bills and identify potential cashflow deficits</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
             </div>
             <div id="cashflow-safety-badge"></div>
           </div>
@@ -913,6 +913,7 @@
       // 0. CLEAR existing containers to prevent duplication on multiple nav clicks
       const paymentsContainer = document.getElementById('dashboard-payments');
       paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
+      document.getElementById('cashflow-safety-badge').textContent = '';
       
       // Remove any previously injected MTD sections to prevent the "repeated sections" bug
       const existingMtd = document.getElementById('mtd-spending-section');
@@ -921,19 +922,37 @@
       // Load Cashflow History Chart
       loadCashflowChart();
 
-      const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-      const data = await summaryRes.json();
+      let data;
+      try {
+        const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
+        data = await summaryRes.json();
+        if (!summaryRes.ok) throw new Error(data.error || 'Unable to load account balance');
+      } catch (error) {
+        paymentsContainer.textContent = `Unable to load account balance: ${error.message}`;
+        document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        return;
+      }
       
       document.getElementById('dashboard-metrics').innerHTML = `
         <div class="metric-card"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
         <div class="metric-card"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
         <div class="metric-card"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">$${data.balance.toFixed(2)}</div></div>
+        <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
       `;
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
-      const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
-      const timeline = await payRes.json();
+      let timeline;
+      try {
+        const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
+        const payload = await payRes.json();
+        if (!payRes.ok) throw new Error(payload.error || 'Unable to load upcoming payments');
+        if (!Array.isArray(payload)) throw new Error('Invalid upcoming payments response');
+        timeline = payload;
+      } catch (error) {
+        paymentsContainer.textContent = `Unable to load upcoming payments: ${error.message}`;
+        document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        return;
+      }
       
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
@@ -944,9 +963,8 @@
 
       // Scan through to find min balance & jeopardy
       timeline.forEach(item => {
-        if (item.status !== 'processed') {
-          if (item.isIncome) runningBalance += item.amount;
-          else runningBalance -= item.amount;
+        if (item.status !== 'processed' && Number.isFinite(data.balance)) {
+          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
 
           if (runningBalance < minProjectedBalance) {
             minProjectedBalance = runningBalance;
@@ -961,10 +979,14 @@
       // Update Cashflow Safety Status Badge
       const safetyBadge = document.getElementById('cashflow-safety-badge');
       if (safetyBadge) {
-        if (minProjectedBalance < 0) {
+        if (!Number.isFinite(data.balance)) {
+          safetyBadge.textContent = 'Projection unavailable: no recorded account balance';
+        } else if (timeline.length === 0) {
+          safetyBadge.textContent = "No fixed payments found in last month's transactions";
+        } else if (minProjectedBalance < 0) {
           safetyBadge.innerHTML = `
             <div style="background: rgba(235, 87, 87, 0.15); border: 1px solid var(--danger); color: var(--danger); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <span>🚨 DEFICIT ALERT:</span> Balance projected at -$${Math.abs(minProjectedBalance).toFixed(2)} on Day ${deficitDay} (${deficitBill})
+              <span>🚨 DEFICIT ALERT:</span> ${deficitDay === null ? 'Recorded balance is already negative.' : 'First shortfall: Day ' + deficitDay + ' (' + deficitBill + ').'} Minimum projected balance: -$${Math.abs(minProjectedBalance).toFixed(2)}
             </div>
           `;
         } else {
@@ -994,29 +1016,30 @@
 
       timeline.forEach(item => {
         const isPaid = item.status === 'processed';
+        const isOverdue = !isPaid && item.dayOfMonth < new Date().getDate();
         
-        if (!isPaid) {
-          if (item.isIncome) runningBalance += item.amount;
-          else runningBalance -= item.amount;
+        if (!isPaid && Number.isFinite(data.balance)) {
+          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
         }
 
-        const isDeficit = !isPaid && runningBalance < 0;
+        const isDeficit = !isPaid && Number.isFinite(data.balance) && runningBalance < 0;
 
         timelineHtml += `
-          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.65' : '1'}; background: ${isDeficit ? 'rgba(235, 87, 87, 0.12)' : (item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent')}">
+          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.65' : '1'}; color: ${isPaid ? 'var(--text-secondary)' : 'var(--text-primary)'}; background: ${isDeficit ? 'rgba(235, 87, 87, 0.12)' : (item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent')}">
             <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : (isDeficit ? 'var(--danger)' : 'var(--primary)')};">
               ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
+              ${isOverdue ? '<span style="display: block; font-size: 10px;">Overdue / not recorded</span>' : ''}
               ${isDeficit ? '<span style="display: block; font-size: 10px; color: var(--danger); font-weight: 700;">⚠️ AT RISK</span>' : ''}
             </td>
             <td style="padding: 12px 0;">
               <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
               <div style="font-size: 11px; color: var(--text-secondary);">${item.category}</div>
             </td>
-            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${item.isIncome ? 'var(--success)' : 'var(--danger)'}">
+            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${isPaid ? 'var(--text-secondary)' : (item.isIncome ? 'var(--success)' : 'var(--danger)')}">
               ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
             </td>
             <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: ${isPaid ? 'var(--text-secondary)' : (runningBalance < 0 ? 'var(--danger)' : 'var(--text-primary)')}">
-              ${isPaid ? '—' : (runningBalance < 0 ? '-' : '') + '$' + Math.abs(runningBalance).toFixed(2)}
+              ${isPaid || !Number.isFinite(data.balance) ? '—' : (runningBalance < 0 ? '-' : '') + '$' + Math.abs(runningBalance).toFixed(2)}
             </td>
           </tr>
         `;

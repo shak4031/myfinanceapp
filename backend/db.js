@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { log } from './utils/logger.js';
+import { isFixedPayment } from './utils/fixedPayments.js';
 
 const { Pool } = pg;
 
@@ -298,19 +299,8 @@ export default class Database {
       
       // Map any transfers explicitly marked as savings like Ally or Zelle Farin as savings 
       await this.run(
-        "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('ALLY CC MOBILE PAY', 'Ally Savings Transfer', (SELECT id FROM categories WHERE name = 'Savings'), TRUE) ON CONFLICT (pattern) DO NOTHING"
+        "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ('ALLY CC MOBILE PAY', 'Ally Savings Transfer', (SELECT id FROM categories WHERE name = 'Savings'), FALSE) ON CONFLICT (pattern) DO NOTHING"
       );
-
-      // Proactively ensure PennyMac is marked as a fixed bill in existing transactions
-      try {
-        const pennymacLabel = await this.get("SELECT id FROM transaction_labels WHERE pattern = 'PENNYMAC'");
-        if (pennymacLabel) {
-          await this.run(
-            "UPDATE transactions SET is_fixed = TRUE, label_id = $1, category = 'Mortgage' WHERE description LIKE '%PENNYMAC%'",
-            [pennymacLabel.id]
-          );
-        }
-      } catch (err) { /* ignore */ }
 
       // Proactively clean up any overly-broad or corrupted transaction labels and heal is_fixed
       try {
@@ -343,44 +333,20 @@ export default class Database {
           WHERE category = 'EV Charging' AND description ~* 'HOME\\s*DEPOT|LOWES'
         `);
 
-        // 2. Heal is_fixed: Reset all variable categories and card purchases to is_fixed = FALSE
-        await this.run(`
-          UPDATE transactions 
-          SET is_fixed = FALSE 
-          WHERE category IN ('Groceries', 'Dining', 'Shopping', 'EV Charging', 'Gas', 'Healthcare', 'Salary', 'Income')
-          OR description ~* 'TARGET|WALMART|AMAZON|INSTACART|WAWA|TRADER\\s*JOE|WHOLE\\s*FOODS|SHOPRITE|STARBUCKS|CHIPOTLE|UBER\\s*EATS|DOORDASH|GRUBHUB|ELECTRIFY\\s*AMERICA|CHARGEPOINT|PAYROLL|SALARY'
-        `);
-
-        // 3. Ensure true recurring fixed bills are accurately flagged as is_fixed = TRUE
-        const verifiedFixedPatterns = [
-          'PENNYMAC|MORTGAGE',
-          'HYUNDAI|SANTANDER|AUTO\\s*LOAN|CAR\\s*PAYMENT|CAR\\s*LEASE',
-          'OLLO|CREDIT\\s*CARD|PAYMENT.*THANK|CAPITAL\\s*ONE|CHASE|DISCOVER|AMEX',
-          'PSEG|ELECTRIC|WATER|GAS\\s*CO|HYDRO',
-          'VERIZON|COMCAST|XFINITY|FIOS|T-MOBILE|AT&?T\\b|ATT\\b',
-          'STATE\\s*FARM|GEICO|ALLSTATE|PROGRESSIVE|INSURANCE',
-          'NETFLIX|HULU|SPOTIFY|DISNEY|HBO|ROCKET\\s*(?:MONEY|PREMIUM)?|MUSIC\\s*&?\\s*ARTS|ANTHROPIC'
-        ];
-
-        for (const pattern of verifiedFixedPatterns) {
-          await this.run(
-            `UPDATE transactions SET is_fixed = TRUE WHERE description ~* $1 AND user_id = 1`,
-            [pattern]
-          );
+        // Repair false positives without re-enabling bills the user has deselected.
+        const flagged = await this.all('SELECT id, description, category, direction, is_fixed FROM transactions WHERE user_id = 1 AND is_fixed = TRUE');
+        for (const tx of flagged) {
+          if (!isFixedPayment(tx)) {
+            await this.run('UPDATE transactions SET is_fixed = FALSE WHERE id = $1 AND user_id = 1', [tx.id]);
+          }
         }
 
         // 4. Align transaction_labels is_fixed flags
         await this.run(`
           UPDATE transaction_labels 
           SET is_fixed = FALSE 
-          WHERE pattern ~* 'TARGET|WALMART|AMAZON|INSTACART|WAWA|TRADER|WHOLE\\s*FOODS|STARBUCKS|CHIPOTLE|UBER|ELECTRIFY|CHARGEPOINT|PAYROLL'
+          WHERE pattern ~* 'TARGET|WALMART|INSTACART|WAWA|TRADER|WHOLE\\s*FOODS|STARBUCKS|CHIPOTLE|UBER|ELECTRIFY|CHARGEPOINT|PAYROLL'
         `);
-        for (const pattern of verifiedFixedPatterns) {
-          await this.run(
-            `UPDATE transaction_labels SET is_fixed = TRUE WHERE pattern ~* $1`,
-            [pattern]
-          );
-        }
 
         log('DATABASE', '✓ Fixed bill flags and transaction categories successfully healed');
       } catch (err) {

@@ -4,6 +4,7 @@ import Database from '../db.js';
 import { TransactionCSVParser, categorizeTransaction } from '../utils/transaction-parser.js';
 import PDFParser from '../utils/pdfParser.js';
 import { normalizeDescription, dedupWhereClause } from '../utils/normalize.js';
+import { isFixedPayment } from '../utils/fixedPayments.js';
 
 const router = express.Router();
 const db = new Database();
@@ -97,7 +98,7 @@ router.post('/import-csv', async (req, res) => {
         `INSERT INTO transactions 
          (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
          VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-        [t.date, t.description, t.amount, t.direction, t.balance, source || 'csv_import', t.category, labelId, isFixed]
+        [t.date, t.description, t.amount, t.direction, t.balance, source || 'csv_import', t.category, labelId, isFixedPayment({ ...t, is_fixed: isFixed })]
       );
       imported++;
     }
@@ -189,7 +190,7 @@ router.post('/import-pdf', async (req, res) => {
         `INSERT INTO transactions 
          (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
          VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-        [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'pdf_import', category, labelId, isFixed]
+        [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'pdf_import', category, labelId, isFixedPayment({ ...t, category, is_fixed: isFixed })]
       );
       imported++;
     }
@@ -267,7 +268,7 @@ router.post('/import-batch', async (req, res) => {
           await db.run(
             `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
              VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-            [t.date, t.description, t.amount, t.direction, t.balance, source || 'batch_import', category, labelId, isFixed]
+            [t.date, t.description, t.amount, t.direction, t.balance, source || 'batch_import', category, labelId, isFixedPayment({ ...t, category, is_fixed: isFixed })]
           );
           imported++;
         }
@@ -309,7 +310,7 @@ router.post('/import-batch', async (req, res) => {
           await db.run(
             `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category, label_id, is_fixed) 
              VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9)`,
-            [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'batch_pdf', category, labelId, isFixed]
+            [t.date, t.description, t.amount, t.direction.toUpperCase(), t.balance, source || 'batch_pdf', category, labelId, isFixedPayment({ ...t, category, is_fixed: isFixed })]
           );
           imported++;
         }
