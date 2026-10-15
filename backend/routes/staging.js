@@ -28,7 +28,7 @@ router.post('/force-push', async (req, res) => {
     // Insert into main transactions table regardless of logic
     await db.run(
       `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category) 
-       VALUES ($1, $2, $3, $4, $5, $6, 1, 'Other')`,
+       VALUES ($1, $2, $3, $4, $5, $6, current_setting('app.user_id')::integer, 'Other')`,
       [st.date, st.description, st.amount, st.direction, st.balance, st.source]
     );
 

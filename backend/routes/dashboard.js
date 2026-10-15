@@ -3,6 +3,7 @@ import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { buildUpcomingPayments } from '../utils/fixedPayments.js';
+import { currentUserId } from '../utils/tenant.js';
 
 const router = Router();
 const db = new Database();
@@ -42,7 +43,7 @@ async function get90DayAverages() {
       FROM transactions
       WHERE user_id = $1 AND date >= $2 AND date <= $3
       ORDER BY date::date`,
-      [1, startDate, endDate]
+      [currentUserId(), startDate, endDate]
     );
 
     if (rows.length === 0) {
@@ -130,8 +131,8 @@ function getDateRange(filter) {
   }
 
   return {
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0]
+    startDate: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+    endDate: `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
   };
 }
 
@@ -157,7 +158,7 @@ async function getHistoricalAverages() {
       WHERE user_id = $1 AND date >= $2 AND date <= $3
       GROUP BY DATE_TRUNC('month', date::date)
       ORDER BY month DESC`,
-      [1, startDate, endDate]
+      [currentUserId(), startDate, endDate]
     );
     
     log('DASHBOARD', `Historical query returned ${result.length} months: ${JSON.stringify(result)}`);
@@ -176,7 +177,7 @@ async function getHistoricalAverages() {
       const monthTransactions = await db.all(
         `SELECT description, amount, direction FROM transactions 
          WHERE user_id = $1 AND DATE_TRUNC('month', date::date)::date = $2`,
-        [1, month.month]
+        [currentUserId(), month.month]
       );
       
       let monthIncome = 0;
@@ -232,7 +233,7 @@ async function getRecurringPayments() {
       GROUP BY description, category, amount, EXTRACT(DAY FROM date::date)
       HAVING COUNT(*) >= 2 OR MAX(is_fixed::int) = 1
       ORDER BY frequency DESC, last_date DESC`,
-      [1]
+      [currentUserId()]
     );
     
     return result.filter(p => {
@@ -296,7 +297,7 @@ router.post('/summary', async (req, res) => {
     // 1. Get latest balance
     const latestBalance = await db.all(
        'SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1',
-       [1]
+       [currentUserId()]
     );
     const balance = latestBalance.length > 0 ? Number(latestBalance[0].balance) : null;
     if (balance !== null && !Number.isFinite(balance)) throw new Error('Invalid account balance');
@@ -308,7 +309,7 @@ router.post('/summary', async (req, res) => {
         SUM(CASE WHEN direction = 'DEBIT' THEN amount ELSE 0 END) as total_expenses
       FROM transactions
       WHERE user_id = $1 AND date >= $2 AND date <= $3`,
-      [1, startDate, endDate]
+      [currentUserId(), startDate, endDate]
     );
 
     const periodIncome = parseFloat(result.total_income || 0);
@@ -342,7 +343,7 @@ router.get('/monthly-cashflow', async (req, res) => {
        FROM transactions 
        WHERE user_id = $1 
        ORDER BY date ASC, id ASC`,
-      [1]
+      [currentUserId()]
     );
 
     const yearData = {};
@@ -446,7 +447,7 @@ router.post('/upcoming-payments', async (req, res) => {
         is_fixed
       FROM transactions
       WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
-      [1, dateString(previousMonth), dateString(today)]
+      [currentUserId(), dateString(previousMonth), dateString(today)]
     );
     res.json(buildUpcomingPayments(transactions, today));
   } catch (error) {
@@ -472,7 +473,7 @@ router.post('/category-spending', async (req, res) => {
       WHERE user_id = $1 AND date >= $2 AND date <= $3 AND UPPER(direction) = 'DEBIT'
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, total_spending DESC`,
-      [1, startDate, endDate]
+      [currentUserId(), startDate, endDate]
     );
 
     // Format response
@@ -535,7 +536,7 @@ router.post('/category-transactions', async (req, res) => {
       FROM transactions
       WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4
       ORDER BY date DESC`,
-      [1, category, startDate, endDate]
+      [currentUserId(), category, startDate, endDate]
     );
 
     const transactions = result.map(row => ({
@@ -566,7 +567,7 @@ router.post('/category-trends', async (req, res) => {
       WHERE user_id = $1 AND UPPER(direction) = 'DEBIT'
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, category ASC`,
-      [1]
+      [currentUserId()]
     );
 
     // Organize by month, then category
@@ -633,7 +634,7 @@ router.post('/category-transactions-for-month', async (req, res) => {
       FROM transactions
       WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4 AND UPPER(direction) = 'DEBIT'
       ORDER BY date DESC`,
-      [1, category, startDate, endDate]
+      [currentUserId(), category, startDate, endDate]
     );
 
     const transactions = result.map(row => ({
@@ -668,7 +669,7 @@ router.get('/all-transactions', async (req, res) => {
       FROM transactions
       WHERE user_id = $1
       ORDER BY date DESC
-    `, [1]);
+    `, [currentUserId()]);
 
     log('DASHBOARD', `Returning ${result.length} total transactions (including is_fixed)`);
 
@@ -698,7 +699,7 @@ router.post('/update-category', async (req, res) => {
     }
 
     // Get old category before update
-    const oldTxn = await db.get('SELECT id, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, 1]);
+    const oldTxn = await db.get('SELECT id, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, currentUserId()]);
     
     if (!oldTxn) {
       log('CATEGORIZE', `❌ Transaction not found: ID ${transaction_id}`);
@@ -708,7 +709,9 @@ router.post('/update-category', async (req, res) => {
     const oldCategory = oldTxn.category || 'Uncategorized';
 
     // Update the transaction
-    await db.run('UPDATE transactions SET category = $1 WHERE id = $2 AND user_id = $3', [new_category, transaction_id, 1]);
+    const validCategory = await db.get('SELECT id FROM categories WHERE name = $1', [new_category]);
+    if (!validCategory) return res.status(400).json({ error: 'Choose one of your categories' });
+    await db.run('UPDATE transactions SET category = $1, previous_category = category, category_corrected = TRUE, correction_timestamp = NOW() WHERE id = $2 AND user_id = $3', [new_category, transaction_id, currentUserId()]);
 
     log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: "${oldTxn.description}" | ${oldCategory} → ${new_category}`);
 
@@ -743,7 +746,7 @@ router.get('/transactions/test', async (req, res) => {
       FROM transactions
       WHERE user_id = $1
       ORDER BY date DESC
-    `, [1]);
+    `, [currentUserId()]);
 
     res.json({
       total: result.length,

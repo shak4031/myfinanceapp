@@ -1,0 +1,125 @@
+/* Force redeploy marker: 1780952552331 */
+import express from 'express';
+import bodyParser from 'body-parser';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { randomUUID } from 'node:crypto';
+import auth, { requireUser, requireAdmin, enforceSameOrigin } from './routes/auth.js';
+import admin from './routes/admin.js';
+import supportAccess from './routes/supportAccess.js';
+import { recordAudit, structuredLog } from './utils/audit.js';
+import dashboard from './routes/dashboard.js';
+import transactions from './routes/transactions.js';
+import debts from './routes/debts.js';
+import goals from './routes/goals.js';
+import importCsv from './routes/import.js';
+import bulkImport from './routes/bulk-import.js';
+import categories from './routes/categories.js';
+import categorizations from './routes/categorizations.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const app = express();
+if (process.env.TRUST_PROXY_HOPS !== undefined) {
+  const hops = Number(process.env.TRUST_PROXY_HOPS);
+  if (!Number.isInteger(hops) || hops < 0 || hops > 10) throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 10');
+  app.set('trust proxy', hops);
+}
+
+// Middleware
+if (process.env.NODE_ENV === 'production') {
+  let origin;
+  try { origin = new URL(process.env.APP_ORIGIN); } catch { throw new Error('A valid HTTPS APP_ORIGIN is required in production'); }
+  if (origin.protocol !== 'https:' || origin.origin !== process.env.APP_ORIGIN) throw new Error('APP_ORIGIN must be an HTTPS origin without a path or trailing slash');
+}
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'same-origin');
+  if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+// Every request gets a correlation ID that is returned to the client and stored with logs/audit rows.
+app.use((req, res, next) => {
+  const incoming = req.get('x-request-id');
+  req.id = /^[A-Za-z0-9-]{8,64}$/.test(incoming || '') ? incoming : randomUUID();
+  res.set('X-Request-Id', req.id);
+  const started = process.hrtime.bigint();
+  res.on('finish', () => {
+    if (!req.originalUrl.startsWith('/api')) return;
+    structuredLog(res.statusCode >= 500 ? 'error' : 'info', {
+      event: 'http.request', requestId: req.id, method: req.method, path: req.originalUrl.split('?')[0],
+      status: res.statusCode, durationMs: Number((process.hrtime.bigint() - started) / 1000000n),
+      user: req.user?.id ?? null, actor: req.support?.actorUserId ?? null
+    });
+    // Routes that handle their own errors still get an audit record for support follow-up.
+    if (res.statusCode >= 500 && !res.locals.errorAudited) {
+      recordAudit(req, 'server.error', 'error', { status: res.statusCode, detail: { source: 'route' } });
+    }
+  });
+  next();
+});
+app.use(bodyParser.json({ limit: '20mb' }));
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  const json = res.json.bind(res);
+  res.json = body => json(res.statusCode >= 500
+    ? { error: 'The request could not be completed. Please try again.', requestId: req.id }
+    : body);
+  next();
+});
+app.use('/api', enforceSameOrigin);
+
+import staging from './routes/staging.js';
+
+// ... existing imports ...
+
+// Routes BEFORE static files
+app.use('/api/auth', auth);
+app.use('/api', requireUser);
+app.use('/api/support-access', supportAccess);
+app.use('/api/admin', requireAdmin, admin);
+app.use('/api/dashboard', dashboard);
+app.use('/api/transactions', transactions);
+app.use('/api/staging', staging);
+app.use('/api/dashboard', transactions); // Alias for update-transaction support
+app.use('/api/debts', debts);
+app.use('/api/goals', goals);
+app.use('/api/import', importCsv);
+app.use('/api/bulk-import', bulkImport);
+app.use('/api/categories', categories);
+app.use('/api/categorizations', categorizations);
+app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
+// Global application logs and legacy fixture imports are never exposed to users.
+app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Server logs are not available through the application' }));
+app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
+app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
+
+// Static files (after API routes)
+app.use(express.static(join(__dirname, '../frontend')));
+
+// Serve frontend
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, '../frontend/index.html'));
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  if (err.code === '25006') {
+    // PostgreSQL rejected a write inside a read-only support session.
+    return res.status(403).json({ error: 'This support session is read-only.' });
+  }
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request body is not valid JSON' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'The upload is too large' });
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+  if (status >= 500) {
+    res.locals.errorAudited = true;
+    structuredLog('error', { event: 'server.exception', requestId: req.id, name: err.name, code: err.code, stack: err.stack });
+    recordAudit(req, 'server.error', 'error', { status, detail: { name: err.name, code: err.code || null, source: 'exception' } });
+  }
+  res.status(status).json({ error: status < 500 ? err.message : 'The request could not be completed. Please try again.', requestId: req.id });
+});
+
+export default app;

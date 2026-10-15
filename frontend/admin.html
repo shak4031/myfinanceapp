@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyFinance · Admin console</title>
+  <link rel="stylesheet" href="refresh.css">
+  <style>
+    body { margin: 0; }
+    .admin-shell { max-width: 1240px; margin: 0 auto; padding: 32px 24px 64px; }
+    .admin-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .admin-top h1 { margin: 0; font-size: 28px; letter-spacing: -.8px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid #e2e7df; margin-bottom: 20px; }
+    .tabs button { background: none; border: 0; padding: 12px 16px; font: inherit; font-weight: 600; color: #647168; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tabs button.active { color: #24553e; border-bottom-color: #286b50; }
+    .card { background: #fff; border: 1px solid #e2e7df; border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .stat { background: #fff; border: 1px solid #e2e7df; border-radius: 14px; padding: 16px; }
+    .stat b { display: block; font-size: 26px; margin-top: 6px; }
+    .stat.bad b { color: #b84239; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 12px; }
+    .filters label { display: grid; gap: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef1ec; vertical-align: top; }
+    th { color: #63716a; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; }
+    td code, pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }
+    pre { background: #f6f8f4; border: 1px solid #e2e7df; border-radius: 10px; padding: 12px; overflow: auto; max-height: 420px; white-space: pre-wrap; word-break: break-word; }
+    .outcome-failure, .outcome-denied { color: #996517; font-weight: 700; }
+    .outcome-error { color: #b84239; font-weight: 700; }
+    .outcome-success { color: #257252; }
+    .method { display: inline-block; min-width: 58px; text-align: center; border-radius: 6px; padding: 3px 6px; font-weight: 800; font-size: 11px; color: #fff; }
+    .method.get { background: #2f6fb3; } .method.post { background: #257252; } .method.put { background: #996517; } .method.delete { background: #b84239; }
+    details.op { border: 1px solid #e2e7df; border-radius: 12px; margin-bottom: 8px; background: #fff; }
+    details.op summary { padding: 10px 14px; cursor: pointer; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    details.op .op-body { padding: 0 14px 14px; display: grid; gap: 10px; }
+    details.op textarea { min-height: 90px; font-family: Consolas, monospace; font-size: 12px; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .actions .btn { padding: 6px 10px; font-size: 12px; }
+    .warn { background: #fff4d6; border: 1px solid #e8c56f; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; color: #5c4210; }
+    #admin-toast { position: fixed; bottom: 20px; right: 20px; background: #203d30; color: #fff; padding: 12px 18px; border-radius: 12px; max-width: 420px; }
+  </style>
+</head>
+<body>
+  <div class="admin-shell">
+    <div class="admin-top">
+      <div><p class="eyebrow">MYFINANCE · SUPPORT &amp; OPERATIONS</p><h1>Admin console</h1>
+        <p class="muted" id="admin-who">Checking access…</p></div>
+      <div class="actions"><a class="btn btn-secondary" href="/">Back to my finances</a></div>
+    </div>
+    <div id="admin-denied" class="card" hidden><h2>Administrator access required</h2><p class="muted">Sign in with the owner/administrator account to use this console.</p><a class="btn btn-primary" href="/">Go to sign in</a></div>
+    <div id="admin-app" hidden>
+      <nav class="tabs" id="tabs">
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="users">Users</button>
+        <button data-tab="audit">Audit &amp; errors</button>
+        <button data-tab="support">Support sessions</button>
+        <button data-tab="api">API explorer</button>
+      </nav>
+      <section data-panel="overview"><div id="overview"></div></section>
+      <section data-panel="users" hidden>
+        <div class="card">
+          <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>
+          <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead.</p>
+          <div id="users" class="table-scroll"></div>
+        </div>
+      </section>
+      <section data-panel="audit" hidden>
+        <div class="card">
+          <div class="filters">
+            <label>Event<select id="f-type">
+              <option value="">All events</option><option value="auth.login">Logins</option><option value="auth.locked">Lockouts</option>
+              <option value="auth.password_reset">Password resets</option><option value="auth.">All authentication</option>
+              <option value="support.">Support access</option><option value="admin.">Admin actions</option><option value="server.">Server errors</option>
+            </select></label>
+            <label>Outcome<select id="f-outcome"><option value="">Any</option><option>success</option><option>failure</option><option>denied</option><option>error</option></select></label>
+            <label>Customer email<input id="f-email" type="email" placeholder="exact email"></label>
+            <label>User ID<input id="f-user" type="number" min="1" style="width:90px"></label>
+            <label>Request ID<input id="f-request" placeholder="from error message" style="width:300px"></label>
+            <button class="btn btn-primary" id="audit-search">Search</button>
+          </div>
+          <p class="muted">Every error shown to a customer includes a request ID. Paste it here to find what happened. Passwords, tokens and financial values are never logged; emails and IPs are stored as keyed hashes.</p>
+          <div id="audit" class="table-scroll"></div>
+          <button class="btn btn-secondary" id="audit-more" hidden>Load older events</button>
+        </div>
+      </section>
+      <section data-panel="support" hidden>
+        <div class="card">
+          <h2>Customer-approved access</h2>
+          <p class="muted">Customers grant access from <b>Settings &amp; support</b> in their app. You can only view an account while its grant is active. Sessions last up to 2 hours, end when you sign out or the customer revokes access, and every request is logged and visible to the customer.</p>
+          <div id="grants" class="table-scroll"></div>
+        </div>
+      </section>
+      <section data-panel="api" hidden>
+        <div class="warn">Requests run as <b>you</b> and can access only your own account. Customer data is available only through a support session the customer has approved.</div>
+        <div id="api"></div>
+      </section>
+    </div>
+  </div>
+  <div id="admin-toast" hidden role="status"></div>
+  <script src="admin.js"></script>
+</body>
+</html>

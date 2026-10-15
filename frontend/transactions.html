@@ -260,10 +260,19 @@
             color: #666;
         }
     </style>
+    <link rel="stylesheet" href="refresh.css">
+    <style>
+      .card,.controls,.transactions { background:#fff; border-color:#e2e7df; }
+      h1 { color:#202e2a; } .card.credits .card-value,.amount.credit { color:#257252; }
+      .card.debits .card-value,.amount.debit { color:#b84239; }
+      input,select { background:#fff; color:#202e2a; border-color:#d8e0d5; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>Transaction Viewer</h1>
+        <a href="/#transactions">← Back to your private workspace</a>
+        <h1>Local CSV viewer</h1>
+        <p class="muted">A standalone, browser-only scratchpad. Files loaded here are not imported or saved to your account. Use Import Statements in the signed-in workspace to save transactions.</p>
 
         <!-- SUMMARY CARDS -->
         <div class="summary">
@@ -503,7 +512,7 @@
                 html += `
                     <tr>
                         <td class="date">${dateStr}</td>
-                        <td class="description">${txn.description}</td>
+                        <td class="description">${String(txn.description).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}</td>
                         <td><span class="badge ${txn.direction}">${badge}</span></td>
                         <td class="amount ${txn.direction}">$${amountDisplay}</td>
                     </tr>

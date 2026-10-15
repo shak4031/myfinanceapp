@@ -1,0 +1,74 @@
+:root {
+  --primary: #226452; --primary-dark: #164b3d; --primary-light: #dcebe4;
+  --success: #257252; --danger: #b84239; --warning: #996517;
+  --bg-primary: #f5f5f1; --bg-secondary: #fff; --bg-tertiary: #eff2ed;
+  --text-primary: #202e2a; --text-secondary: #63716a; --border: #e2e7df;
+  --shadow: 0 12px 40px rgba(29,48,35,.06); --shadow-sm: 0 2px 6px rgba(29,48,35,.04);
+}
+[hidden] { display: none !important; }
+/* Loaded before the legacy stylesheet; these scoped rules retain the light palette. */
+html body { background: #f5f5f1; color: #202e2a; font-family: "Segoe UI", system-ui, sans-serif; }
+body .app-container { grid-template-columns: 248px minmax(0,1fr); }
+body .sidebar { background: #fff; border-color: #e2e7df; padding: 32px 18px; }
+body .sidebar-logo { color: #203d30; margin-bottom: 16px; font-size: 22px; letter-spacing: -.7px; }
+.brand-mark { display: inline-flex; justify-content: center; align-items: center; width: 64px; height: 64px; border-radius: 20px; background: #226452; color: white; font-size: 45px; font-weight: 800; letter-spacing: -5px; padding-right: 4px; }
+.brand-mark span { color: #d9ea95; }
+.brand-mark.small { width: 36px; height: 36px; font-size: 27px; border-radius: 11px; letter-spacing: -3px; }
+.sidebar-caption, .eyebrow { color: #75816d; font-size: 10px; letter-spacing: 1.7px; font-weight: 700; margin-bottom: 12px; }
+.sidebar-caption { margin: 8px 12px 28px; font-size: 9px; }
+body .nav-list { gap: 6px; }
+body .nav-btn { color: #647168; padding: 13px 16px; }
+body .nav-btn.active { background: #e9f0e7; color: #24553e; box-shadow: inset 3px 0 #286b50; }
+.sidebar-bottom { margin-top: auto; padding: 24px 12px 0; display: grid; gap: 12px; color: #63716a; font-size: 13px; }
+body .main-content { padding: 42px; gap: 28px; }
+body .header h1 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -1.1px; font-weight: 650; }
+.muted { color: #63716a; font-size: 13px; line-height: 1.7; margin: 8px 0 16px; }
+body .panel, body .metric-card { border-color: #e2e7df; background: white; border-radius: 18px; box-shadow: 0 4px 24px rgba(35,55,39,.025); }
+body .panel-header { background: #fafbf8; padding: 20px; }
+body .metric-label { letter-spacing: .7px; font-size: 10px; }
+body .metric-value { letter-spacing: -.8px; }
+body .btn { border-radius: 10px; padding: 11px 17px; }
+body .btn-primary { background: #226452; color: white; }
+body .btn-secondary { background: #edf1e9; color: #304c3d; }
+body .panel { overflow-x: auto; }
+input, select, textarea { font: inherit; max-width: 100%; color: #202e2a; background: #fff; border: 1px solid #d8e0d5; border-radius: 8px; padding: 10px; }
+input[type=checkbox] { accent-color: #226452; width: 17px; height: 17px; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #90b3a2; outline-offset: 3px; }
+button:disabled { opacity: .55; cursor: wait; }
+label { font-size: 13px; }
+progress { width: 100%; accent-color: #226452; height: 10px; }
+.auth-screen { min-height: 100vh; display: none; place-content: center; padding: 24px; background: radial-gradient(ellipse at top right,#e6ecda,transparent 60%),#f5f5f1; }
+.auth-pending .auth-screen { display: grid; }
+.auth-pending .app-container, .auth-pending #import-modal, .auth-pending #add-goal-modal, .auth-pending #debt-dialog { display: none !important; }
+.auth-card { width: min(440px,calc(100vw - 48px)); padding: 40px; border: 1px solid #e2e7df; border-radius: 24px; background: white; box-shadow: 0 20px 80px #264e3510; }
+.auth-card .brand-mark { margin-bottom: 28px; }
+.auth-card h1 { font-size: 30px; line-height: 1.15; letter-spacing: -1px; }
+.auth-card form:not([hidden]), .auth-card label { display: grid; gap: 10px; }
+.auth-card form { margin-top: 20px; }
+.auth-card label[hidden] { display: none; }
+.auth-card input { width: 100%; margin-bottom: 8px; }
+#auth-error { color: #b84239; font-size: 13px; }
+.auth-footnote { color: #63716a; font-size: 12px; text-align: center; margin-top: 24px; }
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 14px 0; }
+.plan-card { padding: 24px; display: grid; gap: 12px; }
+.coach-note { background: #f4f6ef; border-left: 3px solid #90a366; border-radius: 8px; padding: 18px; margin: 12px 0; line-height: 1.7; }
+.coach-note.warning, .coach-note.danger { border-left-color: #b86a45; }
+.table-scroll { overflow: auto; }
+.review-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.review-table td, .review-table th { padding: 14px 10px; border-bottom: 1px solid #e2e7df; }
+.editor { border: 0; padding: 28px; border-radius: 18px; width: min(560px,90vw); max-height: 90vh; color: #202e2a; }
+.editor::backdrop { background: #172f2566; }
+.editor form { display: grid; gap: 14px; }
+.editor label { display: grid; gap: 5px; }
+.editor h2 { margin-bottom: 10px; }
+@media(max-width:1100px) { body .main-content { padding: 28px; } #payoff-view > div[style*="350px"] { display: flex !important; flex-direction: column; } }
+@media(max-width:768px) { body .app-container { grid-template-columns: 1fr; } body .main-content { padding: 72px 18px 24px; } body .sidebar { width: 280px; } body .header { align-items: flex-start; } .auth-card { padding: 28px; } #goals-list { grid-template-columns: 1fr !important; } .panel-container { grid-template-columns: 1fr !important; } body .metrics-grid { grid-template-columns: 1fr 1fr; } .review-table { min-width: 650px; } }
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Account recovery, support sessions and admin navigation */
+.link-button { background: none; border: 0; color: #226452; text-decoration: underline; cursor: pointer; padding: 4px; font-size: 13px; }
+.admin-only { display: none; }
+body.is-admin .admin-only { display: block; }
+a.nav-btn { display: block; text-decoration: none; }
+.support-banner { position: sticky; top: 0; z-index: 1000; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 20px; background: #fff4d6; color: #5c4210; border-bottom: 2px solid #d9a73b; font-size: 14px; font-weight: 600; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #dcebe4; color: #164b3d; font-size: 12px; font-weight: 700; }

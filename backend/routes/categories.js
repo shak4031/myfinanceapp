@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
     log('CATEGORIES', `Creating new category: ${name}`);
     
     await db.run(
-      'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3) ON CONFLICT (name) DO NOTHING',
+      'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3) ON CONFLICT (user_id, name) DO NOTHING',
       [name, icon, color]
     );
     

@@ -1,303 +1,104 @@
 import { Router } from 'express';
 import Database from '../db.js';
-import { log } from '../utils/logger.js';
+import { buildFinancialPlan } from '../utils/financialPlan.js';
+import { parseTxDate } from '../utils/normalize.js';
 
 const router = Router();
 const db = new Database();
 
-/**
- * GET /api/goals
- * List all goals with funding projections
- */
-router.get('/', async (req, res) => {
-  try {
-    const goals = await db.all(
-      'SELECT * FROM savings_goals WHERE user_id = 1 ORDER BY priority ASC, created_at ASC'
-    );
+async function fundingAnalysis() {
+  const goals = await db.all('SELECT * FROM savings_goals ORDER BY priority, id');
+  const rows = await db.all(`
+    SELECT id, date, description, category, direction, amount FROM transactions
+    WHERE date::date >= (date_trunc('month', CURRENT_DATE) - INTERVAL '3 months')::date
+      AND date::date < date_trunc('month', CURRENT_DATE)::date
+  `);
+  const debts = await db.all('SELECT min_payment,payment_in_history FROM credit_cards WHERE balance > 0');
+  return { goals, plan: buildFinancialPlan(rows, goals, new Date(), debts) };
+}
 
-    // Fetch funding projections for each goal
-    const fundedGoals = await Promise.all(goals.map(async (g) => {
-      const projection = await calculateGoalFunding(g);
-      return {
-        id: g.id,
-        name: g.name,
-        target_amount: parseFloat(g.target_amount) || 0,
-        current_amount: parseFloat(g.current_amount) || 0,
-        target_date: g.target_date,
-        priority: g.priority,
-        icon: g.icon,
-        color: g.color,
-        notes: g.notes,
-        remaining: Math.max(0, (parseFloat(g.target_amount) || 0) - (parseFloat(g.current_amount) || 0)),
-        progress_pct: g.target_amount > 0 ? ((parseFloat(g.current_amount) || 0) / parseFloat(g.target_amount) * 100).toFixed(1) : 0,
-        ...projection
-      };
-    }));
-
-    res.json(fundedGoals);
-  } catch (err) {
-    log('GOALS', `GET error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
+router.get('/funding-analysis', async (req, res, next) => {
+  try { res.json((await fundingAnalysis()).plan); } catch (error) { next(error); }
 });
 
-/**
- * POST /api/goals
- * Create a new goal
- */
-router.post('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
-    const { name, target_amount, current_amount, target_date, priority, icon, color, notes } = req.body;
-
-    if (!name || !target_amount) {
-      return res.status(400).json({ error: 'Name and target_amount are required' });
-    }
-
-    const result = await db.run(
-      `INSERT INTO savings_goals 
-       (user_id, name, target_amount, current_amount, target_date, priority, icon, color, notes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id`,
-      [1, name, parseFloat(target_amount) || 0, parseFloat(current_amount) || 0, target_date || null,
-       priority || 1, icon || '\u{1f3af}', color || '#4a9eff', notes || null]
-    );
-
-    log('GOALS', `Created goal: ${name} ($${target_amount})`);
-    res.json({ success: true, id: result?.rows?.[0]?.id || null, message: 'Goal created' });
-  } catch (err) {
-    log('GOALS', `POST error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
+    const { goals, plan } = await fundingAnalysis();
+    res.json(goals.map(goal => ({
+      ...goal, target_amount: Number(goal.target_amount), current_amount: Number(goal.current_amount),
+      ...plan.goals.find(row => row.id === goal.id),
+      progress_pct: Number(goal.target_amount) > 0 ? Math.min(100, Number(goal.current_amount) / Number(goal.target_amount) * 100) : 0
+    })));
+  } catch (error) { next(error); }
 });
 
-/**
- * PUT /api/goals/:id
- * Update a goal
- */
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, target_amount, current_amount, target_date, priority, icon, color, notes } = req.body;
-
-    const updates = [];
-    const values = [];
-    let paramIdx = 1;
-
-    if (name !== undefined) { updates.push(`name = $${paramIdx++}`); values.push(name); }
-    if (target_amount !== undefined) { updates.push(`target_amount = $${paramIdx++}`); values.push(parseFloat(target_amount)); }
-    if (current_amount !== undefined) { updates.push(`current_amount = $${paramIdx++}`); values.push(parseFloat(current_amount)); }
-    if (target_date !== undefined) { updates.push(`target_date = $${paramIdx++}`); values.push(target_date); }
-    if (priority !== undefined) { updates.push(`priority = $${paramIdx++}`); values.push(priority); }
-    if (icon !== undefined) { updates.push(`icon = $${paramIdx++}`); values.push(icon); }
-    if (color !== undefined) { updates.push(`color = $${paramIdx++}`); values.push(color); }
-    if (notes !== undefined) { updates.push(`notes = $${paramIdx++}`); values.push(notes); }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    values.push(id);
-    await db.run(
-      `UPDATE savings_goals SET ${updates.join(', ')} WHERE id = $${paramIdx}`,
-      values
-    );
-
-    log('GOALS', `Updated goal ${id}`);
-    res.json({ success: true, message: 'Goal updated' });
-  } catch (err) {
-    log('GOALS', `PUT error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * DELETE /api/goals/:id
- * Delete a goal
- */
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    await db.run('DELETE FROM savings_goals WHERE id = $1', [id]);
-    log('GOALS', `Deleted goal ${id}`);
-    res.json({ success: true, message: 'Goal deleted' });
-  } catch (err) {
-    log('GOALS', `DELETE error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/goals/:id/contribute
- * Contribute money to a goal
- */
-router.post('/:id/contribute', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { amount } = req.body;
-    if (!amount || parseFloat(amount) <= 0) {
-      return res.status(400).json({ error: 'Valid positive amount required' });
-    }
-
-    await db.run(
-      'UPDATE savings_goals SET current_amount = current_amount + $1 WHERE id = $2',
-      [parseFloat(amount), id]
-    );
-
-    const updated = await db.get('SELECT * FROM savings_goals WHERE id = $1', [id]);
-    log('GOALS', `Contributed $${amount} to goal ${id}`);
-    res.json({ success: true, current_amount: updated.current_amount });
-  } catch (err) {
-    log('GOALS', `Contribute error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /api/goals/funding-analysis
- * Income vs spending analysis for all goals
- */
-router.get('/funding-analysis', async (req, res) => {
-  try {
-    const analysis = await computeFundingAnalysis();
-    res.json(analysis);
-  } catch (err) {
-    log('GOALS', `Analysis error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * Calculate projected funding for a single goal based on:
- * - Monthly income (from transactions direction=CREDIT)
- * - Monthly spending (from transactions direction=DEBIT)
- * - Target date deadline
- * - Current progress
- */
-async function calculateGoalFunding(goal) {
-  try {
-    // 1. Get last 3 months of income and expenses for trend
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const cutoffDate = threeMonthsAgo.toISOString().split('T')[0];
-
-    // Monthly average income (salary, deposits, etc)
-    const incomeRes = await db.get(
-      `SELECT COALESCE(AVG(monthly_income), 0) as avg_income FROM (
-        SELECT 
-          DATE_TRUNC('month', date::date) as month,
-          SUM(amount) as monthly_income
-        FROM transactions
-        WHERE direction = 'CREDIT' AND date >= $1 AND user_id = 1
-          AND NOT (description ILIKE '%transfer%' OR description ILIKE '%xfer%')
-        GROUP BY DATE_TRUNC('month', date::date)
-      ) income_months`,
-      [cutoffDate]
-    );
-
-    const avgIncome = parseFloat(incomeRes?.avg_income) || 5000; // fallback
-
-    // Monthly average spending (debits)
-    const expenseRes = await db.get(
-      `SELECT COALESCE(AVG(monthly_expense), 0) as avg_expense FROM (
-        SELECT 
-          DATE_TRUNC('month', date::date) as month,
-          SUM(amount) as monthly_expense
-        FROM transactions
-        WHERE direction = 'DEBIT' AND date >= $1 AND user_id = 1
-          AND category NOT IN ('Savings', 'Transfer')
-        GROUP BY DATE_TRUNC('month', date::date)
-      ) expense_months`,
-      [cutoffDate]
-    );
-
-    const avgExpense = parseFloat(expenseRes?.avg_expense) || 3500; // fallback
-
-    // Discretionary = what could go to goals
-    const monthlyDiscretionary = Math.max(0, avgIncome - avgExpense);
-
-    // Calculate how many months until target
-    let monthsUntil = 12; // default
-    if (goal.target_date) {
-      const target = new Date(goal.target_date);
-      const now = new Date();
-      monthsUntil = Math.max(1, (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth()));
-    }
-
-    const targetAmount = parseFloat(goal.target_amount) || 0;
-    const currentAmount = parseFloat(goal.current_amount) || 0;
-    const remaining = Math.max(0, targetAmount - currentAmount);
-
-    // Calculate suggested monthly contribution
-    const suggestedMonthly = monthsUntil > 0 ? remaining / monthsUntil : 0;
-
-    // Is it achievable?
-    const achievable = suggestedMonthly <= monthlyDiscretionary;
-    const monthlyShortfall = achievable ? 0 : Math.max(0, suggestedMonthly - monthlyDiscretionary);
-
-    // Projected completion date based on available discretionary
-    const projectedMonths = (monthlyDiscretionary > 0 && remaining > 0) ? Math.ceil(remaining / monthlyDiscretionary) : (remaining <= 0 ? 0 : 999);
-    const projectedDate = new Date();
-    if (remaining <= 0) {
-      projectedDate.setDate(projectedDate.getDate());
+function validatedGoal(input, partial = false) {
+  const result = {};
+  for (const key of ['name', 'target_amount', 'current_amount', 'target_date', 'priority', 'icon', 'color', 'notes']) {
+    if (input[key] === undefined && partial) continue;
+    const value = input[key];
+    if (key === 'name') {
+      if (typeof value !== 'string' || !value.trim() || value.length > 150) throw Object.assign(new Error('A goal name of up to 150 characters is required'), { status: 400 });
+      result[key] = value.trim();
+    } else if (['target_amount', 'current_amount', 'priority'].includes(key)) {
+      const number = value === undefined && key === 'current_amount' ? 0 : value === undefined && key === 'priority' ? 1 : Number(value);
+      if (!Number.isFinite(number) || number < 0 || number > 1e10 || (key === 'target_amount' && number === 0)
+          || (key === 'priority' && (!Number.isInteger(number) || number < 1 || number > 1000))) {
+        throw Object.assign(new Error(`Invalid ${key}`), { status: 400 });
+      }
+      result[key] = number;
+    } else if (key === 'target_date') {
+      const parsed = value ? parseTxDate(value) : null;
+      if (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !parsed
+          || parsed.year < 1900 || parsed.year > 2200
+          || new Date(parsed.year, parsed.month, parsed.day).getMonth() !== parsed.month)) {
+        throw Object.assign(new Error('Choose a valid target date'), { status: 400 });
+      }
+      result[key] = value || null;
     } else {
-      projectedDate.setMonth(projectedDate.getMonth() + projectedMonths);
+      if (value != null && (typeof value !== 'string' || value.length > 4000)) throw Object.assign(new Error(`Invalid ${key}`), { status: 400 });
+      result[key] = value || (key === 'icon' ? 'Save' : key === 'color' ? '#369c85' : null);
     }
-
-    return {
-      monthly_income: parseFloat(avgIncome.toFixed(2)),
-      monthly_expense: parseFloat(avgExpense.toFixed(2)),
-      monthly_discretionary: parseFloat(monthlyDiscretionary.toFixed(2)),
-      suggested_monthly: parseFloat(suggestedMonthly.toFixed(2)),
-      achievable,
-      monthly_shortfall: parseFloat(monthlyShortfall.toFixed(2)),
-      projected_months: projectedMonths,
-      projected_date: remaining <= 0 ? new Date().toISOString().split('T')[0] : projectedDate.toISOString().split('T')[0],
-      months_until_target: monthsUntil
-    };
-
-  } catch (err) {
-    log('GOALS', `Funding calc error: ${err.message}`);
-    return {
-      monthly_income: 0, monthly_expense: 0, monthly_discretionary: 0,
-      suggested_monthly: 0, achievable: false, monthly_shortfall: 0,
-      projected_months: 999, projected_date: null, months_until_target: 12
-    };
   }
+  return result;
 }
 
-/**
- * Compute overall funding analysis across all goals
- */
-async function computeFundingAnalysis() {
+router.post('/', async (req, res, next) => {
   try {
-    const goals = await db.all('SELECT * FROM savings_goals WHERE user_id = 1 ORDER BY priority ASC');
-    const analysis = await Promise.all(goals.map(g => calculateGoalFunding(g)));
+    const goal = validatedGoal(req.body);
+    const keys = Object.keys(goal);
+    const result = await db.run(`INSERT INTO savings_goals (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING id`, Object.values(goal));
+    res.json({ success: true, id: result.rows[0].id, message: 'Goal created' });
+  } catch (error) { next(error); }
+});
 
-    const totalRemaining = goals.reduce((s, g) => s + Math.max(0, parseFloat(g.target_amount) - parseFloat(g.current_amount || 0)), 0);
-    const totalSuggested = analysis.reduce((s, a) => s + a.suggested_monthly, 0);
-    const totalDiscretionary = analysis.length > 0 ? analysis[0].monthly_discretionary : 0;
+router.put('/:id', async (req, res, next) => {
+  try {
+    const goal = validatedGoal(req.body, true);
+    const keys = Object.keys(goal);
+    if (!keys.length) return res.status(400).json({ error: 'No fields to update' });
+    const result = await db.run(`UPDATE savings_goals SET ${keys.map((key, i) => `${key}=$${i + 1}`).join(',')} WHERE id=$${keys.length + 1} RETURNING id`, [...Object.values(goal), req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
 
-    return {
-      total_goals: goals.length,
-      total_remaining: parseFloat(totalRemaining.toFixed(2)),
-      total_suggested_monthly: parseFloat(totalSuggested.toFixed(2)),
-      total_discretionary: parseFloat(totalDiscretionary.toFixed(2)),
-      gap: parseFloat((totalSuggested - totalDiscretionary).toFixed(2)),
-      summary: totalSuggested <= totalDiscretionary
-        ? "\u2705 Your discretionary income covers all goal contributions!"
-        : "\u26a0\ufe0f You need to increase income or reduce spending to meet all goals on time.",
-      goals: goals.map((g, i) => ({
-        name: g.name,
-        target: parseFloat(g.target_amount),
-        current: parseFloat(g.current_amount || 0),
-        remaining: parseFloat((g.target_amount - (g.current_amount || 0)).toFixed(2)),
-        target_date: g.target_date,
-        ...analysis[i]
-      }))
-    };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const result = await db.run('DELETE FROM savings_goals WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
+
+router.post('/:id/contribute', async (req, res, next) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1e10) return res.status(400).json({ error: 'A valid positive contribution is required' });
+    const result = await db.run('UPDATE savings_goals SET current_amount=current_amount+$1 WHERE id=$2 RETURNING current_amount', [amount, req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ success: true, current_amount: Number(result.rows[0].current_amount), message: 'Savings progress recorded; no bank transfer was made' });
+  } catch (error) { next(error); }
+});
 
 export default router;

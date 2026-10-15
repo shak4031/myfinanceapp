@@ -1,96 +1,29 @@
-/* Force redeploy marker: 1780952552331 */
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import app from './app.js';
 import Database from './db.js';
-import auth from './routes/auth.js';
-import dashboard from './routes/dashboard.js';
-import transactions from './routes/transactions.js';
-import debts from './routes/debts.js';
-import goals from './routes/goals.js';
-import importCsv from './routes/import.js';
-import bulkImport from './routes/bulk-import.js';
-import categories from './routes/categories.js';
-import categorizations from './routes/categorizations.js';
-import categorizationsLite from './routes/categorizations-lite.js';
-import logsRoute from './routes/logs.js';
 import { log } from './utils/logger.js';
+import { purgeExpiredAuditEvents, structuredLog } from './utils/audit.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
-
-// Logging middleware
-app.use((req, res, next) => {
-  log('API', `[${req.method}] ${req.path}`);
-  next();
-});
-
-// Session middleware (HTTP-only cookies)
-app.use((req, res, next) => {
-  const sessionId = req.cookies?.session_id;
-  if (sessionId) {
-    req.user = { id: 1, name: 'Shak' }; // For now, hardcoded
-    log('AUTH', `User authenticated: ${req.user.name}`);
-  }
-  next();
-});
-
-import staging from './routes/staging.js';
-
-// ... existing imports ...
-
-// Routes BEFORE static files
-app.use('/api/auth', auth);
-app.use('/api/dashboard', dashboard);
-app.use('/api/transactions', transactions);
-app.use('/api/staging', staging);
-app.use('/api/dashboard', transactions); // Alias for update-transaction support
-app.use('/api/debts', debts);
-app.use('/api/goals', goals);
-app.use('/api/import', importCsv);
-app.use('/api/bulk-import', bulkImport);
-app.use('/api/categories', categories);
-app.use('/api/categorizations', categorizations);
-app.use('/api/categorizations-lite', categorizationsLite);
-app.use('/api', logsRoute);
-
-// Static files (after API routes)
-app.use(express.static(join(__dirname, '../frontend')));
-
-// Serve frontend
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, '../frontend/index.html'));
-});
-
-// Error handling
-app.use((err, req, res, next) => {
-  log('ERROR', `${err.message}`);
-  res.status(500).json({ error: err.message });
-});
-
-// Initialize database and start server
 const db = new Database();
+
+async function purge() {
+  try {
+    const removed = await purgeExpiredAuditEvents();
+    if (removed) log('AUDIT', `Removed ${removed} audit events past the retention period`);
+  } catch {
+    structuredLog('error', { event: 'audit.purge_failed' });
+  }
+}
+
+process.on('unhandledRejection', error => structuredLog('error', { event: 'process.unhandled_rejection', name: error?.name, stack: error?.stack }));
 
 try {
   await db.init();
-  log('SERVER', '✓ Database initialized successfully');
-} catch (err) {
-  log('SERVER', `❌ Database initialization failed: ${err.message}`);
-  process.exit(1);
+  await purge();
+  setInterval(purge, 24 * 60 * 60 * 1000).unref();
+  const port = process.env.PORT || 3000;
+  app.listen(port, '0.0.0.0', () => log('SERVER', `MyFinanceApp listening on port ${port} with private account sessions`));
+} catch (error) {
+  log('SERVER', `Startup failed: ${error.message}`);
+  process.exitCode = 1;
+  await db.close();
 }
-
-app.listen(PORT, '0.0.0.0', () => {
-  log('SERVER', `🚀 MyFinanceApp running on port ${PORT}`);
-  log('SERVER', `📊 Database: PostgreSQL (Railway)`);
-  log('SERVER', `🔐 Authentication: Local (hooks for email/password ready)`);
-});
-
-export default app;

@@ -1,203 +1,196 @@
-# Deployment Guide - MyFinanceApp V2
+# Private-account deployment
 
-## 🚀 Quick Deploy to Railway (5 minutes)
+## Before upgrading
 
-### Prerequisites
-- GitHub account
-- Railway account (https://railway.app)
-- Domain: myfinanceapp.us (already registered)
+1. Back up PostgreSQL and verify the backup can be restored. Test the upgrade on
+   a separate staging database first. Do not point tests at production.
+2. Existing rows with no owner are assigned to user **1**. Existing owned records
+   retain their owner. Only a protected owner-setup flow may claim account 1.
+3. The application no longer seeds personal debts, rewrites balances, repairs
+   categories, or resets fixed flags at startup. Review flags removed by older
+   versions manually; their original intent cannot be reconstructed reliably.
 
----
+## Environment
 
-## Step 1: Create GitHub Repository
+Set secrets in your deployment platform, never in source control:
 
-```bash
-cd /opt/data/myfinanceapp-v2
-
-# Initialize repo (if not done)
-git init
-git add .
-git commit -m "Initial release"
-
-# Create repo on GitHub via web UI
-# https://github.com/new
-# Name: myfinanceapp
-# Visibility: private (or public)
-
-# Add remote
-git remote add origin https://github.com/YOUR_USERNAME/myfinanceapp.git
-git branch -M main
-git push -u origin main
-```
-
----
-
-## Step 2: Connect to Railway
-
-1. Go to https://railway.app
-2. Sign in with GitHub
-3. Click "New Project"
-4. Click "Deploy from GitHub repo"
-5. Select `myfinanceapp` repository
-6. Railway auto-detects Node.js
-7. Click "Deploy"
-
----
-
-## Step 3: Configure Environment
-
-In Railway dashboard:
-
-**Variables:**
-```
-PORT=8080  (Railway provides this)
+```text
+DATABASE_URL=postgresql://<migration-user>:<password>@<host>:5432/<database>
 NODE_ENV=production
+APP_ORIGIN=https://<your-app-domain>
+OWNER_SETUP_TOKEN=<cryptographically-random-token-at-least-32-characters>
+ALLOW_REGISTRATION=false
+
+# Password-reset and security-notice email (required for self-service reset)
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_SECURE=false            # true for implicit TLS, usually port 465
+SMTP_USER=<smtp-user>
+SMTP_PASS=<smtp-password>
+SMTP_FROM="MyFinanceApp <no-reply@your-domain>"
+
+# Audit and monitoring
+AUDIT_HASH_SECRET=<random-secret-at-least-32-characters>
+AUDIT_RETENTION_DAYS=365     # 30 to 3650
+ALERT_WEBHOOK_URL=<optional Slack/Discord-compatible incoming webhook>
 ```
 
-**Build Command:**
-```
-npm install
-```
+Generate a setup token (and `AUDIT_HASH_SECRET`) locally with:
 
-**Start Command:**
-```
-node backend/server.js
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
----
+`DATABASE_SSL=true` enables certificate-verified PostgreSQL TLS when your provider
+requires it. Use the provider's trusted certificate configuration; do not disable
+certificate validation. Private-network database connections can omit this
+setting when appropriate to the provider.
 
-## Step 4: Connect Custom Domain
+`APP_ORIGIN` must exactly match the browser origin, with scheme and port where
+applicable and no trailing slash. Cross-origin writes are rejected. In production
+session cookies are Secure, HttpOnly and SameSite=Strict, so HTTPS is required.
+Configure your hosting proxy to terminate HTTPS and preserve the expected host.
+If deployed behind a trusted reverse proxy, set `TRUST_PROXY_HOPS` to the exact
+trusted hop count (for example `1` for one proxy). Do not trust arbitrary forwarded
+headers. Without the correct setting, all users behind that proxy may share the
+same authentication IP rate limit.
 
-1. In Railway dashboard → Settings → Domain
-2. Click "Add Custom Domain"
-3. Enter: `myfinanceapp.us`
-4. Railway gives you nameservers
-5. Update domain registrar with nameservers
-6. Wait 24-48 hours for DNS propagation
+The migration connection must own the existing tables, create/alter tables and
+roles, and grant the `finance_app_runtime` role to itself. The runtime role must
+be `NOLOGIN NOSUPERUSER NOBYPASSRLS`. Each financial database operation starts a
+transaction, sets that restricted role, and sets the verified user ID locally.
+The role cannot read authentication/session tables or truncate financial tables.
+The application fails startup if these protections cannot be installed. The
+administrative connection is used only by schema setup and authentication.
 
----
+## Start and claim the owner account
 
-## Step 5: Persistent Volume (Optional)
-
-If you want database to persist:
-
-In Railway dashboard → Variables → Add:
-
-```
-DATABASE_URL=/var/data/myfinanceapp-v2.db
-```
-
-Then update backend/db.js:
-```javascript
-this.dbPath = process.env.DATABASE_URL || '/opt/data/myfinanceapp-v2.db';
-```
-
----
-
-## ✅ Verification
-
-After deployment:
-
-```bash
-# Should return HTML
-curl https://myfinanceapp.us/
-
-# Should return JSON
-curl -X POST https://myfinanceapp.us/api/dashboard/summary
-
-# Check logs
-railway logs  # in CLI
+```powershell
+npm ci
+npm test
+npm start
 ```
 
----
+Open the app and complete **Owner setup** using your name, email, a password of
+12 to 128 characters, and the setup token. This assigns credentials to account 1
+without copying its financial data to anyone else. Setup is single-use and
+serialized with registration. Remove `OWNER_SETUP_TOKEN` after setup and restart.
 
-## 🔒 HTTPS
+Leave registration closed until staging isolation tests and an independent
+production security review are complete. Set `ALLOW_REGISTRATION=true` only when
+ready. New users receive independent empty budgets and category lists.
+Passwords use salted scrypt; session tokens are random, stored hashed, expire
+after seven days and are revoked on logout. Authentication attempts are limited
+in PostgreSQL across processes.
 
-Railway handles HTTPS automatically. Your app will:
-- ✅ Run on https://myfinanceapp.us
-- ✅ Force HTTPS
-- ✅ Have SSL certificate
+The owner does not register: account 1 already holds the existing data and is
+claimed once through Owner setup. Other people register with **Create an
+account** only while `ALLOW_REGISTRATION=true`; each starts with an empty,
+isolated workspace.
 
----
+There is not yet email verification, MFA or self-service account deletion. Do not
+advertise these capabilities.
 
-## 💾 Database Persistence
+## Password reset
 
-Current setup:
-- Database file: `/opt/data/myfinanceapp-v2.db`
-- On Railway: Survives redeploys if mounted as persistent volume
+- Users choose **Forgot password?** on the sign-in screen. The response is always
+  the same, so it does not reveal whether an email is registered.
+- When SMTP is configured, the user receives a single-use link that expires in
+  30 minutes. The token is placed in the URL fragment, so it is not sent in
+  server request logs, and only its hash is stored.
+- Completing a reset signs out every session (including support sessions),
+  clears login lockouts, and emails a security notice.
+- An admin can send the same reset email from the admin console. Admins never
+  see or choose the user's password or reset token. Without SMTP the request
+  returns 503; configure SMTP before inviting users.
 
-Railway persistent volume:
-1. Add volume in Railway dashboard
-2. Mount to `/var/data/`
-3. Update DB path in code
+## Audit logs, error logging and monitoring
 
----
+- Every request receives an `X-Request-Id` (an incoming valid ID is preserved).
+  Server errors return `{ error, requestId }`; ask customers for this ID.
+- Structured JSON lines (`http.request`, `server.error`, audit events) are
+  written to stdout for Railway or another log platform. Bodies, passwords,
+  tokens, cookies, amounts, balances and descriptions are never logged.
+- The append-only `audit_events` table records successful and failed logins
+  (with reason), lockouts, registration, setup, logout, reset requests and
+  completions, admin actions, support grants and every support-session request,
+  and uncaught 5xx errors. Emails and IPs are stored as keyed hashes
+  (`AUDIT_HASH_SECRET`).
+- `ALERT_WEBHOOK_URL` receives throttled alerts for server errors and lockouts.
+- Audit rows, used/expired reset tokens and expired sessions are purged after
+  `AUDIT_RETENTION_DAYS` at startup and daily.
 
-## 📊 Monitoring
+## Admin console
 
-Railway provides:
-- ✅ Auto-scaling
-- ✅ Health checks
-- ✅ Logs
-- ✅ Metrics
-- ✅ Uptime monitoring
+Open `/admin.html` while signed in as an admin (account 1 is the admin). It
+provides service health and configuration warnings, user search (account
+metadata only, never financial data), password-reset email, unlock, sign out
+everywhere, filtered audit/error search by event, outcome, user, email or
+request ID, support sessions, and an API explorer generated from
+`/api/admin/openapi.json` that can send test requests and shows status, latency
+and request ID. Customers can never reach admin endpoints.
 
----
+## Consent-based support access
 
-## 🔄 Continuous Deployment
+Admins cannot view customer data without permission and never use customer
+credentials. In **Settings & support**, the customer grants access for 1–72
+hours with a reason. Access is read-only by default; the customer may explicitly
+allow edits. The customer can revoke access at any time and sees every support
+action in their activity list.
 
-After setup:
+From the admin console's Support sessions tab, the admin starts a session from
+an active grant (up to 2 hours, never beyond the grant). The customer is emailed.
+A banner shows the support session; read-only access is enforced both by the API
+and by PostgreSQL read-only transactions. Admin and grant-management endpoints are
+blocked during support sessions, each request is audited, and ending, revoking or
+expiring the grant stops access immediately.
 
-```bash
-# Make changes locally
-git add .
-git commit -m "Feature: Add something"
-git push origin main
+## Live-data migration rehearsal
 
-# Railway auto-deploys within 30 seconds
-```
+Your existing months of data are not copied or re-imported. The upgrade updates
+the same database in place and assigns existing rows to account 1. Rehearse it:
 
----
+1. Take a Railway backup and restore it to a separate staging database.
+2. Before upgrading, record counts on staging, for example
+   `SELECT date_trunc('month', date::date) m, count(*), sum(amount) FROM transactions GROUP BY 1 ORDER BY 1;`
+   plus counts of categories, debts, goals and transactions marked fixed.
+3. Deploy this version against staging, complete Owner setup, and rerun the
+   queries. Counts and totals must match and every row must have `user_id = 1`.
+4. Verify dashboard balances, Upcoming payments and Fixed flags in the browser.
+5. Only then back up production and deploy. To roll back, redeploy the previous
+   version and restore the backup taken immediately before the upgrade.
 
-## 🆘 Troubleshooting
+## Verify on staging
 
-**App won't start:**
-```bash
-# Check logs in Railway dashboard
-# Common: PORT not set, NODE_ENV issues
-```
+- An unauthenticated financial API request returns 401.
+- Owner setup can be completed only with the configured token and only once.
+- Create two accounts. Add different transactions, merchant rules, staging rows,
+  loans and goals. Neither account should see or modify the other's records,
+  including when requesting known record IDs.
+- Each account can use the same category/merchant names independently.
+- A missing balance shows unavailable, not a funded forecast. A checked Fixed
+  Payment debit creates a last-month template; an unchecked one does not.
+- Review categorization previews before approving changes. Fixed flags remain
+  unchanged and manual category corrections remain protected.
+- Check goal funding across all active goals together; the same surplus must
+  not be assigned in full to every goal.
+- A loan marked as not yet included in imported spending reserves its minimum
+  payment separately. Existing imported loan payments must not be counted twice.
+- Logout removes access, and another person's subsequent login must not show
+  cached data from the previous account.
 
-**Database not persisting:**
-```bash
-# Use Railway persistent volume
-# Or switch to PostgreSQL (managed by Railway)
-```
+Automated regressions use embedded PostgreSQL and temporary HTTP servers without
+touching the configured live database. Run `npm test`. Browser smoke tests, when
+present, also use synthetic data only.
 
-**Domain not working:**
-```bash
-# DNS can take 24-48 hours
-# Check propagation: https://dnschecker.org
-```
+## Removed unsafe legacy routes
 
----
+`/api/bulk-import/execute-final` returns 410 rather than loading shared financial
+fixtures. Use private CSV/PDF imports instead. `/api/categorizations-lite` returns
+410 instead of accessing shared SQLite records. `/api/logs` returns 403 because
+global logs may contain multiple users' activity; use the admin console's audit
+search or restricted deployment logs instead.
 
-## 💡 Next Steps
-
-1. **Push to GitHub** (Step 1)
-2. **Deploy on Railway** (Steps 2-3)
-3. **Configure domain** (Step 4)
-4. **Test live** at https://myfinanceapp.us
-5. **Add features** as needed
-
----
-
-## 📝 Current Production Ready
-
-Your app is **already production-ready**:
-- ✅ Error handling
-- ✅ Logging
-- ✅ Database seeded
-- ✅ APIs working
-- ✅ Frontend polished
-
-Just push to deploy! 🚀
+Do not expose PostgreSQL or operator logs publicly. Use encrypted backups,
+restricted operator access, monitoring, and a retention policy. Account isolation
+does not by itself make a public financial product production-certified.

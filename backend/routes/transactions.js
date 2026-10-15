@@ -1,494 +1,114 @@
 import { Router } from 'express';
 import Database from '../db.js';
-import { log } from '../utils/logger.js';
-import { normalizeDescription, dedupWhereClause, extractMerchantCore, buildLabelPattern, escapeRegex } from '../utils/normalize.js';
-import { getFixedBillCategory } from '../utils/fixedPayments.js';
+import { currentUserId } from '../utils/tenant.js';
+import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
 
 const router = Router();
 const db = new Database();
-
-// Helper: Get date range based on filter
-function getDateRange(filter) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  let startDate, endDate = new Date(today);
-  endDate.setHours(23, 59, 59, 999);
-
-  if (filter === 'current') {
-    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
-  } else if (filter === 'last') {
-    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    endDate = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
-  } else if (filter === 'ytd') {
-    startDate = new Date(today.getFullYear(), 0, 1);
-    endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-  } else if (filter === 'all') {
-    startDate = new Date('2000-01-01');
-    endDate = new Date('2099-12-31');
-  } else {
-    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+const route = handler => async (req, res) => {
+  try { await handler(req, res); } catch (error) {
+    res.status(error.status || (error.code === '23505' ? 409 : 500)).json({ error: error.message });
   }
+};
 
-  return {
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0]
-  };
-}
-
-router.post('/', async (req, res) => {
-  try {
-    const { dateFilter = 'current', category } = req.body || {};
-    const { startDate, endDate } = getDateRange(dateFilter);
-
-    log('TRANSACTIONS', `Fetching transactions: ${startDate} to ${endDate}${category ? `, category: ${category}` : ''}`);
-
-    let query = 'SELECT * FROM transactions WHERE user_id = $1 AND date >= $2 AND date <= $3';
-    let params = [1, startDate, endDate];
-
-    if (category) {
-      query += ' AND category = $4';
-      params.push(category);
-    }
-
-    query += ' ORDER BY date DESC';
-
-    const transactions = await db.all(query, params);
-
-    log('TRANSACTIONS', `Fetched ${transactions.length} transactions`);
-    res.json(transactions);
-  } catch (err) {
-    log('TRANSACTIONS', `Error: ${err.message}`);
-    res.status(500).json({ error: err.message });
+router.post('/', route(async (req, res) => {
+  const { dateFilter = 'current', category } = req.body || {};
+  const now = new Date();
+  let start = '2000-01-01', end = '2099-12-31';
+  if (dateFilter !== 'all') {
+    const year = now.getFullYear(), month = now.getMonth();
+    const first = dateFilter === 'ytd' ? new Date(year, 0, 1) : new Date(year, month - (dateFilter === 'last' ? 1 : 0), 1);
+    const last = dateFilter === 'last' ? new Date(year, month, 0) : dateFilter === 'ytd' ? now : new Date(year, month + 1, 0);
+    const format = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    start = format(first); end = format(last);
   }
-});
+  res.json(await db.all(`SELECT * FROM transactions WHERE ${TENANT} AND date >= $1 AND date <= $2
+    ${category ? 'AND category=$3' : ''} ORDER BY date DESC, id DESC`, category ? [start, end, category] : [start, end]));
+}));
 
-// UPDATE TRANSACTION
-router.post('/update-transaction', async (req, res) => {
-  try {
-    const { id, category, is_fixed, apply_to_all = true } = req.body;
-    
-    if (!id) {
-      return res.status(400).json({ error: 'Transaction ID is required' });
-    }
+router.get('/categorization-rules', route(async (req, res) => {
+  // Listing remains available even if an invalid legacy rule needs repair.
+  const rules = await db.all(RULES_SQL);
+  const categories = await db.all(`SELECT id,name FROM categories WHERE ${TENANT} ORDER BY name`);
+  res.json({ rules, categories });
+}));
+router.post('/categorization-rules', route(async (req, res) => {
+  res.json({ rule: await db.transaction(client => saveRule(client, req.body)) });
+}));
+router.put('/categorization-rules/:id', route(async (req, res) => {
+  res.json({ rule: await db.transaction(client => saveRule(client, req.body, req.params.id)) });
+}));
+router.post('/categorization-preview', route(async (req, res) => {
+  const result = await db.transaction(async client => {
+    const config = await loadCategorization(client);
+    const transactions = (await client.query(`SELECT id,description,direction,category,category_corrected FROM transactions WHERE ${TENANT} ORDER BY id`)).rows;
+    return preview(transactions, config.compiled, config.names, req.body?.scope);
+  });
+  res.json(result);
+}));
+router.post('/categorization-apply', route(async (req, res) => {
+  res.json(await applyUpdates(db, req.body?.updates));
+}));
+router.post('/cleanup-database', (req, res) => res.status(409).json({
+  error: 'Automatic cleanup is disabled. Request /api/transactions/categorization-preview and approve selected updates with /api/transactions/categorization-apply. Categories and fixed flags were not changed.'
+}));
 
-    log('TRANSACTIONS', `Updating transaction ${id}: category=${category}, is_fixed=${is_fixed}, apply_to_all=${apply_to_all}`);
+router.post('/update-transaction', route(async (req, res) => {
+  const { id, category } = req.body || {};
+  // Category edits never modify fixed flags or other transactions.
+  const result = await applyUpdates(db, [{ id, category }], { expected: false, protectCorrections: false });
+  res.json({ success: true, ...result });
+}));
 
-    // Get the description of the transaction we're updating
-    const txn = await db.get('SELECT description FROM transactions WHERE id = $1', [id]);
-    
-    if (!txn) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
+router.post('/update-fixed', route(async (req, res) => {
+  const { id, is_fixed, apply_to_all = true } = req.body || {};
+  if (!id || typeof is_fixed !== 'boolean' || typeof apply_to_all !== 'boolean') throw failure(400, 'id and boolean is_fixed/apply_to_all are required');
+  const updated = await db.transaction(async client => {
+    const txn = (await client.query(`SELECT id,description,category FROM transactions WHERE id=$1 AND ${TENANT} FOR UPDATE`, [id])).rows[0];
+    if (!txn) throw failure(404, 'Transaction not found');
+    if (!apply_to_all) return (await client.query(`UPDATE transactions SET is_fixed=$1 WHERE id=$2 AND ${TENANT}`, [is_fixed, id])).rowCount;
+    const pattern = canonicalMerchant(txn.description);
+    const label = (await client.query(`INSERT INTO transaction_labels (pattern,display_label,match_type,is_fixed)
+      VALUES ($1,$1,'merchant',$2) ON CONFLICT (user_id,pattern) DO UPDATE SET is_fixed=EXCLUDED.is_fixed,
+      match_type='merchant' RETURNING id`, [pattern, is_fixed])).rows[0];
+    const transactions = (await client.query(`SELECT id,description FROM transactions WHERE ${TENANT} ORDER BY id FOR UPDATE`)).rows;
+    const ids = transactions.filter(row => canonicalMerchant(row.description) === pattern).map(row => row.id);
+    return (await client.query(`UPDATE transactions SET is_fixed=$1,label_id=$2 WHERE id=ANY($3::integer[]) AND ${TENANT}`, [is_fixed, label.id, ids])).rowCount;
+  });
+  res.json({ success: true, updated });
+}));
 
-    const hasFixedParam = typeof is_fixed === 'boolean' || is_fixed === 'true' || is_fixed === 'false';
-    const isFixedBool = is_fixed === true || is_fixed === 'true';
+router.post('/bulk-update-category', (req, res) => res.status(409).json({ error: 'Use categorization-preview and categorization-apply with explicit transaction IDs.' }));
+router.post('/sync-labels', (req, res) => res.status(409).json({ error: 'Automatic label creation is disabled. Save explicit categorization-rules instead.' }));
 
-    if (apply_to_all) {
-      // ALWAYS build clean, specific pattern from the actual transaction description
-      const canonicalPattern = buildLabelPattern(txn.description);
-      const coreMerchant = extractMerchantCore(txn.description) || txn.description;
-
-      const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [category]);
-      const catId = catRow?.id || null;
-
-      // Find or insert specific label for this merchant pattern
-      let targetLabelId;
-      const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
-      if (existingLabel) {
-        targetLabelId = existingLabel.id;
-        if (hasFixedParam) {
-          await db.run(
-            'UPDATE transaction_labels SET is_fixed = $1, category_id = $2 WHERE id = $3',
-            [isFixedBool, catId, targetLabelId]
-          );
-        } else {
-          await db.run(
-            'UPDATE transaction_labels SET category_id = $1 WHERE id = $2',
-            [catId, targetLabelId]
-          );
-        }
-      } else {
-        const insertRes = await db.pool.query(
-          'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
-          [canonicalPattern, coreMerchant, catId, hasFixedParam ? isFixedBool : false]
-        );
-        targetLabelId = insertRes.rows[0]?.id;
-      }
-
-      // Update ONLY transactions matching this specific merchant pattern
-      if (hasFixedParam) {
-        await db.run(
-          'UPDATE transactions SET category = $1, is_fixed = $2, label_id = $3 WHERE description ~* $4 AND user_id = $5',
-          [category, isFixedBool, targetLabelId, canonicalPattern, 1]
-        );
-      } else {
-        await db.run(
-          'UPDATE transactions SET category = $1, label_id = $2 WHERE description ~* $3 AND user_id = $4',
-          [category, targetLabelId, canonicalPattern, 1]
-        );
-      }
-    } else {
-      // Update just this one
-      if (hasFixedParam) {
-        await db.run(
-          'UPDATE transactions SET category = $1, is_fixed = $2 WHERE id = $3 AND user_id = $4',
-          [category, isFixedBool, id, 1]
-        );
-      } else {
-        await db.run(
-          'UPDATE transactions SET category = $1 WHERE id = $2 AND user_id = $3',
-          [category, id, 1]
-        );
-      }
-    }
-
-    res.json({ 
-      success: true, 
-      message: apply_to_all ? 'All matching transactions updated' : 'Transaction updated successfully' 
-    });
-  } catch (err) {
-    log('TRANSACTIONS', `Error updating transaction: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/delete-description', async (req, res) => {
-  try {
-    const { pattern } = req.body;
-    if (!pattern) return res.status(400).json({ error: 'pattern is required' });
-
-    log('TRANSACTIONS', `Deleting transactions matching: ${pattern}`);
-    await db.run(
-      'DELETE FROM transactions WHERE description LIKE $1 AND user_id = $2',
-      [`%${pattern}%`, 1]
-    );
-
-    res.json({ success: true, message: `Transactions matching ${pattern} deleted` });
-  } catch (err) {
-    log('TRANSACTIONS', `Error deleting transactions: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/cleanup-database', async (req, res) => {
-  try {
-    log('TRANSACTIONS', 'Starting database deduplication and cleanup...');
-    
-    // 1. Seed Categories (ensure consistent IDs)
-    const categoryCheck = await this.pool.query('SELECT COUNT(*) FROM categories');
-    if (categoryCheck.rows[0].count === '0') {
-      const categories = [
-        ['Groceries', '🛒', '#2ecc71'], ['Utilities', '⚡', '#3498db'], ['EV Charging', '🔌', '#00bcd4'], ['Gas', '⛽', '#e74c3c'],
-        ['Dining', '🍽️', '#f39c12'], ['Shopping', '🛍️', '#9b59b6'], ['Entertainment', '🎬', '#e91e63'],
-        ['Healthcare', '🏥', '#00bcd4'], ['Insurance', '🛡️', '#673ab7'], ['Subscriptions', '📺', '#ff9800'],
-        ['Transportation', '🚗', '#795548'], ['Home', '🏠', '#cddc39'], ['Salary', '💵', '#1b5e20'],
-        ['Credit Cards', '🗂️', '#ff6b6b'], ['Car Loans', '🏎️', '#e74c3c'], ['Internet', '🌐', '#3498db'], 
-        ['Other', '📦', '#424242']
-      ];
-      for (const [name, icon, color] of categories) {
-        await this.pool.query('INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3)', [name, icon, color]);
-      }
-      log('DATABASE', '✓ Categories seeded');
-    }
-
-    // 2. Clear ALL transaction tags to force a holistic categorization cycle
-    await db.run('UPDATE transactions SET category = NULL, is_fixed = FALSE');
-
-    // 3. Holistic Categorization (Unified Source of Truth logic)
-    const rules = [
-      { pattern: 'chargepoint|tesla|supercharger|blink|ev charging|plugshare|electric vehicle charging', category: 'EV Charging', fixed: false },
-      
-      // LIFESTYLE (Not Fixed)
-      { pattern: 'paypal|target|klarna|amazon|walmart|etsy|michael|shopping', category: 'Shopping', fixed: false },
-      { pattern: 'restaurant|cafe|dining|roy rogers|pizza|grubhub|uber.*eats|doordash|starbucks|chipotle|five guys|baking|bakery', category: 'Dining', fixed: false },
-      { pattern: 'netflix|hulu|spotify|disney|hbo|youtube|subscriptions', category: 'Subscriptions', fixed: false },
-      { pattern: 'grocery|shoprite|wawa|trader joe|whole foods|instacart|bereket', category: 'Groceries', fixed: false },
-      { pattern: 'pharmacy|cvs|walgreens|healthcare|hospital|medical', category: 'Healthcare', fixed: false },
-      { pattern: 'payroll|salary|wells fargo|bonus|deposit', category: 'Salary', fixed: false }
-    ];
-
-    for (const rule of rules) {
-       await db.run(
-        `UPDATE transactions 
-         SET category = $1, is_fixed = $2
-         WHERE description ~* $3 AND user_id = 1`,
-        [rule.category, rule.fixed, rule.pattern]
-      );
-    }
-
-    const transactions = await db.all('SELECT id, description, direction FROM transactions WHERE user_id = 1');
-    for (const tx of transactions) {
-      const category = getFixedBillCategory(tx.description);
-      if (category && String(tx.direction).toUpperCase() === 'DEBIT') {
-        await db.run('UPDATE transactions SET category = $1, is_fixed = TRUE WHERE id = $2 AND user_id = 1', [category, tx.id]);
-      }
-    }
-
-    // 4. Backup: Anything still NULL gets 'Other'
-    await db.run("UPDATE transactions SET category = 'Other' WHERE category IS NULL");
-
-    log('TRANSACTIONS', '✓ Holistic database cleanup and categorization complete');
-    res.json({ success: true, message: 'Database successfully re-categorized.' });
-  } catch (err) {
-    log('TRANSACTIONS', `Error in cleanup: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/sync-labels', async (req, res) => {
-  try {
-    log('TRANSACTIONS', 'Manual sync: Creating labels for all distinct production transactions...');
-    
-    // 1. Get all descriptions that don't have a label yet
-    const unlabeled = await db.all(`
-        SELECT DISTINCT description 
-        FROM transactions 
-        WHERE label_id IS NULL
-    `);
-
-    const otherCat = await db.get("SELECT id FROM categories WHERE name = 'Other'");
-    let createdCount = 0;
-
-    for (const t of unlabeled) {
-        const cleanLabel = buildLabelPattern(t.description);
-        const displayLabel = extractMerchantCore(t.description) || cleanLabel;
-        
-        // Check if label already exists (prevent duplicates in label table)
-        const exists = await db.get("SELECT id FROM transaction_labels WHERE pattern = $1", [cleanLabel]);
-        
-        let labelId;
-        if (!exists) {
-            const result = await db.pool.query(
-                "INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, FALSE) RETURNING id",
-                [cleanLabel, displayLabel, otherCat.id]
-            );
-            labelId = result.rows[0].id;
-            createdCount++;
-        } else {
-            labelId = exists.id;
-        }
-
-        // Link all transactions matching this pattern
-        await db.run("UPDATE transactions SET label_id = $1 WHERE description ~* $2 AND user_id = 1", [labelId, cleanLabel]);
-    }
-
-    res.json({ success: true, message: `Synced ${unlabeled.length} descriptions, created ${createdCount} new unique labels.` });
-  } catch (err) {
-    log('TRANSACTIONS', `Error syncing labels: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// UPDATE FIXED FLAG
-router.post('/update-fixed', async (req, res) => {
-  try {
-    const { id, is_fixed, apply_to_all = true } = req.body;
-    
-    if (!id) return res.status(400).json({ error: 'Transaction ID is required' });
-
-    const isFixedBool = is_fixed === true || is_fixed === 'true' || is_fixed === 1 || is_fixed === '1';
-    log('TRANSACTIONS', `Updating Fixed Flag: txn_id=${id}, is_fixed=${isFixedBool}, apply_to_all=${apply_to_all}`);
-
-    const txn = await db.get('SELECT description, category FROM transactions WHERE id = $1', [id]);
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
-
-    if (apply_to_all) {
-      const canonicalPattern = buildLabelPattern(txn.description);
-      const coreMerchant = extractMerchantCore(txn.description) || txn.description;
-
-      const catRow = await db.get('SELECT id FROM categories WHERE name = $1', [txn.category]);
-      const catId = catRow?.id || null;
-
-      // 1. Update or create label in transaction_labels
-      let targetLabelId;
-      const existingLabel = await db.get('SELECT id FROM transaction_labels WHERE pattern = $1', [canonicalPattern]);
-      if (existingLabel) {
-        targetLabelId = existingLabel.id;
-        await db.run(
-          'UPDATE transaction_labels SET is_fixed = $1 WHERE id = $2',
-          [isFixedBool, targetLabelId]
-        );
-      } else {
-        const insertRes = await db.pool.query(
-          'INSERT INTO transaction_labels (pattern, display_label, category_id, is_fixed) VALUES ($1, $2, $3, $4) RETURNING id',
-          [canonicalPattern, coreMerchant, catId, isFixedBool]
-        );
-        targetLabelId = insertRes.rows[0]?.id;
-      }
-
-      // 2. Propagate is_fixed and label_id to ONLY transactions matching this specific merchant
-      await db.run(
-        'UPDATE transactions SET is_fixed = $1, label_id = $2 WHERE description ~* $3 AND user_id = 1',
-        [isFixedBool, targetLabelId, canonicalPattern]
-      );
-    } else {
-      await db.run(
-        'UPDATE transactions SET is_fixed = $1 WHERE id = $2 AND user_id = 1',
-        [isFixedBool, id]
-      );
-    }
-
-    res.json({ success: true, message: 'Fixed flag updated for all matching transactions' });
-  } catch (err) {
-    log('TRANSACTIONS', `Error updating fixed flag: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/bulk-update-category', async (req, res) => {
-  try {
-    const { updates } = req.body;
-    if (!updates || !Array.isArray(updates)) return res.status(400).json({ error: 'updates array is required' });
-
-    for (const update of updates) {
-      const { pattern, category } = update;
-      await db.run(
-        `UPDATE transaction_labels 
-         SET category_id = (SELECT id FROM categories WHERE name = $1) 
-         WHERE pattern ~* $2`,
-        [category, pattern]
-      );
-      
-      // Update existing transactions for immediate UI consistency
-      await db.run(
-        `UPDATE transactions 
-         SET category = $1 
-         WHERE label_id IN (SELECT id FROM transaction_labels WHERE pattern ~* $2)`,
-        [category, pattern]
-      );
-    }
-
-    res.json({ success: true, message: 'Labels and historical transactions updated' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/delete-by-id', async (req, res) => {
-  try {
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'id is required' });
-
-    log('TRANSACTIONS', `Deleting transaction id: ${id}`);
-    await db.run('DELETE FROM transactions WHERE id = $1 AND user_id = 1', [id]);
-
-    res.json({ success: true, message: `Transaction ${id} deleted` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/insert-manual', async (req, res) => {
-  try {
-    const { date, description, category, amount, direction, balance, source } = req.body;
-    
-    await db.run(
-      `INSERT INTO transactions (date, description, category, amount, direction, balance, source, user_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
-      [date, description, category, amount, direction, balance, source]
-    );
-    res.json({ success: true, message: 'Manual transaction inserted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/transactions/dedup
- * 
- * Deduplicate the entire transactions table by normalizing descriptions
- * (collapsing whitespace) and removing duplicate transactions.
- * 
- * Strategy per group (date, normalized desc, amount, direction):
- *   1. Keep the row with the longest description (most complete data)
- *   2. Keep the row with the most recent created_at (if descriptions same length)
- *   3. Delete extras
- * 
- * Safe for repeat runs — idempotent.
- */
-router.post('/dedup', async (req, res) => {
-  try {
-    log('DEDUP', '🔍 Starting full database deduplication...');
-
-    // Find duplicates using normalized descriptions
-    const duplicates = await db.all(`
-      WITH normalized AS (
-              SELECT 
-                id, date, 
-                regexp_replace(description, '[[:space:]]+', ' ', 'g') AS norm_desc,
-                description,
-                amount, direction
-              FROM transactions
-              WHERE user_id = 1
-            ),
-            ranked AS (
-              SELECT *,
-                ROW_NUMBER() OVER (
-                  PARTITION BY date, norm_desc, amount, direction
-                  ORDER BY LENGTH(description) DESC, id DESC
-                ) AS rn
-              FROM normalized
-            )
-      SELECT id, date, description, norm_desc, amount, direction, rn
-      FROM ranked
-      WHERE rn > 1
-      ORDER BY date, norm_desc
-    `);
-
-    if (duplicates.length === 0) {
-      log('DEDUP', '✅ No duplicates found — database is clean');
-      return res.json({ success: true, removed: 0, message: 'No duplicates found' });
-    }
-
-    const dupIds = duplicates.map(d => d.id);
-    log('DEDUP', `📊 Found ${duplicates.length} duplicate rows to remove`);
-
-    // Log sample duplicates for audit
-    const sampleGroups = {};
-    for (const d of duplicates) {
-      const key = `${d.date}|${d.norm_desc}|${d.amount}|${d.direction}`;
-      if (!sampleGroups[key]) sampleGroups[key] = [];
-      sampleGroups[key].push(d);
-    }
-    const groupEntries = Object.entries(sampleGroups);
-    log('DEDUP', `📋 ${groupEntries.length} unique duplicate groups detected`);
-    for (const [key, rows] of groupEntries.slice(0, 5)) {
-      const [date, desc, amt, dir] = key.split('|');
-      log('DEDUP', `  Group: ${date} | $${amt} ${dir} | "${desc.substring(0, 40)}" → ${rows.length + 1} total (keeping 1, removing ${rows.length})`);
-    }
-
-    // Delete duplicates in batches (Postgres has limits on IN clause size)
-    const BATCH_SIZE = 100;
-    let totalRemoved = 0;
-    for (let i = 0; i < dupIds.length; i += BATCH_SIZE) {
-      const batch = dupIds.slice(i, i + BATCH_SIZE);
-      const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(',');
-      const result = await db.run(
-        `DELETE FROM transactions WHERE id IN (${placeholders})`,
-        batch
-      );
-      totalRemoved += batch.length;
-    }
-
-    log('DEDUP', `✅ Dedup complete: ${totalRemoved} duplicate rows removed`);
-
-    // Return audit trail
-    res.json({
-      success: true,
-      removed: totalRemoved,
-      groups: groupEntries.length,
-      sampleGroups: groupEntries.slice(0, 10).map(([key, rows]) => {
-        const [date, desc, amt, dir] = key.split('|');
-        return { date, description: desc, amount: parseFloat(amt), direction: dir, removed: rows.length };
-      })
-    });
-  } catch (err) {
-    log('DEDUP', `❌ Dedup failed: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
+router.post('/delete-by-id', route(async (req, res) => {
+  if (!req.body?.id) throw failure(400, 'id is required');
+  const result = await db.run(`DELETE FROM transactions WHERE id=$1 AND ${TENANT}`, [req.body.id]);
+  if (!result.rowCount) throw failure(404, 'Transaction not found');
+  res.json({ success: true });
+}));
+router.post('/delete-description', route(async (req, res) => {
+  if (typeof req.body?.pattern !== 'string' || !req.body.pattern.trim()) throw failure(400, 'pattern is required');
+  const result = await db.run(`DELETE FROM transactions WHERE description=$1 AND ${TENANT}`, [req.body.pattern]);
+  if (!result.rowCount) throw failure(404, 'Transaction not found');
+  res.json({ success: true, deleted: result.rowCount });
+}));
+router.post('/insert-manual', route(async (req, res) => {
+  const { date, description, category, amount, direction, balance, source } = req.body || {};
+  if (!date || !description || !Number.isFinite(Number(amount)) || !['DEBIT','CREDIT'].includes(direction)) throw failure(400, 'Valid date, description, amount and direction are required');
+  const cat = await db.get(`SELECT id FROM categories WHERE name=$1 AND ${TENANT}`, [category]);
+  if (!cat) throw failure(400, 'Unknown category');
+  await db.run(`INSERT INTO transactions (date,description,category,amount,direction,balance,source,user_id,category_corrected)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)`, [date,description,category,amount,direction,balance,source,currentUserId()]);
+  res.json({ success: true });
+}));
+router.post('/dedup', route(async (req, res) => {
+  const result = await db.run(`WITH ranked AS (
+    SELECT id, ROW_NUMBER() OVER (PARTITION BY date,regexp_replace(description,'[[:space:]]+',' ','g'),amount,direction
+      ORDER BY category_corrected DESC,is_fixed DESC,length(description) DESC,id DESC) AS rn
+    FROM transactions WHERE ${TENANT})
+    DELETE FROM transactions WHERE id IN (SELECT id FROM ranked WHERE rn>1) AND ${TENANT}`);
+  res.json({ success: true, removed: result.rowCount });
+}));
 
 export default router;

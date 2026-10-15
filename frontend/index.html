@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MyFinanceApp v2</title>
+  <title>MyFinance · Your money, with direction</title>
+  <script src="session.js"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -427,8 +428,28 @@
     }
 
   </style>
+  <link rel="stylesheet" href="refresh.css">
 </head>
-<body>
+<body class="auth-pending">
+  <section id="auth-screen" class="auth-screen" aria-label="Account access">
+    <div class="auth-card">
+      <div class="brand-mark">m<span>·</span></div>
+      <p class="eyebrow">MYFINANCE / YOUR NEXT CHAPTER</p>
+      <h1 id="auth-title">A clearer picture of your money.</h1>
+      <p class="muted" id="auth-description">Checking your secure session…</p>
+      <form id="auth-form" hidden>
+        <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="100"></label>
+        <label id="auth-email-label">Email<input id="auth-email" type="email" autocomplete="username" required></label>
+        <label id="auth-password-label">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="12" required></label>
+        <label id="auth-token-label" hidden>Owner setup token<input id="auth-token" type="password" autocomplete="off"></label>
+        <p id="auth-error" role="alert"></p>
+        <button class="btn btn-primary" id="auth-submit" type="submit">Sign in</button>
+        <button class="btn btn-secondary" id="auth-switch" type="button" hidden>Create an account</button>
+        <button class="link-button" id="auth-forgot" type="button" hidden>Forgot your password?</button>
+      </form>
+    </div>
+    <p class="auth-footnote">Private by design. Your financial data stays on this server.</p>
+  </section>
   <div class="app-container">
     <!-- HAMBURGER BUTTON (visible on mobile) -->
     <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
@@ -436,16 +457,20 @@
 
     <!-- NAVIGATION -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-logo">💰 MyFinanceApp</div>
+      <div class="sidebar-logo"><span class="brand-mark small">m<span>·</span></span> MyFinance</div>
+      <div class="sidebar-caption">YOUR MONEY, WITH DIRECTION</div>
       <ul class="nav-list">
         <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
         <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
         <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
-        <li><button class="nav-btn" onclick="showView('etl')">⚙️ ETL Staging</button></li>
+        <li><button class="nav-btn" onclick="showView('etl')">↳ Import review</button></li>
         <li><button class="nav-btn" onclick="showView('payoff')">🏔️ Payoff Plan</button></li>
         <li><button class="nav-btn" onclick="showView('goals')">🎯 Goals</button></li>
-        <li><button class="nav-btn" onclick="showView('insights')">💡 AI Insights</button></li>
+        <li><button class="nav-btn" onclick="showView('insights')">◈ Spending coach</button></li>
+        <li><button class="nav-btn" onclick="showView('settings')">⚙ Settings &amp; support</button></li>
+        <li class="admin-only"><a class="nav-btn" href="/admin.html">🛠 Admin console</a></li>
       </ul>
+      <div class="sidebar-bottom"><p id="account-name"></p><small>Small steps. Real progress.</small><button class="btn btn-secondary" onclick="FinanceSession.logout()">Sign out</button></div>
     </aside>
 
     <!-- CONTENT AREA -->
@@ -454,7 +479,7 @@
       <!-- DASHBOARD -->
       <section id="dashboard-view" class="view active">
         <header class="header">
-          <h1>Dashboard</h1>
+          <div><p class="eyebrow">THE BIG PICTURE</p><h1>Your money at a glance</h1><p class="muted">Know where you stand. Choose what comes next.</p></div>
           <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
         </header>
 
@@ -511,7 +536,6 @@
           <div class="panel">
             <div class="panel-header">
               Groups
-              <button class="btn" style="padding: 2px 8px; font-size: 10px; background: var(--success); color: white;" onclick="toggleFixedCategoryPrompt()">+ Bill</button>
             </div>
             <div id="cat-fixed-selector" style="display: none; padding: 12px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border);">
                <select id="new-fixed-cat-select" style="width: 100%; padding: 6px; margin-bottom: 8px; font-size: 12px; background: var(--bg-primary); color: white; border: 1px solid var(--border);">
@@ -539,15 +563,16 @@
           <div style="display: flex; gap: 16px;">
             <div class="metric-card" style="padding: 10px 20px; flex-direction: row; gap: 20px; align-items: center; margin: 0;">
                <div><span class="metric-label">Total Debt:</span> <span id="payoff-total-debt" class="metric-value" style="font-size: 18px;">$0.00</span></div>
-               <div><span class="metric-label">Monthly Goal:</span> <span class="metric-value" style="font-size: 18px; color: var(--success);">$1,342.15</span></div>
+               <label>Monthly budget ($)<input id="payoff-budget" type="number" min="0" step="0.01" placeholder="Enter budget" onchange="loadPayoffPlan()"></label>
+               <button class="btn btn-primary" onclick="openDebtEditor()">+ Add debt or loan</button>
             </div>
           </div>
         </header>
 
         <!-- Timeline visualization -->
         <div class="panel" style="padding: 24px; margin-bottom: 12px;">
-          <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">📈 13-Month Avalanche Payoff Progress Timeline</h3>
-          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">Using the Avalanche method, you save $2,026 in interest vs minimums. Here is your projected monthly tracking:</div>
+          <h3 style="margin-bottom: 16px;">Your avalanche projection</h3>
+          <p class="muted">Minimums first, then extra money to the highest APR. Estimates use monthly interest, no new charges, and your entered budget; lender calculations may differ.</p>
           <div id="payoff-timeline-chart" style="display: flex; flex-direction: column; gap: 16px;"></div>
         </div>
 
@@ -573,7 +598,7 @@
             <div id="achievements-list" style="display: flex; flex-direction: column; gap: 12px;">
               <div class="list-item" style="background: var(--bg-secondary); border-radius: 8px;">
                 <div style="font-weight: 700; color: var(--warning);">⭐ Program Goal: Debt Freedom</div>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Zero balances on all 5 credit cards within 13 months while building a $1,000/mo savings buffer.</p>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Build a plan around your actual balances, rates, and minimum payments. Keep an emergency cushion and check your savings goals before increasing the budget.</p>
               </div>
             </div>
           </div>
@@ -583,15 +608,15 @@
       <!-- INSIGHTS -->
       <section id="insights-view" class="view">
         <header class="header">
-          <h1>💡 AI Finance Assistant (CPA Mode)</h1>
-          <button class="btn btn-primary" id="run-insights-btn" onclick="generateInsights()">🔄 Run Daily Audit</button>
+          <div><p class="eyebrow">LESS GUESSWORK. MORE INTENTION.</p><h1>Your spending coach</h1></div>
+          <button class="btn btn-primary" id="run-insights-btn" onclick="generateInsights()">Review my plan</button>
         </header>
 
         <div id="insights-container" class="panel" style="padding: 32px; min-height: 400px; line-height: 1.8;">
           <div style="text-align: center; color: var(--text-secondary); padding-top: 60px;">
             <div style="font-size: 40px; margin-bottom: 20px;">🧐</div>
-            <h3>Ready for your financial audit?</h3>
-            <p>Click "Run Daily Audit" to have Hermes review your June spending and provide frank, tangible advice.</p>
+            <h3>Honest numbers. A practical next step.</h3>
+            <p>Review imported spending and all your goals together. This is local, evidence-based coaching, not an external AI service or a CPA. No financial data is sent to third parties.</p>
           </div>
         </div>
       </section>
@@ -782,6 +807,9 @@
   <div class="toast-container" id="toasts"></div>
 
   <script>
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
     // TIMEZONE-SAFE DATE PARSING
     // 'new Date("2026-06-01")' parses as UTC midnight, which shifts to previous day
     // in timezones west of UTC. Parse string components as local time instead.
@@ -1032,8 +1060,9 @@
               ${isDeficit ? '<span style="display: block; font-size: 10px; color: var(--danger); font-weight: 700;">⚠️ AT RISK</span>' : ''}
             </td>
             <td style="padding: 12px 0;">
-              <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${item.description}</div>
-              <div style="font-size: 11px; color: var(--text-secondary);">${item.category}</div>
+              <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${escapeHtml(item.description)}</div>
+              <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(item.category)}</div>
+              ${item.sourceTransactionId ? `<button class="btn btn-secondary" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" style="font-size:11px;margin-top:8px">Stop projecting this bill</button>` : ''}
             </td>
             <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${isPaid ? 'var(--text-secondary)' : (item.isIncome ? 'var(--success)' : 'var(--danger)')}">
               ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
@@ -1067,11 +1096,11 @@
         const icon = categoryIcons[cat.name] || '📦';
         const currentMonthKey = new Date().toISOString().substring(0, 7) + "-01";
         catHtml += `
-          <div class="metric-card list-item" onclick="drillDownMTD('${cat.name}', '${currentMonthKey}')" style="cursor: pointer; padding: 20px;">
+          <div class="metric-card list-item" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="drillDownMTD(this.dataset.category, this.dataset.month)" style="cursor: pointer; padding: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: start;">
               <span style="font-size: 24px;">${icon}</span>
               <div style="text-align: right;">
-                <div class="metric-label">${cat.name}</div>
+                <div class="metric-label">${escapeHtml(cat.name)}</div>
                 <div class="metric-value" style="font-size: 18px; color: var(--text-primary)">$${cat.totalSpending.toFixed(2)}</div>
                 <div style="font-size: 11px; color: var(--text-secondary);">${cat.transactionCount} txns</div>
               </div>
@@ -1114,7 +1143,7 @@
         <div class="list-item" style="cursor: default">
           <div class="txn-row">
             <div style="font-size: 12px; color: var(--text-secondary)">${localDate(t.date).toLocaleDateString()}</div>
-            <div style="font-weight: 600">${t.description}</div>
+            <div style="font-weight: 600">${escapeHtml(t.description)}</div>
             <div class="txn-amount ${t.amount > 0 ? 'income' : ''}">$${Math.abs(t.amount).toFixed(2)}</div>
           </div>
         </div>
@@ -1206,7 +1235,7 @@
       });
 
       document.getElementById('txn-list').innerHTML = monthlyData.sort((a,b) => localDate(b.month) - localDate(a.month)).map(m => `
-        <div class="list-item" onclick="loadMonthTransactions('${cat}', '${m.month}')">
+        <div class="list-item" data-category="${escapeHtml(cat)}" data-month="${escapeHtml(m.month)}" onclick="loadMonthTransactions(this.dataset.category, this.dataset.month)">
           <div style="display: flex; justify-content: space-between;">
             <div style="font-weight: 600;">${localDate(m.month).toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</div>
             <div style="color: var(--primary); font-weight: 700;">$${m.spending.toFixed(2)}</div>
@@ -1228,7 +1257,7 @@
       document.getElementById('txn-list').innerHTML = data.map(t => `
         <div class="list-item" style="font-size: 12px;">
           <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
-          <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${t.description}">${t.description}</div>
+          <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(t.description)}">${escapeHtml(t.description)}</div>
           <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
         </div>
       `).join('');
@@ -1324,12 +1353,12 @@
         tbody.innerHTML = items.map(t => `
           <tr style="border-bottom: 1px solid var(--border);">
             <td style="padding: 12px; font-size: 12px;">${t.date}</td>
-            <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${t.status}</span></td>
-            <td style="padding: 12px; font-size: 13px;">${t.description}</td>
+            <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${escapeHtml(t.status)}</span></td>
+            <td style="padding: 12px; font-size: 13px;">${escapeHtml(t.description)}</td>
             <td style="padding: 12px; font-weight: 700;">$${Math.abs(t.amount).toFixed(2)}</td>
             <td style="padding: 12px; text-align: center; display: flex; gap: 8px; justify-content: center;">
-              <button onclick="forcePushStaging('${t.id}')" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
-              <button onclick="dismissStaging('${t.id}')" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
+              <button data-id="${escapeHtml(t.id)}" onclick="forcePushStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
+              <button data-id="${escapeHtml(t.id)}" onclick="dismissStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
             </td>
           </tr>
         `).join('');
@@ -1348,70 +1377,6 @@
        await fetch('/api/staging/dismiss', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
        notify('Transaction dismissed');
        loadEtlStaging();
-    }
-
-    async function generateInsights() {
-      const container = document.getElementById('insights-container');
-      const btn = document.getElementById('run-insights-btn');
-      
-      btn.disabled = true;
-      btn.textContent = '🕵️ Analyzing Spending...';
-      container.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-secondary);"><div class="spinner"></div> Audit in progress. Reviewing 553 transactions and projected liabilities...</div>`;
-
-      try {
-        // Fetch current month data
-        const res = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-        const categories = await res.json();
-        
-        // Fetch summary
-        const sumRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-        const summary = await sumRes.json();
-
-        const dining = categories.find(c => c.name === 'Dining')?.totalSpending || 0;
-        const shopping = categories.find(c => c.name === 'Shopping')?.totalSpending || 0;
-
-        setTimeout(() => {
-          let advice = `
-            <div style="font-family: inherit; color: var(--text-primary);">
-              <h2 style="color: var(--primary); margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">June 2026 Audit Report</h2>
-              
-              <div style="background: rgba(255, 107, 107, 0.1); border-left: 4px solid var(--danger); padding: 16px; border-radius: 8px; margin-bottom: 24px;">
-                <p><strong>CPA Frank Truth:</strong> You are currently outspending your net income. Despite your successful $\$${summary.income.toFixed(0)}$ paycheck, your "lifestyle leak" is $\$${(dining + shopping).toFixed(2)}$ month-to-date.</p>
-              </div>
-
-              <h3 style="margin-bottom: 16px;">🚨 The "Living Paycheck to Paycheck" Culprits:</h3>
-              <ul style="list-style: none; padding: 0;">
-                <li style="margin-bottom: 12px; display: flex; gap: 12px;">
-                  <span style="font-size: 20px;">🍽️</span>
-                  <span><strong>Dining:</strong> You've spent $\$${dining.toFixed(2)}$ so far in June. That is food you are eating today at the expense of your <strong>Shed Renovation</strong> tomorrow. Cut this by 50% immediately.</span>
-                </li>
-                <li style="margin-bottom: 12px; display: flex; gap: 12px;">
-                  <span style="font-size: 20px;">🛍️</span>
-                  <span><strong>Shopping:</strong> $\$${shopping.toFixed(2)}$ spent. If you can't pay cash for it and still save $\$1,000$, you can't afford it. Stop the Amazon/Target bleed.</span>
-                </li>
-              </ul>
-
-              <h3 style="margin-top: 32px; margin-bottom: 16px;">⚒️ Tangible Daily Habit Changes:</h3>
-              <ol style="margin-left: 20px; padding: 0;">
-                <li style="margin-bottom: 8px;"><strong>The 24-Hour Wait Rule:</strong> Any "Shopping" item must stay in the cart for 24 hours. 90% of the time, the impulse fades.</li>
-                <li style="margin-bottom: 8px;"><strong>Meal Prep or Poverty:</strong> Those $\$20-40$ Chipotle/Five Guys runs are your greatest threat. Commit to 4 nights a week of "Home" meals.</li>
-                <li style="margin-bottom: 8px;"><strong>Automate the Shed Save:</strong> Move $\$250$ to your Ally savings the SECOND the Wells Fargo check hits. If it isn't in your checking, you won't "spend" the shed away.</li>
-              </ol>
-
-              <div style="margin-top: 32px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; font-style: italic; font-size: 13px; color: var(--text-secondary);">
-                Analysis based on latest production imports through June 5th.
-              </div>
-            </div>
-          `;
-          container.innerHTML = advice;
-          btn.disabled = false;
-          btn.textContent = '🔄 Re-Run Daily Audit';
-        }, 2000);
-
-      } catch (err) {
-        container.innerHTML = '<p>Financial audit failed. Database connection error.</p>';
-        btn.disabled = false;
-      }
     }
 
     async function loadPayoffPlan() {
@@ -1433,7 +1398,7 @@
         debts.forEach((d, index) => {
           totalDebt += d.balance;
           const isTopPriority = index === 0;
-          const monthlyCommitment = 1342.15;
+          const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
           const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
           const payment = isTopPriority ? (monthlyCommitment - othersMinTotal) : (d.min_payment || 35);
 
@@ -1471,8 +1436,8 @@
 
       // Deep copy debts to avoid mutating main state
       let activeDebts = debts.map(d => ({ ...d }));
-      const monthlyCommitment = 1342.15;
-      const timelineMonths = 13;
+      const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
+      const timelineMonths = 600;
       
       const today = new Date();
       
@@ -1619,11 +1584,11 @@
           loadDashboard();
         } else {
           resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${data.error}</div>`;
+          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
         }
       } catch (err) {
         resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${err.message}</div>`;
+        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -1683,11 +1648,11 @@
           loadDashboard();
         } else {
           resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${data.error}</div>`;
+          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
         }
       } catch (err) {
         resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${err.message}</div>`;
+        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -1915,8 +1880,10 @@
       }
     });
 
-    loadDashboard();
   </script>
+  <script src="refresh.js"></script>
+  <script src="account.js"></script>
+  <script>FinanceSession.start();</script>
 </body>
 </html>
 <!-- Redeploy marker: 1780927100 -->

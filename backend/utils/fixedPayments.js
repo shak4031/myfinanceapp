@@ -11,11 +11,6 @@ export const FIXED_BILL_RULES = [
 
 const VARIABLE_PURCHASES = /\b(?:target|walmart|instacart|wawa|shoprite|starbucks|chipotle|doordash|grubhub|chargepoint|electrify\s+america|shell|chevron|exxon|sunoco|citgo|gas\s+station)\b|\b(?:trader\s+joe|whole\s+foods|uber\s+eats)\b/i;
 const CARD_PURCHASE = /\b(?:visa\s+dda\s+(?:pur|ref)|dda\s+(?:purchase|pur|ref)|pos\s+(?:debit|purchase|pur)|check\s+card|debit\s+card)\b/i;
-const VARIABLE_CATEGORIES = new Set([
-  'groceries', 'dining', 'shopping', 'ev charging', 'gas', 'healthcare',
-  'salary', 'income', 'savings', 'transfers', 'transfer', 'banking fees'
-]);
-const CARD_BILL_CATEGORIES = new Set(['credit cards', 'car loans', 'mortgage', 'home', 'housing', 'utilities', 'internet', 'insurance', 'other', 'uncategorized', 'payment']);
 
 export function getFixedBillCategory(description = '') {
   if (VARIABLE_PURCHASES.test(description)) return null;
@@ -29,15 +24,7 @@ export function getFixedBillCategory(description = '') {
 
 export function isFixedPayment(tx) {
   const fixed = tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true' || tx.is_fixed === '1';
-  if (!fixed || String(tx.direction).toUpperCase() !== 'DEBIT') return false;
-  if (VARIABLE_PURCHASES.test(tx.description || '')) return false;
-  const category = String(tx.category || '').toLowerCase();
-  const billCategory = getFixedBillCategory(tx.description);
-  if (VARIABLE_CATEGORIES.has(category) && !billCategory) return false;
-  if (/\b(?:transfer|xfer|zelle|venmo|savings)\b/i.test(tx.description || '') && !billCategory) return false;
-  if (CARD_PURCHASE.test(tx.description || '') && CARD_BILL_CATEGORIES.has(category) && !billCategory) return false;
-  if (category === 'credit cards' && !billCategory && !/\b(?:payment|pmt|autopay|pay|citicards)\b/i.test(tx.description || '')) return false;
-  return true;
+  return fixed && String(tx.direction).toUpperCase() === 'DEBIT';
 }
 
 function merchantKey(tx) {
@@ -78,7 +65,7 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
   for (const tx of lastMonth) {
     if (!templates.some(template => sameBill(template, tx))) templates.push(tx);
   }
-  const thisMonth = debits.filter(tx => tx.parsed.year === year && tx.parsed.month === month && tx.parsed.day <= today.getDate() && isFixedPayment({ ...tx, is_fixed: true }));
+  const thisMonth = debits.filter(tx => tx.parsed.year === year && tx.parsed.month === month && tx.parsed.day <= today.getDate());
   const timeline = [];
   const paidIds = new Set();
   for (const template of templates) {
@@ -94,6 +81,7 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
       }
     } else {
       timeline.push({
+        sourceTransactionId: template.id,
         description: getCanonicalMerchant(template.description), category: template.category || 'Other',
         amount: template.amount, dayOfMonth: Math.min(template.parsed.day, monthEnd),
         isIncome: false, status: 'projected'

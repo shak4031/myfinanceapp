@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
+import { currentUserId } from '../utils/tenant.js';
+import { applyUpdates, saveRule } from '../utils/categorization.js';
 
 const router = Router();
 const db = new Database();
@@ -53,7 +55,7 @@ router.post('/list', async (req, res) => {
       LIMIT $4 OFFSET $5
     `;
 
-    const transactions = await db.all(query, [1, startDate, endDate, parseInt(limit), parseInt(offset)]);
+    const transactions = await db.all(query, [currentUserId(), startDate, endDate, parseInt(limit), parseInt(offset)]);
 
     // Get counts
     const countsQuery = `
@@ -65,7 +67,7 @@ router.post('/list', async (req, res) => {
       WHERE user_id = $1
     `;
 
-    const counts = await db.get(countsQuery, [1]);
+    const counts = await db.get(countsQuery, [currentUserId()]);
 
     log('CATEGORIZATIONS', `Fetched ${transactions.length} transactions with counts:`, counts);
 
@@ -92,51 +94,13 @@ router.post('/update-batch', async (req, res) => {
       return res.status(400).json({ error: 'updates must be an array' });
     }
 
-    log('CATEGORIZATIONS', `Batch updating ${updates.length} transactions`);
-
-    let successCount = 0;
-    const errors = [];
-
-    for (const { id, newCategory } of updates) {
-      try {
-        // Get current category for previous_category tracking
-        const current = await db.get(
-          'SELECT category FROM transactions WHERE id = $1',
-          [id]
-        );
-
-        if (!current) {
-          errors.push({ id, error: 'Transaction not found' });
-          continue;
-        }
-
-        // Update with correction tracking
-        await db.run(
-          `UPDATE transactions 
-           SET category = $1, 
-               category_corrected = TRUE, 
-               previous_category = $2,
-               correction_timestamp = NOW()
-           WHERE id = $3`,
-          [newCategory, current.category, id]
-        );
-
-        successCount++;
-      } catch (err) {
-        errors.push({ id, error: err.message });
-      }
-    }
-
-    log('CATEGORIZATIONS', `Batch update complete: ${successCount} updated, ${errors.length} errors`);
-
-    res.json({
-      success: true,
-      updated: successCount,
-      errors
-    });
+    const result = await applyUpdates(db, updates.map(item => ({
+      ...item, category: item.newCategory
+    })), { expected: false, protectCorrections: false });
+    res.json({ success: true, ...result, errors: [] });
   } catch (err) {
     log('CATEGORIZATIONS', `Error: ${err.message}`);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -156,7 +120,7 @@ router.post('/patterns', async (req, res) => {
       LIMIT 50
     `;
 
-    const results = await db.all(query, [1]);
+    const results = await db.all(query, [currentUserId()]);
 
     // Group by keywords and aggregate categories
     const patterns = {};
@@ -176,11 +140,11 @@ router.post('/patterns', async (req, res) => {
           };
         }
 
-        patterns[keyword].count += row.count;
+        patterns[keyword].count += Number(row.count);
 
         if (row.category) {
           patterns[keyword].currentCategories[row.category] =
-            (patterns[keyword].currentCategories[row.category] || 0) + row.count;
+            (patterns[keyword].currentCategories[row.category] || 0) + Number(row.count);
         }
       }
     }
@@ -215,36 +179,15 @@ router.post('/learn-pattern', async (req, res) => {
       return res.status(400).json({ error: 'keyword and suggestedCategory required' });
     }
 
-    log('CATEGORIZATIONS', `Learning pattern: "${keyword}" -> "${suggestedCategory}"`);
-
-    // Find all transactions matching keyword and update them
-    const query = `
-      UPDATE transactions 
-      SET 
-        category = $1,
-        category_corrected = TRUE,
-        previous_category = category,
-        correction_timestamp = NOW()
-      WHERE user_id = $2 
-        AND UPPER(description) LIKE $3
-        AND category != $1
-      RETURNING id
-    `;
-
-    const pattern = `%${keyword}%`;
-    const result = await db.pool.query(query, [suggestedCategory, 1, pattern]);
-    const updated = result.rowCount || 0;
-
-    log('CATEGORIZATIONS', `Pattern learning complete: ${updated} transactions updated`);
-
-    res.json({
-      success: true,
-      updated,
-      message: `Applied pattern to ${updated} transactions`
-    });
+    const rule = await db.transaction(client => saveRule(client, {
+      pattern: keyword, display_label: keyword, category: suggestedCategory,
+      priority: 100, enabled: true
+    }));
+    res.json({ success: true, rule, updated: 0,
+      message: 'Literal merchant rule saved. Preview and approve historical category changes separately.' });
   } catch (err) {
     log('CATEGORIZATIONS', `Error: ${err.message}`);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -263,7 +206,7 @@ router.post('/category-summary', async (req, res) => {
       ORDER BY count DESC
     `;
 
-    const categories = await db.all(query, [1]);
+    const categories = await db.all(query, [currentUserId()]);
 
     log('CATEGORIZATIONS', `Category summary: ${categories.length} categories`);
 
@@ -291,7 +234,7 @@ router.post('/by-category', async (req, res) => {
       LIMIT $3 OFFSET $4
     `;
 
-    const transactions = await db.all(query, [1, category, parseInt(limit), parseInt(offset)]);
+    const transactions = await db.all(query, [currentUserId(), category, parseInt(limit), parseInt(offset)]);
 
     log('CATEGORIZATIONS', `Fetched ${transactions.length} transactions for category`);
 

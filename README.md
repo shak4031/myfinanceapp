@@ -1,5 +1,52 @@
 # MyFinanceApp v2 - Documentation Index
 
+## Private accounts and controlled planning
+
+This version replaces the shared demo login with email/password accounts and
+server-side sessions. All financial API calls require authentication. PostgreSQL
+row-level security isolates transactions, import staging, merchant rules,
+categories, debts, and goals; account identity never comes from a request body.
+Existing records remain assigned to owner account **1**. New users receive
+categories only, never the owner's transactions, debts, rules, or goals.
+
+Before deploying, back up the database and follow the private-account setup in
+[DEPLOYMENT.md](./DEPLOYMENT.md). Public registration is off by default. Startup
+requires a migration-capable PostgreSQL connection; migration fails rather than
+starting with isolation disabled. Production requires HTTPS and `APP_ORIGIN`.
+
+The main application retains bill projections, debt payoff, goals, CSV/PDF
+imports, and category drill-downs, with an original light sidebar/card layout.
+Spending coaching uses local, evidence-based calculations: no financial records
+are sent to an external AI service. It is budgeting guidance, not a licensed
+adviser's financial, tax, or investment advice.
+
+Goal planning includes competing car, college, emergency, and other savings
+targets. Dated goals share one observed monthly surplus in priority order;
+missing history and missing deadlines are explicit. Contributions record savings
+progress and do not initiate bank transfers. Forecasts use imported records, not
+gross annual salary, and cannot account for obligations you have not entered.
+For a new loan not yet in imported spending, uncheck **Monthly payment already
+included in imported spending** so its minimum payment is reserved separately.
+Check it again once that obligation is represented in the imported history.
+
+Categorization is reviewable: preview suggestions, approve selected changes, and
+manage your merchant rules. Manual corrections are protected. Categorization
+never changes Fixed Payment flags. Startup no longer repairs or resets personal
+categories, balances, or fixed flags. Legacy shared SQL-fixture imports, SQLite
+categorization, and web access to global server logs are disabled because they
+cannot safely serve private accounts.
+
+Account support: users reset forgotten passwords by email (SMTP required).
+Failed logins, lockouts, admin actions and server errors are written to an
+append-only audit log with request IDs. Admins use `/admin.html` for health,
+user support, audit/error search and an API explorer. Customers can grant
+time-limited, revocable support access (read-only by default) in **Settings &
+support**; admins never see customer data otherwise. See
+[DEPLOYMENT.md](./DEPLOYMENT.md) for required environment variables.
+
+Run `npm test` for focused regressions, including embedded PostgreSQL isolation
+tests and HTTP account/session flows. Tests do not connect to your live database.
+
 ## 📚 Available Documentation
 
 ### For Users
@@ -118,10 +165,10 @@
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
   with past due days remain in the projection and are labelled overdue.
   Assumed payroll deposits and optional debt-payoff-plan payments are not added.
-- Ordinary card purchases, variable spending, savings transfers, and income are
-  not monthly fixed bills. Automatic cleanup uses specific bill/payment patterns,
-  not generic words such as VISA, CHASE, or gas. Startup does not automatically
-  re-enable fixed bills that were deselected.
+- The **Fixed Payment flag is authoritative** for debit transactions: the app
+  does not reject your selection because of its category or merchant name.
+  Unflagged transactions do not create bill templates; credits do not create
+  payments. Startup and auto-categorization never turn your choices on or off.
 - Use the transaction's Fixed Bill checkbox to manage recurring bills. New bills
   need a payment in the previous month before they can supply a monthly template.
   The projection is based on imported records, not verified bank due dates; keep
