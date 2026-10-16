@@ -28,6 +28,8 @@
     .outcome-failure, .outcome-denied { color: #996517; font-weight: 700; }
     .outcome-error { color: #b84239; font-weight: 700; }
     .outcome-success { color: #257252; }
+    .severity-server { color: #b84239; font-weight: 700; }
+    .severity-browser { color: #996517; font-weight: 700; }
     .method { display: inline-block; min-width: 58px; text-align: center; border-radius: 6px; padding: 3px 6px; font-weight: 800; font-size: 11px; color: #fff; }
     .method.get { background: #2f6fb3; } .method.post { background: #257252; } .method.put { background: #996517; } .method.delete { background: #b84239; }
     details.op { border: 1px solid #e2e7df; border-radius: 12px; margin-bottom: 8px; background: #fff; }
@@ -52,7 +54,8 @@
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="active">Overview</button>
         <button data-tab="users">Users</button>
-        <button data-tab="audit">Audit &amp; errors</button>
+        <button data-tab="errors">Error logs</button>
+        <button data-tab="audit">Audit trail</button>
         <button data-tab="support">Support sessions</button>
         <button data-tab="api">API explorer</button>
       </nav>
@@ -62,6 +65,17 @@
           <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>
           <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead.</p>
           <div id="users" class="table-scroll"></div>
+        </div>
+      </section>
+      <section data-panel="errors" hidden>
+        <div class="card">
+          <div class="filters">
+            <label>Time range<select id="errors-range"><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option><option value="all">All retained</option></select></label>
+            <label>Request ID<input id="errors-request" placeholder="Paste request ID" style="width:300px"></label>
+            <button class="btn btn-primary" id="errors-search">Search errors</button>
+          </div>
+          <p class="muted">Shows server failures and browser runtime errors for signed-in users. Browser reports contain a sanitized summary, not page contents or stacks. Match a request ID with your hosting provider’s stdout logs for full server diagnostics. Up to 300 newest entries are shown.</p>
+          <div id="errors" class="table-scroll" aria-live="polite"></div>
         </div>
       </section>
       <section data-panel="audit" hidden>

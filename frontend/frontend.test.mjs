@@ -6,37 +6,81 @@ import { readFileSync } from 'node:fs';
 const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({}) })) {
   const nodes = new Map();
+  const listeners = new Map();
   function node(id = '') {
     if (nodes.has(id)) return nodes.get(id);
     const classes = new Set(['auth-pending']);
     const element = {
       id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false,
       style: {}, dataset: {}, parentElement: { before() {}, after() {} },
-      classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c), toggle() {} },
+      classList: {
+        add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
+        toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
+      },
       appendChild() {}, prepend() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
       getAttribute: () => '', setAttribute() {}, reset() {}, showModal() {}
     };
     nodes.set(id, element); return element;
   }
+  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
   const context = {
     console, URL, Date, Number, String, Object, Math, Promise, Set, Map,
-    fetch: fetchImpl, setTimeout, clearTimeout,
+    fetch: fetchImpl, setTimeout, clearTimeout, addEventListener: (name, listener) => listeners.set(name, listener),
     location: { href: 'http://local.test/', origin: 'http://local.test', hash: '', reload() { context.reloaded = true; } },
-    document: { getElementById: node, createElement: tag => node(`new-${tag}-${nodes.size}`), querySelector: node, querySelectorAll: () => [], body: node('body') },
+    document: {
+      getElementById: node, createElement: tag => node(`new-${tag}-${nodes.size}`), querySelector: node,
+      querySelectorAll: selector => selector === '.view' ? views : [], body: node('body')
+    },
     notify() {}, closeSidebar() {}, closeAddGoalModal() {}, openAddGoalModal() {},
     loadDashboard() {}, loadAllTransactions() {}, loadCategories() {}, loadEtlStaging() {}, loadGoals() {}, loadPayoffPlan() {}, generateInsights() {},
     showView(view) { context.lastView = view; }, FormData, FinanceSession: { isAuthenticated: () => true }
   };
   context.window = context;
   vm.createContext(context);
-  return { context, node, run: file => vm.runInContext(source(file), context) };
+  return { context, node, views, listeners, run: file => vm.runInContext(source(file), context) };
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+});
+test('only one navigation implementation switches to exactly one active view', () => {
+  const html = source('index.html');
+  assert.doesNotMatch(html, /function showView|showView\s*=/);
+  const f = fixture(); f.run('refresh.js');
+  f.context.showView('category-admin');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['category-admin-view']);
+  f.context.showView('categories');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['categories-view']);
+});
+test('browser error reports are same-origin, redacted, and deduplicated', () => {
+  const requests = [];
+  const f = fixture(async (url, options) => { requests.push([url, options]); return { ok: true }; });
+  f.run('client-errors.js');
+  const event = {
+    error: new Error('private stack must not be sent'),
+    message: 'token=private123 amount=$123.45 ashak@example.com',
+    filename: 'http://local.test/refresh.js?session=secret', lineno: 9, colno: 4
+  };
+  f.listeners.get('error')(event);
+  f.listeners.get('error')(event);
+  f.listeners.get('error')({ ...event, filename: 'https://third-party.test/tracker.js' });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0][0], '/api/client-errors');
+  const report = JSON.parse(requests[0][1].body);
+  assert.equal(report.file, 'refresh.js');
+  assert.equal(report.line, 9);
+  assert.doesNotMatch(JSON.stringify(report), /private123|123\.45|ashak@example\.com|private stack|session=secret/);
+});
+test('brand mark is a scalable green SVG used on sign-in and in navigation', () => {
+  const html = source('index.html');
+  assert.equal((html.match(/class="brand-mark(?: small)?"/g) || []).length, 2);
+  assert.equal((html.match(/class="brand-mark-bg"/g) || []).length, 2);
+  assert.equal((html.match(/class="brand-mark-line"/g) || []).length, 2);
+  assert.match(html, /aria-label="MyFinance mark"/);
+  assert.match(source('refresh.css'), /\.brand-mark-bg\s*\{\s*fill:\s*#226452/);
 });
 test('categories overview is focused and category administration has its own page', () => {
   const html = source('index.html');

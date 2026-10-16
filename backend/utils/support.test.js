@@ -42,6 +42,11 @@ test('audit logging, password reset, admin console and consented support access'
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   process.env.APP_ORIGIN = base;
+  for (const path of ['/', '/admin.html', '/refresh.js', '/refresh.css', '/client-errors.js']) {
+    const response = await fetch(`${base}${path}`);
+    assert.equal(response.status, 200, `${path} should be served`);
+    assert.match(response.headers.get('cache-control'), /no-cache, must-revalidate/);
+  }
   const call = async (path, { method, body, cookie } = {}) => {
     const response = await fetch(`${base}${path}`, {
       method: method || (body === undefined ? 'GET' : 'POST'),
@@ -79,6 +84,23 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal(audit.body[0].detail.reason, 'wrong_password');
     assert.equal(audit.body[0].subject_email, 'customer@example.com');
     assert.equal(JSON.stringify(audit.body).includes('wrong-password-123'), false);
+    const clientError = await call('/api/client-errors', {
+      body: { name: 'TypeError', message: 'token=super-secret amount=123.45 email owner@example.com', file: 'https://assets.example/app.js?token=ignored', line: 8, column: 3 },
+      cookie: customerCookie
+    });
+    assert.equal(clientError.status, 202);
+    await settle();
+    const errors = await call(`/api/admin/errors?range=24h&requestId=${clientError.headers.get('x-request-id')}`, { cookie: adminCookie });
+    assert.equal(errors.status, 200);
+    assert.equal(errors.body.length, 1);
+    assert.equal(errors.body[0].event_type, 'client.error');
+    assert.equal(errors.body[0].detail.file, 'app.js');
+    assert.equal(errors.body[0].detail.line, 8);
+    assert.doesNotMatch(errors.body[0].detail.message, /super-secret|123\.45|owner@example\.com/);
+    assert.equal((await call('/api/admin/errors', { cookie: customerCookie })).status, 403);
+    const errorStats = await call('/api/admin/overview', { cookie: adminCookie });
+    assert.equal(errorStats.body.stats.server_errors_24h, 0);
+    assert.equal(errorStats.body.stats.browser_errors_24h, 1);
     const byEmail = await call('/api/admin/audit?email=CUSTOMER@example.com&eventType=auth.', { cookie: adminCookie });
     assert.ok(byEmail.body.some(row => row.event_type === 'auth.login' && row.outcome === 'failure'));
     const users = await call('/api/admin/users', { cookie: adminCookie });

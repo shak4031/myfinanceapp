@@ -10,10 +10,12 @@
 html body { background: #f5f5f1; color: #202e2a; font-family: "Segoe UI", system-ui, sans-serif; }
 body .app-container { grid-template-columns: 248px minmax(0,1fr); }
 body .sidebar { background: #fff; border-color: #e2e7df; padding: 32px 18px; }
-body .sidebar-logo { color: #203d30; margin-bottom: 16px; font-size: 22px; letter-spacing: -.7px; }
-.brand-mark { display: inline-flex; justify-content: center; align-items: center; width: 64px; height: 64px; border-radius: 20px; background: #226452; color: white; font-size: 45px; font-weight: 800; letter-spacing: -5px; padding-right: 4px; }
-.brand-mark span { color: #d9ea95; }
-.brand-mark.small { width: 36px; height: 36px; font-size: 27px; border-radius: 11px; letter-spacing: -3px; }
+body .sidebar-logo { display: flex; align-items: center; gap: 10px; color: #203d30; margin-bottom: 16px; font-size: 22px; font-weight: 720; letter-spacing: -.8px; }
+.brand-mark { display: block; flex: 0 0 auto; width: 64px; height: 64px; filter: drop-shadow(0 8px 12px #164b3d26); }
+.brand-mark-bg { fill: #226452; }
+.brand-mark-line { fill: none; stroke: #fff; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
+.brand-mark-accent { fill: #d9ea95; }
+.brand-mark.small { width: 38px; height: 38px; filter: none; }
 .sidebar-caption, .eyebrow { color: #75816d; font-size: 10px; letter-spacing: 1.7px; font-weight: 700; margin-bottom: 12px; }
 .sidebar-caption { margin: 8px 12px 28px; font-size: 9px; }
 body .nav-list { gap: 6px; }

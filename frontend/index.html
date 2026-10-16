@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
   <script src="session.js"></script>
+  <script src="client-errors.js"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -433,7 +434,11 @@
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
     <div class="auth-card">
-      <div class="brand-mark">m<span>·</span></div>
+      <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="MyFinance mark">
+        <rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/>
+        <path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/>
+        <circle class="brand-mark-accent" cx="47" cy="18" r="4"/>
+      </svg>
       <p class="eyebrow">MYFINANCE / YOUR NEXT CHAPTER</p>
       <h1 id="auth-title">A clearer picture of your money.</h1>
       <p class="muted" id="auth-description">Checking your secure session…</p>
@@ -457,7 +462,14 @@
 
     <!-- NAVIGATION -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-logo"><span class="brand-mark small">m<span>·</span></span> MyFinance</div>
+      <div class="sidebar-logo">
+        <svg class="brand-mark small" viewBox="0 0 64 64" aria-hidden="true">
+          <rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/>
+          <path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/>
+          <circle class="brand-mark-accent" cx="47" cy="18" r="4"/>
+        </svg>
+        <span>MyFinance</span>
+      </div>
       <div class="sidebar-caption">YOUR MONEY, WITH DIRECTION</div>
       <ul class="nav-list">
         <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
@@ -810,23 +822,6 @@
         return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1);
       }
       return new Date(str);
-    }
-
-    // NAVIGATION
-    function showView(viewId) {
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(`${viewId}-view`).classList.add('active');
-      const clickedBtn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.textContent.toLowerCase().includes(viewId));
-      if (clickedBtn) clickedBtn.classList.add('active');
-      
-      if (viewId === 'dashboard') loadDashboard();
-      if (viewId === 'categories') loadCategories();
-      if (viewId === 'transactions') loadAllTransactions();
-      if (viewId === 'etl') loadEtlStaging();
-      if (viewId === 'payoff') loadPayoffPlan();
-      if (viewId === 'goals') loadGoals();
-      if (viewId === 'insights') { /* Initial view state already set */ }
     }
 
     // MONTHLY CASHFLOW HISTORY LOGIC
@@ -1788,28 +1783,6 @@
       } catch (err) {
         document.getElementById('goals-list').innerHTML = `<div style="padding: 40px; text-align: center; color: var(--danger);">Failed to load goals</div>`;
       }
-    }
-
-    // Update showView to include goals
-    const _origShowView = showView;
-    showView = function(viewId) {
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(`${viewId}-view`).classList.add('active');
-      const clickedBtn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.textContent.toLowerCase().includes(viewId));
-      if (clickedBtn) clickedBtn.classList.add('active');
-
-      // Close mobile sidebar on navigation
-      if (window.innerWidth <= 768 && document.getElementById('sidebar').classList.contains('open')) {
-        closeSidebar();
-      }
-
-      if (viewId === 'dashboard') loadDashboard();
-      if (viewId === 'categories') loadCategories();
-      if (viewId === 'transactions') loadAllTransactions();
-      if (viewId === 'etl') loadEtlStaging();
-      if (viewId === 'payoff') loadPayoffPlan();
-      if (viewId === 'goals') loadGoals();
     }
 
     // --- Sidebar Toggle (Mobile) ---

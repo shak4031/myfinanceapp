@@ -16,10 +16,19 @@ import importCsv from './routes/import.js';
 import bulkImport from './routes/bulk-import.js';
 import categories from './routes/categories.js';
 import categorizations from './routes/categorizations.js';
+import clientErrors from './routes/clientErrors.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
+function safeErrorMessage(value) {
+  return String(value || '').replace(/[\r\n\t]+/g, ' ')
+    .replace(/\b(password|token|secret|cookie|authorization|amount|balance|description)\s*[:=]\s*[^,;]+/gi, '$1=[redacted]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
+    .replace(/(?:[$€£]\s*)-?\d[\d,]*(?:\.\d{1,2})?/g, '[amount]')
+    .replace(/\b[a-f0-9]{40,}\b/gi, '[redacted]')
+    .slice(0, 500);
+}
 if (process.env.TRUST_PROXY_HOPS !== undefined) {
   const hops = Number(process.env.TRUST_PROXY_HOPS);
   if (!Number.isInteger(hops) || hops < 0 || hops > 10) throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 10');
@@ -65,9 +74,18 @@ app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   res.set('X-Content-Type-Options', 'nosniff');
   const json = res.json.bind(res);
-  res.json = body => json(res.statusCode >= 500
-    ? { error: 'The request could not be completed. Please try again.', requestId: req.id }
-    : body);
+  res.json = body => {
+    if (res.statusCode >= 500 && !res.locals.errorAudited) {
+      res.locals.errorAudited = true;
+      recordAudit(req, 'server.error', 'error', {
+        status: res.statusCode,
+        detail: { source: 'route', ...(typeof body?.error === 'string' ? { message: safeErrorMessage(body.error) } : {}) }
+      });
+    }
+    return json(res.statusCode >= 500
+      ? { error: 'The request could not be completed. Please try again.', requestId: req.id }
+      : body);
+  };
   next();
 });
 app.use('/api', enforceSameOrigin);
@@ -79,6 +97,7 @@ import staging from './routes/staging.js';
 // Routes BEFORE static files
 app.use('/api/auth', auth);
 app.use('/api', requireUser);
+app.use('/api/client-errors', clientErrors);
 app.use('/api/support-access', supportAccess);
 app.use('/api/admin', requireAdmin, admin);
 app.use('/api/dashboard', dashboard);
@@ -98,10 +117,15 @@ app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
 // Static files (after API routes)
-app.use(express.static(join(__dirname, '../frontend')));
+app.use(express.static(join(__dirname, '../frontend'), {
+  setHeaders(res, path) {
+    if (/\.(?:html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  }
+}));
 
 // Serve frontend
 app.get('*', (req, res) => {
+  res.set('Cache-Control', 'no-cache, must-revalidate');
   res.sendFile(join(__dirname, '../frontend/index.html'));
 });
 
@@ -117,7 +141,10 @@ app.use((err, req, res, next) => {
   if (status >= 500) {
     res.locals.errorAudited = true;
     structuredLog('error', { event: 'server.exception', requestId: req.id, name: err.name, code: err.code, stack: err.stack });
-    recordAudit(req, 'server.error', 'error', { status, detail: { name: err.name, code: err.code || null, source: 'exception' } });
+    recordAudit(req, 'server.error', 'error', { status, detail: {
+      name: err.name, code: err.code || null, source: 'exception',
+      ...(typeof err.message === 'string' ? { message: safeErrorMessage(err.message) } : {})
+    } });
   }
   res.status(status).json({ error: status < 500 ? err.message : 'The request could not be completed. Please try again.', requestId: req.id });
 });

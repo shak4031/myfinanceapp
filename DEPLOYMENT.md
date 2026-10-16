@@ -109,13 +109,17 @@ advertise these capabilities.
 - Every request receives an `X-Request-Id` (an incoming valid ID is preserved).
   Server errors return `{ error, requestId }`; ask customers for this ID.
 - Structured JSON lines (`http.request`, `server.error`, audit events) are
-  written to stdout for Railway or another log platform. Bodies, passwords,
-  tokens, cookies, amounts, balances and descriptions are never logged.
+  written to stdout for Railway or another log platform. Error summaries saved
+  in the audit table are bounded and redact common secrets, email addresses and
+  long numeric values; exception stacks remain available only in restricted
+  operator logs.
 - The append-only `audit_events` table records successful and failed logins
   (with reason), lockouts, registration, setup, logout, reset requests and
   completions, admin actions, support grants and every support-session request,
-  and uncaught 5xx errors. Emails and IPs are stored as keyed hashes
-  (`AUDIT_HASH_SECRET`).
+  server 5xx errors, and sanitized browser runtime-error summaries. Emails and
+  IPs are stored as keyed hashes (`AUDIT_HASH_SECRET`). Browser reports omit
+  stacks, page contents and network bodies, redact common secrets and amounts,
+  and are rate-limited per account.
 - `ALERT_WEBHOOK_URL` receives throttled alerts for server errors and lockouts.
 - Audit rows, used/expired reset tokens and expired sessions are purged after
   `AUDIT_RETENTION_DAYS` at startup and daily.
@@ -125,10 +129,17 @@ advertise these capabilities.
 Open `/admin.html` while signed in as an admin (account 1 is the admin). It
 provides service health and configuration warnings, user search (account
 metadata only, never financial data), password-reset email, unlock, sign out
-everywhere, filtered audit/error search by event, outcome, user, email or
+everywhere, a dedicated **Error logs** view filterable by time range and request
+ID, a separate **Audit trail** filterable by event, outcome, user, email or
 request ID, support sessions, and an API explorer generated from
 `/api/admin/openapi.json` that can send test requests and shows status, latency
 and request ID. Customers can never reach admin endpoints.
+
+Use the request ID shown in the Error logs view to locate the matching entry in
+the hosting provider's restricted stdout logs when a server stack trace is
+needed. The app deliberately does not provide a browser endpoint for global
+operator log files. Frontend HTML, JavaScript and CSS responses require
+revalidation so deployments do not silently reuse stale cached app assets.
 
 ## Consent-based support access
 

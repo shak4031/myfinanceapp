@@ -52,7 +52,9 @@
         ${stat('Status', data.status)}${stat('Database latency', `${data.databaseLatencyMs} ms`, data.databaseLatencyMs > 500)}
         ${stat('Accounts', s.users)}${stat('Active sessions', s.active_sessions)}
         ${stat('Failed logins (24h)', s.failed_logins_24h, s.failed_logins_24h > 20)}${stat('Lockouts (24h)', s.lockouts_24h, s.lockouts_24h > 0)}
-        ${stat('Server errors (24h)', s.errors_24h, s.errors_24h > 0)}${stat('Active support grants', s.active_support_grants)}
+        ${stat('Server errors (24h)', s.server_errors_24h, s.server_errors_24h > 0)}
+        ${stat('Browser errors (24h)', s.browser_errors_24h, s.browser_errors_24h > 0)}
+        ${stat('Active support grants', s.active_support_grants)}
       </div>
       <div class="card" style="margin-top:16px"><table><tbody>
         <tr><th>Environment</th><td>${esc(data.environment)}</td></tr><tr><th>Node</th><td>${esc(data.node)}</td></tr>
@@ -61,11 +63,16 @@
         <tr><th>Audit retention</th><td>${esc(data.auditRetentionDays)} days</td></tr>
       </tbody></table>
       <div class="actions" style="margin-top:12px">
-        <button class="btn btn-secondary" data-jump="server.">View server errors</button>
+        <button class="btn btn-secondary" data-error-jump>View error logs</button>
         <button class="btn btn-secondary" data-jump="auth.login">View failed logins</button>
       </div></div>`;
   }
   $('overview').addEventListener('click', event => {
+    if (event.target.dataset.errorJump !== undefined) {
+      $('errors-range').value = '24h';
+      $('errors-request').value = '';
+      return openTab('errors');
+    }
     const type = event.target.dataset.jump;
     if (!type) return;
     $('f-type').value = type;
@@ -132,6 +139,29 @@
   $('audit-search').onclick = () => loadAudit().catch(error => toast(error.message));
   $('audit-more').onclick = () => loadAudit(true).catch(error => toast(error.message));
 
+  async function loadErrorLogs() {
+    $('errors').innerHTML = '<p class="muted">Loading error logs…</p>';
+    const params = new URLSearchParams({ range: $('errors-range').value });
+    const requestId = $('errors-request').value.trim();
+    if (requestId) params.set('requestId', requestId);
+    const rows = await api(`/api/admin/errors?${params}`);
+    $('errors').innerHTML = rows.length ? `<table><thead><tr><th>When</th><th>Source</th><th>Route</th><th>Summary</th><th>Request ID</th><th>Account</th></tr></thead><tbody>${
+      rows.map(row => {
+        const detail = row.detail || {};
+        const source = detail.source === 'browser' ? 'Browser' : 'Server';
+        const summary = [detail.name, detail.message].filter(Boolean).join(': ') || 'No error summary recorded';
+        const location = detail.file ? `${detail.file}${detail.line ? `:${detail.line}` : ''}` : '';
+        return `<tr><td>${esc(when(row.created_at))}</td><td class="severity-${source.toLowerCase()}">${source}</td>
+          <td>${esc(row.method || '')} ${esc(row.path || '')}${row.status ? ` → ${esc(row.status)}` : ''}<br><small>${esc(location)}</small></td>
+          <td>${esc(summary)}${detail.code ? `<br><small>Code: ${esc(detail.code)}</small>` : ''}</td>
+          <td><code>${esc(row.request_id || '—')}</code></td><td>${esc(row.actor_email || row.actor_user_id || '—')}</td></tr>`;
+      }).join('')
+    }</tbody></table>` : '<p class="muted">No errors found for this range and request ID.</p>';
+  }
+  $('errors-search').onclick = () => loadErrorLogs().catch(error => {
+    $('errors').innerHTML = `<p class="outcome-error">${esc(error.message)}</p>`;
+  });
+
   async function loadGrants() {
     const rows = await api('/api/admin/support-grants');
     $('grants').innerHTML = rows.length ? `<table><thead><tr><th>Customer</th><th>Reason</th><th>Access</th><th>Expires</th><th>Last used</th><th></th></tr></thead><tbody>${
@@ -197,7 +227,7 @@
     } catch (error) { output.textContent = `Request not sent: ${error.message}`; }
   });
 
-  const loaders = { overview: loadOverview, users: loadUsers, audit: () => loadAudit(), support: loadGrants, api: loadApi };
+  const loaders = { overview: loadOverview, users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
 
   (async () => {
     try {

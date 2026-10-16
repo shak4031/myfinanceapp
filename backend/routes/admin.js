@@ -35,7 +35,9 @@ router.get('/overview', async (req, res, next) => {
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
            AND event_type = 'auth.locked') AS lockouts_24h,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
-           AND outcome = 'error') AS errors_24h,
+           AND event_type = 'server.error') AS server_errors_24h,
+        (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
+           AND event_type = 'client.error') AS browser_errors_24h,
         (SELECT COUNT(*)::int FROM support_grants WHERE revoked_at IS NULL AND expires_at > NOW()) AS active_support_grants
     `)).rows[0]);
     res.json({
@@ -96,6 +98,35 @@ router.get('/audit', async (req, res, next) => {
       LEFT JOIN users subject ON subject.id = a.subject_user_id
       ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
       ORDER BY a.id DESC LIMIT ${limit}
+    `, params)).rows);
+    res.json(rows);
+  } catch (error) { next(error); }
+});
+
+router.get('/errors', async (req, res, next) => {
+  try {
+    const params = [];
+    const filters = ["a.event_type IN ('server.error', 'client.error')"];
+    const requestId = typeof req.query.requestId === 'string' ? req.query.requestId.trim().slice(0, 64) : '';
+    if (requestId) {
+      params.push(requestId);
+      filters.push(`a.request_id = $${params.length}`);
+    }
+    const ranges = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
+    const range = typeof req.query.range === 'string' && (req.query.range === 'all' || Object.prototype.hasOwnProperty.call(ranges, req.query.range))
+      ? req.query.range : '24h';
+    const days = ranges[range];
+    if (days) {
+      params.push(days);
+      filters.push(`a.created_at > NOW() - make_interval(days => $${params.length})`);
+    }
+    const rows = await administrativeTransaction(async client => (await client.query(`
+      SELECT a.id, a.created_at, a.event_type, a.actor_user_id, actor.email AS actor_email,
+        a.request_id, a.method, a.path, a.status, a.detail
+      FROM audit_events a
+      LEFT JOIN users actor ON actor.id = a.actor_user_id
+      WHERE ${filters.join(' AND ')}
+      ORDER BY a.id DESC LIMIT 300
     `, params)).rows);
     res.json(rows);
   } catch (error) { next(error); }
