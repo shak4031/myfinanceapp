@@ -11,8 +11,19 @@
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   };
+  const transactionDate = value => {
+    const date = new Date(`${String(value ?? '').slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? new Date(NaN) : date;
+  };
   window.filterTransactionsByCategoryAndMonth = (transactions, category, month) => transactions.filter(transaction =>
     (!category || transaction.category === category) && (!month || monthKey(transaction.date) === month));
+  const mtdDialog = $('mtd-transactions-dialog');
+  const closeMtdDialog = () => mtdDialog.open && mtdDialog.close();
+  mtdDialog.querySelector('.mtd-dialog-close').addEventListener('click', closeMtdDialog);
+  mtdDialog.querySelector('.mtd-dialog-done').addEventListener('click', closeMtdDialog);
+  mtdDialog.addEventListener('click', event => {
+    if (event.target === mtdDialog) closeMtdDialog();
+  });
   const json = async (url, method = 'GET', body) => {
     const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
     const data = await response.json();
@@ -119,17 +130,36 @@
       .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
     $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
   };
-  window.openCategoryTransactions = (category, month = '') => {
-    const filter = $('txn-filter-category');
-    if (!Array.from(filter.options).some(option => option.value === category)) {
-      const option = document.createElement('option');
-      option.value = category;
-      option.textContent = category;
-      filter.appendChild(option);
+  window.openCategoryTransactions = async (category, month = '') => {
+    const period = monthKey(month) || monthKey(new Date());
+    const periodDate = new Date(`${period}-01T00:00:00`);
+    $('mtd-dialog-title').textContent = category;
+    $('mtd-dialog-period').textContent = periodDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    $('mtd-dialog-total').textContent = '—';
+    $('mtd-dialog-count').textContent = '—';
+    $('mtd-dialog-content').innerHTML = '<div class="mtd-dialog-state"><div><strong>Loading transactions…</strong>Please wait while we gather this month’s activity.</div></div>';
+    if (!mtdDialog.open) mtdDialog.showModal();
+    try {
+      const data = await json('/api/dashboard/all-transactions');
+      const transactions = window.filterTransactionsByCategoryAndMonth(data.transactions || [], category, period)
+        .sort((a, b) => transactionDate(b.date) - transactionDate(a.date));
+      const spending = transactions.filter(transaction => String(transaction.direction).toUpperCase() === 'DEBIT')
+        .reduce((total, transaction) => total + Math.abs(Number(transaction.amount) || 0), 0);
+      $('mtd-dialog-total').textContent = money(spending);
+      $('mtd-dialog-count').textContent = transactions.length.toLocaleString();
+      $('mtd-dialog-content').innerHTML = transactions.length ? `<div class="mtd-transaction-list">${transactions.map(transaction => {
+        const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
+        return `<article class="mtd-transaction-row">
+          <div><div class="mtd-transaction-description">${escape(transaction.description || 'Transaction')}</div>
+            <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div></div>
+          <div class="mtd-transaction-amount ${debit ? 'debit' : 'credit'}">${debit ? '−' : '+'}${money(Math.abs(Number(transaction.amount) || 0))}</div>
+        </article>`;
+      }).join('')}</div>` : '<div class="mtd-dialog-state"><div><strong>No transactions found</strong>There are no transactions for this category and month.</div></div>';
+    } catch (error) {
+      $('mtd-dialog-total').textContent = '—';
+      $('mtd-dialog-count').textContent = '—';
+      $('mtd-dialog-content').innerHTML = `<div class="mtd-dialog-state"><div><strong>Could not load transactions</strong>${escape(error.message || 'Please try again.')}</div></div>`;
     }
-    filter.value = category;
-    $('txn-filter-month').value = month ? String(month).slice(0, 7) : '';
-    window.showView('transactions');
   };
   $('category-cards').onclick = async event => {
     const card = event.target.closest('[data-open-category]');

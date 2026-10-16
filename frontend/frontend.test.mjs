@@ -17,9 +17,10 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
         add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
         toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
       },
-      appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
+      appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {}, close() { this.open = false; }, focus() {},
+      addEventListener(name, listener) { (this.listeners ||= {})[name] = listener; },
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
-      getAttribute: () => '', setAttribute() {}, reset() {}, showModal() {}
+      getAttribute: () => '', setAttribute() {}, reset() {}, showModal() { this.open = true; }
     };
     nodes.set(id, element); return element;
   }
@@ -56,20 +57,25 @@ test('only one navigation implementation switches to exactly one active view', (
   f.context.showView('categories');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['categories-view']);
 });
-test('dashboard category drill-down opens only that category and month of transactions', async () => {
-  const f = fixture(async url => {
-    if (url === '/api/categories') return response(200, []);
-    if (url === '/api/dashboard/all-transactions') return response(200, { transactions: [] });
-    return response(200, {});
-  });
+test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
+  const f = fixture(async url => url === '/api/dashboard/all-transactions'
+    ? response(200, { transactions: [
+      { category: 'Groceries', date: '2026-10-03', description: 'Market', amount: 42.5, direction: 'DEBIT' },
+      { category: 'Dining', date: '2026-10-04', description: 'Cafe', amount: 15, direction: 'DEBIT' },
+      { category: 'Groceries', date: '2026-09-30', description: 'Earlier market', amount: 20, direction: 'DEBIT' }
+    ] })
+    : response(200, {}));
   f.run('refresh.js');
-  f.context.openCategoryTransactions('Groceries', '2026-10-01');
-  await Promise.resolve();
-  await Promise.resolve();
-  assert.equal(f.node('txn-filter-category').value, 'Groceries');
-  assert.equal(f.node('txn-filter-month').value, '2026-10');
-  assert.equal(f.context.location.hash, 'transactions');
-  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['transactions-view']);
+  await f.context.openCategoryTransactions('Groceries', '2026-10-01');
+  assert.equal(f.node('mtd-transactions-dialog').open, true);
+  assert.equal(f.node('mtd-dialog-title').textContent, 'Groceries');
+  assert.equal(f.node('mtd-dialog-period').textContent, 'October 2026');
+  assert.equal(f.node('mtd-dialog-total').textContent, '$42.50');
+  assert.equal(f.node('mtd-dialog-count').textContent, '1');
+  assert.match(f.node('mtd-dialog-content').innerHTML, /Market/);
+  assert.doesNotMatch(f.node('mtd-dialog-content').innerHTML, /Cafe|Earlier market/);
+  assert.notEqual(f.context.location.hash, 'transactions');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), []);
 });
 test('transaction category/month filter excludes other categories and months', () => {
   const f = fixture(); f.run('refresh.js');

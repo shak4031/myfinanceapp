@@ -806,6 +806,26 @@
   </div>
 
   <div class="toast-container" id="toasts"></div>
+  <dialog id="mtd-transactions-dialog" class="mtd-dialog" aria-labelledby="mtd-dialog-title">
+    <div class="mtd-dialog-shell">
+  <header class="mtd-dialog-header">
+    <div>
+      <p class="eyebrow">MONTH-TO-DATE DETAIL</p>
+      <h2 id="mtd-dialog-title"></h2>
+      <p id="mtd-dialog-period" class="muted"></p>
+    </div>
+    <button type="button" class="mtd-dialog-close" aria-label="Close transactions">&times;</button>
+  </header>
+  <div class="mtd-dialog-summary">
+    <div><span>Total spending</span><strong id="mtd-dialog-total">$0.00</strong></div>
+    <div><span>Transactions</span><strong id="mtd-dialog-count">0</strong></div>
+  </div>
+  <div id="mtd-dialog-content" class="mtd-dialog-content" aria-live="polite"></div>
+  <footer class="mtd-dialog-footer">
+    <button type="button" class="btn btn-secondary mtd-dialog-done">Done</button>
+  </footer>
+    </div>
+  </dialog>
 
   <script>
     function escapeHtml(value) {
@@ -1081,7 +1101,7 @@
         const now = new Date();
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
         catHtml += `
-          <div class="metric-card list-item" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="drillDownMTD(this.dataset.category, this.dataset.month)" style="cursor: pointer; padding: 20px;">
+          <button type="button" class="metric-card list-item mtd-category-card" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="window.openCategoryTransactions(this.dataset.category, this.dataset.month)">
             <div style="display: flex; justify-content: space-between; align-items: start;">
               <span style="font-size: 24px;">${icon}</span>
               <div style="text-align: right;">
@@ -1090,16 +1110,12 @@
                 <div style="font-size: 11px; color: var(--text-secondary);">${cat.transactionCount} txns</div>
               </div>
             </div>
-          </div>
+          </button>
         `;
       });
       
       catHtml += '</div></div>';
       paymentsContainer.insertAdjacentHTML('afterend', catHtml);
-    }
-
-    async function drillDownMTD(category, month) {
-      window.openCategoryTransactions(category, month);
     }
 
     async function toggleFixed(txnId, isFixed) {
