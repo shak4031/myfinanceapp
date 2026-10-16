@@ -4,6 +4,15 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
   const money = value => value == null || !Number.isFinite(Number(value)) ? 'Not enough data' : Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const fixed = value => value === true || value === 1 || value === 'true';
+  const monthKey = value => {
+    const dateText = String(value ?? '');
+    const isoDate = dateText.match(/^(\d{4})-(\d{2})/);
+    if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+  window.filterTransactionsByCategoryAndMonth = (transactions, category, month) => transactions.filter(transaction =>
+    (!category || transaction.category === category) && (!month || monthKey(transaction.date) === month));
   const json = async (url, method = 'GET', body) => {
     const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
     const data = await response.json();
@@ -110,7 +119,7 @@
       .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
     $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
   };
-  window.openCategoryTransactions = category => {
+  window.openCategoryTransactions = (category, month = '') => {
     const filter = $('txn-filter-category');
     if (!Array.from(filter.options).some(option => option.value === category)) {
       const option = document.createElement('option');
@@ -119,6 +128,7 @@
       filter.appendChild(option);
     }
     filter.value = category;
+    $('txn-filter-month').value = month ? String(month).slice(0, 7) : '';
     window.showView('transactions');
   };
   $('category-cards').onclick = async event => {

@@ -11,19 +11,20 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     if (nodes.has(id)) return nodes.get(id);
     const classes = new Set(['auth-pending']);
     const element = {
-      id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false,
+      id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, options: [],
       style: {}, dataset: {}, parentElement: { before() {}, after() {} },
       classList: {
         add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
         toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
       },
-      appendChild() {}, prepend() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
+      appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
       getAttribute: () => '', setAttribute() {}, reset() {}, showModal() {}
     };
     nodes.set(id, element); return element;
   }
   const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  node('txn-filter-category').options.push({ value: '' });
   const context = {
     console, URL, Date, Number, String, Object, Math, Promise, Set, Map,
     fetch: fetchImpl, setTimeout, clearTimeout, addEventListener: (name, listener) => listeners.set(name, listener),
@@ -54,6 +55,33 @@ test('only one navigation implementation switches to exactly one active view', (
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['category-admin-view']);
   f.context.showView('categories');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['categories-view']);
+});
+test('dashboard category drill-down opens only that category and month of transactions', async () => {
+  const f = fixture(async url => {
+    if (url === '/api/categories') return response(200, []);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions: [] });
+    return response(200, {});
+  });
+  f.run('refresh.js');
+  f.context.openCategoryTransactions('Groceries', '2026-10-01');
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(f.node('txn-filter-category').value, 'Groceries');
+  assert.equal(f.node('txn-filter-month').value, '2026-10');
+  assert.equal(f.context.location.hash, 'transactions');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['transactions-view']);
+});
+test('transaction category/month filter excludes other categories and months', () => {
+  const f = fixture(); f.run('refresh.js');
+  const transactions = [
+    { category: 'Groceries', date: '2026-10-03' },
+    { category: 'Dining', date: '2026-10-04' },
+    { category: 'Groceries', date: '2026-09-30' }
+  ];
+  assert.deepEqual(
+    f.context.filterTransactionsByCategoryAndMonth(transactions, 'Groceries', '2026-10'),
+    [transactions[0]]
+  );
 });
 test('browser error reports are same-origin, redacted, and deduplicated', () => {
   const requests = [];
