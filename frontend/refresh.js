@@ -37,10 +37,11 @@
   window.showView = function(view) {
     if (!FinanceSession.isAuthenticated()) return;
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
-    document.querySelectorAll('.nav-btn').forEach(node => node.classList.toggle('active', node.getAttribute('onclick') === `showView('${view}')`));
+    const navView = view === 'category-admin' ? 'categories' : view;
+    document.querySelectorAll('.nav-btn').forEach(node => node.classList.toggle('active', node.getAttribute('onclick') === `showView('${navView}')`));
     closeSidebar();
     location.hash = view;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, transactions: loadAllTransactions, etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
 
@@ -53,17 +54,33 @@
     <label class="rule-search-label">Find a saved merchant<input id="rule-search" type="search" placeholder="Search merchant or category"></label>
     <div id="merchant-rules" class="table-scroll"></div>
     <form id="rule-form" class="toolbar"><label>Merchant text<input id="rule-pattern" required maxlength="200" placeholder="Merchant as shown on statement"></label><label>Display name (optional)<input id="rule-label" maxlength="100" placeholder="e.g. Local grocery store"></label><label>Category<select id="rule-category" required></select></label><label class="advanced-priority">Priority<input id="rule-priority" type="number" min="0" max="1000" value="100" step="1" required></label><button class="btn btn-primary">Add merchant rule</button></form></details>`;
-  $('categories-view').prepend(review);
+  $('category-admin-content').appendChild(review);
   const categoryManager = document.createElement('section');
   categoryManager.className = 'panel plan-card category-manager';
   categoryManager.innerHTML = `<div><p class="eyebrow">YOUR CATEGORY LIST</p><h2>Manage categories</h2><p class="muted">Create a category, rename one, or remove one. When removing a category, choose where its transactions and merchant mappings should go.</p></div>
     <form id="category-create-form" class="toolbar"><label>New category name<input id="category-new-name" required maxlength="100" placeholder="e.g. Childcare"></label><button class="btn btn-primary">Create category</button></form>
     <div id="category-manager-list" class="category-manager-list"></div>
     <dialog id="category-delete-dialog" class="editor"><form id="category-delete-form"><h2>Remove category</h2><p id="category-delete-copy" class="muted"></p><label>Move its transactions and merchant mappings to<select id="category-replacement" required></select></label><div class="toolbar"><button type="button" class="btn btn-secondary" id="category-delete-cancel">Cancel</button><button class="btn btn-primary">Move and delete</button></div></form></dialog>`;
-  $('categories-view').prepend(categoryManager);
+  $('category-admin-content').appendChild(categoryManager);
   let deletingCategory = null;
-  $('cat-fixed-selector').remove();
   const categoryOptions = selected => categories.map(category => `<option value="${escape(category.name)}" ${selected === category.name ? 'selected' : ''}>${escape(category.name)}</option>`).join('');
+  const categoryArtwork = name => {
+    const value = String(name || '').toLowerCase();
+    const choices = [
+      [/grocer|food|market|dining|restaurant|coffee/, '🥑', 'fresh'],
+      [/home|mortgage|rent|house/, '🏡', 'home'],
+      [/transport|car|gas|fuel|ev|travel/, '🚗', 'travel'],
+      [/health|medical|pharmacy|pet/, '🩺', 'care'],
+      [/salary|income|payroll/, '💸', 'income'],
+      [/saving|goal|invest/, '🌱', 'growth'],
+      [/utility|electric|water|internet|phone/, '⚡', 'utility'],
+      [/shop|cloth|retail/, '🛍️', 'shop'],
+      [/subscription|entertain|stream/, '🎬', 'play'],
+      [/debt|loan|credit|tax/, '📊', 'finance']
+    ];
+    return choices.find(([pattern]) => pattern.test(value))?.slice(1)
+      || ['✨', 'other'];
+  };
   window.loadCategories = async function() {
     const [data, summary] = await Promise.all([
       json('/api/transactions/categorization-rules'),
@@ -75,21 +92,39 @@
     $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
       <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
       <button class="btn btn-secondary" type="submit">Rename</button>
-      <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}">Delete</button>
+      <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}" ${categories.length < 2 ? 'disabled title="Add another category before deleting this one"' : ''}>Delete</button>
     </form>`).join('');
-    $('cat-list').innerHTML = '';
-    for (const category of categories) {
-      const button = document.createElement('button');
-      button.className = 'nav-btn';
-      button.textContent = `${category.name} · ${counts.get(category.name) || 0}`;
-      button.setAttribute('aria-label', `${category.name}, ${counts.get(category.name) || 0} transactions`);
-      button.onclick = () => loadCategoryMonths(category.name).catch(reportError);
-      $('cat-list').appendChild(button);
-    }
+    const transactionCount = categories.reduce((total, category) => total + (counts.get(category.name) || 0), 0);
+    $('category-overview-summary').innerHTML = `<div><span class="summary-icon">✦</span><span><strong>${categories.length}</strong><small>categories</small></span></div><div><span class="summary-icon">↗</span><span><strong>${transactionCount.toLocaleString()}</strong><small>categorized transactions</small></span></div>`;
+    $('category-cards').innerHTML = categories.map((category, index) => {
+      const [icon, art] = categoryArtwork(category.name);
+      const count = counts.get(category.name) || 0;
+      return `<button class="category-card category-${art}" type="button" data-open-category="${escape(category.name)}" style="--card-order:${index}" aria-label="View ${escape(category.name)}, ${count} transactions">
+        <span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span>
+        <span class="category-card-copy"><strong>${escape(category.name)}</strong><small>${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
+        <span class="category-card-arrow" aria-hidden="true">↗</span>
+      </button>`;
+    }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
     $('category-replacement').innerHTML = categories
       .filter(category => String(category.id) !== String(deletingCategory?.id))
       .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
     $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
+  };
+  window.openCategoryTransactions = category => {
+    const filter = $('txn-filter-category');
+    if (!Array.from(filter.options).some(option => option.value === category)) {
+      const option = document.createElement('option');
+      option.value = category;
+      option.textContent = category;
+      filter.appendChild(option);
+    }
+    filter.value = category;
+    window.showView('transactions');
+  };
+  $('category-cards').onclick = async event => {
+    const card = event.target.closest('[data-open-category]');
+    if (!card) return;
+    window.openCategoryTransactions(card.dataset.openCategory);
   };
   $('category-create-form').onsubmit = async event => {
     event.preventDefault();

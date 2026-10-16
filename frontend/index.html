@@ -525,35 +525,22 @@
         </div>
       </section>
 
-      <!-- CATEGORIES (REBUILT 3-PANEL) -->
+      <!-- CATEGORY OVERVIEW -->
       <section id="categories-view" class="view">
-        <header class="header">
-          <div><h1>Categories</h1><p class="muted">Change a transaction's category to teach the app how to categorize that merchant on future imports. Manage category names below.</p></div>
+        <header class="header category-overview-header">
+          <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">A colorful snapshot of where your money goes. Pick a category to view its transactions.</p></div>
+          <button class="btn btn-primary" onclick="showView('category-admin')">⚙ Manage categories</button>
         </header>
+        <div id="category-overview-summary" class="category-overview-summary"></div>
+        <div id="category-cards" class="category-cards" aria-live="polite"></div>
+      </section>
 
-        <div class="panel-container">
-          <!-- PANEL 1: CATEGORY LIST -->
-          <div class="panel">
-            <div class="panel-header">
-              Browse by category
-            </div>
-            <div id="cat-fixed-selector" style="display: none; padding: 12px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border);">
-               <select id="new-fixed-cat-select" style="width: 100%; padding: 6px; margin-bottom: 8px; font-size: 12px; background: var(--bg-primary); color: white; border: 1px solid var(--border);">
-               </select>
-               <button class="btn btn-primary" style="width: 100%; font-size: 11px;" onclick="addCategoryToUpcoming()">Add to Upcoming</button>
-            </div>
-            <div class="panel-body" id="cat-list"></div>
-          </div>
-
-          <!-- PANEL 2: TRANSACTIONS -->
-          <div class="panel">
-            <div class="panel-header" id="txn-header">Transactions by category</div>
-            <div class="panel-body" id="txn-list">
-              <div style="padding: 40px; text-align: center; color: var(--text-secondary);">Select a category to view items</div>
-            </div>
-          </div>
-
-          </div>
+      <section id="category-admin-view" class="view">
+        <header class="header category-admin-header">
+          <div><p class="eyebrow">PERSONALIZE YOUR WORKSPACE</p><h1>Category admin</h1><p class="muted">Manage category names and the merchant mappings that automatically organize future imports.</p></div>
+          <button class="btn btn-secondary" onclick="showView('categories')">← Back to categories</button>
+        </header>
+        <div id="category-admin-content"></div>
       </section>
 
       <!-- DEBT PAYOFF PLAN -->
@@ -1114,40 +1101,7 @@
     }
 
     async function drillDownMTD(category, month) {
-      // 1. Switch to Categories View first
-      showView('categories');
-      
-      // 2. Clear previous content and show loading
-      const txnList = document.getElementById('txn-list');
-      const txnHeader = document.getElementById('txn-header');
-      txnHeader.textContent = `${category} - ${new Date().toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}`;
-      txnList.innerHTML = '<div style="padding: 20px; text-align: center;">Loading June items...</div>';
-
-      // 3. Force FETCH for June 2026 specifically
-      const res = await fetch('/api/dashboard/category-transactions-for-month', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ 
-          category: category, 
-          month: new Date().toISOString().substring(0, 7) + '-01' // Dynamic current month
-        })
-      });
-      const transactions = await res.json();
-      
-      if (transactions.length === 0) {
-        txnList.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">No transactions found for June.</div>';
-        return;
-      }
-      
-      txnList.innerHTML = transactions.map(t => `
-        <div class="list-item" style="cursor: default">
-          <div class="txn-row">
-            <div style="font-size: 12px; color: var(--text-secondary)">${localDate(t.date).toLocaleDateString()}</div>
-            <div style="font-weight: 600">${escapeHtml(t.description)}</div>
-            <div class="txn-amount ${t.amount > 0 ? 'income' : ''}">$${Math.abs(t.amount).toFixed(2)}</div>
-          </div>
-        </div>
-      `).join('');
+      window.openCategoryTransactions(category);
     }
 
     async function toggleFixed(txnId, isFixed) {

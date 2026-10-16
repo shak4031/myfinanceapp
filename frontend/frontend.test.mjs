@@ -38,6 +38,16 @@ test('all frontend scripts and inline application code parse', () => {
   for (const file of ['session.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
+test('categories overview is focused and category administration has its own page', () => {
+  const html = source('index.html');
+  const overview = html.match(/<section id="categories-view"[\s\S]*?<\/section>/)?.[0] || '';
+  assert.match(overview, /category-cards/);
+  assert.match(overview, /showView\('category-admin'\)/);
+  assert.doesNotMatch(overview, /Review category suggestions|category-manager-list|merchant-rules|txn-list/);
+  assert.match(html, /id="category-admin-view"/);
+  assert.match(source('refresh.js'), /Saved merchant mappings/);
+  assert.match(source('refresh.css'), /\.category-card/);
+});
 test('forgot-password mode asks only for email and posts a reset request', async () => {
   const requests = [];
   const f = fixture(async (url, options = {}) => {
