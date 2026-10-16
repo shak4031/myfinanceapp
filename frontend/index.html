@@ -528,7 +528,7 @@
       <!-- CATEGORIES (REBUILT 3-PANEL) -->
       <section id="categories-view" class="view">
         <header class="header">
-          <h1>Categories</h1>
+          <div><h1>Categories</h1><p class="muted">Change a transaction's category to teach the app how to categorize that merchant on future imports. Manage category names below.</p></div>
         </header>
 
         <div class="panel-container">
@@ -1329,11 +1329,13 @@
           body: JSON.stringify({ id, category, apply_to_all: true })
         });
         const data = await res.json();
-        
+        if (!res.ok) throw new Error(data.error || 'Could not update the transaction category.');
         await loadAllTransactions();
-        notify(`✓ Updated category to "${category}"`);
+        notify(category
+          ? `Category updated to "${category}". This merchant is mapped for future imports.`
+          : 'Transaction set to Uncategorized. Its saved merchant mapping was turned off.');
       } catch (err) {
-        notify('❌ Update failed');
+        notify(err.message || 'Category update failed.');
       }
     }
 

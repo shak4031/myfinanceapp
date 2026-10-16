@@ -29,16 +29,17 @@ For a new loan not yet in imported spending, uncheck **Monthly payment already
 included in imported spending** so its minimum payment is reserved separately.
 Check it again once that obligation is represented in the imported history.
 
-Categorization is reviewable: find suggestions for transactions that need a
-category, adjust the suggested category, then apply selected or all suggestions
-together. You can optionally remember the exact merchant descriptions you
-approve for future imports. Saved merchant rules are searchable and editable;
-invalid legacy rules are skipped with a repair warning instead of blocking
-otherwise valid suggestions. Manual corrections are protected. Categorization
-never changes Fixed Payment flags. Startup no longer repairs or resets personal
-categories, balances, or fixed flags. Legacy shared SQL-fixture imports, SQLite
-categorization, and web access to global server logs are disabled because they
-cannot safely serve private accounts.
+Changing a transaction's category automatically saves a normalized, literal
+merchant mapping for future imports; setting it to Uncategorized disables that
+merchant mapping. It never rewrites other transactions or Fixed Payment flags.
+Category management supports creating, renaming, and deleting categories;
+deletion requires choosing a replacement and moves existing transactions and
+merchant mappings to it. Categorization suggestions can also be reviewed and
+applied together, and invalid legacy rules are skipped with a repair warning.
+Startup no longer repairs or resets personal categories, balances, or fixed
+flags. Legacy shared SQL-fixture imports, SQLite categorization, and web access
+to global server logs are disabled because they cannot safely serve private
+accounts.
 
 Account support: users reset forgotten passwords by email (SMTP required).
 Failed logins, lockouts, admin actions and server errors are written to an

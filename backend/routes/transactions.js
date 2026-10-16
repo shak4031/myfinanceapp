@@ -57,8 +57,25 @@ router.post('/cleanup-database', (req, res) => res.status(409).json({
 
 router.post('/update-transaction', route(async (req, res) => {
   const { id, category } = req.body || {};
-  // Category edits never modify fixed flags or other transactions.
-  const result = await applyUpdates(db, [{ id, category }], { expected: false, protectCorrections: false });
+  if (!Number.isSafeInteger(Number(id)) || Number(id) < 1 || typeof category !== 'string') {
+    throw failure(400, 'A valid transaction id and category are required');
+  }
+  if (!category) {
+    const result = await db.transaction(async client => {
+      const transaction = (await client.query(`SELECT id,description FROM transactions WHERE id=$1 AND ${TENANT} FOR UPDATE`, [id])).rows[0];
+      if (!transaction) throw failure(404, 'Transaction not found');
+      await client.query(`UPDATE transactions SET previous_category=category,category=NULL,
+        category_corrected=TRUE,correction_timestamp=NOW() WHERE id=$1 AND ${TENANT}`, [id]);
+      const pattern = canonicalMerchant(transaction.description);
+      if (pattern) await client.query(`UPDATE transaction_labels SET enabled=FALSE
+        WHERE ${TENANT} AND match_type='merchant' AND pattern=$1`, [pattern]);
+      return { updated: 1, rulesSaved: 0, rulesDisabled: pattern ? 1 : 0 };
+    });
+    return res.json({ success: true, ...result });
+  }
+  const result = await applyUpdates(db, [{ id, category }], {
+    expected: false, protectCorrections: false, learnRules: true
+  });
   res.json({ success: true, ...result });
 }));
 

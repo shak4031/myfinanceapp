@@ -4,9 +4,11 @@ import express from 'express';
 import { PGlite } from '@electric-sql/pglite';
 import Database from '../db.js';
 import transactionsRouter from '../routes/transactions.js';
+import categoriesRouter from '../routes/categories.js';
 import categorizationsRouter from '../routes/categorizations.js';
 import { importTransactions } from '../routes/import.js';
 import { canonicalMerchant, compileRules, classify, preview, saveRule, loadCategorization, applyUpdates } from './categorization.js';
+import { withUser } from './tenant.js';
 
 const names = new Set(['Other', 'Shopping', 'Groceries', 'Dining', 'Subscriptions', 'Salary']);
 const merchant = (id, pattern, category, priority = 100, extra = {}) =>
@@ -74,7 +76,7 @@ async function fixture() {
   await pg.exec(`
     SELECT set_config('app.user_id','1',false);
     CREATE TABLE categories (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
-      name TEXT, UNIQUE(user_id,name));
+      name TEXT, icon TEXT, color TEXT, UNIQUE(user_id,name));
     CREATE TABLE transaction_labels (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
       pattern TEXT, display_label TEXT, category_id INT REFERENCES categories(id), match_type TEXT DEFAULT 'regex',
       priority INT DEFAULT 0, enabled BOOLEAN DEFAULT TRUE, is_fixed BOOLEAN DEFAULT FALSE, UNIQUE(user_id,pattern));
@@ -179,12 +181,14 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
   Database.prototype.transaction = db.transaction;
   const app = express();
   app.use(express.json());
+  app.use((req, res, next) => withUser(1, next));
   app.use('/api/transactions', transactionsRouter);
+  app.use('/api/categories', categoriesRouter);
   app.use('/api/categorizations', categorizationsRouter);
   const server = await new Promise(resolve => { const listener = app.listen(0, '127.0.0.1', () => resolve(listener)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const request = async (path, body, method = 'POST') => {
-    const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, body: await response.json() };
   };
   try {
@@ -199,6 +203,13 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.deepEqual(flags, [{ is_fixed: true, category: 'Other' }, { is_fixed: true, category: 'Dining' }]);
     assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining', is_fixed: false })).status, 200);
     assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
+    const mapped = (await client.query("SELECT c.name,l.pattern,l.match_type FROM transaction_labels l JOIN categories c ON c.id=l.category_id WHERE l.pattern='MY STORE'")).rows[0];
+    assert.deepEqual(mapped, { name: 'Dining', pattern: 'MY STORE', match_type: 'merchant' });
+    assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: '' })).body.rulesDisabled, 1);
+    assert.equal((await client.query("SELECT enabled FROM transaction_labels WHERE pattern='MY STORE'")).rows[0].enabled, false);
+    assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining' })).status, 200);
+    const learnedConfig = await loadCategorization(client);
+    assert.equal(classify({ description: 'VISA DDA PUR AP 987 MY STORE' }, learnedConfig.compiled, learnedConfig.names).category, 'Dining');
     const learned = await request('/api/categorizations/learn-pattern', { keyword: 'MY STORE', suggestedCategory: 'Groceries' });
     assert.equal(learned.status, 200);
     assert.equal(learned.body.updated, 0);
@@ -228,6 +239,22 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal(previewWithLegacyRule.body.invalidRules.length, 1);
     assert.equal(previewWithLegacyRule.body.suggestions.some(row => row.description === 'STARBUCKS' && row.suggestedCategory === 'Dining'), true);
     assert.equal((await fetch(base + '/api/transactions/categorization-rules')).status, 200);
+    const created = await request('/api/categories', { name: 'Family' });
+    assert.equal(created.status, 201);
+    assert.equal((await request('/api/categories', { name: 'Family' })).status, 409);
+    const familyId = created.body.category.id;
+    await client.query("INSERT INTO transactions (description,category) VALUES ('FAMILY EXPENSE','Family')");
+    assert.equal((await request(`/api/categories/${familyId}`, { name: 'Household' }, 'PUT')).status, 200);
+    assert.equal((await client.query("SELECT category FROM transactions WHERE description='FAMILY EXPENSE'")).rows[0].category, 'Household');
+    await client.query("INSERT INTO categories (name) VALUES ('Remove Me')");
+    const removeId = (await client.query("SELECT id FROM categories WHERE name='Remove Me'")).rows[0].id;
+    await client.query("INSERT INTO transactions (description,category) VALUES ('OLD CATEGORY EXPENSE','Remove Me')");
+    await client.query("INSERT INTO transaction_labels (pattern,category_id,match_type) VALUES ('OLD MERCHANT',$1,'merchant')", [removeId]);
+    const deleteResult = await request(`/api/categories/${removeId}`, { replacementId: 2 }, 'DELETE');
+    assert.deepEqual(deleteResult, { status: 200, body: { success: true, transactions: 1 } });
+    assert.equal((await client.query("SELECT category FROM transactions WHERE description='OLD CATEGORY EXPENSE'")).rows[0].category, 'Groceries');
+    assert.equal((await client.query("SELECT category_id FROM transaction_labels WHERE pattern='OLD MERCHANT'")).rows[0].category_id, 2);
+    assert.equal((await client.query("SELECT count(*)::int AS count FROM categories WHERE name='Remove Me'")).rows[0].count, 0);
   } finally {
     await new Promise(resolve => server.close(resolve));
     Database.prototype.transaction = original;

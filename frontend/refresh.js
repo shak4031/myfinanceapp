@@ -48,13 +48,20 @@
   review.className = 'panel plan-card';
   review.innerHTML = `<div><p class="eyebrow">A QUICKER WAY TO KEEP THINGS ORGANIZED</p><h2>Review category suggestions</h2><p class="muted">Start with transactions that need a category. Check the suggestions, adjust any category that looks wrong, then apply them together. Nothing changes until you approve.</p></div>
     <div class="toolbar"><label>Show <select id="review-scope"><option value="uncategorized">Needs a category</option><option value="all">All transactions</option></select></label><button id="preview-button" class="btn btn-primary">Find suggestions</button><button id="approve-button" class="btn btn-secondary" disabled>Apply selected</button><button id="approve-all-button" class="btn btn-secondary" disabled>Apply all suggestions</button></div>
-    <label class="remember-merchant"><input id="remember-merchants" type="checkbox"> Remember these exact merchant descriptions for future imports</label>
     <p id="review-status" role="status"></p><div id="category-preview" class="table-scroll"></div>
-    <details><summary>Saved merchant rules · manage what the app remembers</summary><p class="muted">Rules apply to future imports. Edit or turn off a rule if the same merchant sometimes belongs in a different category.</p>
+    <details><summary>Saved merchant mappings · manage what the app remembers</summary><p class="muted">Changing a transaction's category creates an exact merchant mapping for future imports. These are literal matches, not regular expressions, so statement text cannot accidentally act as executable pattern syntax.</p>
     <label class="rule-search-label">Find a saved merchant<input id="rule-search" type="search" placeholder="Search merchant or category"></label>
     <div id="merchant-rules" class="table-scroll"></div>
     <form id="rule-form" class="toolbar"><label>Merchant text<input id="rule-pattern" required maxlength="200" placeholder="Merchant as shown on statement"></label><label>Display name (optional)<input id="rule-label" maxlength="100" placeholder="e.g. Local grocery store"></label><label>Category<select id="rule-category" required></select></label><label class="advanced-priority">Priority<input id="rule-priority" type="number" min="0" max="1000" value="100" step="1" required></label><button class="btn btn-primary">Add merchant rule</button></form></details>`;
   $('categories-view').prepend(review);
+  const categoryManager = document.createElement('section');
+  categoryManager.className = 'panel plan-card category-manager';
+  categoryManager.innerHTML = `<div><p class="eyebrow">YOUR CATEGORY LIST</p><h2>Manage categories</h2><p class="muted">Create a category, rename one, or remove one. When removing a category, choose where its transactions and merchant mappings should go.</p></div>
+    <form id="category-create-form" class="toolbar"><label>New category name<input id="category-new-name" required maxlength="100" placeholder="e.g. Childcare"></label><button class="btn btn-primary">Create category</button></form>
+    <div id="category-manager-list" class="category-manager-list"></div>
+    <dialog id="category-delete-dialog" class="editor"><form id="category-delete-form"><h2>Remove category</h2><p id="category-delete-copy" class="muted"></p><label>Move its transactions and merchant mappings to<select id="category-replacement" required></select></label><div class="toolbar"><button type="button" class="btn btn-secondary" id="category-delete-cancel">Cancel</button><button class="btn btn-primary">Move and delete</button></div></form></dialog>`;
+  $('categories-view').prepend(categoryManager);
+  let deletingCategory = null;
   $('cat-fixed-selector').remove();
   const categoryOptions = selected => categories.map(category => `<option value="${escape(category.name)}" ${selected === category.name ? 'selected' : ''}>${escape(category.name)}</option>`).join('');
   window.loadCategories = async function() {
@@ -65,6 +72,11 @@
     rules = data.rules || []; categories = data.categories || [];
     const counts = new Map((summary.categories || []).map(item => [item.category, Number(item.count) || 0]));
     $('rule-category').innerHTML = categoryOptions('');
+    $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
+      <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
+      <button class="btn btn-secondary" type="submit">Rename</button>
+      <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}">Delete</button>
+    </form>`).join('');
     $('cat-list').innerHTML = '';
     for (const category of categories) {
       const button = document.createElement('button');
@@ -74,7 +86,60 @@
       button.onclick = () => loadCategoryMonths(category.name).catch(reportError);
       $('cat-list').appendChild(button);
     }
-    $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant rules yet. Apply a suggestion and choose “Remember these exact merchant descriptions” to build them.</td></tr>'}</tbody></table>`;
+    $('category-replacement').innerHTML = categories
+      .filter(category => String(category.id) !== String(deletingCategory?.id))
+      .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
+    $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
+  };
+  $('category-create-form').onsubmit = async event => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      await json('/api/categories', 'POST', { name: $('category-new-name').value.trim() });
+      $('category-new-name').value = '';
+      await loadCategories();
+      notify('Category created.');
+    } catch (error) { reportError(error); }
+    finally { button.disabled = false; }
+  };
+  $('category-manager-list').onsubmit = async event => {
+    if (!event.target.matches('[data-category]')) return;
+    event.preventDefault();
+    const row = event.target;
+    const button = row.querySelector('button[type=submit]');
+    button.disabled = true;
+    try {
+      await json(`/api/categories/${encodeURIComponent(row.dataset.category)}`, 'PUT', { name: row.querySelector('[data-category-name]').value.trim() });
+      await Promise.all([loadCategories(), loadAllTransactions()]);
+      notify('Category renamed.');
+    } catch (error) { reportError(error); }
+    finally { button.disabled = false; }
+  };
+  $('category-manager-list').onclick = event => {
+    const button = event.target.closest('[data-delete-category]');
+    if (!button) return;
+    deletingCategory = categories.find(category => String(category.id) === button.dataset.deleteCategory);
+    if (!deletingCategory) return;
+    $('category-delete-copy').textContent = `Transactions and saved merchant mappings assigned to "${deletingCategory.name}" will move to the category you choose below.`;
+    $('category-replacement').innerHTML = categories
+      .filter(category => String(category.id) !== String(deletingCategory.id))
+      .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
+    $('category-delete-dialog').showModal();
+  };
+  $('category-delete-cancel').onclick = () => $('category-delete-dialog').close();
+  $('category-delete-form').onsubmit = async event => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const result = await json(`/api/categories/${encodeURIComponent(deletingCategory.id)}`, 'DELETE', { replacementId: Number($('category-replacement').value) });
+      $('category-delete-dialog').close();
+      deletingCategory = null;
+      await Promise.all([loadCategories(), loadAllTransactions()]);
+      notify(`Category deleted. ${result.transactions} transaction${result.transactions === 1 ? '' : 's'} moved.`);
+    } catch (error) { reportError(error); }
+    finally { button.disabled = false; }
   };
   $('rule-search').oninput = () => {
     const query = $('rule-search').value.trim().toLowerCase();
@@ -133,10 +198,10 @@
     $('approve-button').disabled = true; $('approve-all-button').disabled = true;
     $('preview-button').disabled = true;
     try {
-      const data = await json('/api/transactions/categorization-apply', 'POST', { updates, learnRules: $('remember-merchants').checked });
+      const data = await json('/api/transactions/categorization-apply', 'POST', { updates, learnRules: true });
       $('review-status').textContent = `${data.updated} categories updated${data.rulesSaved ? ` · ${data.rulesSaved} merchant rule${data.rulesSaved === 1 ? '' : 's'} saved for future imports` : ''}${data.rulesSkipped ? ` · ${data.rulesSkipped} conflicting merchant rule${data.rulesSkipped === 1 ? ' was' : 's were'} skipped` : ''}. Find suggestions again to review what remains.`;
       $('category-preview').textContent = ''; suggestions = [];
-      $('remember-merchants').checked = false;
+      await loadCategories();
     } catch (error) { $('review-status').textContent = `${error.message} Preview again if categories changed since this review.`; }
     finally { $('preview-button').disabled = false; $('approve-all-button').disabled = !suggestions.length; }
   }

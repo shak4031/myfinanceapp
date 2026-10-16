@@ -172,6 +172,10 @@ the same database in place and assigns existing rows to account 1. Rehearse it:
   Payment debit creates a last-month template; an unchecked one does not.
 - Review categorization previews before approving changes. Fixed flags remain
   unchanged and manual category corrections remain protected.
+- Correct a transaction's category and verify its normalized merchant mapping
+  is used on a later import. Create and rename a category; delete a test
+  category into a replacement and verify its transactions and merchant mappings
+  move with it.
 - Check goal funding across all active goals together; the same surplus must
   not be assigned in full to every goal.
 - A loan marked as not yet included in imported spending reserves its minimum
