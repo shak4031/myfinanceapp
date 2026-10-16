@@ -41,13 +41,15 @@ router.put('/categorization-rules/:id', route(async (req, res) => {
 router.post('/categorization-preview', route(async (req, res) => {
   const result = await db.transaction(async client => {
     const config = await loadCategorization(client);
-    const transactions = (await client.query(`SELECT id,description,direction,category,category_corrected FROM transactions WHERE ${TENANT} ORDER BY id`)).rows;
-    return preview(transactions, config.compiled, config.names, req.body?.scope);
+    const transactions = (await client.query(`SELECT id,date,description,amount,direction,category,category_corrected FROM transactions WHERE ${TENANT} ORDER BY id`)).rows;
+    return { ...preview(transactions, config.compiled, config.names, req.body?.scope), invalidRules: config.invalidRules };
   });
   res.json(result);
 }));
 router.post('/categorization-apply', route(async (req, res) => {
-  res.json(await applyUpdates(db, req.body?.updates));
+  const learnRules = req.body?.learnRules ?? false;
+  if (typeof learnRules !== 'boolean') throw failure(400, 'learnRules must be a boolean');
+  res.json(await applyUpdates(db, req.body?.updates, { learnRules }));
 }));
 router.post('/cleanup-database', (req, res) => res.status(409).json({
   error: 'Automatic cleanup is disabled. Request /api/transactions/categorization-preview and approve selected updates with /api/transactions/categorization-apply. Categories and fixed flags were not changed.'

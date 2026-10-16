@@ -79,7 +79,8 @@ export function preview(transactions, rules, categories, scope) {
       && transaction.category && !['Other', 'Uncategorized'].includes(transaction.category))) continue;
     const suggestion = classify(transaction, rules, categories);
     if (!suggestion.category || suggestion.category === transaction.category) continue;
-    suggestions.push({ id: transaction.id, description: transaction.description,
+    suggestions.push({ id: transaction.id, date: transaction.date ?? null, amount: transaction.amount ?? null,
+      direction: transaction.direction ?? null, description: transaction.description,
       currentCategory: transaction.category ?? null, suggestedCategory: suggestion.category,
       reason: suggestion.reason, ruleId: suggestion.ruleId });
   }
@@ -89,7 +90,17 @@ export function preview(transactions, rules, categories, scope) {
 export async function loadCategorization(client) {
   const rules = (await client.query(RULES_SQL)).rows;
   const categories = (await client.query(`SELECT id, name FROM categories WHERE ${TENANT} ORDER BY name`)).rows;
-  return { rules, categories, compiled: compileRules(rules), names: new Set(categories.map(row => row.name)) };
+  const compiled = [];
+  const invalidRules = [];
+  for (const rule of rules) {
+    try {
+      compiled.push(...compileRules([rule]));
+    } catch (error) {
+      if (error.status !== 422) throw error;
+      invalidRules.push({ id: rule.id, pattern: rule.pattern, message: error.message });
+    }
+  }
+  return { rules, categories, compiled: compileRules(compiled), invalidRules, names: new Set(categories.map(row => row.name)) };
 }
 
 export async function saveRule(client, input, id) {
@@ -116,7 +127,7 @@ export async function saveRule(client, input, id) {
   return { ...result.rows[0], category: input.category };
 }
 
-export async function applyUpdates(db, updates, { expected = true, protectCorrections = true } = {}) {
+export async function applyUpdates(db, updates, { expected = true, protectCorrections = true, learnRules = false } = {}) {
   if (!Array.isArray(updates) || updates.length > 5000) throw failure(400, 'updates must be an array of at most 5000 items');
   const ids = new Set();
   for (const item of updates) {
@@ -129,7 +140,7 @@ export async function applyUpdates(db, updates, { expected = true, protectCorrec
   }
   return db.transaction(async client => {
     const categories = new Set((await client.query(`SELECT name FROM categories WHERE ${TENANT}`)).rows.map(row => row.name));
-    const rows = (await client.query(`SELECT id, category, category_corrected FROM transactions
+    const rows = (await client.query(`SELECT id, description, category, category_corrected FROM transactions
       WHERE id = ANY($1::integer[]) AND ${TENANT} ORDER BY id FOR UPDATE`, [[...ids]])).rows;
     const byId = new Map(rows.map(row => [Number(row.id), row]));
     for (const item of updates) {
@@ -148,6 +159,25 @@ export async function applyUpdates(db, updates, { expected = true, protectCorrec
         category_corrected=TRUE, correction_timestamp=NOW() WHERE id=$2 AND ${TENANT}`, [item.category, item.id]);
       updated++;
     }
-    return { updated };
+    if (!learnRules) return { updated };
+
+    const merchants = new Map();
+    const conflictingMerchants = new Set();
+    for (const item of updates) {
+      const merchant = canonicalMerchant(byId.get(Number(item.id)).description);
+      if (!merchant || merchant.length > 256) continue;
+      if (merchants.has(merchant) && merchants.get(merchant) !== item.category) {
+        conflictingMerchants.add(merchant);
+      } else {
+        merchants.set(merchant, item.category);
+      }
+    }
+    let rulesSaved = 0;
+    for (const [pattern, category] of merchants) {
+      if (conflictingMerchants.has(pattern)) continue;
+      await saveRule(client, { pattern, display_label: pattern, category, priority: 100, enabled: true });
+      rulesSaved++;
+    }
+    return { updated, rulesSaved, rulesSkipped: conflictingMerchants.size };
   });
 }

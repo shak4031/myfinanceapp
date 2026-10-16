@@ -56,6 +56,23 @@ progress { width: 100%; accent-color: #226452; height: 10px; }
 .table-scroll { overflow: auto; }
 .review-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
 .review-table td, .review-table th { padding: 14px 10px; border-bottom: 1px solid #e2e7df; }
+.review-table td { vertical-align: middle; }
+.review-table td .muted { margin: 3px 0 0; font-size: 12px; }
+.review-table select { min-width: 150px; }
+#category-preview { max-height: min(62vh, 760px); }
+#category-preview .review-table { min-width: 760px; }
+#category-preview .review-table th:first-child, #category-preview .review-table td:first-child { width: 44px; text-align: center; }
+#category-preview .review-table td:nth-child(2) { min-width: 250px; max-width: 420px; overflow-wrap: anywhere; }
+.remember-merchant { display: flex; align-items: center; gap: 9px; width: fit-content; padding: 8px 0; }
+.rule-search-label { display: grid; gap: 6px; width: min(360px, 100%); margin: 16px 0; }
+.rule-table { min-width: 700px; }
+.rule-table td strong { display: block; max-width: 320px; overflow-wrap: anywhere; }
+.rule-edit { margin-top: 5px; font-size: 12px; }
+.rule-edit summary { color: #526c5e; cursor: pointer; }
+.rule-edit input { display: block; width: min(300px, 100%); margin: 6px 0; }
+.advanced-priority { max-width: 120px; }
+details > summary { cursor: pointer; font-weight: 650; }
+details[open] > summary { margin-bottom: 12px; }
 .editor { border: 0; padding: 28px; border-radius: 18px; width: min(560px,90vw); max-height: 90vh; color: #202e2a; }
 .editor::backdrop { background: #172f2566; }
 .editor form { display: grid; gap: 14px; }

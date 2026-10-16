@@ -13,7 +13,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
       id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false,
       style: {}, dataset: {}, parentElement: { before() {}, after() {} },
       classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c), toggle() {} },
-      appendChild() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
+      appendChild() {}, prepend() {}, before() {}, after() {}, remove() {}, close() {}, focus() {},
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
       getAttribute: () => '', setAttribute() {}, reset() {}, showModal() {}
     };

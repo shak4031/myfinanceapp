@@ -137,6 +137,11 @@ test('apply is atomic for stale and foreign IDs, validates categories, tracks ma
     await assert.rejects(applyUpdates(db, [{ id: 1, category: 'Dining', expectedCategory: 'Groceries' }]), { status: 409 });
     assert.deepEqual(await applyUpdates(db, [{ id: 1, category: 'Dining' }], { expected: false, protectCorrections: false }), { updated: 1 });
     assert.equal((await client.query('SELECT previous_category FROM transactions WHERE id=1')).rows[0].previous_category, 'Groceries');
+    const inserted = await client.query("INSERT INTO transactions (description,category) VALUES ('VISA DDA PUR AP 123 LOCAL MARKET','Other') RETURNING id");
+    const learned = await applyUpdates(db, [{ id: inserted.rows[0].id, category: 'Groceries', expectedCategory: 'Other' }], { learnRules: true });
+    assert.deepEqual(learned, { updated: 1, rulesSaved: 1, rulesSkipped: 0 });
+    const savedRule = (await client.query("SELECT pattern,match_type FROM transaction_labels WHERE pattern='LOCAL MARKET'")).rows[0];
+    assert.deepEqual(savedRule, { pattern: 'LOCAL MARKET', match_type: 'merchant' });
   } finally { await pg.close(); }
 });
 
@@ -217,7 +222,11 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal((await request('/api/transactions/categorization-apply',
       { updates: [{ id: 2, category: 'Shopping', expectedCategory: 'Dining' }] })).status, 409);
     await client.query("INSERT INTO transaction_labels (pattern,match_type) VALUES ('(a+)+$', 'regex')");
-    assert.equal((await request('/api/transactions/categorization-preview', { scope: 'all' })).status, 422);
+    await client.query("INSERT INTO transactions (description,category) VALUES ('STARBUCKS','Other')");
+    const previewWithLegacyRule = await request('/api/transactions/categorization-preview', { scope: 'all' });
+    assert.equal(previewWithLegacyRule.status, 200);
+    assert.equal(previewWithLegacyRule.body.invalidRules.length, 1);
+    assert.equal(previewWithLegacyRule.body.suggestions.some(row => row.description === 'STARBUCKS' && row.suggestedCategory === 'Dining'), true);
     assert.equal((await fetch(base + '/api/transactions/categorization-rules')).status, 200);
   } finally {
     await new Promise(resolve => server.close(resolve));

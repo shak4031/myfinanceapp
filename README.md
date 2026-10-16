@@ -29,8 +29,12 @@ For a new loan not yet in imported spending, uncheck **Monthly payment already
 included in imported spending** so its minimum payment is reserved separately.
 Check it again once that obligation is represented in the imported history.
 
-Categorization is reviewable: preview suggestions, approve selected changes, and
-manage your merchant rules. Manual corrections are protected. Categorization
+Categorization is reviewable: find suggestions for transactions that need a
+category, adjust the suggested category, then apply selected or all suggestions
+together. You can optionally remember the exact merchant descriptions you
+approve for future imports. Saved merchant rules are searchable and editable;
+invalid legacy rules are skipped with a repair warning instead of blocking
+otherwise valid suggestions. Manual corrections are protected. Categorization
 never changes Fixed Payment flags. Startup no longer repairs or resets personal
 categories, balances, or fixed flags. Legacy shared SQL-fixture imports, SQLite
 categorization, and web access to global server logs are disabled because they

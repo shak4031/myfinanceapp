@@ -6,7 +6,9 @@
   const fixed = value => value === true || value === 1 || value === 'true';
   const json = async (url, method = 'GET', body) => {
     const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+    return data;
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
@@ -44,27 +46,39 @@
 
   const review = document.createElement('div');
   review.className = 'panel plan-card';
-  review.innerHTML = `<div><p class="eyebrow">YOU STAY IN CONTROL</p><h2>Review categories before they change</h2><p class="muted">Exact merchant-text rules make suggestions, not silent changes. Preview, select, then approve. No transactions are deleted.</p></div>
-    <div class="toolbar"><label>Review scope <select id="review-scope"><option value="uncategorized">Uncategorized only</option><option value="all">All transactions</option></select></label><button id="preview-button" class="btn btn-primary">Preview suggestions</button><button id="approve-button" class="btn btn-secondary" disabled>Approve selected</button></div>
+  review.innerHTML = `<div><p class="eyebrow">A QUICKER WAY TO KEEP THINGS ORGANIZED</p><h2>Review category suggestions</h2><p class="muted">Start with transactions that need a category. Check the suggestions, adjust any category that looks wrong, then apply them together. Nothing changes until you approve.</p></div>
+    <div class="toolbar"><label>Show <select id="review-scope"><option value="uncategorized">Needs a category</option><option value="all">All transactions</option></select></label><button id="preview-button" class="btn btn-primary">Find suggestions</button><button id="approve-button" class="btn btn-secondary" disabled>Apply selected</button><button id="approve-all-button" class="btn btn-secondary" disabled>Apply all suggestions</button></div>
+    <label class="remember-merchant"><input id="remember-merchants" type="checkbox"> Remember these exact merchant descriptions for future imports</label>
     <p id="review-status" role="status"></p><div id="category-preview" class="table-scroll"></div>
-    <details><summary>Merchant rules · edit, enable, or disable</summary><div id="merchant-rules" class="table-scroll"></div>
-    <form id="rule-form" class="toolbar"><label>Exact merchant text<input id="rule-pattern" required maxlength="200" placeholder="Merchant as shown on statement"></label><label>Display label<input id="rule-label" maxlength="100"></label><label>Category<select id="rule-category" required></select></label><label>Priority<input id="rule-priority" type="number" min="0" max="1000" value="0" step="1" required></label><button class="btn btn-primary">Add rule</button></form></details>`;
-  $('categories-view').appendChild(review);
+    <details><summary>Saved merchant rules · manage what the app remembers</summary><p class="muted">Rules apply to future imports. Edit or turn off a rule if the same merchant sometimes belongs in a different category.</p>
+    <label class="rule-search-label">Find a saved merchant<input id="rule-search" type="search" placeholder="Search merchant or category"></label>
+    <div id="merchant-rules" class="table-scroll"></div>
+    <form id="rule-form" class="toolbar"><label>Merchant text<input id="rule-pattern" required maxlength="200" placeholder="Merchant as shown on statement"></label><label>Display name (optional)<input id="rule-label" maxlength="100" placeholder="e.g. Local grocery store"></label><label>Category<select id="rule-category" required></select></label><label class="advanced-priority">Priority<input id="rule-priority" type="number" min="0" max="1000" value="100" step="1" required></label><button class="btn btn-primary">Add merchant rule</button></form></details>`;
+  $('categories-view').prepend(review);
   $('cat-fixed-selector').remove();
   const categoryOptions = selected => categories.map(category => `<option value="${escape(category.name)}" ${selected === category.name ? 'selected' : ''}>${escape(category.name)}</option>`).join('');
   window.loadCategories = async function() {
-    const data = await json('/api/transactions/categorization-rules');
+    const [data, summary] = await Promise.all([
+      json('/api/transactions/categorization-rules'),
+      json('/api/categorizations/category-summary', 'POST')
+    ]);
     rules = data.rules || []; categories = data.categories || [];
+    const counts = new Map((summary.categories || []).map(item => [item.category, Number(item.count) || 0]));
     $('rule-category').innerHTML = categoryOptions('');
     $('cat-list').innerHTML = '';
     for (const category of categories) {
       const button = document.createElement('button');
       button.className = 'nav-btn';
-      button.textContent = category.name;
+      button.textContent = `${category.name} · ${counts.get(category.name) || 0}`;
+      button.setAttribute('aria-label', `${category.name}, ${counts.get(category.name) || 0} transactions`);
       button.onclick = () => loadCategoryMonths(category.name).catch(reportError);
       $('cat-list').appendChild(button);
     }
-    $('merchant-rules').innerHTML = `<table class="review-table"><thead><tr><th>Merchant text / display label</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}"><td><input data-rule-pattern aria-label="Exact merchant text" maxlength="256" value="${escape(rule.pattern)}"><input data-rule-label aria-label="Display label" value="${escape(rule.display_label)}"></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}" style="width:80px"></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('')}</tbody></table>`;
+    $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant rules yet. Apply a suggestion and choose “Remember these exact merchant descriptions” to build them.</td></tr>'}</tbody></table>`;
+  };
+  $('rule-search').oninput = () => {
+    const query = $('rule-search').value.trim().toLowerCase();
+    $('merchant-rules').querySelectorAll('[data-rule]').forEach(row => { row.hidden = !row.dataset.ruleSearch.includes(query); });
   };
   $('merchant-rules').onclick = async event => {
     const button = event.target.closest('[data-save-rule]');
@@ -75,7 +89,7 @@
       const priority = Number(row.querySelector('input[type=number]').value);
       if (!Number.isInteger(priority) || priority < 0 || priority > 1000) throw new Error('Priority must be a whole number from 0 to 1000.');
       await json(`/api/transactions/categorization-rules/${encodeURIComponent(rules[Number(button.dataset.saveRule)].id)}`, 'PUT', { pattern: row.querySelector('[data-rule-pattern]').value.trim(), display_label: row.querySelector('[data-rule-label]').value.trim(), category: row.querySelector('select').value, priority, enabled: row.querySelector('input[type=checkbox]').checked });
-      suggestions = []; $('category-preview').textContent = ''; $('approve-button').disabled = true;
+      suggestions = []; $('category-preview').textContent = ''; $('approve-button').disabled = true; $('approve-all-button').disabled = true;
       notify('Rule saved. Preview again to see its effect.');
     } catch (error) { reportError(error); }
     finally { button.disabled = false; }
@@ -86,42 +100,48 @@
     button.disabled = true;
     try {
       await json('/api/transactions/categorization-rules', 'POST', { pattern: $('rule-pattern').value.trim(), display_label: $('rule-label').value.trim(), category: $('rule-category').value, priority: Number($('rule-priority').value), enabled: true });
-      suggestions = []; $('category-preview').textContent = ''; $('approve-button').disabled = true;
+      suggestions = []; $('category-preview').textContent = ''; $('approve-button').disabled = true; $('approve-all-button').disabled = true;
       event.target.reset(); await loadCategories(); notify('Rule added. Preview before applying.');
     } catch (error) { reportError(error); }
     finally { button.disabled = false; }
   };
   $('preview-button').onclick = async () => {
     $('preview-button').disabled = true;
-    $('approve-button').disabled = true;
+    $('approve-button').disabled = true; $('approve-all-button').disabled = true;
     suggestions = []; $('category-preview').textContent = '';
     try {
       const data = await json('/api/transactions/categorization-preview', 'POST', { scope: $('review-scope').value });
       suggestions = data.suggestions || [];
-      $('review-status').textContent = `${suggestions.length} suggestions · ${data.unchanged || 0} unchanged. Select the changes you approve.`;
-      $('category-preview').innerHTML = suggestions.length ? `<table class="review-table"><thead><tr><th><input id="select-suggestions" type="checkbox" aria-label="Select all suggestions"></th><th>Transaction</th><th>Current</th><th>Suggested</th><th>Why</th></tr></thead><tbody>${suggestions.map((item, index) => `<tr><td><input type="checkbox" data-suggestion="${index}" aria-label="Approve suggestion for ${escape(item.description)}"></td><td>${escape(item.description)}</td><td>${escape(item.currentCategory || 'Uncategorized')}</td><td>${escape(item.suggestedCategory)}</td><td>${escape(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes suggested. Your existing categories are untouched.</p>';
+      const warnings = data.invalidRules || [];
+      $('review-status').textContent = `${suggestions.length} suggestions found · ${data.unchanged || 0} already look good or were left unchanged.${warnings.length ? ` ${warnings.length} older rule${warnings.length === 1 ? '' : 's'} need attention; valid suggestions are still available below.` : ''}`;
+      $('category-preview').innerHTML = `${warnings.length ? `<div class="coach-note warning" role="status"><strong>Some older rules need repair</strong><p>These rules were skipped so they cannot block other suggestions. Edit or disable them under Saved merchant rules.</p><ul>${warnings.map(rule => `<li>${escape(rule.message)}</li>`).join('')}</ul></div>` : ''}${suggestions.length ? `<table class="review-table"><thead><tr><th><input id="select-suggestions" type="checkbox" aria-label="Select all suggestions"></th><th>Transaction</th><th>Current</th><th>Suggested category</th><th>Match</th></tr></thead><tbody>${suggestions.map((item, index) => `<tr><td><input type="checkbox" data-suggestion="${index}" aria-label="Select ${escape(item.description)}"></td><td><strong>${escape(item.description)}</strong><div class="muted">${escape(item.date || '')}${item.amount == null ? '' : ` · ${money(item.amount)}`}</div></td><td>${escape(item.currentCategory || 'Uncategorized')}</td><td><select data-suggestion-category="${index}" aria-label="Category for ${escape(item.description)}">${categoryOptions(item.suggestedCategory)}</select></td><td><span title="${escape(item.reason)}">${escape(item.reason)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes suggested. Your existing categories are untouched.</p>'}`;
+      $('approve-all-button').disabled = !suggestions.length;
     } catch (error) { $('review-status').textContent = error.message; }
     finally { $('preview-button').disabled = false; }
   };
   $('category-preview').onchange = event => {
-    if (event.target.id === 'select-suggestions') document.querySelectorAll('[data-suggestion]').forEach(node => { node.checked = event.target.checked; });
-    $('approve-button').disabled = !document.querySelector('[data-suggestion]:checked');
+    if (event.target.id === 'select-suggestions') $('category-preview').querySelectorAll('[data-suggestion]').forEach(node => { node.checked = event.target.checked; });
+    $('approve-button').disabled = !$('category-preview').querySelector('[data-suggestion]:checked');
   };
-  $('approve-button').onclick = async () => {
-    const updates = Array.from(document.querySelectorAll('[data-suggestion]:checked'), node => {
+  async function applySuggestions(selected, confirmAll = false) {
+    const updates = selected.map(node => {
       const item = suggestions[Number(node.dataset.suggestion)];
-      return { id: item.id, category: item.suggestedCategory, expectedCategory: item.currentCategory };
+      return { id: item.id, category: $('category-preview').querySelector(`[data-suggestion-category="${Number(node.dataset.suggestion)}"]`).value, expectedCategory: item.currentCategory };
     });
     if (!updates.length) return;
-    $('approve-button').disabled = true;
+    if (confirmAll && !confirm(`Apply the selected categories to all ${updates.length} suggested transactions? You can review each suggestion before approving.`)) return;
+    $('approve-button').disabled = true; $('approve-all-button').disabled = true;
     $('preview-button').disabled = true;
     try {
-      const data = await json('/api/transactions/categorization-apply', 'POST', { updates });
-      $('review-status').textContent = `${data.updated} approved changes applied. Preview again for remaining suggestions.`;
+      const data = await json('/api/transactions/categorization-apply', 'POST', { updates, learnRules: $('remember-merchants').checked });
+      $('review-status').textContent = `${data.updated} categories updated${data.rulesSaved ? ` · ${data.rulesSaved} merchant rule${data.rulesSaved === 1 ? '' : 's'} saved for future imports` : ''}${data.rulesSkipped ? ` · ${data.rulesSkipped} conflicting merchant rule${data.rulesSkipped === 1 ? ' was' : 's were'} skipped` : ''}. Find suggestions again to review what remains.`;
       $('category-preview').textContent = ''; suggestions = [];
+      $('remember-merchants').checked = false;
     } catch (error) { $('review-status').textContent = `${error.message} Preview again if categories changed since this review.`; }
-    finally { $('preview-button').disabled = false; }
-  };
+    finally { $('preview-button').disabled = false; $('approve-all-button').disabled = !suggestions.length; }
+  }
+  $('approve-button').onclick = () => applySuggestions(Array.from($('category-preview').querySelectorAll('[data-suggestion]:checked')));
+  $('approve-all-button').onclick = () => applySuggestions(Array.from(suggestions, (_, index) => ({ dataset: { suggestion: String(index) } })), true);
 
   window.loadAllTransactions = async function() {
     const table = $('full-txn-table');
