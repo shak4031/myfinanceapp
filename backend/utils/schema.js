@@ -91,6 +91,8 @@ export async function migratePrivateSchema(client) {
         END WHERE UPPER(direction) = 'DEBIT';
       END IF;
     END $$;
+    -- Income override for deposits: 'income' = regular pay, 'other' = not pay (gifts, reimbursements), NULL = detect.
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS income_role TEXT CHECK (income_role IN ('income','other'));
     CREATE TABLE IF NOT EXISTS staging_transactions (
       id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT,
       balance NUMERIC(14,2), source TEXT, status TEXT DEFAULT 'pending', error_message TEXT,

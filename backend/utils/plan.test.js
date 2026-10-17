@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectIncomeStreams, projectIncome, isIncomeTransaction } from './income.js';
+import { detectIncomeStreams, projectIncome, isIncomeTransaction, incomeSources } from './income.js';
 import { buildDebtPlan, simulatePayoff, normalizeDebt } from './payoff.js';
 import { buildGoalPlan } from './goalPlan.js';
 import { buildPlanPayments, computePlan } from './moneyPlan.js';
@@ -42,6 +42,31 @@ test('income detection recognizes weekly, semimonthly and monthly pay and ignore
   assert.equal(isIncomeTransaction({ direction: 'DEBIT', description: 'ACME PAYROLL', category: 'Salary' }), false);
   const stale = paychecks('2026-01-01', 14, '2026-06-01');
   assert.equal(detectIncomeStreams(stale, today).length, 0, 'a job that stopped paying is not projected');
+});
+
+test('a user override beats income detection, and the review groups deposits by sender with a reason', () => {
+  const today = new Date('2026-10-15T12:00:00Z');
+  const pay = paychecks('2026-04-02', 14, '2026-10-15');
+  // Someone reimbursing the user every two weeks, filed under Income: detection would call it pay.
+  const friend = paychecks('2026-04-03', 14, '2026-10-15').map(row => ({ ...row, id: `f${row.id}`, description: 'MOBILE DEPOSIT JANE DOE', amount: 150, category: 'Income' }));
+  const misc = ['2026-08-01', '2026-09-01', '2026-10-01'].map((date, i) => ({ id: `m${i}`, date, description: 'ETSY PAYOUT', amount: 80, direction: 'CREDIT', category: 'Other' }));
+  assert.equal(detectIncomeStreams([...pay, ...friend], today).length, 2);
+  const corrected = friend.map(row => ({ ...row, income_role: 'other' }));
+  assert.deepEqual(detectIncomeStreams([...pay, ...corrected], today).map(stream => stream.key), ['ACME CORP PAYROLL']);
+  assert.equal(projectIncome([...pay, ...corrected], today).items.every(item => item.description !== 'Mobile Jane Doe'), true);
+  assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'ETSY PAYOUT', income_role: 'income' }), true);
+  assert.equal(isIncomeTransaction({ direction: 'DEBIT', description: 'ETSY', income_role: 'income' }), false, 'money out is never income');
+
+  const sources = incomeSources([...pay, ...corrected, ...misc], today);
+  assert.deepEqual(sources.map(source => [source.name, source.status, source.by, source.regular]), [
+    ['Acme Corp Payroll', 'income', 'category', true],
+    ['Mobile Jane Doe', 'other', 'you', false],
+    ['Etsy Payout', 'other', 'auto', false]
+  ]);
+  assert.equal(sources[0].cadenceLabel, 'Every other Thursday');
+  assert.equal(sources[1].reason, 'You marked this as not income');
+  assert.equal(sources[0].transactions[0].date, '2026-10-15', 'newest deposit first');
+  assert.equal(incomeSources([{ id: 1, date: '2026-10-01', description: 'AMAZON REFUND', amount: 9, direction: 'CREDIT' }], today).length, 0, 'one-off deposits are not listed');
 });
 
 test('payoff simulation charges interest, rolls freed minimums forward and never mutates input', () => {

@@ -44,6 +44,8 @@ export function openApiSpec() {
       '/api/transactions/categorization-rules': { get: op('Finance', 'List categorization rules') },
       '/api/transactions/categorization-preview': { post: op('Finance', 'Preview category suggestions', body({ scope: 'uncategorized' })) },
       '/api/transactions/update-pay-mode': { post: op('Finance', "Mark outgoing payments as auto-pay or manual (pay_mode 'auto', 'manual' or null)", body({ ids: [1], pay_mode: 'auto' })) },
+      '/api/transactions/income-sources': { get: op('Finance', 'Deposits grouped by sender with whether each counts as income and why') },
+      '/api/transactions/update-income-role': { post: op('Finance', "Override income detection for deposits (income_role 'income', 'other' or null to auto-detect)", body({ ids: [1], income_role: 'other' })) },
       '/api/debts': { get: op('Finance', 'List debts') },
       '/api/goals': { get: op('Finance', 'List savings goals') },
       '/api/goals/funding-analysis': { get: op('Finance', 'Goal funding plan and coaching') },

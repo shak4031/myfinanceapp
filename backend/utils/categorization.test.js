@@ -84,7 +84,7 @@ async function fixture() {
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
-      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')));
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
     INSERT INTO categories (user_id,name) VALUES (2,'Foreign');
     INSERT INTO transactions (description,category,is_fixed) VALUES ('MY STORE','Other',TRUE),('MY STORE','Dining',FALSE);
@@ -199,6 +199,24 @@ test('import inherits auto-pay/manual from earlier payments to the same bill, el
   } finally { await pg.close(); }
 });
 
+test('import keeps the user income decision for new deposits from the same sender', async () => {
+  const { pg, client } = await fixture();
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category,income_role) VALUES
+      ('2026-01-09','MOBILE DEPOSIT JANE DOE REF 991',150,'CREDIT','Other','other'),
+      ('2026-01-10','ETSY PAYOUT 1234',80,'CREDIT','Other','income')`);
+    const config = await loadCategorization(client);
+    await importTransactions(client, [
+      { date: '2026-02-06', description: 'MOBILE DEPOSIT JANE DOE REF 2044', amount: 150, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ETSY PAYOUT 5678', amount: 95, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ACME PAYROLL', amount: 2000, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ETSY PAYOUT 5678', amount: 12, direction: 'DEBIT' }
+    ], config, 'test');
+    const roles = (await client.query("SELECT income_role FROM transactions WHERE date='2026-02-06' ORDER BY id")).rows.map(row => row.income_role);
+    assert.deepEqual(roles, ['other', 'income', null, null]);
+  } finally { await pg.close(); }
+});
+
 test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learning saves without rewriting', async () => {
   const { pg, client, db } = await fixture();
   const original = Database.prototype.transaction;
@@ -246,6 +264,16 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: null })).body.updated, 1);
     assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, null);
     assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=3')).rows[0].pay_mode, null);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2] })).status, 400, 'role is required');
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2], income_role: 'salary' })).status, 400);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [1], income_role: 'other' })).status, 400, 'debits cannot be income');
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2, 3], income_role: 'other' })).status, 404, 'other users are invisible');
+    assert.deepEqual(await request('/api/transactions/update-income-role', { ids: [2], income_role: 'other' }), { status: 200, body: { success: true, updated: 1 } });
+    await client.query("UPDATE transactions SET date=to_char(CURRENT_DATE,'YYYY-MM-DD'),amount=150 WHERE id=2");
+    const sources = (await request('/api/transactions/income-sources', undefined, 'GET')).body.sources;
+    assert.deepEqual(sources.map(source => [source.name, source.status, source.by]), [['My Store', 'other', 'you']]);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2], income_role: null })).body.updated, 1);
+    assert.equal((await client.query('SELECT income_role FROM transactions WHERE id=2')).rows[0].income_role, null);
     await client.query('UPDATE transactions SET direction=NULL WHERE id IN (1,2,3)');
     assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining', is_fixed: false })).status, 200);
     assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);

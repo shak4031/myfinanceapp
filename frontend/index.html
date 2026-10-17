@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017q"></script>
-  <script src="client-errors.js?v=20261017q"></script>
+  <script src="session.js?v=20261017r"></script>
+  <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -433,11 +433,12 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017q">
-  <link rel="stylesheet" href="analytics.css?v=20261017q">
-  <link rel="stylesheet" href="plan.css?v=20261017q">
-  <link rel="stylesheet" href="welcome.css?v=20261017q">
-  <link rel="stylesheet" href="tutorial.css?v=20261017q">
+  <link rel="stylesheet" href="refresh.css?v=20261017r">
+  <link rel="stylesheet" href="analytics.css?v=20261017r">
+  <link rel="stylesheet" href="plan.css?v=20261017r">
+  <link rel="stylesheet" href="welcome.css?v=20261017r">
+  <link rel="stylesheet" href="income-review.css?v=20261017r">
+  <link rel="stylesheet" href="tutorial.css?v=20261017r">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -615,7 +616,7 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
-          <button class="btn btn-primary" onclick="openImportModal()">Import statements</button>
+          <div class="header-actions"><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
           <div class="filter-panel panel">
             <label for="txn-filter-search" class="search-filter">Search transactions
@@ -645,7 +646,7 @@
         <div class="panel transaction-panel">
           <table class="transactions-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
-              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="padding: 12px;" title="Auto-pay goes out on its own; Manual needs you to pay it">Pays by</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
+              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;" title="Debits: a fixed monthly bill. Deposits: counts as regular income for payday forecasts.">Fixed / Income</th><th style="padding: 12px;" title="Auto-pay goes out on its own; Manual needs you to pay it">Pays by</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
             </thead>
             <tbody id="full-txn-table"></tbody>
           </table>
@@ -1083,7 +1084,8 @@
         byDay.get(day).push({ item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance });
       });
       const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : 'Paid';
-      const flexAttrs = item => item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"` : '';
+      const flexAttrs = item => item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"`
+        : item.isIncome && item.incomeKey ? ` data-income-key="${escapeHtml(item.incomeKey)}" role="button" tabindex="0" aria-label="Review income from ${escapeHtml(item.description)}"` : '';
       const statusOf = entry => entry.item.isIncome ? (entry.isPaid ? ['is-paid', 'Received'] : ['is-upcoming', 'Expected']) : entry.isPaid ? ['is-paid', doneLabel(entry.item)] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
       const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const todayNum = calToday.getDate();
@@ -1111,7 +1113,7 @@
             const { item } = entry;
             const balance = hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;';
             const sign = item.isIncome ? '+' : '&minus;';
-            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}"${flexAttrs(item)} title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
+            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}"${flexAttrs(item)} title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)}${item.isIncome ? ' &middot; Not your pay? Select to review income' : ''} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
               ${stopButton(entry, 'pay-card-stop')}
               <span class="pay-card-cat">${escapeHtml(item.label || item.category || 'Uncategorized')}</span>
               <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
@@ -1151,7 +1153,7 @@
       const timelineHtml = timeline.length ? `
         <div class="pay-cal-summary">
           <div><span>Month</span><strong>${monthName}</strong></div>
-          <div class="is-income"><span>Income still coming</span><strong>${incomeExpected ? '+' + fmtMoney(incomeExpected) : fmtMoney(0)}</strong><small>${nextPay ? `Next ${weekdays[new Date(calYear, calMonth, nextPay.day).getDay()]} ${nextPay.day}${nextPay.item.cadenceLabel ? ` &middot; ${escapeHtml(nextPay.item.cadenceLabel)}` : ''}` : incomeReceived ? `${fmtMoney(incomeReceived)} received` : 'Tag paychecks as Salary to project them'}</small></div>
+          <div class="is-income"><span>Income still coming <button type="button" class="pay-sum-link" data-income-review title="Check which deposits count as your pay">Review</button></span><strong>${incomeExpected ? '+' + fmtMoney(incomeExpected) : fmtMoney(0)}</strong><small>${nextPay ? `Next ${weekdays[new Date(calYear, calMonth, nextPay.day).getDay()]} ${nextPay.day}${nextPay.item.cadenceLabel ? ` &middot; ${escapeHtml(nextPay.item.cadenceLabel)}` : ''}` : incomeReceived ? `${fmtMoney(incomeReceived)} received` : 'Tag paychecks as Salary to project them'}</small></div>
           <div class="is-paid"><span>Paid</span><strong>${fmtMoney(paidTotal)}</strong><small>${paidCount} bill${paidCount === 1 ? '' : 's'}</small></div>
           <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
           <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After unpaid bills and expected income'}</small></div>
@@ -1584,17 +1586,18 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017q"></script>
-  <script src="refresh.js?v=20261017q"></script>
-  <script src="account.js?v=20261017q"></script>
-  <script src="pro-charts.js?v=20261017q"></script>
-  <script src="pro-core.js?v=20261017q"></script>
-  <script src="pro-dashboard.js?v=20261017q"></script>
-  <script src="pro-categories.js?v=20261017q"></script>
-  <script src="analytics.js?v=20261017q"></script>
-  <script src="plan.js?v=20261017q"></script>
-  <script src="welcome.js?v=20261017q"></script>
-  <script src="tutorial.js?v=20261017q"></script>
+  <script src="ui.js?v=20261017r"></script>
+  <script src="refresh.js?v=20261017r"></script>
+  <script src="account.js?v=20261017r"></script>
+  <script src="pro-charts.js?v=20261017r"></script>
+  <script src="pro-core.js?v=20261017r"></script>
+  <script src="pro-dashboard.js?v=20261017r"></script>
+  <script src="pro-categories.js?v=20261017r"></script>
+  <script src="analytics.js?v=20261017r"></script>
+  <script src="plan.js?v=20261017r"></script>
+  <script src="welcome.js?v=20261017r"></script>
+  <script src="income-review.js?v=20261017r"></script>
+  <script src="tutorial.js?v=20261017r"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

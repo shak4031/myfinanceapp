@@ -31,7 +31,7 @@ export async function loadPlanInputs(db, now = new Date()) {
       WHERE date::date >= (date_trunc('month', $1::date) - INTERVAL '3 months')::date
         AND date::date < date_trunc('month', $1::date)::date`, [dateString(now)])).rows;
     const recent = (await client.query(`
-      SELECT id, date, description, category, direction, amount, is_fixed, pay_mode FROM transactions
+      SELECT id, date, description, category, direction, amount, is_fixed, pay_mode, income_role FROM transactions
       WHERE direction = 'CREDIT' AND date::date >= $1::date AND date::date <= $2::date`, [dateString(recentStart), dateString(now)])).rows;
     return { debts, goals, settings: normalizeSettings(settings), history, recent };
   });

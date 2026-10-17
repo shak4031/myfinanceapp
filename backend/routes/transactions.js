@@ -3,6 +3,7 @@ import Database from '../db.js';
 import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
 import { isPayMode } from '../utils/payMode.js';
+import { isIncomeRole, incomeSources } from '../utils/income.js';
 
 const router = Router();
 const db = new Database();
@@ -126,6 +127,31 @@ router.post('/update-pay-mode', route(async (req, res) => {
     if (found.length !== ids.length) throw failure(404, 'Transaction not found');
     if (found.some(row => String(row.direction).toUpperCase() !== 'DEBIT')) throw failure(400, 'Only outgoing payments can be auto-pay or manual');
     return (await client.query(`UPDATE transactions SET pay_mode=$1 WHERE id=ANY($2::integer[]) AND ${TENANT}`, [pay_mode, ids])).rowCount;
+  });
+  res.json({ success: true, updated });
+}));
+
+// Deposits grouped by sender, with whether each counts as pay and why, so users can correct detection.
+router.get('/income-sources', route(async (req, res) => {
+  const today = new Date();
+  const since = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 400);
+  const day = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const rows = await db.all(`SELECT id,date,description,amount,direction,category,is_fixed,income_role FROM transactions
+    WHERE ${TENANT} AND UPPER(direction)='CREDIT' AND date::date >= $1::date ORDER BY date DESC, id DESC`, [day(since)]);
+  res.json({ sources: incomeSources(rows, today) });
+}));
+
+router.post('/update-income-role', route(async (req, res) => {
+  const { ids, income_role } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || income_role === undefined || !isIncomeRole(income_role)
+    || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length) {
+    throw failure(400, "ids (unique positive integers, at most 5000) and income_role ('income', 'other' or null) are required");
+  }
+  const updated = await db.transaction(async client => {
+    const found = (await client.query(`SELECT id,direction FROM transactions WHERE id=ANY($1::integer[]) AND ${TENANT} FOR UPDATE`, [ids])).rows;
+    if (found.length !== ids.length) throw failure(404, 'Transaction not found');
+    if (found.some(row => String(row.direction).toUpperCase() !== 'CREDIT')) throw failure(400, 'Only deposits can be marked as income');
+    return (await client.query(`UPDATE transactions SET income_role=$1 WHERE id=ANY($2::integer[]) AND ${TENANT}`, [income_role, ids])).rowCount;
   });
   res.json({ success: true, updated });
 }));

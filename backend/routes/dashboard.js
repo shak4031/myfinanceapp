@@ -8,6 +8,7 @@ import { buildPlanPayments, computePlan, loadPlanInputs } from '../utils/moneyPl
 import { getEntitlement } from '../utils/license.js';
 import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
+import { isIncomeTransaction } from '../utils/income.js';
 
 const router = Router();
 const db = new Database();
@@ -715,6 +716,7 @@ router.get('/all-transactions', async (req, res) => {
         category,
         is_fixed,
         pay_mode,
+        income_role,
         user_id
       FROM transactions
       WHERE user_id = $1
@@ -729,7 +731,8 @@ router.get('/all-transactions', async (req, res) => {
         ...row,
         id: row.id.toString(),
         amount: parseFloat(row.amount),
-        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true'
+        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true',
+        counts_as_income: isIncomeTransaction(row)
       }))
     });
   } catch (error) {

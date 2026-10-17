@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -351,6 +351,73 @@ test('pay-mode column, filter and similar-payment prompt mark auto-pay and manua
   const updates = calls.filter(([url]) => url === '/api/transactions/update-pay-mode').map(([, body]) => body);
   assert.deepEqual(updates, [{ ids: [1], pay_mode: 'auto' }, { ids: [2], pay_mode: 'auto' }]);
   assert.equal(dialog.open, false);
+});
+test('deposits get an editable income toggle that can un-count a whole sender', async () => {
+  const calls = [];
+  const transactions = [
+    { id: '1', date: '2026-09-26', description: 'ZELLE FROM JANE DOE 8812', amount: 400, direction: 'CREDIT', category: 'Income', counts_as_income: true, income_role: null },
+    { id: '2', date: '2026-09-12', description: 'ZELLE FROM JANE DOE 1203', amount: 400, direction: 'CREDIT', category: 'Income', counts_as_income: true, income_role: null },
+    { id: '3', date: '2026-09-10', description: 'NETFLIX', amount: 15, direction: 'DEBIT', category: 'Subscriptions', is_fixed: true }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/categories') return response(200, [{ name: 'Income' }, { name: 'Subscriptions' }]);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+    return response(200, { success: true, updated: 1 });
+  });
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const html = f.node('full-txn-table').innerHTML;
+  assert.equal((html.match(/data-income /g) || []).length, 2);
+  assert.equal((html.match(/data-fixed /g) || []).length, 1);
+  assert.doesNotMatch(html, /disabled title="Only debit/);
+  assert.match(html, /Counts as income: ZELLE FROM JANE DOE 8812" checked/);
+  assert.deepEqual(f.context.findSimilarTransactions(transactions, transactions[0], { income: false }).map(item => item.transaction.id), ['2']);
+  const box = { checked: false, disabled: false, matches: selector => selector === '[data-income]', closest: () => ({ dataset: { transaction: '0' } }) };
+  const pending = f.node('full-txn-table').onchange({ target: box });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('similar-title').textContent, 'Apply to other deposits from this sender?');
+  assert.match(f.node('similar-list').innerHTML, /Income &rarr; Not income/);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="0" checked/);
+  f.node('similar-list').querySelectorAll = () => [{ checked: true, dataset: { similar: '0' } }];
+  await f.node('similar-form').onsubmit({ preventDefault() {} });
+  await pending;
+  const updates = calls.filter(([url]) => url === '/api/transactions/update-income-role').map(([, body]) => body);
+  assert.deepEqual(updates, [{ ids: [1], income_role: 'other' }, { ids: [2], income_role: 'other' }]);
+});
+test('income review lists sources safely and switches a whole sender off', async () => {
+  const calls = [];
+  let sources = [
+    { key: 'zelle jane doe', name: '<b>Jane</b>', status: 'income', by: 'category', reason: 'Category is Income', regular: true, cadence: 'biweekly', cadenceLabel: 'Every other Fri',
+      expected: 400, count: 3, counted: 3, total: 1200, average: 400, lastDate: '2026-09-26', ids: [1, 2, 9],
+      transactions: [{ id: 1, date: '2026-09-26', description: 'ZELLE FROM JANE', amount: 400, category: 'Income', counted: true, by: 'category' }] },
+    { key: 'acme payroll', name: 'Acme Payroll', status: 'other', by: 'you', reason: 'You marked this as not income', regular: false, count: 4, counted: 0, total: 8000, average: 2000, lastDate: '2026-09-25', ids: [5], transactions: [] }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/transactions/income-sources') return response(200, { sources });
+    return response(200, { success: true, updated: 3 });
+  });
+  f.run('income-review.js');
+  const dialog = f.node('body').options.find(child => child.id === 'income-review');
+  await f.context.FinanceIncome.open();
+  assert.equal(dialog.open, true);
+  const body = f.node('income-review-body').innerHTML;
+  assert.match(body, /&lt;b&gt;Jane&lt;\/b&gt;/);
+  assert.doesNotMatch(body, /<b>Jane/);
+  assert.match(body, /Counted as income[\s\S]*Every other Fri[\s\S]*Not counted[\s\S]*Reset to automatic/);
+  assert.match(body, /data-ir-role="income" aria-pressed="true"/);
+  assert.match(f.node('income-review-summary').innerHTML, /1<\/strong> counted as pay[\s\S]*\/mo expected[\s\S]*set by you/);
+  const button = { dataset: { irRole: 'other' }, closest: () => ({ dataset: { irKey: 'zelle jane doe' } }) };
+  dialog.listeners.click({ target: { closest: selector => selector === '[data-ir-role]' ? button : null } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const updates = calls.filter(([url]) => url === '/api/transactions/update-income-role').map(([, body]) => body);
+  assert.deepEqual(updates, [{ ids: [1, 2, 9], income_role: 'other' }]);
+  let invalidated = false;
+  f.context.FinancePlan = { invalidate: () => { invalidated = true; } };
+  dialog.close();
+  assert.equal(invalidated, true);
 });
 test('upcoming payments switch between calendar and list views and remember the choice', () => {
   const f = fixture(); f.run('refresh.js');

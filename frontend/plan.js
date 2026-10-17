@@ -308,7 +308,7 @@
           <p class="plan-eyebrow">${icon('piggy', 12)} WHERE YOUR SURPLUS GOES</p>
           <h2>${surplus == null ? 'Import a few months' : `${money(surplus)}<small>/mo</small>`}</h2>
           <p class="plan-hero-sub">${surplus == null ? 'We need at least one complete month of history to size your plan.' : `Typical income ${money(s.avgMonthlyIncome)} minus spending ${money(s.avgMonthlyExpenses)}, from the last ${s.monthsUsed} month${s.monthsUsed === 1 ? '' : 's'}.`}</p>
-          ${streams.length ? `<div class="plan-income-streams">${streams.map(item => `<span class="plan-pill income">${esc(item.name)} · ${esc(item.label)} · ${money(item.amount)}</span>`).join('')}</div>` : ''}
+          ${streams.length ? `<div class="plan-income-streams">${streams.map(item => `<span class="plan-pill income">${esc(item.name)} · ${esc(item.label)} · ${money(item.amount)}</span>`).join('')}<button type="button" class="plan-pill plan-pill-link" data-income-review>Not right? Review income</button></div>` : `<div class="plan-income-streams"><button type="button" class="plan-pill plan-pill-link" data-income-review>Choose which deposits are your pay</button></div>`}
         </div>
         <div class="plan-stats">
           <div class="plan-stat"><span>Debt-free extra</span><strong>${money(debtExtra)}</strong><small>Above minimums</small></div>

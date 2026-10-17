@@ -5,6 +5,7 @@ import PDFParser from '../utils/pdfParser.js';
 import { normalizeDescription } from '../utils/normalize.js';
 import { TENANT, classify, loadCategorization, failure } from '../utils/categorization.js';
 import { inheritPayMode } from '../utils/payMode.js';
+import { incomeKey } from '../utils/income.js';
 
 const router = express.Router();
 const db = new Database();
@@ -31,6 +32,9 @@ export async function importTransactions(client, transactions, config, source) {
   // One snapshot of bills with a known pay mode, newest first, so repeat payments inherit it.
   const payHistory = (await client.query(`SELECT id,description,label_id,pay_mode FROM transactions
     WHERE ${TENANT} AND pay_mode IS NOT NULL AND UPPER(direction)='DEBIT' ORDER BY date DESC, id DESC LIMIT 2000`)).rows;
+  const incomeHistory = (await client.query(`SELECT description,income_role FROM transactions
+    WHERE ${TENANT} AND income_role IS NOT NULL AND UPPER(direction)='CREDIT' ORDER BY date DESC, id DESC LIMIT 2000`)).rows
+    .map(row => ({ key: incomeKey(row.description), role: row.income_role }));
   for (const transaction of transactions) {
     const direction = String(transaction.direction).toUpperCase();
     if (!['DEBIT', 'CREDIT'].includes(direction)) throw failure(400, 'Invalid transaction direction');
@@ -42,11 +46,12 @@ export async function importTransactions(client, transactions, config, source) {
     // New records may inherit a user's explicit label flag. Categorization never infers a fixed flag.
     const fixed = suggestion.label?.is_fixed === true;
     const payMode = inheritPayMode({ ...transaction, direction, label_id: suggestion.label?.id ?? null }, payHistory);
+    const incomeRole = direction === 'CREDIT' ? incomeHistory.find(row => row.key === incomeKey(transaction.description))?.role ?? null : null;
     await client.query(`INSERT INTO transactions
-      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [transaction.date, transaction.description, transaction.amount, direction, transaction.balance,
-      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode]);
+      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole]);
     imported++;
   }
   return { imported, duplicates, excluded: 0 };

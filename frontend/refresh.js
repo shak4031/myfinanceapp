@@ -137,14 +137,16 @@
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
   // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
-  // `change` is a category name, { isFixed } for the fixed-bill flag, or { payMode } for auto-pay/manual; rows already in that state are skipped.
+  // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for counting deposits as pay; rows already in that state are skipped.
   window.findSimilarTransactions = (transactions, source, change) => {
     const key = window.merchantKey(source?.description);
     const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
     const byPay = change && typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
-    if (!key || (!byFixed && !byPay && !change)) return [];
+    const byIncome = change && typeof change === 'object' && typeof change.income === 'boolean';
+    if (!key || (!byFixed && !byPay && !byIncome && !change)) return [];
     const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed
       : byPay ? t => payModeOf(t) !== (change.payMode || null)
+      : byIncome ? t => !!t.counts_as_income !== change.income
       : t => t.category !== change;
     const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
     return transactions
@@ -539,26 +541,31 @@
     $('similar-apply').disabled = !count;
   }
   // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
-  // `change` is a category name, { isFixed } for the fixed-bill flag, or { payMode } for auto-pay/manual.
+  // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for deposits.
   function promptSimilarTransactions(source, change, items) {
     const byPay = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
-    const byFixed = typeof change === 'object' && !byPay;
-    similarState = { change, byFixed, byPay, items, updated: 0 };
+    const byIncome = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'income');
+    const byFixed = typeof change === 'object' && !byPay && !byIncome;
+    const preselect = byPay || byIncome;
+    similarState = { change, byFixed, byPay, byIncome, items, updated: 0 };
     const strong = items.filter(item => item.sameAmount).length;
-    const action = byPay ? (change.payMode ? `also be marked <strong>${payLabel(change.payMode)}</strong>` : 'also have their <strong>payment method cleared</strong>')
+    const incomeLabel = value => value ? 'Income' : 'Not income';
+    const action = byIncome ? (change.income ? 'also <strong>count as your income</strong>' : 'also <strong>stop counting as income</strong>')
+      : byPay ? (change.payMode ? `also be marked <strong>${payLabel(change.payMode)}</strong>` : 'also have their <strong>payment method cleared</strong>')
       : byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change)}</strong>`;
     const fixedLabel = value => value ? 'Fixed bill' : 'Not fixed';
-    $('similar-title').textContent = byPay ? 'Apply to similar payments?' : byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
-    const hint = byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
+    $('similar-title').textContent = byIncome ? 'Apply to other deposits from this sender?' : byPay ? 'Apply to similar payments?' : byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
+    const hint = byIncome ? 'All deposits from this sender are preselected so your payday forecast stays consistent. '
+      : byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
       : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
     $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${hint}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
-      const from = byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
-      const to = byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
-      return `<label class="similar-row${sameAmount || byPay ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || byPay ? 'checked' : ''}>
+      const from = byIncome ? incomeLabel(!!transaction.counts_as_income) : byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
+      const to = byIncome ? incomeLabel(change.income) : byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
+      return `<label class="similar-row${sameAmount || preselect ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || preselect ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
-        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount || byPay ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
         <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
     }).join('');
     $('similar-error').textContent = '';
@@ -576,7 +583,9 @@
     if (!selected.length) return similarDialog.close();
     $('similar-apply').disabled = true; $('similar-error').textContent = '';
     try {
-      const result = similarState.byPay
+      const result = similarState.byIncome
+        ? await json('/api/transactions/update-income-role', 'POST', { ids: selected.map(t => Number(t.id)), income_role: similarState.change.income ? 'income' : 'other' })
+        : similarState.byPay
         ? await json('/api/transactions/update-pay-mode', 'POST', { ids: selected.map(t => Number(t.id)), pay_mode: similarState.change.payMode || null })
         : similarState.byFixed
         ? await json('/api/transactions/update-fixed-many', 'POST', { ids: selected.map(t => Number(t.id)), is_fixed: similarState.change.isFixed })
@@ -617,7 +626,9 @@
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
-          <td style="text-align:center"><input data-fixed type="checkbox" aria-label="Fixed bill: ${escape(transaction.description)}" ${fixed(transaction.is_fixed) ? 'checked' : ''} ${debit ? '' : 'disabled title="Only debit payments can be fixed bills"'}></td>
+          <td style="text-align:center">${debit
+            ? `<input data-fixed type="checkbox" aria-label="Fixed bill: ${escape(transaction.description)}" ${fixed(transaction.is_fixed) ? 'checked' : ''}>`
+            : `<label class="income-toggle${transaction.income_role ? ' is-set' : ''}" title="${transaction.counts_as_income ? 'Counted as regular income and used to forecast paydays. Untick if this is not your pay.' : 'Not counted as income. Tick if this is regular pay.'}"><input data-income type="checkbox" aria-label="Counts as income: ${escape(transaction.description)}" ${transaction.counts_as_income ? 'checked' : ''}><span>Income</span></label>`}</td>
           <td>${debit ? `<select data-paymode class="paymode-select is-${payModeOf(transaction) || 'unset'}" aria-label="How ${escape(transaction.description)} is paid">
             ${['', 'auto', 'manual'].map(mode => `<option value="${mode}" ${(payModeOf(transaction) || '') === mode ? 'selected' : ''}>${payLabel(mode || null)}</option>`).join('')}
           </select>` : '<span class="paymode-na" title="Money in does not need paying">—</span>'}</td>
@@ -630,7 +641,14 @@
         const item = rows[Number(row.dataset.transaction)];
         event.target.disabled = true;
         try {
-          if (event.target.matches('[data-fixed]')) {
+          if (event.target.matches('[data-income]')) {
+            const income = event.target.checked;
+            await json('/api/transactions/update-income-role', 'POST', { ids: [Number(item.id)], income_role: income ? 'income' : 'other' });
+            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { income });
+            const extra = similar.length ? await promptSimilarTransactions(item, { income }, similar) : 0;
+            window.FinancePlan?.invalidate?.();
+            notify(`${income ? 'Counted as income' : 'No longer counted as income'}: this${extra ? ` and ${extra} other deposit${extra === 1 ? '' : 's'}` : ' deposit only'}. Your payday forecast has been updated.`);
+          } else if (event.target.matches('[data-fixed]')) {
             const isFixed = event.target.checked;
             await json('/api/transactions/update-fixed', 'POST', { id: item.id, is_fixed: isFixed, apply_to_all: false });
             const similar = window.findSimilarTransactions(transactionCache.transactions, item, { isFixed });

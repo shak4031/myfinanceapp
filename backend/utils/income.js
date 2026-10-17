@@ -16,13 +16,25 @@ const median = values => {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
-export function isIncomeTransaction(tx) {
-  if (String(tx.direction).toUpperCase() !== 'CREDIT') return false;
+// income_role is the user's override: 'income' always counts, 'other' never does, NULL lets detection decide.
+export const isIncomeRole = value => value === null || value === 'income' || value === 'other';
+
+// Whether a deposit counts as pay, and a plain-language reason the income review can show.
+export function incomeReason(tx) {
+  if (String(tx.direction).toUpperCase() !== 'CREDIT') return { counted: false, by: 'direction', reason: 'Money out' };
+  if (tx.income_role === 'income') return { counted: true, by: 'you', reason: 'You marked this as income' };
+  if (tx.income_role === 'other') return { counted: false, by: 'you', reason: 'You marked this as not income' };
   const text = tx.description || '';
-  if (INCOME_CATEGORY.test(String(tx.category || '').trim())) return true;
-  if (NOT_INCOME.test(text)) return false;
-  const fixed = tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true';
-  return fixed || INCOME_TEXT.test(text);
+  const category = String(tx.category || '').trim();
+  if (INCOME_CATEGORY.test(category)) return { counted: true, by: 'category', reason: `Category is ${category}` };
+  if (NOT_INCOME.test(text)) return { counted: false, by: 'wording', reason: 'Looks like a transfer, refund or interest' };
+  if (tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true') return { counted: true, by: 'fixed', reason: 'Marked as fixed' };
+  if (INCOME_TEXT.test(text)) return { counted: true, by: 'wording', reason: 'Payroll wording in the description' };
+  return { counted: false, by: 'auto', reason: 'Not recognised as pay' };
+}
+
+export function isIncomeTransaction(tx) {
+  return incomeReason(tx).counted;
 }
 
 // Employer key without reference numbers, masked accounts or ACH boilerplate.
@@ -96,6 +108,44 @@ export function detectIncomeStreams(transactions, today = new Date()) {
   return streams.sort((a, b) => b.amount - a.amount);
 }
 
+// Deposits grouped by sender for the income review: everything counted as pay, anything the user
+// has overridden, and other repeating deposits that might be pay the rules missed.
+export function incomeSources(transactions, today = new Date()) {
+  const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const streams = new Map(detectIncomeStreams(transactions, today).map(stream => [stream.key, stream]));
+  const groups = new Map();
+  for (const tx of transactions) {
+    if (String(tx.direction).toUpperCase() !== 'CREDIT') continue;
+    const parsed = parseTxDate(tx.date);
+    const amount = Number(tx.amount);
+    if (!parsed || !Number.isFinite(amount) || amount <= 0) continue;
+    const time = utc(parsed);
+    if (time > now || now - time > 400 * DAY_MS) continue;
+    const key = incomeKey(tx.description);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ id: tx.id, time, date: new Date(time).toISOString().slice(0, 10), description: tx.description, amount: cents(amount),
+      category: tx.category || null, income_role: tx.income_role ?? null, ...incomeReason(tx) });
+  }
+  const sources = [];
+  for (const [key, rows] of groups) {
+    rows.sort((a, b) => b.time - a.time || String(b.id).localeCompare(String(a.id)));
+    const counted = rows.filter(row => row.counted).length;
+    const overridden = rows.some(row => row.income_role);
+    if (!counted && !overridden && rows.length < 3) continue;
+    const stream = streams.get(key);
+    const total = cents(rows.reduce((sum, row) => sum + row.amount, 0));
+    sources.push({
+      key, name: titleCase(key), status: counted === rows.length ? 'income' : counted ? 'mixed' : 'other',
+      by: rows[0].by, reason: rows[0].reason, regular: !!stream, cadence: stream?.cadence || null, cadenceLabel: stream?.label || null,
+      expected: stream?.amount ?? null, count: rows.length, counted, total, average: cents(total / rows.length), lastDate: rows[0].date,
+      ids: rows.map(row => row.id),
+      transactions: rows.slice(0, 24).map(({ time, ...row }) => row)
+    });
+  }
+  const rank = source => (source.status === 'other' ? 2 : 0) + (source.regular ? 0 : 1);
+  return sources.sort((a, b) => rank(a) - rank(b) || b.total - a.total).slice(0, 40);
+}
+
 function semimonthlyDays(dated) {
   const early = dated.filter(row => row.day <= 15).map(row => row.day);
   const late = dated.filter(row => row.day > 15).map(row => row.day);
@@ -138,7 +188,7 @@ export function projectIncome(transactions, today = new Date()) {
     for (const tx of received) {
       items.push({
         id: tx.id, description: tx.description, category: tx.category || stream.category, amount: cents(Number(tx.amount)),
-        dayOfMonth: parseTxDate(tx.date).day, isIncome: true, status: 'processed', cadence: stream.cadence, cadenceLabel: stream.label
+        dayOfMonth: parseTxDate(tx.date).day, isIncome: true, status: 'processed', cadence: stream.cadence, cadenceLabel: stream.label, incomeKey: stream.key
       });
     }
     for (const time of nextPayDates(stream, monthEnd)) {
@@ -147,7 +197,7 @@ export function projectIncome(transactions, today = new Date()) {
       if (received.some(tx => parseTxDate(tx.date).day === date.getUTCDate())) continue;
       items.push({
         key: `income:${stream.key}:${date.getUTCDate()}`, description: stream.name, category: stream.category, amount: stream.amount,
-        dayOfMonth: date.getUTCDate(), isIncome: true, status: 'projected', cadence: stream.cadence, cadenceLabel: stream.label
+        dayOfMonth: date.getUTCDate(), isIncome: true, status: 'projected', cadence: stream.cadence, cadenceLabel: stream.label, incomeKey: stream.key
       });
     }
   }

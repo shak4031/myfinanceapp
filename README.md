@@ -224,6 +224,14 @@ calendar-filter, filtered-summary, and request-order regressions.
   or monthly) is detected from the last months of deposits, and expected paychecks
   are added to the running balance. Debt-free-plan and goal contributions appear as
   violet **Flexible** cards that can be adjusted or skipped for a single month.
+- **You decide what counts as pay.** Regular deposits (even Zelle or Venmo money
+  from a friend) can look like a paycheck. Each deposit in Transactions has an
+  **Income** toggle under *Fixed / Income*, and **Review income** (Transactions
+  header, the Upcoming "Income still coming" tile, any income card, or the Goals
+  money-flow panel) lists every repeat sender with its cadence, why it was counted,
+  and an *Income / Not income* switch. Your choice beats automatic detection, is
+  offered for the sender's other deposits, sticks to future imports from the same
+  sender, and can be reset to automatic at any time.
 - The **Fixed Payment flag is authoritative** for debit transactions: the app
   does not reject your selection because of its category or merchant name.
   Unflagged transactions do not create bill templates; credits do not create
@@ -332,6 +340,8 @@ Warning:   #ffd93d (Caution Yellow)
 | POST | `/api/dashboard/upcoming-payments` | Get payment cascade |
 | GET | `/api/dashboard/insights` | Welcome insights and today's pulse |
 | POST | `/api/transactions` | Get transactions |
+| GET | `/api/transactions/income-sources` | Repeat deposit senders and whether each counts as income |
+| POST | `/api/transactions/update-income-role` | Mark deposits `income`, `other`, or `null` (automatic) |
 | POST | `/api/debts` | Get credit cards |
 | POST | `/api/goals` | Get savings goals |
 | POST | `/api/import/import-csv` | Import CSV file |
