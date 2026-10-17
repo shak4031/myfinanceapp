@@ -6,6 +6,8 @@ import { buildUpcomingPayments } from '../utils/fixedPayments.js';
 import { currentUserId } from '../utils/tenant.js';
 import { buildPlanPayments, computePlan, loadPlanInputs } from '../utils/moneyPlan.js';
 import { getEntitlement } from '../utils/license.js';
+import { buildAnalytics } from '../utils/analytics.js';
+import { buildInsights } from '../utils/insights.js';
 
 const router = Router();
 const db = new Database();
@@ -431,40 +433,74 @@ router.get('/monthly-cashflow', async (req, res) => {
   }
 });
 
+async function loadUpcoming(req, today = new Date()) {
+  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const transactions = await db.all(
+    `SELECT 
+      id,
+      date,
+      description,
+      category,
+      amount,
+      direction,
+      label_id,
+      is_fixed,
+      pay_mode
+    FROM transactions
+    WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
+    [currentUserId(), dateString(previousMonth), dateString(today)]
+  );
+  const bills = buildUpcomingPayments(transactions, today);
+  // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
+  let extras = [], plan = null, pro = false;
+  try {
+    const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
+    pro = !!entitlement.active;
+    plan = computePlan(inputs, { pro, now: today });
+    extras = [...plan.incomeItems, ...buildPlanPayments(plan, today)];
+  } catch (error) {
+    log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
+  }
+  const items = [...bills, ...extras].sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome));
+  return { items, plan, pro };
+}
+
 router.post('/upcoming-payments', async (req, res) => {
   try {
     log('DASHBOARD', 'Fetching monthly fixed payments based on the previous month');
-    const today = new Date();
-    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const transactions = await db.all(
-      `SELECT 
-        id,
-        date,
-        description,
-        category,
-        amount,
-        direction,
-        label_id,
-        is_fixed,
-        pay_mode
-      FROM transactions
-      WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
-      [currentUserId(), dateString(previousMonth), dateString(today)]
-    );
-    const bills = buildUpcomingPayments(transactions, today);
-    // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
-    let extras = [];
-    try {
-      const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
-      const plan = computePlan(inputs, { pro: !!entitlement.active, now: today });
-      extras = [...plan.incomeItems, ...buildPlanPayments(plan, today)];
-    } catch (error) {
-      log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
-    }
-    res.json([...bills, ...extras].sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome)));
+    res.json((await loadUpcoming(req)).items);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/insights', async (req, res) => {
+  try {
+    const today = new Date();
+    const [{ items, plan, pro }, latest, count] = await Promise.all([
+      loadUpcoming(req, today),
+      db.all('SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1', [currentUserId()]),
+      db.get('SELECT COUNT(*) AS total FROM transactions WHERE user_id = $1', [currentUserId()])
+    ]);
+    const balance = latest.length && Number.isFinite(Number(latest[0].balance)) ? Number(latest[0].balance) : null;
+    let analytics = null;
+    if (pro) {
+      try {
+        analytics = await db.transaction(async client => {
+          const transactions = (await client.query('SELECT id, date, description, amount, direction, category, is_fixed, label_id FROM transactions ORDER BY date, id')).rows;
+          const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
+            .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
+          return buildAnalytics({ transactions, budgets, latestBalance: balance, today });
+        });
+      } catch (error) {
+        log('DASHBOARD', `Insight analytics unavailable: ${error.message}`);
+      }
+    }
+    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: Number(count?.total) > 0 }));
+  } catch (error) {
+    log('DASHBOARD', `Error building insights: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });

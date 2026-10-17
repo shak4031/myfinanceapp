@@ -215,10 +215,13 @@
   window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf') selectImportFile('pdf', file); };
 
   // Navigation is explicit: labels can change without breaking the active state.
-  window.showView = function(view) {
+  // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial.
+  window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
-    if (!Object.prototype.hasOwnProperty.call(titles, view)) view = 'dashboard';
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
+    if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
+    if (view !== 'tutorials') sub = '';
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
     document.querySelectorAll('.nav-btn').forEach(node => {
@@ -230,9 +233,10 @@
     $('current-page').textContent = titles[view];
     document.title = `${titles[view]} · MyFinance`;
     closeSidebar();
-    if (location.hash !== `#${view}`) history.pushState(null, '', `#${view}`);
+    const hash = `#${view}${sub ? `/${sub}` : ''}`;
+    if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
   window.addEventListener('hashchange', () => window.showView(location.hash.slice(1)));

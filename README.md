@@ -188,6 +188,16 @@ calendar-filter, filtered-summary, and request-order regressions.
 ## 🎯 Features at a Glance
 
 ### Dashboard Tab ✅
+- **Welcome hero** instead of a bar chart: a greeting, a one-line status headline and
+  rotating insight cards (over-budget categories, bills due soon, manual payments,
+  balance dipping below a safe level before payday, debt-free progress, goal status,
+  price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
+  can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
+- **Today at a glance**: balance, next payday, bills left, lowest projected point and
+  debt-free month. Insights come from `GET /api/dashboard/insights`
+  (rules in `backend/utils/insights.js`).
+- The cash-flow history chart is still available in a collapsed drawer below the
+  upcoming payments and only loads when opened.
 - 4 summary metrics (income, expenses, net cashflow, balance)
 - Date filtering (Current Month, Last Month, YTD, All Time)
 - Upcoming payments with smart balance cascade
@@ -236,6 +246,21 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 - APR-driven guidance, a suggested extra payment, and a debt-free date chart vs. minimums only
 - Pro what-if simulator (extra per month and lump sums)
 - Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
+- **How the strategy dates work:** every strategy is simulated month by month at your
+  current monthly debt budget. Each card shows the resulting debt-free month, the total
+  interest and which debt receives the extra first. When two strategies pay your debts
+  in the same order (common when your highest-APR debt is also your smallest), their
+  results are identical; the page says so and switching shows a confirmation.
+
+### Tutorials tab
+- Short animated walkthroughs for the **Debt-free plan**, **Savings goals** and the
+  **Dashboard**, with chapters, a progress bar, full screen, keyboard controls
+  (Space/K, ←/→, F) and optional voice narration using the browser's speech engine.
+- Deep links such as `#tutorials/debt-strategies` open a specific chapter; they are
+  linked from the Debt-free plan ("Watch the 1-min tour", "How it works"), Goals,
+  the dashboard welcome ("Tour") and Settings.
+- Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
+  size and need no video hosting. Edit them in `frontend/tutorial.js`.
 
 ### Goals tab
 - Money-flow view: income streams, monthly surplus, debt extra, goal budget, unassigned
@@ -301,6 +326,7 @@ Warning:   #ffd93d (Caution Yellow)
 |--------|----------|---------|
 | POST | `/api/dashboard/summary` | Get metrics with date filter |
 | POST | `/api/dashboard/upcoming-payments` | Get payment cascade |
+| GET | `/api/dashboard/insights` | Welcome insights and today's pulse |
 | POST | `/api/transactions` | Get transactions |
 | POST | `/api/debts` | Get credit cards |
 | POST | `/api/goals` | Get savings goals |

@@ -107,7 +107,8 @@ export function simulatePayoff(debts, { budget = 0, strategy = 'avalanche', lump
 
 const summary = result => ({
   feasible: result.feasible, debtFree: result.debtFree, months: result.months, debtFreeDate: result.debtFreeDate,
-  totalInterest: result.totalInterest, totalPaid: result.totalPaid, reason: result.reason || ''
+  totalInterest: result.totalInterest, totalPaid: result.totalPaid, reason: result.reason || '',
+  order: result.order || [], firstTarget: result.payoffs?.find(item => item.id === result.order?.[0])?.name || null
 });
 const money = value => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const monthsText = months => months >= 24 && months % 12 === 0 ? `${months / 12} years` : `${months} month${months === 1 ? '' : 's'}`;

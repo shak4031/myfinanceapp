@@ -27,7 +27,8 @@
       spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
       flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', piggy: '<path d="M4 11a7 6 0 0 1 13-3h2v4l-2 1v3h-3v2h-3v-2H8v2H5v-3a6 6 0 0 1-1-4Z"/><circle cx="14.5" cy="10.5" r=".8"/>',
       info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', check: '<path d="m5 12 5 5 9-10"/>',
-      alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/>', bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7Z"/>'
+      alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/>', bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7Z"/>',
+      play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/>'
     };
     return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
   };
@@ -90,7 +91,7 @@
   const proBadge = () => `<span class="plan-pro-tag">${icon('lock', 11)}PRO</span>`;
   const strategyCards = (list, active, kind, numbers = () => '') => `<div class="plan-strategies" role="radiogroup" aria-label="${kind === 'debt' ? 'Payoff strategy' : 'Goal strategy'}">${list.map(item => `
     <button type="button" class="plan-strategy${item.id === active ? ' is-active' : ''}${item.locked ? ' is-locked' : ''}" role="radio" aria-checked="${item.id === active}" data-act="${kind}-strategy" data-id="${esc(item.id)}">
-      <span class="plan-strategy-head"><strong>${esc(item.name)}</strong>${item.locked ? proBadge() : item.recommended ? '<span class="plan-reco">Recommended</span>' : item.id === active ? `<span class="plan-check">${icon('check', 14)}</span>` : ''}</span>
+      <span class="plan-strategy-head"><strong>${esc(item.name)}</strong><span class="plan-strategy-badges">${item.locked ? proBadge() : `${item.recommended ? '<span class="plan-reco">Recommended</span>' : ''}${item.id === active ? `<span class="plan-check" title="Selected">${icon('check', 14)}</span>` : ''}`}</span></span>
       <span class="plan-strategy-tag">${esc(item.tagline)}</span>
       ${numbers(item)}
     </button>`).join('')}</div>`;
@@ -263,11 +264,19 @@
     const numbers = item => item.locked ? '<span class="plan-strategy-meta">Unlock to compare</span>'
       : item.feasible === undefined ? '<span class="plan-strategy-meta">Set your own order</span>'
       : !item.feasible ? '<span class="plan-strategy-meta">Budget below minimums</span>'
-      : `<span class="plan-strategy-meta"><b>${item.debtFree ? monthLabel(item.debtFreeDate) : '50+ yrs'}</b><i>${money(item.totalInterest)} interest</i></span>`;
+      : `<span class="plan-strategy-meta"><b>${item.debtFree ? monthLabel(item.debtFreeDate) : '50+ yrs'}</b><i>${money(item.totalInterest)} interest</i></span>
+        ${item.firstTarget ? `<span class="plan-strategy-first">Extra goes to <b>${esc(item.firstTarget)}</b> first</span>` : ''}`;
     const hasDebts = d.debts.length > 0;
+    const sameOrder = (a, b) => a.order?.length && a.order.join('|') === b.order?.join('|');
+    const compared = strategies.filter(item => !item.locked && item.feasible);
+    const twins = compared.filter(item => compared.some(other => other.id !== item.id && sameOrder(item, other)));
+    const active = strategies.find(item => item.id === d.strategy);
+    const tieNote = twins.length > 1 && twins.some(item => item.id === d.strategy)
+      ? `<p class="plan-strategy-note">${icon('info', 14)}<span><b>${esc(twins.map(item => item.name).join(', ').replace(/, ([^,]*)$/, ' and $1'))}</b> attack your debts in the same order with these balances and rates, so their dates and interest match. Switching between them changes nothing today; it will once your balances or rates diverge.</span></p>` : '';
+    const strategyIntro = `Each card shows the month you'd be debt-free and the total interest you'd pay with that strategy at your current ${money(d.budget)}/mo budget. Every strategy pays all minimums; they differ only in where the extra money goes. Star a debt to pay it first regardless.`;
     root.innerHTML = `${hasDebts ? debtHero(p) : ''}
       ${d.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Your saved strategy needs MyFinance Pro, so the plan is using Avalanche. <button type="button" class="link-btn" data-act="unlock" data-reason="Advanced payoff strategies are part of MyFinance Pro">Renew Pro</button></p>` : ''}
-      ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy</h3><p>Every strategy pays all minimums. They differ in where the extra money goes. Star a debt to pay it first regardless.</p></div></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}</section>` : ''}
+      ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy${active ? ` <span class="plan-strategy-current">Using ${esc(active.name)}</span>` : ''}</h3><p>${strategyIntro}</p></div><a class="plan-help-link" href="#tutorials/debt-strategies" title="How strategies work">${icon('play', 13)} How it works</a></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}${tieNote}</section>` : ''}
       <div class="plan-columns">
         <div class="plan-col-main">
           ${hasDebts ? budgetPanel(p) : ''}
@@ -421,11 +430,19 @@
         const list = act === 'debt-strategy' ? state.plan.debtPlan.strategies : state.plan.goalPlan.strategies;
         const choice = list.find(item => item.id === id);
         if (choice?.locked) return unlock(`${choice.name} is part of MyFinance Pro`);
+        if (choice?.id === (act === 'debt-strategy' ? state.plan.debtPlan.strategy : state.plan.goalPlan.strategy)) return;
         if (id === 'custom' && !state.plan.debtPlan.debts.some(debt => debt.custom_rank != null)) {
           const ids = rankedDebts().map(debt => debt.id);
           return mutate(api('/api/plan/debt-order', 'PUT', { ids }));
         }
-        return mutate(api('/api/plan/settings', 'PUT', { [act === 'debt-strategy' ? 'debt_strategy' : 'goal_strategy']: id }));
+        const before = act === 'debt-strategy' ? state.plan.debtPlan.plan : null;
+        const saved = await mutate(api('/api/plan/settings', 'PUT', { [act === 'debt-strategy' ? 'debt_strategy' : 'goal_strategy']: id }));
+        if (saved && choice) {
+          const after = act === 'debt-strategy' ? saved.debtPlan.plan : null;
+          const same = before && after && before.debtFreeDate === after.debtFreeDate && Math.abs((before.totalInterest || 0) - (after.totalInterest || 0)) < 1;
+          notifyUser(same ? `Switched to ${choice.name}. Same payoff order as before, so your dates don't change.` : `Switched to ${choice.name}. Your plan and calendar are updated.`);
+        }
+        return saved;
       }
       case 'apply-budget': return mutate(api('/api/plan/settings', 'PUT', { debt_budget: Number(button.dataset.amount) }));
       case 'reset-budget': return mutate(api('/api/plan/settings', 'PUT', { debt_budget: null }));

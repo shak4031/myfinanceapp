@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -787,4 +787,98 @@ test('analytics page shows a locked preview without Pro', async () => {
   await f.context.loadAnalyticsPage();
   assert.match(f.node('analytics-content').innerHTML, /Your Pro trial has ended/);
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
+});
+
+const browserBits = (f, { reduced = true } = {}) => {
+  const store = new Map();
+  const base = f.context.document.getElementById;
+  f.context.document.getElementById = id => {
+    const el = base(id);
+    el.style.setProperty ||= function (key, value) { this[key] = value; };
+    el.getBoundingClientRect ||= () => ({ left: 0, top: 0, width: 800, height: 450 });
+    el.contains ||= () => true;
+    el.children ||= [];
+    return el;
+  };
+  Object.assign(f.context, {
+    localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) },
+    matchMedia: () => ({ matches: reduced }), performance: { now: () => 0 },
+    requestAnimationFrame: () => 0, cancelAnimationFrame() {}
+  });
+  return store;
+};
+test('dashboard welcome greets, ranks insights, escapes text and offers the tour once', async () => {
+  const insights = { asOf: '2026-10-15', insights: [
+    { id: 'runway', tone: 'danger', icon: 'alert', title: 'Balance dips <below> zero on the 28th', detail: 'Move a payment.', action: { label: 'See upcoming', act: 'upcoming' } },
+    { id: 'budget', tone: 'warning', icon: 'gauge', title: 'Dining is over budget', detail: 'x', action: null }
+  ], pulse: { balance: 1520.5, lowPoint: { day: 28, amount: -40 }, billsLeft: { count: 3, total: 900 }, nextIncome: { amount: 2450, day: 23, daysAway: 1 }, debtFreeDate: '2028-09' } };
+  const f = fixture(async url => url === '/api/dashboard/insights' ? response(200, insights) : response(200, {}));
+  const store = browserBits(f);
+  f.run('welcome.js');
+  await f.context.FinanceWelcome.load();
+  const html = f.node('welcome-hero').innerHTML;
+  assert.match(html, /One thing needs your attention today/);
+  assert.match(html, /Balance dips &lt;below&gt; zero/);
+  assert.doesNotMatch(html, /<below>/);
+  assert.match(html, /Next payday[\s\S]*Tomorrow/);
+  assert.match(html, /Lowest point ahead[\s\S]*−\$40/);
+  assert.match(html, /Take a one-minute tour/);
+  assert.match(html, /1 \/ 3/);
+  f.context.FinanceWelcome.markTourSeen();
+  assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');
+  await f.context.FinanceWelcome.load();
+  assert.doesNotMatch(f.node('welcome-hero').innerHTML, /Take a one-minute tour/);
+});
+test('a failed insights load shows a retry in the welcome hero', async () => {
+  const f = fixture(async () => response(500, { error: 'Insights offline' }));
+  browserBits(f);
+  f.run('welcome.js');
+  await f.context.FinanceWelcome.load();
+  assert.match(f.node('welcome-hero').innerHTML, /Insights offline[\s\S]*data-welcome-retry/);
+});
+test('tutorial deep links open the right walkthrough and chapter', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard');
+  tours.open('debt-strategies');
+  assert.equal(tours.state.tutorial.id, 'debt');
+  assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
+  assert.equal(tours.state.playing, false, 'reduced motion never autoplays');
+  assert.match(f.node('tut-caption').textContent, /\w/);
+  tours.open('debt-dates');
+  assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'dates');
+  assert.match(f.node('tut-caption').textContent, /same order|match/i);
+  tours.open('goals');
+  assert.equal(tours.state.tutorial.id, 'goals');
+  assert.equal(tours.state.index, 0);
+  tours.go(99);
+  assert.equal(tours.state.index, tours.state.tutorial.scenes.length - 1);
+  assert.match(f.node('tutorial-root').innerHTML, /All tutorials/);
+});
+test('the router keeps a tutorial sub-path and hands it to the player', () => {
+  const f = fixture(); f.run('refresh.js');
+  const opened = [];
+  f.context.FinanceTutorials = { open: sub => opened.push(sub) };
+  f.context.showView('tutorials/debt-strategies');
+  assert.equal(f.context.location.hash, '#tutorials/debt-strategies');
+  assert.equal(opened.join(), 'debt-strategies');
+  f.context.showView('payoff/anything');
+  assert.equal(f.context.location.hash, '#payoff');
+});
+test('strategy cards explain the dates, the first target and identical orders', async () => {
+  const payload = planPayload();
+  payload.debtPlan.comparison = [
+    { id: 'avalanche', feasible: true, debtFree: true, debtFreeDate: '2028-09', totalInterest: 2900, order: ['1', '2'], firstTarget: '<Visa>' },
+    { id: 'snowball', feasible: true, debtFree: true, debtFreeDate: '2028-09', totalInterest: 2900, order: ['1', '2'], firstTarget: '<Visa>' },
+    { id: 'interest', locked: true }
+  ];
+  const f = loadPlan(async () => response(200, payload));
+  await f.context.loadPayoffPlan();
+  const html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /Using Avalanche/);
+  assert.match(html, /Extra goes to <b>&lt;Visa&gt;<\/b> first/);
+  assert.match(html, /Avalanche and Snowball<\/b> attack your debts in the same order/);
+  assert.match(html, /href="#tutorials\/debt-strategies"/);
 });

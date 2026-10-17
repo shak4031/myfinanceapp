@@ -21,6 +21,9 @@
       <h3>Your grants</h3><div id="support-grants" class="table-scroll"></div>
       <h3>Support activity on your account</h3><div id="support-activity" class="table-scroll"></div>
     </div>
+    <div class="panel plan-card"><div><p class="eyebrow">LEARN MYFINANCE</p><h2>Watch the tutorials</h2>
+      <p class="muted">One-minute narrated tours of the dashboard, the debt-free plan and savings goals.</p></div>
+      <div><a class="btn btn-secondary" href="#tutorials">Open tutorials</a></div></div>
     <div class="panel plan-card"><div><p class="eyebrow">PASSWORD</p><h2>Forgot or want to change your password?</h2>
       <p class="muted">Sign out and choose “Forgot your password?”. We will email a single-use link that expires in 30 minutes and signs out all devices once used.</p></div></div>`;
   document.querySelector('.main-content').appendChild(view);

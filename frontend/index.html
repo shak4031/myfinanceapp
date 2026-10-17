@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017o"></script>
-  <script src="client-errors.js?v=20261017o"></script>
+  <script src="session.js?v=20261017p"></script>
+  <script src="client-errors.js?v=20261017p"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -433,9 +433,11 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017o">
-  <link rel="stylesheet" href="analytics.css?v=20261017o">
-  <link rel="stylesheet" href="plan.css?v=20261017o">
+  <link rel="stylesheet" href="refresh.css?v=20261017p">
+  <link rel="stylesheet" href="analytics.css?v=20261017p">
+  <link rel="stylesheet" href="plan.css?v=20261017p">
+  <link rel="stylesheet" href="welcome.css?v=20261017p">
+  <link rel="stylesheet" href="tutorial.css?v=20261017p">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -487,6 +489,7 @@
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan</a></li>
         <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals</a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
+        <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
         <li class="admin-only"><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
       </ul>
@@ -503,38 +506,8 @@
       
       <!-- DASHBOARD -->
       <section id="dashboard-view" class="view active">
-        <header class="header">
-          <div><p class="eyebrow">THE BIG PICTURE</p><h1>Your money at a glance</h1><p class="muted">Know where you stand. Choose what comes next.</p></div>
-          <button class="btn btn-primary" onclick="openImportModal()">Import statements</button>
-        </header>
-
-        <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
-        <div class="panel section-panel">
-          <div class="section-head">
-            <div>
-              <h2>Income &amp; expense history</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track patterns, seasonal trends, and net cashflow across months and years</div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <label for="cashflow-year-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Year:</label>
-              <select id="cashflow-year-select" onchange="changeCashflowYear(this.value)" style="padding: 8px 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
-              </select>
-            </div>
-          </div>
-
-          <!-- Key Metrics Badges for Selected Year -->
-          <div id="cashflow-year-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;"></div>
-
-          <!-- Bar Chart Container -->
-          <div id="cashflow-chart-container" style="overflow-x: auto; padding-bottom: 8px;"></div>
-
-          <!-- Legend -->
-          <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-size: 12px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--success); border-radius: 3px; display: inline-block;"></span> <span>Income</span></div>
-            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--danger); border-radius: 3px; display: inline-block;"></span> <span>Expenses</span></div>
-            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px; display: inline-block;"></span> <span>Net Cashflow</span></div>
-          </div>
-        </div>
+        <h1 class="visually-hidden">Dashboard</h1>
+        <section id="welcome-hero" class="welcome-hero" aria-label="Welcome and insights"></section>
 
         <div class="metrics-grid" id="dashboard-metrics"></div>
 
@@ -554,6 +527,31 @@
           </div>
           <div id="dashboard-payments"></div>
         </div>
+        <!-- INCOME & EXPENSE HISTORY (optional drawer) -->
+        <details id="cashflow-history" class="panel section-panel history-disclosure">
+          <summary>
+            <div><h2>Income &amp; expense history</h2><p>Month-by-month income, spending and net cashflow by year</p></div>
+            <span class="history-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          </summary>
+          <div class="history-body">
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px;">
+              <label for="cashflow-year-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Year:</label>
+              <select id="cashflow-year-select" onchange="changeCashflowYear(this.value)" style="padding: 8px 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;"></select>
+            </div>
+          <!-- Key Metrics Badges for Selected Year -->
+          <div id="cashflow-year-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;"></div>
+
+          <!-- Bar Chart Container -->
+          <div id="cashflow-chart-container" style="overflow-x: auto; padding-bottom: 8px;"></div>
+
+          <!-- Legend -->
+          <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-size: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--success); border-radius: 3px; display: inline-block;"></span> <span>Income</span></div>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--danger); border-radius: 3px; display: inline-block;"></span> <span>Expenses</span></div>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px; display: inline-block;"></span> <span>Net Cashflow</span></div>
+          </div>
+          </div>
+        </details>
       </section>
 
       <!-- CATEGORY OVERVIEW -->
@@ -592,6 +590,7 @@
       <section id="payoff-view" class="view">
         <header class="header">
           <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Your debt-free plan</h1><p class="muted">Every balance in one place. Pick a strategy, set what you can afford and watch the finish line move closer.</p></div>
+          <a class="btn btn-secondary header-tour" href="#tutorials/debt"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the 1-min tour</a>
         </header>
         <div id="plan-debt-root" class="plan-root"></div>
       </section>
@@ -681,8 +680,17 @@
       <section id="goals-view" class="view">
         <header class="header">
           <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Savings goals</h1><p class="muted">Every goal gets a monthly amount that fits next to your bills and your debt-free plan.</p></div>
+          <a class="btn btn-secondary header-tour" href="#tutorials/goals"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>How goals work</a>
         </header>
         <div id="plan-goals-root" class="plan-root"></div>
+      </section>
+
+      <!-- TUTORIALS -->
+      <section id="tutorials-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">LEARN MYFINANCE</p><h1>Tutorials</h1><p class="muted">Short, narrated walkthroughs. Press play, pause any time, or jump to a chapter.</p></div>
+        </header>
+        <div id="tutorial-root" class="tut-root"></div>
       </section>
 
     </main>
@@ -889,6 +897,10 @@
       }
     }
 
+    document.getElementById('cashflow-history')?.addEventListener('toggle', event => {
+      if (event.target.open && !cashflowDataCache) loadCashflowChart();
+    });
+
     function changeCashflowYear(year) {
       if (!cashflowDataCache) return;
       renderCashflowYear(year);
@@ -968,8 +980,8 @@
       const existingMtd = document.getElementById('mtd-spending-section');
       if (existingMtd) existingMtd.remove();
 
-      // Load Cashflow History Chart
-      loadCashflowChart();
+      window.FinanceWelcome?.load();
+      if (document.getElementById('cashflow-history')?.open) loadCashflowChart();
 
       let data;
       try {
@@ -1572,15 +1584,17 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017o"></script>
-  <script src="refresh.js?v=20261017o"></script>
-  <script src="account.js?v=20261017o"></script>
-  <script src="pro-charts.js?v=20261017o"></script>
-  <script src="pro-core.js?v=20261017o"></script>
-  <script src="pro-dashboard.js?v=20261017o"></script>
-  <script src="pro-categories.js?v=20261017o"></script>
-  <script src="analytics.js?v=20261017o"></script>
-  <script src="plan.js?v=20261017o"></script>
+  <script src="ui.js?v=20261017p"></script>
+  <script src="refresh.js?v=20261017p"></script>
+  <script src="account.js?v=20261017p"></script>
+  <script src="pro-charts.js?v=20261017p"></script>
+  <script src="pro-core.js?v=20261017p"></script>
+  <script src="pro-dashboard.js?v=20261017p"></script>
+  <script src="pro-categories.js?v=20261017p"></script>
+  <script src="analytics.js?v=20261017p"></script>
+  <script src="plan.js?v=20261017p"></script>
+  <script src="welcome.js?v=20261017p"></script>
+  <script src="tutorial.js?v=20261017p"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>
