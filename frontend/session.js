@@ -142,7 +142,7 @@ window.FinanceSession = (() => {
         document.body.classList.toggle('is-admin', user.role === 'admin' && !support);
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        showView(['categories','transactions','etl','payoff','goals','insights','settings'].includes(target) ? target : 'dashboard');
+        showView(['categories','category-admin','transactions','etl','payoff','goals','insights','settings'].includes(target) ? target : 'dashboard');
         return;
       }
       if (response.status !== 401) throw new Error('Unable to check your session.');

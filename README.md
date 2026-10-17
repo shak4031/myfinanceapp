@@ -52,6 +52,32 @@ support**; admins never see customer data otherwise. See
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
 
+## Responsive workspace and activity filters
+
+The finance workspace uses a shared navy navigation rail, emerald actions,
+high-contrast typography, and white panels. Navigation remains available on every
+finance view; on phones, open the menu in the upper left. Browser Back/Forward
+and direct links also work, including the category management view. The admin
+console includes links back to each finance view. The legacy transaction viewer
+now redirects to the authenticated workspace rather than showing a separate demo.
+
+Transactions and Categories both offer an **Activity month** calendar. An empty
+month means **All time**. Transaction month, category, and fixed-bill filters
+combine; visible totals always use the same filtered rows. **Reset filters**
+clears all three. Category counts and spending totals use the selected month,
+and opening a category carries that month into its floating detail panel.
+The detail panel has its own calendar and **All time** action. Dashboard
+month-to-date cards continue to open the specific month shown on the dashboard.
+
+Category details, imports, goal/debt editors, confirmations, and savings entry
+use centered, viewport-constrained floating dialogs with dimmed backdrops.
+Dialogs retain keyboard focus, close with Escape or their close/cancel controls,
+and scroll internally when needed. On smaller screens, content stacks and wide
+data tables scroll within their panels rather than widening the whole page.
+
+Run `node --test frontend/frontend.test.mjs` for focused navigation, dialog,
+calendar-filter, filtered-summary, and request-order regressions.
+
 ## 📚 Available Documentation
 
 ### For Users

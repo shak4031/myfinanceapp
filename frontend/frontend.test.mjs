@@ -17,22 +17,30 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
         add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c),
         toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
       },
-      appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {}, close() { this.open = false; }, focus() {},
+      appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {},
+      close() { this.open = false; this.listeners?.close?.(); }, focus() {},
       addEventListener(name, listener) { (this.listeners ||= {})[name] = listener; },
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
-      getAttribute: () => '', setAttribute() {}, reset() {}, showModal() { this.open = true; }
+      getAttribute: () => '', setAttribute() {}, removeAttribute() {}, reset() {}, showModal() { this.open = true; }
     };
     nodes.set(id, element); return element;
   }
   const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'categories', 'transactions', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+    const item = node(`nav-${view}`);
+    item.dataset.view = view;
+    return item;
+  });
   node('txn-filter-category').options.push({ value: '' });
   const context = {
     console, URL, Date, Number, String, Object, Math, Promise, Set, Map,
     fetch: fetchImpl, setTimeout, clearTimeout, addEventListener: (name, listener) => listeners.set(name, listener),
     location: { href: 'http://local.test/', origin: 'http://local.test', hash: '', reload() { context.reloaded = true; } },
+    history: { pushState(state, unused, hash) { context.location.hash = hash; } },
     document: {
       getElementById: node, createElement: tag => node(`new-${tag}-${nodes.size}`), querySelector: node,
-      querySelectorAll: selector => selector === '.view' ? views : [], body: node('body')
+      querySelectorAll: selector => selector === '.view' ? views : selector === '.nav-btn' ? nav : [], body: node('body'),
+      addEventListener: (name, listener) => listeners.set(`document:${name}`, listener)
     },
     notify() {}, closeSidebar() {}, closeAddGoalModal() {}, openAddGoalModal() {},
     loadDashboard() {}, loadAllTransactions() {}, loadCategories() {}, loadEtlStaging() {}, loadGoals() {}, loadPayoffPlan() {}, generateInsights() {},
@@ -45,8 +53,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
-  for (const html of ['index.html','admin.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
+  for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
   const html = source('index.html');
@@ -89,6 +97,184 @@ test('transaction category/month filter excludes other categories and months', (
     [transactions[0]]
   );
 });
+const activity = [
+  { id: 1, category: 'Groceries', date: '2026-10-01T00:00:00.000Z', description: 'October market', amount: 42.5, direction: 'DEBIT', is_fixed: true },
+  { id: 2, category: 'Dining', date: '2026-10-31', description: 'October cafe', amount: 15, direction: 'DEBIT', is_fixed: false },
+  { id: 3, category: 'Groceries', date: '2026-09-30', description: 'September market', amount: 20, direction: 'DEBIT', is_fixed: true },
+  { id: 4, category: 'Income', date: '2026-10-15', description: 'October salary', amount: 1000, direction: 'CREDIT', is_fixed: true }
+];
+const categoryData = [{ id: 1, name: 'Groceries' }, { id: 2, name: 'Dining' }, { id: 3, name: 'Income' }];
+function activityFixture() {
+  return fixture(async url => response(200, url === '/api/categories' ? categoryData
+    : url.endsWith('categorization-rules') ? { categories: categoryData, rules: [] }
+    : { transactions: activity }));
+}
+test('active transaction renderer applies month to rows and all summary amounts', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('txn-filter-month').value = '2026-10';
+  await f.context.loadAllTransactions();
+  const html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /October market/);
+  assert.match(html, /October cafe/);
+  assert.match(html, /October salary/);
+  assert.doesNotMatch(html, /September market/);
+  assert.match(f.node('txn-summary').innerHTML, /\$1,000\.00/);
+  assert.match(f.node('txn-summary').innerHTML, /\$57\.50/);
+  assert.match(f.node('txn-summary').innerHTML, /\$942\.50/);
+  assert.match(f.node('txn-filter-status').textContent, /October 2026 · 3 matching/);
+  assert.doesNotMatch(source('index.html'), /async function loadAllTransactions/);
+});
+test('transaction month, category and fixed debit filters compose and reset together', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('txn-filter-month').value = '2026-10';
+  f.node('txn-filter-category').value = 'Groceries';
+  f.node('txn-filter-fixed').checked = true;
+  await f.context.loadAllTransactions();
+  assert.match(f.node('full-txn-table').innerHTML, /October market/);
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October cafe|September market|October salary/);
+  f.node('txn-filter-category').value = '';
+  await f.context.loadAllTransactions();
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October salary/);
+  await f.context.resetTransactionFilters();
+  assert.equal(f.node('txn-filter-month').value, '');
+  assert.equal(f.node('txn-filter-fixed').checked, false);
+  assert.match(f.node('full-txn-table').innerHTML, /September market/);
+  assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
+});
+test('empty transaction periods have zero summaries and an explicit empty state', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('txn-filter-month').value = '2025-01';
+  await f.context.loadAllTransactions();
+  assert.match(f.node('full-txn-table').innerHTML, /No transactions match/);
+  assert.equal((f.node('txn-summary').innerHTML.match(/\$0\.00/g) || []).length, 3);
+  assert.match(f.node('txn-filter-status').textContent, /0 matching/);
+});
+test('out-of-order transaction responses cannot overwrite newer results', async () => {
+  let finish;
+  let calls = 0;
+  const f = fixture(async url => {
+    if (url === '/api/categories') return response(200, categoryData);
+    if (++calls === 1) return new Promise(resolve => { finish = resolve; });
+    return response(200, { transactions: [activity[1]] });
+  });
+  f.run('refresh.js');
+  const old = f.context.loadAllTransactions();
+  await f.context.loadAllTransactions();
+  finish(response(200, { transactions: [activity[0]] }));
+  await old;
+  assert.match(f.node('full-txn-table').innerHTML, /October cafe/);
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October market/);
+});
+test('category month filters card counts and spending, and is inherited by the floating detail', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('category-filter-month').value = '2026-10';
+  await f.context.loadCategories();
+  assert.match(f.node('category-cards').innerHTML, /\$42\.50/);
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /\$62\.50/);
+  assert.match(f.node('category-filter-status').textContent, /October 2026 · 3 transactions/);
+  await f.node('category-cards').onclick({ target: { closest: () => ({ dataset: { openCategory: 'Groceries' } }) } });
+  assert.equal(f.node('category-dialog-month').value, '2026-10');
+  assert.equal(f.node('mtd-dialog-total').textContent, '$42.50');
+  assert.equal(f.node('mtd-dialog-count').textContent, '1');
+  f.node('category-dialog-month').value = '2026-09';
+  await f.node('category-dialog-month').onchange();
+  assert.equal(f.node('mtd-dialog-total').textContent, '$20.00');
+  await f.node('category-dialog-all').onclick();
+  assert.equal(f.node('mtd-dialog-period').textContent, 'All time');
+  assert.equal(f.node('mtd-dialog-total').textContent, '$62.50');
+  assert.equal(f.node('mtd-dialog-count').textContent, '2');
+});
+test('category load failure clears stale results and reports the error', async () => {
+  const f = fixture(async () => response(500, { error: 'Service unavailable' }));
+  f.run('refresh.js');
+  f.node('category-cards').textContent = 'Old results';
+  await f.context.loadCategories();
+  assert.equal(f.node('category-cards').textContent, '');
+  assert.match(f.node('category-filter-status').textContent, /Could not load categories: Service unavailable/);
+});
+test('a closed category dialog discards a late transaction response', async () => {
+  let finish;
+  const f = fixture(() => new Promise(resolve => { finish = resolve; }));
+  f.run('refresh.js');
+  const pending = f.context.openCategoryTransactions('Groceries', '2026-10');
+  f.node('mtd-transactions-dialog').close();
+  finish(response(200, { transactions: activity }));
+  await pending;
+  assert.equal(f.node('mtd-transactions-dialog').open, false);
+  assert.equal(f.node('mtd-dialog-count').textContent, '—');
+});
+test('goal validation and save errors are visible inside the floating editor', async () => {
+  const f = fixture(async () => response(500, { error: 'Unable to save this goal' }));
+  f.run('refresh.js');
+  await f.context.saveGoal();
+  assert.match(f.node('goal-error').textContent, /positive target/);
+  f.node('goal-name').value = 'Emergency fund';
+  f.node('goal-target').value = '5000';
+  f.context.document.querySelector = selector => selector === 'dialog[open] [role="alert"]' ? f.node('goal-error') : f.node(selector);
+  await f.context.saveGoal();
+  assert.equal(f.node('goal-error').textContent, 'Unable to save this goal');
+});
+test('hash navigation updates the view, breadcrumb and active parent navigation', () => {
+  const f = fixture(); f.run('refresh.js');
+  f.context.location.hash = '#transactions';
+  f.listeners.get('hashchange')();
+  assert.equal(f.node('current-page').textContent, 'Transactions');
+  assert.equal(f.node('nav-transactions').classList.contains('active'), true);
+  f.context.showView('category-admin');
+  assert.equal(f.node('nav-categories').classList.contains('active'), true);
+  assert.equal(f.node('nav-transactions').classList.contains('active'), false);
+  assert.equal(f.context.location.hash, '#category-admin');
+  f.context.showView('unknown-page');
+  assert.equal(f.node('current-page').textContent, 'Dashboard');
+});
+test('import and goal editors use native floating dialogs with their controls inside', () => {
+  const html = source('index.html');
+  for (const [id, control] of [['import-modal', 'csv-import-btn'], ['add-goal-modal', 'goal-name']]) {
+    const dialog = html.match(new RegExp(`<dialog id="${id}"[\\s\\S]*?<\\/dialog>`))?.[0] || '';
+    assert.match(dialog, /aria-labelledby=/);
+    assert.ok(dialog.includes(`id="${control}"`));
+  }
+  assert.match(source('refresh.css'), /body dialog\s*\{[^}]*inset:\s*0;[^}]*margin:\s*auto;/);
+  assert.match(source('transactions.html'), /url=\/#transactions/);
+});
+test('floating confirmations return explicit acceptance or cancellation', async () => {
+  const f = fixture(); f.run('ui.js');
+  const cancelled = f.context.FinanceUI.confirm('Delete this item?');
+  let dialog = f.node('body').options.at(-1);
+  assert.equal(dialog.open, true);
+  dialog.querySelector('.btn-secondary').onclick();
+  assert.equal(await cancelled, false);
+  const accepted = f.context.FinanceUI.confirm('Delete this item?');
+  dialog = f.node('body').options.at(-1);
+  dialog.returnValue = 'confirm';
+  dialog.close();
+  assert.equal(await accepted, true);
+});
+test('savings amount dialog returns input only on confirmation and cancels to null', async () => {
+  const f = fixture(); f.run('ui.js');
+  const accepted = f.context.FinanceUI.amount('Record progress, not a transfer.');
+  let dialog = f.node('body').options.at(-1);
+  assert.match(dialog.innerHTML, /min="0.01" step="0.01" required/);
+  dialog.querySelector('input').value = '125.50';
+  dialog.returnValue = 'confirm';
+  dialog.close();
+  assert.equal(await accepted, '125.50');
+  const cancelled = f.context.FinanceUI.amount('Record progress, not a transfer.');
+  dialog = f.node('body').options.at(-1);
+  dialog.close();
+  assert.equal(await cancelled, null);
+});
+test('Escape closes only the topmost floating dialog', () => {
+  const f = fixture(); f.run('ui.js');
+  const first = f.node('first-dialog'), last = f.node('last-dialog');
+  first.open = last.open = true;
+  f.context.document.querySelectorAll = () => [first, last];
+  let prevented = false;
+  f.listeners.get('document:keydown')({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(last.open, false);
+  assert.equal(first.open, true);
+  assert.equal(prevented, true);
+});
 test('browser error reports are same-origin, redacted, and deduplicated', () => {
   const requests = [];
   const f = fixture(async (url, options) => { requests.push([url, options]); return { ok: true }; });
@@ -121,6 +307,7 @@ test('categories overview is focused and category administration has its own pag
   const overview = html.match(/<section id="categories-view"[\s\S]*?<\/section>/)?.[0] || '';
   assert.match(overview, /category-cards/);
   assert.match(overview, /showView\('category-admin'\)/);
+  assert.match(overview, /id="category-filter-month"/);
   assert.doesNotMatch(overview, /Review category suggestions|category-manager-list|merchant-rules|txn-list/);
   assert.match(html, /id="category-admin-view"/);
   assert.match(source('refresh.js'), /Saved merchant mappings/);

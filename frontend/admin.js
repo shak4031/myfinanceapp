@@ -103,7 +103,7 @@
       'revoke-sessions': 'Sign this user out of every device?',
       unlock: 'Clear failed sign-in lockouts for this user?'
     };
-    if (!confirm(prompts[action])) return;
+    if (!await FinanceUI.confirm(prompts[action])) return;
     try {
       const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' });
       toast(result.message || 'Done. The action was recorded in the audit log.');

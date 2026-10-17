@@ -17,13 +17,14 @@
   };
   window.filterTransactionsByCategoryAndMonth = (transactions, category, month) => transactions.filter(transaction =>
     (!category || transaction.category === category) && (!month || monthKey(transaction.date) === month));
+  const periodLabel = month => month ? new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'All time';
+  let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
+  let detailCategory = '';
   const mtdDialog = $('mtd-transactions-dialog');
   const closeMtdDialog = () => mtdDialog.open && mtdDialog.close();
   mtdDialog.querySelector('.mtd-dialog-close').addEventListener('click', closeMtdDialog);
   mtdDialog.querySelector('.mtd-dialog-done').addEventListener('click', closeMtdDialog);
-  mtdDialog.addEventListener('click', event => {
-    if (event.target === mtdDialog) closeMtdDialog();
-  });
+  mtdDialog.addEventListener('close', () => { detailRequest++; });
   const json = async (url, method = 'GET', body) => {
     const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
     const data = await response.json();
@@ -32,10 +33,15 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; };
-  const reportError = error => notify(error.message || 'Something went wrong. Please try again.');
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; categoryRequest++; transactionRequest++; detailRequest++; };
+  const reportError = error => {
+    const message = error.message || 'Something went wrong. Please try again.';
+    const alert = document.querySelector('dialog[open] [role="alert"]');
+    if (alert) alert.textContent = message;
+    else notify(message);
+  };
   window.removeFixedTemplate = async id => {
-    if (!confirm('Remove the Fixed flag from this merchant’s matching transactions? This stops its bill projection; no transactions are deleted.')) return;
+    if (!await FinanceUI.confirm('Remove the Fixed flag from this merchant’s matching transactions? This stops its bill projection; no transactions are deleted.')) return;
     try {
       await json('/api/transactions/update-fixed', 'POST', { id, is_fixed: false, apply_to_all: true });
       await loadDashboard(); notify('Fixed flag removed from matching transactions.');
@@ -56,14 +62,31 @@
   // Navigation is explicit: labels can change without breaking the active state.
   window.showView = function(view) {
     if (!FinanceSession.isAuthenticated()) return;
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', etl: 'Import review', payoff: 'Payoff plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
+    if (!Object.hasOwn(titles, view)) view = 'dashboard';
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
-    document.querySelectorAll('.nav-btn').forEach(node => node.classList.toggle('active', node.getAttribute('onclick') === `showView('${navView}')`));
+    document.querySelectorAll('.nav-btn').forEach(node => {
+      const active = node.dataset.view === navView;
+      node.classList.toggle('active', active);
+      if (active) node.setAttribute('aria-current', 'page');
+      else node.removeAttribute('aria-current');
+    });
+    $('current-page').textContent = titles[view];
+    document.title = `${titles[view]} · MyFinance`;
     closeSidebar();
-    location.hash = view;
+    if (location.hash !== `#${view}`) history.pushState(null, '', `#${view}`);
+    document.querySelector('.main-content').scrollTop = 0;
     const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
+  window.addEventListener('hashchange', () => window.showView(location.hash.slice(1)));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && $('sidebar').classList.contains('open')) {
+      closeSidebar();
+      $('hamburger-btn').focus();
+    }
+  });
 
   const review = document.createElement('div');
   review.className = 'panel plan-card';
@@ -80,7 +103,7 @@
   categoryManager.innerHTML = `<div><p class="eyebrow">YOUR CATEGORY LIST</p><h2>Manage categories</h2><p class="muted">Create a category, rename one, or remove one. When removing a category, choose where its transactions and merchant mappings should go.</p></div>
     <form id="category-create-form" class="toolbar"><label>New category name<input id="category-new-name" required maxlength="100" placeholder="e.g. Childcare"></label><button class="btn btn-primary">Create category</button></form>
     <div id="category-manager-list" class="category-manager-list"></div>
-    <dialog id="category-delete-dialog" class="editor"><form id="category-delete-form"><h2>Remove category</h2><p id="category-delete-copy" class="muted"></p><label>Move its transactions and merchant mappings to<select id="category-replacement" required></select></label><div class="toolbar"><button type="button" class="btn btn-secondary" id="category-delete-cancel">Cancel</button><button class="btn btn-primary">Move and delete</button></div></form></dialog>`;
+    <dialog id="category-delete-dialog" class="editor" aria-labelledby="category-delete-title"><form id="category-delete-form"><h2 id="category-delete-title">Remove category</h2><p id="category-delete-copy" class="muted"></p><label>Move its transactions and merchant mappings to<select id="category-replacement" required></select></label><p id="category-delete-error" role="alert"></p><div class="toolbar"><button type="button" class="btn btn-secondary" id="category-delete-cancel">Cancel</button><button class="btn btn-primary">Move and delete</button></div></form></dialog>`;
   $('category-admin-content').appendChild(categoryManager);
   let deletingCategory = null;
   const categoryOptions = selected => categories.map(category => `<option value="${escape(category.name)}" ${selected === category.name ? 'selected' : ''}>${escape(category.name)}</option>`).join('');
@@ -102,45 +125,68 @@
       || ['✨', 'other'];
   };
   window.loadCategories = async function() {
-    const [data, summary] = await Promise.all([
-      json('/api/transactions/categorization-rules'),
-      json('/api/categorizations/category-summary', 'POST')
-    ]);
-    rules = data.rules || []; categories = data.categories || [];
-    const counts = new Map((summary.categories || []).map(item => [item.category, Number(item.count) || 0]));
-    $('rule-category').innerHTML = categoryOptions('');
-    $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
-      <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
-      <button class="btn btn-secondary" type="submit">Rename</button>
-      <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}" ${categories.length < 2 ? 'disabled title="Add another category before deleting this one"' : ''}>Delete</button>
-    </form>`).join('');
-    const transactionCount = categories.reduce((total, category) => total + (counts.get(category.name) || 0), 0);
-    $('category-overview-summary').innerHTML = `<div><span class="summary-icon">✦</span><span><strong>${categories.length}</strong><small>categories</small></span></div><div><span class="summary-icon">↗</span><span><strong>${transactionCount.toLocaleString()}</strong><small>categorized transactions</small></span></div>`;
-    $('category-cards').innerHTML = categories.map((category, index) => {
-      const [icon, art] = categoryArtwork(category.name);
-      const count = counts.get(category.name) || 0;
-      return `<button class="category-card category-${art}" type="button" data-open-category="${escape(category.name)}" style="--card-order:${index}" aria-label="View ${escape(category.name)}, ${count} transactions">
-        <span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span>
-        <span class="category-card-copy"><strong>${escape(category.name)}</strong><small>${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
-        <span class="category-card-arrow" aria-hidden="true">↗</span>
-      </button>`;
-    }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
-    $('category-replacement').innerHTML = categories
-      .filter(category => String(category.id) !== String(deletingCategory?.id))
-      .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
+    const request = ++categoryRequest;
+    $('category-filter-status').textContent = 'Loading category activity...';
+    try {
+      const [data, activity] = await Promise.all([
+        json('/api/transactions/categorization-rules'),
+        json('/api/dashboard/all-transactions')
+      ]);
+      if (request !== categoryRequest) return;
+      rules = data.rules || []; categories = data.categories || [];
+      const month = $('category-filter-month').value;
+      const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', month);
+      const counts = new Map();
+      const spending = new Map();
+      for (const transaction of filtered) {
+        const category = transaction.category || 'Uncategorized';
+        counts.set(category, (counts.get(category) || 0) + 1);
+        if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + Math.abs(Number(transaction.amount) || 0));
+      }
+      $('category-filter-status').textContent = `${periodLabel(month)} · ${filtered.length.toLocaleString()} transactions`;
+      $('rule-category').innerHTML = categoryOptions('');
+      $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
+        <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
+        <button class="btn btn-secondary" type="submit">Rename</button>
+        <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}" ${categories.length < 2 ? 'disabled title="Add another category before deleting this one"' : ''}>Delete</button>
+      </form>`).join('');
+      const transactionCount = categories.reduce((total, category) => total + (counts.get(category.name) || 0), 0);
+      $('category-overview-summary').innerHTML = `<div><span class="summary-icon">✦</span><span><strong>${categories.length}</strong><small>categories</small></span></div><div><span class="summary-icon">↗</span><span><strong>${transactionCount.toLocaleString()}</strong><small>categorized transactions</small></span></div>`;
+      $('category-cards').innerHTML = categories.map((category, index) => {
+        const [icon, art] = categoryArtwork(category.name);
+        const count = counts.get(category.name) || 0;
+        return `<button class="category-card category-${art}" type="button" data-open-category="${escape(category.name)}" style="--card-order:${index}" aria-label="View ${escape(category.name)}, ${count} transaction${count === 1 ? '' : 's'}">
+          <span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span>
+          <span class="category-card-copy"><strong>${escape(category.name)}</strong><span class="category-card-total">${money(spending.get(category.name) || 0)}</span><small>spent · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
+          <span class="category-card-arrow" aria-hidden="true">↗</span>
+        </button>`;
+      }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
+      $('category-replacement').innerHTML = categories
+        .filter(category => String(category.id) !== String(deletingCategory?.id))
+        .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
     $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
+    } catch (error) {
+      if (request !== categoryRequest) return;
+      $('category-filter-status').textContent = `Could not load categories: ${error.message}`;
+      $('category-cards').textContent = '';
+      $('category-overview-summary').textContent = '';
+      reportError(error);
+    }
   };
   window.openCategoryTransactions = async (category, month = '') => {
-    const period = monthKey(month) || monthKey(new Date());
-    const periodDate = new Date(`${period}-01T00:00:00`);
+    const request = ++detailRequest;
+    const period = month ? monthKey(month) : '';
+    detailCategory = category;
+    $('category-dialog-month').value = period;
     $('mtd-dialog-title').textContent = category;
-    $('mtd-dialog-period').textContent = periodDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    $('mtd-dialog-period').textContent = periodLabel(period);
     $('mtd-dialog-total').textContent = '—';
     $('mtd-dialog-count').textContent = '—';
     $('mtd-dialog-content').innerHTML = '<div class="mtd-dialog-state"><div><strong>Loading transactions…</strong>Please wait while we gather this month’s activity.</div></div>';
     if (!mtdDialog.open) mtdDialog.showModal();
     try {
       const data = await json('/api/dashboard/all-transactions');
+      if (request !== detailRequest) return;
       const transactions = window.filterTransactionsByCategoryAndMonth(data.transactions || [], category, period)
         .sort((a, b) => transactionDate(b.date) - transactionDate(a.date));
       const spending = transactions.filter(transaction => String(transaction.direction).toUpperCase() === 'DEBIT')
@@ -154,17 +200,20 @@
             <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div></div>
           <div class="mtd-transaction-amount ${debit ? 'debit' : 'credit'}">${debit ? '−' : '+'}${money(Math.abs(Number(transaction.amount) || 0))}</div>
         </article>`;
-      }).join('')}</div>` : '<div class="mtd-dialog-state"><div><strong>No transactions found</strong>There are no transactions for this category and month.</div></div>';
+      }).join('')}</div>` : '<div class="mtd-dialog-state"><div><strong>No transactions found</strong>There are no transactions for this category in the selected period.</div></div>';
     } catch (error) {
+      if (request !== detailRequest) return;
       $('mtd-dialog-total').textContent = '—';
       $('mtd-dialog-count').textContent = '—';
       $('mtd-dialog-content').innerHTML = `<div class="mtd-dialog-state"><div><strong>Could not load transactions</strong>${escape(error.message || 'Please try again.')}</div></div>`;
     }
   };
+  $('category-dialog-month').onchange = () => window.openCategoryTransactions(detailCategory, $('category-dialog-month').value);
+  $('category-dialog-all').onclick = () => window.openCategoryTransactions(detailCategory);
   $('category-cards').onclick = async event => {
     const card = event.target.closest('[data-open-category]');
     if (!card) return;
-    window.openCategoryTransactions(card.dataset.openCategory);
+    return window.openCategoryTransactions(card.dataset.openCategory, $('category-filter-month').value);
   };
   $('category-create-form').onsubmit = async event => {
     event.preventDefault();
@@ -196,6 +245,7 @@
     if (!button) return;
     deletingCategory = categories.find(category => String(category.id) === button.dataset.deleteCategory);
     if (!deletingCategory) return;
+    $('category-delete-error').textContent = '';
     $('category-delete-copy').textContent = `Transactions and saved merchant mappings assigned to "${deletingCategory.name}" will move to the category you choose below.`;
     $('category-replacement').innerHTML = categories
       .filter(category => String(category.id) !== String(deletingCategory.id))
@@ -269,7 +319,7 @@
       return { id: item.id, category: $('category-preview').querySelector(`[data-suggestion-category="${Number(node.dataset.suggestion)}"]`).value, expectedCategory: item.currentCategory };
     });
     if (!updates.length) return;
-    if (confirmAll && !confirm(`Apply the selected categories to all ${updates.length} suggested transactions? You can review each suggestion before approving.`)) return;
+    if (confirmAll && !await FinanceUI.confirm(`Apply the selected categories to all ${updates.length} suggested transactions? You can review each suggestion before approving.`)) return;
     $('approve-button').disabled = true; $('approve-all-button').disabled = true;
     $('preview-button').disabled = true;
     try {
@@ -285,12 +335,36 @@
 
   window.loadAllTransactions = async function() {
     const table = $('full-txn-table');
+    const request = ++transactionRequest;
+    table.innerHTML = '<tr><td colspan="5" class="empty-state">Loading transactions...</td></tr>';
+    $('txn-summary').textContent = '';
+    $('txn-filter-status').textContent = 'Loading activity...';
     try {
       const [allCategories, data] = await Promise.all([json('/api/categories'), json('/api/dashboard/all-transactions')]);
+      if (request !== transactionRequest) return;
       const selected = $('txn-filter-category').value;
+      const month = $('txn-filter-month').value;
       $('txn-filter-category').innerHTML = '<option value="">All categories</option>' + allCategories.map(c => `<option value="${escape(c.name)}" ${selected === c.name ? 'selected' : ''}>${escape(c.name)}</option>`).join('');
-      const rows = (data.transactions || []).filter(t => (!selected || t.category === selected) && (!$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))).sort((a,b) => localDate(b.date) - localDate(a.date));
-      table.innerHTML = rows.length ? rows.map((t,index) => `<tr data-transaction="${index}"><td style="padding:14px">${escape(t.date)}</td><td>${escape(t.description)}</td><td><select data-category aria-label="Category for ${escape(t.description)}"><option value="">Uncategorized</option>${allCategories.map(c => `<option value="${escape(c.name)}" ${c.name === t.category ? 'selected' : ''}>${escape(c.name)}</option>`).join('')}</select></td><td style="text-align:center"><input data-fixed type="checkbox" aria-label="Fixed bill: ${escape(t.description)}" ${fixed(t.is_fixed) ? 'checked' : ''} ${String(t.direction).toUpperCase() !== 'DEBIT' ? 'disabled title="Only debit payments can be fixed bills"' : ''}></td><td style="text-align:right">${String(t.direction).toUpperCase() === 'DEBIT' ? '−' : '+'}${money(Math.abs(t.amount))}</td></tr>`).join('') : '<tr><td colspan="5" style="padding:24px">No transactions match these filters.</td></tr>';
+      const rows = window.filterTransactionsByCategoryAndMonth(data.transactions || [], selected, month)
+        .filter(t => !$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))
+        .sort((a,b) => transactionDate(b.date) - transactionDate(a.date));
+      const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+      const income = total('CREDIT'), expenses = total('DEBIT');
+      $('txn-filter-status').textContent = `${periodLabel(month)} · ${rows.length.toLocaleString()} matching transactions`;
+      $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
+        `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">Selected filters</span></div>`).join('');
+      table.innerHTML = rows.length ? rows.map((transaction, index) => {
+        const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
+        return `<tr data-transaction="${index}">
+          <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
+          <td>${escape(transaction.description)}</td>
+          <td><select data-category aria-label="Category for ${escape(transaction.description)}">
+            <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
+          </select></td>
+          <td style="text-align:center"><input data-fixed type="checkbox" aria-label="Fixed bill: ${escape(transaction.description)}" ${fixed(transaction.is_fixed) ? 'checked' : ''} ${debit ? '' : 'disabled title="Only debit payments can be fixed bills"'}></td>
+          <td class="${debit ? 'amount-debit' : 'amount-credit'}" style="text-align:right">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="5" class="empty-state">No transactions match these filters.</td></tr>';
       table.onchange = async event => {
         const row = event.target.closest('[data-transaction]');
         if (!row) return;
@@ -307,7 +381,17 @@
         } catch (error) { reportError(error); }
         finally { if (FinanceSession.isAuthenticated()) await loadAllTransactions(); }
       };
-    } catch (error) { table.textContent = error.message; }
+    } catch (error) {
+      if (request !== transactionRequest) return;
+      table.innerHTML = `<tr><td colspan="5" class="empty-state" role="alert">${escape(error.message)}</td></tr>`;
+      $('txn-filter-status').textContent = 'Could not load transactions. Change a filter or reopen this page to retry.';
+    }
+  };
+  window.resetTransactionFilters = () => {
+    $('txn-filter-category').value = '';
+    $('txn-filter-month').value = '';
+    $('txn-filter-fixed').checked = false;
+    return window.loadAllTransactions();
   };
 
   function fundingMarkup(plan) {
@@ -351,6 +435,7 @@
   window.closeAddGoalModal = function() { originalCloseGoal(); goalEditing = null; $('goal-kind').value = 'general'; $('goal-notes').value = ''; };
   window.openAddGoalModal = function(id = null) {
     closeAddGoalModal();
+    $('goal-error').textContent = '';
     goalEditing = id;
     const goal = goals.find(g => String(g.id) === String(id));
     if (goal) {
@@ -363,11 +448,15 @@
     }
     $('add-goal-modal').querySelector('h2').textContent = goal ? 'Edit savings goal' : 'A goal worth making room for';
     $('add-goal-modal').querySelector('button[onclick="saveGoal()"]').textContent = goal ? 'Save goal' : 'Create goal';
-    $('add-goal-modal').style.display = 'flex'; $('goal-name').focus();
+    $('add-goal-modal').showModal(); $('goal-name').focus();
   };
   window.saveGoal = async function() {
+    $('goal-error').textContent = '';
     const target = Number($('goal-target').value), current = Number($('goal-current').value || 0);
-    if (!$('goal-name').value.trim() || target <= 0 || !Number.isFinite(target) || current < 0 || !Number.isFinite(current)) return notify('Enter a name, positive target, and nonnegative current savings.');
+    if (!$('goal-name').value.trim() || target <= 0 || !Number.isFinite(target) || current < 0 || !Number.isFinite(current)) {
+      $('goal-error').textContent = 'Enter a name, positive target, and nonnegative current savings.';
+      return;
+    }
     const button = $('add-goal-modal').querySelector('button[onclick="saveGoal()"]');
     button.disabled = true;
     try {
@@ -395,10 +484,10 @@
     button.disabled = true;
     try {
       if (button.dataset.goalAction === 'delete') {
-        if (!confirm(`Delete "${goal.name}"?`)) return;
+        if (!await FinanceUI.confirm(`Delete "${goal.name}"?`, { action: 'Delete goal' })) return;
         await json(`/api/goals/${encodeURIComponent(goal.id)}`, 'DELETE');
       } else {
-        const amount = prompt('Savings already set aside ($). This records progress; it does not transfer money:');
+        const amount = await FinanceUI.amount('Enter savings already set aside. This records progress; it does not transfer money.');
         if (amount == null) return;
         if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new Error('Enter a positive amount.');
         await json(`/api/goals/${encodeURIComponent(goal.id)}/contribute`, 'POST', { amount: Number(amount) });
@@ -410,6 +499,7 @@
 
   const dialog = document.createElement('dialog');
   dialog.id = 'debt-dialog'; dialog.className = 'editor';
+  dialog.setAttribute('aria-label', 'Debt or loan details');
   dialog.innerHTML = `<form id="debt-form"><h2>Debt or loan details</h2><label>Name<input name="name" required maxlength="100"></label><label>Type<select name="debt_type"><option value="credit_card">Credit card</option><option value="auto_loan">Auto loan</option><option value="student_loan">Student loan</option><option value="personal_loan">Personal loan</option><option value="mortgage">Mortgage</option><option value="other">Other</option></select></label><label>Current balance ($)<input name="balance" type="number" min="0" step=".01" required></label><label>APR (%)<input name="apr" type="number" min="0" max="1000" step=".001" required></label><label>Minimum monthly payment ($)<input name="min_payment" type="number" min="0" step=".01" required></label><label style="display:flex;align-items:center;gap:10px"><input name="payment_in_history" type="checkbox" checked>Monthly payment already included in imported spending</label><p class="muted">Leave checked for existing payments already in your statements. Uncheck for a new loan: its minimum payment is reserved in your savings plan without double-counting existing loans.</p><label>Credit limit ($, optional)<input name="credit_limit" type="number" min="0" step=".01"></label><label>Due day (optional)<input name="due_date" type="number" min="1" max="31" step="1"></label><p id="debt-error" role="alert"></p><div class="toolbar"><button class="btn btn-primary">Save debt</button><button class="btn btn-secondary" type="button" id="debt-cancel">Cancel</button></div></form>`;
   document.body.appendChild(dialog);
   let debtEditing = null;
@@ -479,7 +569,7 @@
     if (edit) return openDebtEditor(debts[Number(edit.dataset.debtEdit)].id);
     if (!remove) return;
     const debt = debts[Number(remove.dataset.debtDelete)];
-    if (!confirm(`Delete "${debt.name || debt.card_name}" from your plan?`)) return;
+    if (!await FinanceUI.confirm(`Delete "${debt.name || debt.card_name}" from your plan?`, { action: 'Delete debt' })) return;
     remove.disabled = true;
     try { await json(`/api/debts/${encodeURIComponent(debt.id)}`, 'DELETE'); await loadPayoffPlan(); }
     catch (error) { reportError(error); remove.disabled = false; }

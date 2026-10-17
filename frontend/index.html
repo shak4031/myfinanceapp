@@ -457,7 +457,7 @@
   </section>
   <div class="app-container">
     <!-- HAMBURGER BUTTON (visible on mobile) -->
-    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
     <!-- NAVIGATION -->
@@ -471,35 +471,41 @@
         <span>MyFinance</span>
       </div>
       <div class="sidebar-caption">YOUR MONEY, WITH DIRECTION</div>
+      <nav aria-label="Main navigation">
       <ul class="nav-list">
-        <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
-        <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
-        <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
-        <li><button class="nav-btn" onclick="showView('etl')">↳ Import review</button></li>
-        <li><button class="nav-btn" onclick="showView('payoff')">🏔️ Payoff Plan</button></li>
-        <li><button class="nav-btn" onclick="showView('goals')">🎯 Goals</button></li>
-        <li><button class="nav-btn" onclick="showView('insights')">◈ Spending coach</button></li>
-        <li><button class="nav-btn" onclick="showView('settings')">⚙ Settings &amp; support</button></li>
-        <li class="admin-only"><a class="nav-btn" href="/admin.html">🛠 Admin console</a></li>
+        <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
+        <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
+        <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
+        <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
+        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Payoff plan</a></li>
+        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals</a></li>
+        <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
+        <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
+        <li class="admin-only"><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
       </ul>
+      </nav>
       <div class="sidebar-bottom"><p id="account-name"></p><small>Small steps. Real progress.</small><button class="btn btn-secondary" onclick="FinanceSession.logout()">Sign out</button></div>
     </aside>
 
     <!-- CONTENT AREA -->
     <main class="main-content">
+      <div class="workspace-bar">
+        <nav aria-label="Breadcrumb"><a href="#dashboard">Workspace</a><span aria-hidden="true">/</span><span id="current-page" aria-current="page">Dashboard</span></nav>
+        <span class="workspace-badge"><span aria-hidden="true"></span>Private workspace</span>
+      </div>
       
       <!-- DASHBOARD -->
       <section id="dashboard-view" class="view active">
         <header class="header">
           <div><p class="eyebrow">THE BIG PICTURE</p><h1>Your money at a glance</h1><p class="muted">Know where you stand. Choose what comes next.</p></div>
-          <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
+          <button class="btn btn-primary" onclick="openImportModal()">Import statements</button>
         </header>
 
         <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
         <div class="panel" style="padding: 24px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
             <div>
-              <h2 style="font-size: 20px; margin: 0;">📈 Monthly Income vs Expense History</h2>
+              <h2 style="font-size: 20px; margin: 0;">Income &amp; expense history</h2>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track patterns, seasonal trends, and net cashflow across months and years</div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -528,7 +534,7 @@
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
             <div>
-              <h2 style="margin: 0;">📅 Upcoming Payments & Projected Runway</h2>
+              <h2 style="margin: 0;">Upcoming payments &amp; projected runway</h2>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
             </div>
             <div id="cashflow-safety-badge"></div>
@@ -540,16 +546,21 @@
       <!-- CATEGORY OVERVIEW -->
       <section id="categories-view" class="view">
         <header class="header category-overview-header">
-          <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">A colorful snapshot of where your money goes. Pick a category to view its transactions.</p></div>
-          <button class="btn btn-primary" onclick="showView('category-admin')">⚙ Manage categories</button>
+          <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">Understand where your money goes. Open any category for a closer look.</p></div>
+          <button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button>
         </header>
+        <div class="filter-panel panel">
+          <label for="category-filter-month">Activity month<input id="category-filter-month" type="month" onchange="loadCategories()"></label>
+          <button class="btn btn-secondary" type="button" onclick="document.getElementById('category-filter-month').value = ''; loadCategories()">All time</button>
+          <p id="category-filter-status" class="filter-status" role="status"></p>
+        </div>
         <div id="category-overview-summary" class="category-overview-summary"></div>
         <div id="category-cards" class="category-cards" aria-live="polite"></div>
       </section>
 
       <section id="category-admin-view" class="view">
         <header class="header category-admin-header">
-          <div><p class="eyebrow">PERSONALIZE YOUR WORKSPACE</p><h1>Category admin</h1><p class="muted">Manage category names and the merchant mappings that automatically organize future imports.</p></div>
+          <div><p class="eyebrow">PERSONALIZE YOUR WORKSPACE</p><h1>Manage categories</h1><p class="muted">Manage category names and the merchant mappings that automatically organize future imports.</p></div>
           <button class="btn btn-secondary" onclick="showView('categories')">← Back to categories</button>
         </header>
         <div id="category-admin-content"></div>
@@ -558,15 +569,13 @@
       <!-- DEBT PAYOFF PLAN -->
       <section id="payoff-view" class="view">
         <header class="header">
-          <h1>🏔️ Debt Avalanche Payoff</h1>
-          <div style="display: flex; gap: 16px;">
-            <div class="metric-card" style="padding: 10px 20px; flex-direction: row; gap: 20px; align-items: center; margin: 0;">
-               <div><span class="metric-label">Total Debt:</span> <span id="payoff-total-debt" class="metric-value" style="font-size: 18px;">$0.00</span></div>
-               <label>Monthly budget ($)<input id="payoff-budget" type="number" min="0" step="0.01" placeholder="Enter budget" onchange="loadPayoffPlan()"></label>
-               <button class="btn btn-primary" onclick="openDebtEditor()">+ Add debt or loan</button>
-            </div>
-          </div>
+          <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Debt payoff plan</h1><p class="muted">Build a realistic plan, starting with your highest-interest debt.</p></div>
         </header>
+        <div class="filter-panel panel">
+          <div><span class="metric-label">Total debt</span><div id="payoff-total-debt" class="metric-value">$0.00</div></div>
+          <label>Monthly budget ($)<input id="payoff-budget" type="number" min="0" step="0.01" placeholder="Enter budget" onchange="loadPayoffPlan()"></label>
+          <button class="btn btn-primary" onclick="openDebtEditor()">Add debt or loan</button>
+        </div>
 
         <!-- Timeline visualization -->
         <div class="panel" style="padding: 24px; margin-bottom: 12px;">
@@ -623,22 +632,26 @@
       <!-- TRANSACTIONS -->
       <section id="transactions-view" class="view">
         <header class="header">
-          <h1>Transactions</h1>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <select id="txn-filter-category" onchange="loadAllTransactions()" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-              <option value="">All Categories</option>
-            </select>
-            <label for="txn-filter-month" style="font-size: 13px; color: var(--text-secondary);">Month</label>
-            <input id="txn-filter-month" type="month" onchange="loadAllTransactions()" aria-label="Filter transactions by month" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; background: var(--bg-tertiary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);">
-              <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
-              Fixed Bills Only
-            </label>
-          </div>
+          <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
+          <button class="btn btn-primary" onclick="openImportModal()">Import statements</button>
         </header>
-        
-        <div class="panel" style="padding: 24px;">
-          <table style="width: 100%; border-collapse: collapse;">
+          <div class="filter-panel panel">
+            <label for="txn-filter-category">Category
+            <select id="txn-filter-category" onchange="loadAllTransactions()">
+              <option value="">All Categories</option>
+            </select></label>
+            <label for="txn-filter-month">Activity month
+            <input id="txn-filter-month" type="month" onchange="loadAllTransactions()"></label>
+            <label class="checkbox-filter">
+              <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
+              Fixed bills only
+            </label>
+            <button class="btn btn-secondary" type="button" onclick="resetTransactionFilters()">Reset filters</button>
+            <p id="txn-filter-status" class="filter-status" role="status"></p>
+          </div>
+        <div id="txn-summary" class="metrics-grid" aria-live="polite"></div>
+        <div class="panel transaction-panel">
+          <table class="transactions-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
               <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
             </thead>
@@ -650,7 +663,7 @@
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <h1>⚙️ ETL Staging (Needs Review)</h1>
+          <div><p class="eyebrow">KEEP YOUR RECORDS COMPLETE</p><h1>Import review</h1><p class="muted">Resolve flagged transactions before adding them to your account.</p></div>
         </header>
         <div class="panel" style="padding: 24px;">
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
@@ -674,8 +687,8 @@
       <!-- GOALS -->
       <section id="goals-view" class="view">
         <header class="header">
-          <h1>🎯 Savings Goals</h1>
-          <button class="btn btn-primary" onclick="openAddGoalModal()">+ New Goal</button>
+          <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Savings goals</h1><p class="muted">Turn your next milestone into a plan you can follow.</p></div>
+          <button class="btn btn-primary" onclick="openAddGoalModal()">New goal</button>
         </header>
 
         <!-- Funding Overview -->
@@ -689,11 +702,11 @@
   </div>
 
   <!-- IMPORT MODAL -->
-  <div id="import-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow);">
+  <dialog id="import-modal" class="floating-dialog" aria-labelledby="import-title">
+    <div class="floating-dialog-body">
       <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="font-size: 18px;">📥 Import Statements</h2>
-        <button onclick="closeImportModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+        <h2 id="import-title" style="font-size: 18px;">Import statements</h2>
+        <button onclick="closeImportModal()" class="dialog-close" aria-label="Close import">&times;</button>
       </div>
 
       <!-- Tabs -->
@@ -751,42 +764,42 @@
         <div id="import-result" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <!-- ADD GOAL MODAL -->
-  <div id="add-goal-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 480px; box-shadow: var(--shadow);">
+  <dialog id="add-goal-modal" class="floating-dialog" aria-labelledby="goal-editor-title">
+    <div class="floating-dialog-body">
       <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="font-size: 18px;">🎯 New Savings Goal</h2>
-        <button onclick="closeAddGoalModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+        <h2 id="goal-editor-title" style="font-size: 18px;">New savings goal</h2>
+        <button onclick="closeAddGoalModal()" class="dialog-close" aria-label="Close goal editor">&times;</button>
       </div>
       <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Goal Name</label>
+          <label for="goal-name" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Goal Name</label>
           <input id="goal-name" type="text" placeholder="e.g., Emergency Fund" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Amount ($)</label>
+            <label for="goal-target" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Amount ($)</label>
             <input id="goal-target" type="number" placeholder="5000" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Current Savings ($)</label>
+            <label for="goal-current" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Current Savings ($)</label>
             <input id="goal-current" type="number" placeholder="0" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Date</label>
+            <label for="goal-date" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Date</label>
             <input id="goal-date" type="date" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Priority (1=Highest)</label>
+            <label for="goal-priority" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Priority (1=Highest)</label>
             <input id="goal-priority" type="number" min="1" max="10" value="1" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Icon</label>
+          <label for="goal-icon" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Icon</label>
           <select id="goal-icon" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
             <option value="🎯">🎯 General</option>
             <option value="🛡️">🛡️ Emergency</option>
@@ -800,22 +813,27 @@
             <option value="🎮">🎮 Entertainment</option>
           </select>
         </div>
+        <p id="goal-error" role="alert"></p>
         <button class="btn btn-primary" onclick="saveGoal()" style="width: 100%; margin-top: 8px;">Create Goal</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <div class="toast-container" id="toasts"></div>
   <dialog id="mtd-transactions-dialog" class="mtd-dialog" aria-labelledby="mtd-dialog-title">
     <div class="mtd-dialog-shell">
   <header class="mtd-dialog-header">
     <div>
-      <p class="eyebrow">MONTH-TO-DATE DETAIL</p>
+      <p class="eyebrow">CATEGORY ACTIVITY</p>
       <h2 id="mtd-dialog-title"></h2>
       <p id="mtd-dialog-period" class="muted"></p>
     </div>
     <button type="button" class="mtd-dialog-close" aria-label="Close transactions">&times;</button>
   </header>
+  <div class="dialog-filter">
+    <label for="category-dialog-month">Activity month<input id="category-dialog-month" type="month"></label>
+    <button id="category-dialog-all" type="button" class="btn btn-secondary">All time</button>
+  </div>
   <div class="mtd-dialog-summary">
     <div><span>Total spending</span><strong id="mtd-dialog-total">$0.00</strong></div>
     <div><span>Transactions</span><strong id="mtd-dialog-count">0</strong></div>
@@ -1092,7 +1110,7 @@
 
       let catHtml = `
         <div id="mtd-spending-section">
-          <h2 style="margin: 32px 0 20px 0;">📊 Month-to-Date Spending</h2>
+          <h2 style="margin: 32px 0 20px 0;">Month-to-date spending</h2>
           <div class="metrics-grid">
       `;
       
@@ -1229,63 +1247,6 @@
           <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
         </div>
       `).join('');
-    }
-
-    async function loadAllTransactions() {
-      const tbody = document.getElementById('full-txn-table');
-      const filterCat = document.getElementById('txn-filter-category').value;
-      const filterMonth = document.getElementById('txn-filter-month').value;
-      const filterFixed = document.getElementById('txn-filter-fixed').checked;
-      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading...</td></tr>';
-      
-      try {
-        const catRes = await fetch('/api/categories');
-        const categories = await catRes.json();
-        
-        // 1. Unified Sync Helper: Populate filter dropdown if empty
-        const filterSelect = document.getElementById('txn-filter-category');
-        if (filterSelect.options.length <= 1) {
-          categories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.textContent = c.name;
-            filterSelect.appendChild(opt);
-          });
-        }
-
-        // 2. Fetch from main endpoint
-        const res = await fetch('/api/dashboard/all-transactions');
-        const data = await res.json();
-        let txns = data.transactions || [];
-        
-        // 3. Centralized Filtering Logic (Matches Dashboard Timeline)
-        txns = window.filterTransactionsByCategoryAndMonth(txns, filterCat, filterMonth);
-        if (filterFixed) {
-          // Robust check for boolean truthy values from database
-          txns = txns.filter(t => t.is_fixed === true || t.is_fixed === 1 || t.is_fixed === 'true');
-        }
-        
-        tbody.innerHTML = txns.sort((a,b) => localDate(b.date) - localDate(a.date)).map(t => `
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 12px; font-size: 12px; color: var(--text-secondary);">${localDate(t.date).toLocaleDateString('en-US', {month: 'short', day: '2-digit', year: 'numeric'})}</td>
-            <td style="padding: 12px; font-weight: 500; font-size: 13px;">${t.description}</td>
-            <td style="padding: 12px;">
-              <select onchange="modifyTransaction('${t.id}', this.value)" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
-                <option value="">Uncategorized</option>
-                ${categories.map(c => `<option value="${c.name}" ${t.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
-              </select>
-            </td>
-            <td style="padding: 12px; text-align: center;">
-              <input type="checkbox" ${t.is_fixed ? 'checked' : ''} onchange="toggleFixed('${t.id}', this.checked)" style="cursor: pointer;">
-            </td>
-            <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction.toLowerCase() === 'debit' ? 'var(--danger)' : 'var(--success)'}">
-              ${t.direction.toLowerCase() === 'debit' ? '-' : '+'}$${Math.abs(t.amount).toFixed(2)}
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load transactions</td></tr>';
-      }
     }
 
     async function modifyTransaction(id, category) {
@@ -1481,10 +1442,10 @@
     // IMPORT MODAL
     // ===========================================
     function openImportModal() {
-      document.getElementById('import-modal').style.display = 'flex';
+      document.getElementById('import-modal').showModal();
     }
     function closeImportModal() {
-      document.getElementById('import-modal').style.display = 'none';
+      document.getElementById('import-modal').close();
       document.getElementById('import-result').style.display = 'none';
     }
 
@@ -1629,10 +1590,10 @@
     // GOALS PAGE
     // ===========================================
     function openAddGoalModal() {
-      document.getElementById('add-goal-modal').style.display = 'flex';
+      document.getElementById('add-goal-modal').showModal();
     }
     function closeAddGoalModal() {
-      document.getElementById('add-goal-modal').style.display = 'none';
+      document.getElementById('add-goal-modal').close();
       document.getElementById('goal-name').value = '';
       document.getElementById('goal-target').value = '';
       document.getElementById('goal-current').value = '';
@@ -1667,7 +1628,7 @@
     }
 
     async function deleteGoal(id) {
-      if (!confirm('Delete this goal?')) return;
+      if (!await FinanceUI.confirm('Delete this goal?', { action: 'Delete goal' })) return;
       try {
         await fetch(`/api/goals/${id}`, { method: 'DELETE' });
         notify('Goal deleted');
@@ -1676,8 +1637,9 @@
     }
 
     async function contributeToGoal(id) {
-      const amount = prompt('Amount to contribute ($):');
-      if (!amount || isNaN(amount) || amount <= 0) return;
+      const amount = await FinanceUI.amount('Enter savings already set aside. This records progress; it does not transfer money.');
+      if (amount == null) return;
+      if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) { notify('Enter a positive amount.'); return; }
       try {
         const res = await fetch(`/api/goals/${id}/contribute`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1812,6 +1774,10 @@
       overlay.classList.toggle('show');
       hamburger.classList.toggle('open');
       hamburger.textContent = sidebar.classList.contains('open') ? '✕' : '☰';
+      hamburger.setAttribute('aria-expanded', String(sidebar.classList.contains('open')));
+      hamburger.setAttribute('aria-label', sidebar.classList.contains('open') ? 'Close navigation' : 'Open navigation');
+      syncSidebarAccessibility();
+      if (sidebar.classList.contains('open')) sidebar.querySelector('.nav-btn').focus();
     }
     function closeSidebar() {
       document.getElementById('sidebar').classList.remove('open');
@@ -1819,7 +1785,17 @@
       const h = document.getElementById('hamburger-btn');
       h.classList.remove('open');
       h.textContent = '☰';
+      h.setAttribute('aria-expanded', 'false');
+      h.setAttribute('aria-label', 'Open navigation');
+      syncSidebarAccessibility();
     }
+    function syncSidebarAccessibility() {
+      const mobile = window.innerWidth <= 768;
+      const open = document.getElementById('sidebar').classList.contains('open');
+      document.getElementById('sidebar').inert = mobile && !open;
+      document.querySelector('.main-content').inert = mobile && open;
+    }
+    window.addEventListener('resize', syncSidebarAccessibility);
     // Auto-close sidebar on nav click (mobile)
     document.addEventListener('click', function(e) {
       if (e.target.closest('.nav-btn') && window.innerWidth <= 768) {
@@ -1828,6 +1804,7 @@
     });
 
   </script>
+  <script src="ui.js"></script>
   <script src="refresh.js"></script>
   <script src="account.js"></script>
   <script>FinanceSession.start();</script>

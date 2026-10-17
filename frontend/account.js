@@ -51,7 +51,7 @@
     if (event.target.id !== 'support-grant-form') return;
     event.preventDefault();
     const level = $('support-level').value;
-    if (level === 'write' && !confirm('Allow support to make changes to your data? Changes are logged, and you can revoke access at any time.')) return;
+    if (level === 'write' && !await FinanceUI.confirm('Allow support to make changes to your data? Changes are logged, and you can revoke access at any time.')) return;
     try {
       await fetch('/api/support-access', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: $('support-reason').value.trim(), accessLevel: level, hours: Number($('support-hours').value) }) });
