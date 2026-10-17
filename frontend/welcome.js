@@ -63,30 +63,57 @@
     return 'Everything looks on track. Here is what is coming up.';
   }
 
+  const MASCOT = { alert: '⚠️', calendar: '📅', hand: '✋', cash: '💸', flag: '🏁', target: '🎯', gauge: '🔥', trend: '📈', search: '🔍', repeat: '🔁', spark: '✨', shield: '🛡️', upload: '📤', play: '🎬' };
+  const MOOD = { danger: ['🚨', 'Action needed'], warning: ['👀', 'Heads up'], calm: ['🌤️', 'All clear'] };
+  // Each slide enters with its own motion so the rotation never feels repetitive.
+  const EFFECTS = ['rise', 'pop', 'swipe', 'flip', 'cascade', 'zoom'];
+  const HIGHLIGHT = /([−-]?\$[\d,]+(?:\.\d+)?[kKmM]?|\d+(?:\.\d+)?%|\b\d{1,2}(?:st|nd|rd|th)\b|\b\d+ (?:days?|weeks?|months?)\b|\b(?:today|tomorrow)\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b)/i;
+
+  function mood(insights) {
+    if (insights.some(item => item.tone === 'danger')) return ['danger', ...MOOD.danger];
+    if (insights.some(item => item.tone === 'warning')) return ['warning', ...MOOD.warning];
+    return ['calm', ...MOOD.calm];
+  }
+
+  // Splits a title into word spans (for staggered entrances) and marks money, percentages and dates.
+  function titleArt(title) {
+    let word = 0;
+    return String(title ?? '').split(HIGHLIGHT).map((part, i) => {
+      if (!part) return '';
+      if (i % 2) return `<span class="welcome-w" style="--i:${word++}"><mark class="welcome-hl">${esc(part)}</mark></span>`;
+      return part.split(/(\s+)/).map(bit => /^\s+$/.test(bit) ? ' ' : bit ? `<span class="welcome-w" style="--i:${word++}">${esc(bit)}</span>` : '').join('');
+    }).join('');
+  }
+
   function pulseRows(pulse) {
     const today = new Date().getDate();
     const rows = [];
-    rows.push(['Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : '']);
+    rows.push(['🏦', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint']);
     if (pulse.nextIncome) {
       const away = pulse.nextIncome.daysAway;
-      rows.push(['Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · the ${ordinal(pulse.nextIncome.day)}`, 'good']);
+      rows.push(['💰', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · the ${ordinal(pulse.nextIncome.day)}`, 'good']);
     }
-    rows.push(['Bills left this month', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'} to go` : 'Nothing else due', '']);
-    if (pulse.lowPoint) rows.push(['Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : '']);
+    rows.push(['🧾', 'Bills left this month', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'} to go` : 'Nothing else due', 'sky']);
+    if (pulse.lowPoint) rows.push(['📉', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
     if (pulse.debtFreeDate) {
       const [year, month] = pulse.debtFreeDate.split('-').map(Number);
-      rows.push(['Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'good']);
+      rows.push(['🏁', 'Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'grape']);
     }
-    return rows.map(([label, value, note, tone]) => `<div class="welcome-pulse-row${tone ? ` is-${tone}` : ''}"><dt>${esc(label)}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
+    return rows.map(([emoji, label, value, note, tone], i) => `<div class="welcome-pulse-row is-${tone}" style="--i:${i}"><dt><span class="welcome-pulse-emoji" aria-hidden="true">${emoji}</span>${esc(label)}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
   }
 
   function slide(item, index, total) {
     const action = item.action ? `<button type="button" class="welcome-action" data-welcome-action="${index}">${esc(item.action.label)}${icon('arrow', 16)}</button>` : '';
-    return `<article class="welcome-slide tone-${esc(item.tone)}${index === state.index ? ' is-active' : ''}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}" aria-hidden="${index !== state.index}" data-index="${index}">
-      <div class="welcome-slide-top"><span class="welcome-slide-icon">${icon(item.icon, 20)}</span><span class="welcome-slide-tone">${esc(TONE_LABEL[item.tone] || 'Insight')}</span></div>
-      <h3>${esc(item.title)}</h3>
-      <p>${esc(item.detail)}</p>
-      ${action}
+    const burst = item.tone === 'success' || item.tone === 'pro' || item.tone === 'learn'
+      ? `<span class="welcome-burst" aria-hidden="true">${'<i></i>'.repeat(8)}</span>` : '';
+    return `<article class="welcome-slide tone-${esc(item.tone)} fx-${EFFECTS[index % EFFECTS.length]}${index === state.index ? ' is-active' : ''}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}" aria-hidden="${index !== state.index}" data-index="${index}">
+      <span class="welcome-mascot" aria-hidden="true"><span class="welcome-mascot-face">${MASCOT[item.icon] || '✨'}</span>${burst}</span>
+      <div class="welcome-slide-copy">
+        <span class="welcome-slide-tone">${esc(TONE_LABEL[item.tone] || 'Insight')}</span>
+        <h3><span class="visually-hidden">${esc(item.title)}</span><span class="welcome-title-art" aria-hidden="true">${titleArt(item.title)}</span></h3>
+        <p>${esc(item.detail)}</p>
+        ${action}
+      </div>
     </article>`;
   }
 
@@ -96,47 +123,75 @@
     const insights = state.data.insightsView;
     const name = firstName();
     const today = new Date();
+    const [moodTone, moodEmoji, moodLabel] = mood(insights);
     state.index = Math.min(state.index, insights.length - 1);
+    root.setAttribute('data-tone', insights[state.index]?.tone || 'info');
     root.innerHTML = `
+      <span class="welcome-blob welcome-blob-a" aria-hidden="true"></span><span class="welcome-blob welcome-blob-b" aria-hidden="true"></span><span class="welcome-blob welcome-blob-c" aria-hidden="true"></span>
       <div class="welcome-top">
         <div class="welcome-greeting">
-          <p class="welcome-date">${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
-          <h1>${esc(greeting(today))}${name ? `, ${esc(name)}` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
-          <p class="welcome-sub">${esc(headline(insights))}</p>
+          <p class="welcome-date"><span aria-hidden="true">☀️</span>${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
+          <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
+          <p class="welcome-sub"><span class="welcome-mood mood-${moodTone}"><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)}</span>${esc(headline(insights))}</p>
         </div>
         <div class="welcome-top-actions">
           <a class="welcome-ghost" href="#tutorials/dashboard">${icon('play', 15)}Tour</a>
           <button type="button" class="welcome-ghost" onclick="openImportModal()">${icon('upload', 15)}Import</button>
         </div>
       </div>
-      <div class="welcome-body">
-        <section class="welcome-carousel" aria-roledescription="carousel" aria-label="Your insights">
-          <div class="welcome-slides" id="welcome-slides" aria-live="off">${insights.map((item, index) => slide(item, index, insights.length)).join('')}</div>
-          <div class="welcome-controls">
-            <button type="button" class="welcome-nav" data-welcome-step="-1" aria-label="Previous insight">${icon('left', 18)}</button>
-            <div class="welcome-dots" role="tablist" aria-label="Choose an insight">${insights.map((item, index) => `<button type="button" role="tab" class="welcome-dot tone-${esc(item.tone)}${index === state.index ? ' is-active' : ''}" data-welcome-go="${index}" aria-selected="${index === state.index}" aria-label="${esc(item.title)}"><span></span></button>`).join('')}</div>
-            <span class="welcome-count" id="welcome-count">${state.index + 1} / ${insights.length}</span>
-            <button type="button" class="welcome-nav" data-welcome-step="1" aria-label="Next insight">${icon('right', 18)}</button>
-            <button type="button" class="welcome-nav welcome-pause" data-welcome-pause aria-label="${state.userPaused ? 'Resume rotating insights' : 'Pause rotating insights'}" aria-pressed="${state.userPaused}">${icon(state.userPaused ? 'resume' : 'pause', 16)}</button>
-          </div>
-        </section>
-        <aside class="welcome-pulse" aria-label="Today at a glance">
-          <p class="welcome-pulse-title">Today at a glance</p>
-          <dl>${pulseRows(state.data.pulse)}</dl>
-        </aside>
-      </div>`;
+      <section class="welcome-carousel" aria-roledescription="carousel" aria-label="Your insights">
+        <div class="welcome-slides" id="welcome-slides" aria-live="off">${insights.map((item, index) => slide(item, index, insights.length)).join('')}</div>
+        <div class="welcome-controls">
+          <div class="welcome-dots" role="tablist" aria-label="Choose an insight">${insights.map((item, index) => `<button type="button" role="tab" class="welcome-dot tone-${esc(item.tone)}${index === state.index ? ' is-active' : ''}" data-welcome-go="${index}" aria-selected="${index === state.index}" aria-label="${esc(item.title)}"><span></span></button>`).join('')}</div>
+          <span class="welcome-count" id="welcome-count">${state.index + 1} / ${insights.length}</span>
+          <button type="button" class="welcome-nav" data-welcome-step="-1" aria-label="Previous insight">${icon('left', 18)}</button>
+          <button type="button" class="welcome-nav welcome-pause" data-welcome-pause aria-label="${state.userPaused ? 'Resume rotating insights' : 'Pause rotating insights'}" aria-pressed="${state.userPaused}">${icon(state.userPaused ? 'resume' : 'pause', 16)}</button>
+          <button type="button" class="welcome-nav" data-welcome-step="1" aria-label="Next insight">${icon('right', 18)}</button>
+        </div>
+      </section>
+      <aside class="welcome-pulse" aria-label="Today at a glance">
+        <dl>${pulseRows(state.data.pulse)}</dl>
+      </aside>`;
     restart();
+  }
+
+  // The stage glides between slide heights instead of reserving space for the tallest one.
+  function glideHeight(slides, change) {
+    if (!slides || reducedMotion() || typeof slides.offsetHeight !== 'number') return change();
+    const from = slides.offsetHeight;
+    change();
+    const to = slides.offsetHeight;
+    if (!from || from === to) return;
+    slides.style.height = `${from}px`;
+    void slides.offsetHeight;
+    slides.style.height = `${to}px`;
+    clearTimeout(slides._glide);
+    slides._glide = setTimeout(() => { slides.style.height = ''; }, 520);
   }
 
   function show(index, { announce = false } = {}) {
     const insights = state.data?.insightsView || [];
     if (!insights.length) return;
+    const previous = state.index;
     state.index = (index + insights.length) % insights.length;
-    document.querySelectorAll('#welcome-hero .welcome-slide').forEach(node => {
-      const active = Number(node.dataset.index) === state.index;
-      node.classList.toggle('is-active', active);
-      node.setAttribute('aria-hidden', String(!active));
+    const slides = $('welcome-slides');
+    const forward = state.index > previous || (previous === insights.length - 1 && state.index === 0);
+    glideHeight(slides, () => {
+      document.querySelectorAll('#welcome-hero .welcome-slide').forEach(node => {
+        const i = Number(node.dataset.index);
+        const active = i === state.index;
+        const leaving = i === previous && !active && !reducedMotion();
+        node.classList.toggle('is-active', active);
+        node.classList.toggle('is-back', !forward);
+        if (leaving) {
+          node.classList.add('is-leaving');
+          clearTimeout(node._leave);
+          node._leave = setTimeout(() => node.classList.remove('is-leaving'), 480);
+        } else if (active) node.classList.remove('is-leaving');
+        node.setAttribute('aria-hidden', String(!active));
+      });
     });
+    $('welcome-hero')?.setAttribute('data-tone', insights[state.index]?.tone || 'info');
     document.querySelectorAll('#welcome-hero .welcome-dot').forEach(node => {
       const active = Number(node.dataset.welcomeGo) === state.index;
       node.classList.toggle('is-active', active);
@@ -144,11 +199,9 @@
     });
     const count = $('welcome-count');
     if (count) count.textContent = `${state.index + 1} / ${insights.length}`;
-    const slides = $('welcome-slides');
     if (slides) slides.setAttribute('aria-live', announce ? 'polite' : 'off');
     restart();
   }
-
   // The active dot fills over ROTATE_MS; pausing freezes both the timer and the fill.
   function restart() {
     clearTimeout(state.timer);
@@ -190,7 +243,7 @@
     const root = $('welcome-hero');
     if (!root || state.data) return;
     root.innerHTML = `<div class="welcome-top"><div class="welcome-greeting"><p class="welcome-date">${esc(new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p><h1>${esc(greeting())}${firstName() ? `, ${esc(firstName())}` : ''}</h1><p class="welcome-sub">Gathering your insights…</p></div></div>
-      <div class="welcome-body"><div class="welcome-carousel welcome-skeleton"><span></span><span></span><span></span></div><div class="welcome-pulse welcome-skeleton"><span></span><span></span><span></span></div></div>`;
+      <div class="welcome-carousel welcome-skeleton"><span></span><span></span><span></span></div>`;
   }
 
   async function load() {

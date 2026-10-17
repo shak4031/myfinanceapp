@@ -193,7 +193,11 @@ calendar-filter, filtered-summary, and request-order regressions.
   balance dipping below a safe level before payday, debt-free progress, goal status,
   price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
   can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
-- **Today at a glance**: balance, next payday, bills left, lowest projected point and
+  The hero is a light aurora card whose glow follows the active insight's mood; each
+  insight has an emoji mascot, highlights its key figures (amounts, %, dates) with a
+  marker swipe, and enters with a different animation (rise, pop, swipe, flip, word
+  cascade, zoom). The stage resizes smoothly to each message, so there's no empty space.
+- **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
   debt-free month. Insights come from `GET /api/dashboard/insights`
   (rules in `backend/utils/insights.js`).
 - The cash-flow history chart is still available in a collapsed drawer below the

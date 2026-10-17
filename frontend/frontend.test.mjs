@@ -824,6 +824,10 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.match(html, /Lowest point ahead[\s\S]*−\$40/);
   assert.match(html, /Take a one-minute tour/);
   assert.match(html, /1 \/ 3/);
+  assert.match(html, /<mark class="welcome-hl">28th<\/mark>/);
+  assert.match(html, /fx-rise[\s\S]*fx-pop[\s\S]*fx-swipe/);
+  assert.match(html, /welcome-mood mood-danger/);
+  assert.match(html, /⚠️[\s\S]*🔥/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');
   await f.context.FinanceWelcome.load();
