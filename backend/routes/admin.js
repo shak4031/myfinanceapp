@@ -8,6 +8,7 @@ import { issuePasswordReset, attemptKeysForEmail, supportCookieName, cookieOptio
 import { openApiSpec } from '../utils/openapi.js';
 import { log } from '../utils/logger.js';
 import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.js';
+import { isDemoEmail } from '../utils/demo.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -78,7 +79,7 @@ router.get('/users', async (req, res, next) => {
       const row = license_granted_at || license_revoked_at || license_trial_started_at
         ? { granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at }
         : null;
-      const { tier, source, daysLeft, trialEndsAt } = entitlementFromRow(user.id, row);
+      const { tier, source, daysLeft, trialEndsAt } = entitlementFromRow(user.id, row, new Date(), user.email);
       return { ...user, license: { tier, source, daysLeft, trialEndsAt } };
     }));
   } catch (error) { next(error); }
@@ -189,10 +190,13 @@ router.post('/users/:id/license', async (req, res, next) => {
     if (!['grant', 'revoke'].includes(action)) return res.status(400).json({ error: 'action must be grant or revoke' });
     if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro' });
     const entitlement = id && await administrativeTransaction(async client => {
-      if (!await loadUser(client, id)) return null;
+      const user = await loadUser(client, id);
+      if (!user) return null;
+      if (isDemoEmail(user.email)) return { demo: true };
       return setLicense(client, id, action, req.user.id);
     });
     if (!entitlement) return res.status(404).json({ error: 'User not found' });
+    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro' });
     await recordAudit(req, `admin.license_${action === 'grant' ? 'granted' : 'revoked'}`, 'success', { subjectUserId: id, status: 200 });
     res.json({ success: true, license: { tier: entitlement.tier, source: entitlement.source } });
   } catch (error) { next(error); }

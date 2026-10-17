@@ -1,7 +1,8 @@
 import app from './app.js';
-import Database from './db.js';
+import Database, { administrativeTransaction } from './db.js';
 import { log } from './utils/logger.js';
 import { purgeExpiredAuditEvents, structuredLog } from './utils/audit.js';
+import { demoEnabled, resetDemoAccount, startDemoResets } from './utils/demo.js';
 
 const db = new Database();
 
@@ -20,6 +21,15 @@ try {
   await db.init();
   await purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
+  if (demoEnabled()) {
+    await startDemoResets(
+      async () => {
+        const result = await administrativeTransaction(client => resetDemoAccount(client));
+        log('DEMO', `Demo account reset with ${result.transactions} sample transactions`);
+      },
+      error => structuredLog('error', { event: 'demo.reset_failed', name: error?.name, message: error?.message })
+    );
+  }
   const port = process.env.PORT || 3000;
   app.listen(port, '0.0.0.0', () => log('SERVER', `MyFinanceApp listening on port ${port} with private account sessions`));
 } catch (error) {

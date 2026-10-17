@@ -7,6 +7,7 @@ import { withUser } from '../utils/tenant.js';
 import { log } from '../utils/logger.js';
 import { recordAudit } from '../utils/audit.js';
 import { sendPasswordResetEmail, sendSecurityNotice } from '../utils/mailer.js';
+import { isDemoEmail } from '../utils/demo.js';
 
 const router = Router();
 const sessionDays = 7;
@@ -301,8 +302,8 @@ router.post('/password-reset/request', async (req, res, next) => {
     }
     const user = await administrativeTransaction(async client =>
       (await client.query('SELECT id,name,email FROM users WHERE lower(email)=$1 AND password_hash IS NOT NULL', [email])).rows[0]);
-    if (user) await issuePasswordReset(req, user, 'self');
-    else await recordAudit(req, 'auth.password_reset_requested', 'failure', { email, detail: { reason: 'unknown_email' } });
+    if (user && !isDemoEmail(user.email)) await issuePasswordReset(req, user, 'self');
+    else if (!user) await recordAudit(req, 'auth.password_reset_requested', 'failure', { email, detail: { reason: 'unknown_email' } });
     // Same response either way so the endpoint cannot be used to discover accounts.
     res.status(202).json({ success: true, message: genericResetMessage });
   } catch (error) { next(error); }

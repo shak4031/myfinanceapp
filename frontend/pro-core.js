@@ -67,7 +67,7 @@
 
   function planLabel(entitlement = state.entitlement) {
     if (!entitlement) return { tone: 'free', title: 'Free plan', detail: 'Unlock Pro' };
-    if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : 'Active' };
+    if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
     if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro trial', detail: `${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left` };
     return { tone: 'free', title: 'Free plan', detail: entitlement.trialAvailable ? 'Try Pro free for 7 days' : 'Upgrade to Pro' };
   }
@@ -116,7 +116,7 @@
     const supportSession = !!globalThis.FinanceSession?.currentSupport?.();
     let status = '', action = '';
     if (entitlement.tier === 'pro') {
-      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro is active on this account${entitlement.source === 'owner' ? ' (owner license)' : ''}. Every insight is unlocked.</span></p>`;
+      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro is active on this account${entitlement.source === 'owner' ? ' (owner license)' : entitlement.source === 'demo' ? ' (demo account)' : ''}. Every insight is unlocked.</span></p>`;
       action = '<button type="button" class="btn btn-primary" data-pro-close>Explore analytics</button>';
     } else if (entitlement.tier === 'trial') {
       status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your free trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. Ask your MyFinance administrator to keep Pro after it ends.</span></p>`;

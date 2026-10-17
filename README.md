@@ -52,6 +52,16 @@ support**; admins never see customer data otherwise. See
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
 
+## Demo account
+
+The server creates a showcase account on start-up: `demo@myfinance.app` /
+`password1234`. It holds a year of generated sample data (income, fixed bills
+with auto-pay/manual modes, budgets, goals, debts and categorization rules) and
+always includes MyFinance Pro. Its data is rebuilt on every deploy and nightly
+at 08:00 UTC, so changes made during a demo never persist. Admins cannot grant
+or revoke its license, and password-reset emails are never sent for it. Set
+`DEMO_ACCOUNT=false` to disable it.
+
 ## Responsive workspace and activity filters
 
 The finance workspace uses a shared navy navigation rail, emerald actions,

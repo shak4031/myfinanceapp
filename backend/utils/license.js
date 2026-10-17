@@ -1,4 +1,5 @@
 import { administrativeTransaction } from '../db.js';
+import { isDemoEmail } from './demo.js';
 
 export const OWNER_USER_ID = 1;
 export const TRIAL_DAYS = 7;
@@ -16,9 +17,10 @@ export const PRO_FEATURES = Object.freeze([
 const DAY_MS = 86400000;
 
 // Pure so it can be tested without a database.
-export function entitlementFromRow(userId, row, now = new Date()) {
+export function entitlementFromRow(userId, row, now = new Date(), email = row?.email) {
   const base = { plan: PLAN, features: PRO_FEATURES };
   if (Number(userId) === OWNER_USER_ID) return { ...base, tier: 'pro', source: 'owner', active: true, trialAvailable: false };
+  if (isDemoEmail(email)) return { ...base, tier: 'pro', source: 'demo', active: true, trialAvailable: false };
   if (row?.granted_at && !row.revoked_at) {
     return { ...base, tier: 'pro', source: 'license', active: true, trialAvailable: false, grantedAt: row.granted_at };
   }
@@ -37,7 +39,8 @@ export function entitlementFromRow(userId, row, now = new Date()) {
 }
 
 async function loadRow(client, userId) {
-  return (await client.query('SELECT * FROM user_licenses WHERE user_id=$1', [userId])).rows[0];
+  return (await client.query(`SELECT l.*, u.email FROM users u LEFT JOIN user_licenses l ON l.user_id = u.id
+    WHERE u.id=$1`, [userId])).rows[0];
 }
 
 export async function getEntitlement(userId) {

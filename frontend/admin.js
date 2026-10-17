@@ -82,12 +82,12 @@
 
   function planCell(user) {
     const license = user.license || { tier: 'free' };
-    const detail = license.tier === 'trial' ? `Trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro · owner' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
+    const detail = license.tier === 'trial' ? `Trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro · owner' : license.source === 'demo' ? 'Pro · demo' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
     return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>`;
   }
   function planButton(user) {
     const license = user.license || { tier: 'free' };
-    if (license.source === 'owner') return '';
+    if (license.source === 'owner' || license.source === 'demo') return '';
     return license.tier === 'pro'
       ? `<button class="btn btn-secondary" data-action="license-revoke" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Revoke Pro</button>`
       : `<button class="btn btn-primary" data-action="license-grant" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Grant Pro</button>`;
