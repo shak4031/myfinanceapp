@@ -162,9 +162,8 @@
         const [icon, art] = categoryArtwork(category.name);
         const count = counts.get(category.name) || 0;
         return `<button class="category-card category-${art}" type="button" data-open-category="${escape(category.name)}" style="--card-order:${index}" aria-label="View ${escape(category.name)}, ${count} transaction${count === 1 ? '' : 's'}">
-          <span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span>
-          <span class="category-card-copy"><strong>${escape(category.name)}</strong><span class="category-card-total">${money(spending.get(category.name) || 0)}</span><small>spent · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
-          <span class="category-card-arrow" aria-hidden="true">↗</span>
+          <span class="category-card-head"><span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span><strong>${escape(category.name)}</strong><span class="category-card-arrow" aria-hidden="true">↗</span></span>
+          <span class="category-card-copy"><span class="category-card-total">${money(spending.get(category.name) || 0)}</span><small>spent · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
         </button>`;
       }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
       $('category-replacement').innerHTML = categories

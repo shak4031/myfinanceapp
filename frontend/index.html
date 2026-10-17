@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017"></script>
-  <script src="client-errors.js?v=20261017"></script>
+  <script src="session.js?v=20261017b"></script>
+  <script src="client-errors.js?v=20261017b"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -429,7 +429,7 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017">
+  <link rel="stylesheet" href="refresh.css?v=20261017b">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -502,10 +502,10 @@
         </header>
 
         <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
-        <div class="panel" style="padding: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div class="panel section-panel">
+          <div class="section-head">
             <div>
-              <h2 style="font-size: 20px; margin: 0;">Income &amp; expense history</h2>
+              <h2>Income &amp; expense history</h2>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track patterns, seasonal trends, and net cashflow across months and years</div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -531,10 +531,10 @@
 
         <div class="metrics-grid" id="dashboard-metrics"></div>
 
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div id="upcoming-section" class="panel section-panel">
+          <div class="section-head">
             <div>
-              <h2 style="margin: 0;">Upcoming payments &amp; projected runway</h2>
+              <h2>Upcoming payments &amp; projected runway</h2>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
             </div>
             <div id="cashflow-safety-badge"></div>
@@ -906,15 +906,15 @@
 
       // 1. KPI Badges
       summaryContainer.innerHTML = `
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card income" style="padding: 16px;">
           <div class="metric-label">${yearNum} Total Income</div>
           <div class="metric-value" style="font-size: 22px; color: var(--success);">$${summary.totalIncome.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card expense" style="padding: 16px;">
           <div class="metric-label">${yearNum} Total Expenses</div>
           <div class="metric-value" style="font-size: 22px; color: var(--danger);">$${summary.totalExpenses.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card net" style="padding: 16px;">
           <div class="metric-label">${yearNum} Net Cashflow</div>
           <div class="metric-value" style="font-size: 22px; color: ${summary.netSavings >= 0 ? 'var(--success)' : 'var(--danger)'};">${summary.netSavings >= 0 ? '+' : ''}$${summary.netSavings.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
@@ -984,10 +984,10 @@
       }
       
       document.getElementById('dashboard-metrics').innerHTML = `
-        <div class="metric-card"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
+        <div class="metric-card income"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
+        <div class="metric-card expense"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
+        <div class="metric-card net"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
+        <div class="metric-card balance"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
       `;
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
@@ -1051,9 +1051,9 @@
       // Re-run for row-by-row rendering
       runningBalance = data.balance;
       let timelineHtml = `
-        <div class="panel" style="padding: 0; overflow: hidden;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead style="background: var(--bg-tertiary); color: var(--text-secondary); text-align: left; font-size: 11px; text-transform: uppercase;">
+        <div class="data-table-wrap">
+          <table class="data-table payments-table">
+            <thead>
               <tr>
                 <th style="padding: 12px 16px;">Status</th>
                 <th>Description</th>
@@ -1075,7 +1075,7 @@
         const isDeficit = !isPaid && Number.isFinite(data.balance) && runningBalance < 0;
 
         timelineHtml += `
-          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.65' : '1'}; color: ${isPaid ? 'var(--text-secondary)' : 'var(--text-primary)'}; background: ${isDeficit ? 'rgba(235, 87, 87, 0.12)' : (item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent')}">
+          <tr class="${isPaid ? 'is-paid' : ''}${isDeficit ? ' is-deficit' : ''}${item.isIncome ? ' is-income' : ''}" style="color: ${isPaid ? 'var(--text-secondary)' : 'var(--text-primary)'};">
             <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : (isDeficit ? 'var(--danger)' : 'var(--primary)')};">
               ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
               ${isOverdue ? '<span style="display: block; font-size: 10px;">Overdue / not recorded</span>' : ''}
@@ -1084,7 +1084,7 @@
             <td style="padding: 12px 0;">
               <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${escapeHtml(item.description)}</div>
               <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(item.category)}</div>
-              ${item.sourceTransactionId ? `<button class="btn btn-secondary" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" style="font-size:11px;margin-top:8px">Stop projecting this bill</button>` : ''}
+              ${item.sourceTransactionId ? `<button class="btn btn-secondary btn-compact" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)">Stop projecting this bill</button>` : ''}
             </td>
             <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${isPaid ? 'var(--text-secondary)' : (item.isIncome ? 'var(--success)' : 'var(--danger)')}">
               ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
@@ -1109,9 +1109,14 @@
       };
 
       let catHtml = `
-        <div id="mtd-spending-section">
-          <h2 style="margin: 32px 0 20px 0;">Month-to-date spending</h2>
-          <div class="metrics-grid">
+        <div id="mtd-spending-section" class="panel section-panel">
+          <div class="section-head">
+            <div>
+              <h2>Month-to-date spending</h2>
+              <div>Spending by category this month. Select a category to see its transactions.</div>
+            </div>
+          </div>
+          <div class="metrics-grid mtd-grid">
       `;
       
       categories.forEach(cat => {
@@ -1133,7 +1138,7 @@
       });
       
       catHtml += '</div></div>';
-      paymentsContainer.insertAdjacentHTML('afterend', catHtml);
+      document.getElementById('upcoming-section').insertAdjacentHTML('afterend', catHtml);
     }
 
     async function toggleFixed(txnId, isFixed) {
@@ -1804,9 +1809,9 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017"></script>
-  <script src="refresh.js?v=20261017"></script>
-  <script src="account.js?v=20261017"></script>
+  <script src="ui.js?v=20261017b"></script>
+  <script src="refresh.js?v=20261017b"></script>
+  <script src="account.js?v=20261017b"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>
