@@ -232,6 +232,16 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.deepEqual(approved, { status: 200, body: { updated: 1 } });
     assert.equal((await request('/api/transactions/categorization-apply',
       { updates: [{ id: 2, category: 'Shopping', expectedCategory: 'Dining' }] })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }] })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }], protectCorrections: 'no' })).status, 400);
+    assert.deepEqual(await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }], protectCorrections: false }), { status: 200, body: { updated: 1 } });
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Groceries', expectedCategory: 'Groceries' }], protectCorrections: false })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Groceries', expectedCategory: 'Dining' }], protectCorrections: false })).status, 200);
     await client.query("INSERT INTO transaction_labels (pattern,match_type) VALUES ('(a+)+$', 'regex')");
     await client.query("INSERT INTO transactions (description,category) VALUES ('STARBUCKS','Other')");
     const previewWithLegacyRule = await request('/api/transactions/categorization-preview', { scope: 'all' });

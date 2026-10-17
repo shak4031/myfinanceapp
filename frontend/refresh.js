@@ -115,6 +115,27 @@
     if (!tokens.length) return escape(text);
     return String(text ?? '').split(new RegExp(`(${tokens.join('|')})`, 'gi')).map((part, index) => index % 2 ? `<mark>${escape(part)}</mark>` : escape(part)).join('');
   };
+  // Statement noise around the merchant name: bank rails, card networks, web suffixes and filler words.
+  const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
+  // Person-to-person rails need the payee too, otherwise every Zelle/Venmo payment would match.
+  const PAYMENT_RAILS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH']);
+  window.merchantTokens = description => [...new Set(String(description ?? '').toUpperCase().split(/[^A-Z0-9]+/)
+    .filter(token => token.length > 2 && !/\d/.test(token) && !MERCHANT_NOISE.has(token)))];
+  window.merchantKey = description => {
+    const tokens = window.merchantTokens(description);
+    if (!tokens.length) return '';
+    return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
+  };
+  // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
+  window.findSimilarTransactions = (transactions, source, category) => {
+    const key = window.merchantKey(source?.description);
+    if (!key || !category) return [];
+    const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
+    return transactions
+      .filter(t => String(t.id) !== String(source.id) && t.category !== category && String(t.direction).toUpperCase() === direction && window.merchantKey(t.description) === key)
+      .map(transaction => ({ transaction, sameAmount: Math.abs(Math.abs(Number(transaction.amount) || 0) - amount) <= Math.max(1, amount * 0.1) }))
+      .sort((a, b) => (b.sameAmount - a.sameAmount) || (transactionDate(b.transaction.date) - transactionDate(a.transaction.date)));
+  };
   let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
   let transactionCache = null, searchTimer = null;
   const categoryPeriod = periodControl('category-filter', () => window.loadCategories());
@@ -461,6 +482,61 @@
       $('txn-filter-status').textContent = 'Could not load transactions. Change a filter or reopen this page to retry.';
     }
   };
+  const similarDialog = document.createElement('dialog');
+  similarDialog.id = 'similar-dialog'; similarDialog.className = 'editor similar-dialog';
+  similarDialog.setAttribute('aria-labelledby', 'similar-title');
+  similarDialog.innerHTML = `<form id="similar-form"><p class="eyebrow">MATCHING PAYMENTS FOUND</p><h2 id="similar-title">Update similar transactions?</h2><p id="similar-copy" class="muted"></p>
+    <div class="similar-head"><label class="similar-all"><input type="checkbox" id="similar-all">Select all</label><span id="similar-count"></span></div>
+    <div id="similar-list" class="similar-list"></div><p id="similar-error" role="alert"></p>
+    <div class="toolbar"><button type="button" class="btn btn-secondary" id="similar-skip">Only this one</button><button class="btn btn-primary" id="similar-apply">Update selected</button></div></form>`;
+  document.body.appendChild(similarDialog);
+  let similarState = null;
+  const similarChecked = () => [...$('similar-list').querySelectorAll('input[data-similar]')].filter(box => box.checked);
+  function updateSimilarCount() {
+    const total = similarState ? similarState.items.length : 0, count = similarChecked().length;
+    $('similar-count').textContent = `${count} of ${total} selected`;
+    $('similar-all').checked = total > 0 && count === total;
+    $('similar-apply').textContent = count ? `Update ${count} transaction${count === 1 ? '' : 's'}` : 'Update selected';
+    $('similar-apply').disabled = !count;
+  }
+  // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
+  function promptSimilarTransactions(source, category, items) {
+    similarState = { category, items, updated: 0 };
+    const strong = items.filter(item => item.sameAmount).length;
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : ''}Choose which should also move to <strong>${escape(category)}</strong>.`;
+    $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
+      const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
+      return `<label class="similar-row${sameAmount ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount ? 'checked' : ''}>
+        <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
+        <span class="similar-desc">${escape(transaction.description)}<small>${escape(transaction.category || 'Uncategorized')} &rarr; ${escape(category)}${sameAmount ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
+    }).join('');
+    $('similar-error').textContent = '';
+    updateSimilarCount();
+    return new Promise(resolve => { similarState.resolve = resolve; similarDialog.showModal(); });
+  }
+  similarDialog.addEventListener('close', () => { const state = similarState; similarState = null; state?.resolve?.(state.updated); });
+  $('similar-list').onchange = updateSimilarCount;
+  $('similar-all').onchange = () => { [...$('similar-list').querySelectorAll('input[data-similar]')].forEach(box => { box.checked = $('similar-all').checked; }); updateSimilarCount(); };
+  $('similar-skip').onclick = () => similarDialog.close();
+  $('similar-form').onsubmit = async event => {
+    event.preventDefault();
+    if (!similarState) return;
+    const selected = similarChecked().map(box => similarState.items[Number(box.dataset.similar)].transaction);
+    if (!selected.length) return similarDialog.close();
+    $('similar-apply').disabled = true; $('similar-error').textContent = '';
+    try {
+      const result = await json('/api/transactions/categorization-apply', 'POST', {
+        updates: selected.map(t => ({ id: Number(t.id), category: similarState.category, expectedCategory: t.category ?? null })),
+        learnRules: true, protectCorrections: false
+      });
+      similarState.updated = Number(result?.updated ?? selected.length);
+      similarDialog.close();
+    } catch (error) {
+      $('similar-error').textContent = error.message || 'Could not update these transactions.';
+      $('similar-apply').disabled = false;
+    }
+  };
   function renderTransactions() {
     const table = $('full-txn-table');
     const { allCategories, transactions } = transactionCache;
@@ -500,8 +576,11 @@
             await json('/api/transactions/update-fixed', 'POST', { id: item.id, is_fixed: event.target.checked, apply_to_all: false });
             notify('Fixed flag saved for this transaction. Upcoming bills update from your marked debits.');
           } else {
-            await json('/api/transactions/update-transaction', 'POST', { id: item.id, category: event.target.value, apply_to_all: false });
-            notify('Category updated for this transaction only.');
+            const category = event.target.value;
+            await json('/api/transactions/update-transaction', 'POST', { id: item.id, category, apply_to_all: false });
+            const similar = window.findSimilarTransactions(transactionCache.transactions, item, category);
+            const extra = similar.length ? await promptSimilarTransactions(item, category, similar) : 0;
+            notify(extra ? `Category set to ${category} for this and ${extra} similar transaction${extra === 1 ? '' : 's'}.` : 'Category updated for this transaction only.');
           }
         } catch (error) { reportError(error); }
         finally { if (FinanceSession.isAuthenticated()) await loadAllTransactions(); }

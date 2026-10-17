@@ -438,6 +438,33 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-card:hover .pay-card-stop, .pay-card-stop:focus-visible { opacity: 1; }
 .pay-card-stop:hover { background: #fee2e2; color: var(--danger); }
 @media (hover: none) { .pay-card-stop { opacity: 1; } }
+/* Similar-transactions confirmation dialog */
+.editor.similar-dialog { width: min(720px,94vw); display: none; }
+.editor.similar-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.similar-dialog form { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 0 1 auto; }
+.similar-dialog form > * { flex-shrink: 0; }
+.similar-dialog h2 { margin: 0; }
+.similar-dialog #similar-copy { margin: 0; line-height: 1.55; }
+.similar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px; font-size: 13px; color: #64748b; }
+.similar-dialog label.similar-all { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; cursor: pointer; }
+.similar-dialog .similar-list { display: grid; align-content: start; gap: 8px; flex: 0 1 auto; min-height: 96px; max-height: 420px; overflow-y: auto; padding: 2px; }
+.similar-dialog label.similar-row { display: grid; grid-template-columns: auto 92px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; }
+.similar-row:hover { border-color: #94a3b8; }
+.similar-row:has(input:checked) { border-color: #059669; background: #ecfdf5; box-shadow: inset 3px 0 0 #059669; }
+.similar-row input { width: 18px; height: 18px; accent-color: #059669; margin: 0; }
+.similar-date { font-size: 13px; color: #475569; white-space: nowrap; }
+.similar-desc { min-width: 0; font-size: 14px; color: #0f172a; overflow-wrap: anywhere; }
+.similar-desc small { display: block; margin-top: 3px; font-size: 12px; color: #64748b; }
+.similar-amt { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#similar-error:empty { display: none; }
+#similar-error { margin: 0; color: #b91c1c; font-size: 13px; }
+@media (max-width: 560px) {
+  .similar-dialog label.similar-row { grid-template-columns: auto minmax(0,1fr) auto; row-gap: 4px; }
+  .similar-date { grid-column: 2; grid-row: 1; }
+  .similar-desc { grid-column: 2 / -1; grid-row: 2; }
+  .similar-amt { grid-column: 3; grid-row: 1; }
+  .similar-row input { grid-row: 1 / span 2; }
+}
 @media (max-width: 1280px) { .pay-cal-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 /* Narrow screens: each week row scrolls sideways, like a day strip. */
 @media (max-width: 1000px) {

@@ -48,8 +48,11 @@ router.post('/categorization-preview', route(async (req, res) => {
 }));
 router.post('/categorization-apply', route(async (req, res) => {
   const learnRules = req.body?.learnRules ?? false;
+  // Explicit user-confirmed bulk edits may replace earlier manual corrections; stale checks still apply.
+  const protectCorrections = req.body?.protectCorrections ?? true;
   if (typeof learnRules !== 'boolean') throw failure(400, 'learnRules must be a boolean');
-  res.json(await applyUpdates(db, req.body?.updates, { learnRules }));
+  if (typeof protectCorrections !== 'boolean') throw failure(400, 'protectCorrections must be a boolean');
+  res.json(await applyUpdates(db, req.body?.updates, { learnRules, protectCorrections }));
 }));
 router.post('/cleanup-database', (req, res) => res.status(409).json({
   error: 'Automatic cleanup is disabled. Request /api/transactions/categorization-preview and approve selected updates with /api/transactions/categorization-apply. Categories and fixed flags were not changed.'

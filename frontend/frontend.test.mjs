@@ -219,6 +219,58 @@ test('transaction search matches description, category and amount and highlights
   assert.equal(f.node('txn-filter-search').value, '');
   assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
 });
+test('similar-payment matcher normalizes statement noise with regex and weighs amount', () => {
+  const f = fixture(); f.run('refresh.js');
+  const key = f.context.merchantKey;
+  assert.equal(key('VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA'), 'NETFLIX');
+  assert.equal(key('DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA'), 'NETFLIX');
+  assert.equal(key('VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA'), 'NETFLIX');
+  assert.equal(key('ZELLE TO JOHN SMITH 12345'), 'ZELLE JOHN');
+  assert.notEqual(key('ZELLE TO MARY JONES'), key('ZELLE TO JOHN SMITH'));
+  const rows = [
+    { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Entertainment' },
+    { id: '2', date: '2026-08-31', description: 'VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA', amount: 28.78, direction: 'DEBIT', category: 'Entertainment' },
+    { id: '3', date: '2026-07-28', description: 'DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA', amount: 28.78, direction: 'DEBIT', category: 'Shopping' },
+    { id: '4', date: '2025-01-28', description: 'DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA', amount: 15.49, direction: 'DEBIT', category: 'Shopping' },
+    { id: '5', date: '2026-06-28', description: 'NETFLIX COM REFUND', amount: 28.78, direction: 'CREDIT', category: 'Shopping' },
+    { id: '6', date: '2026-06-28', description: 'NETFLIX COM', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions' },
+    { id: '7', date: '2026-06-01', description: 'SPOTIFY USA', amount: 28.78, direction: 'DEBIT', category: 'Shopping' }
+  ];
+  const similar = f.context.findSimilarTransactions(rows, rows[0], 'Subscriptions');
+  assert.deepEqual(similar.map(item => [item.transaction.id, item.sameAmount]), [['2', true], ['3', true], ['4', false]]);
+  assert.equal(f.context.findSimilarTransactions(rows, rows[0], '').length, 0);
+});
+test('changing a category offers similar payments and applies only the confirmed ones', async () => {
+  const calls = [];
+  const transactions = [
+    { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Entertainment' },
+    { id: '2', date: '2026-08-31', description: 'VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA', amount: 28.78, direction: 'DEBIT', category: 'Entertainment' },
+    { id: '3', date: '2026-07-28', description: 'DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA', amount: 28.78, direction: 'DEBIT', category: null }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/categories') return response(200, [{ name: 'Subscriptions' }, { name: 'Entertainment' }]);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+    if (url === '/api/transactions/categorization-apply') return response(200, { updated: 2 });
+    return response(200, { success: true });
+  });
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const select = { value: 'Subscriptions', disabled: false, matches: selector => selector === '[data-category]', closest: () => ({ dataset: { transaction: '0' } }) };
+  const pending = f.node('full-txn-table').onchange({ target: select });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+  assert.equal(dialog.open, true);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="0" checked/);
+  assert.match(f.node('similar-list').innerHTML, /Uncategorized &rarr; Subscriptions/);
+  const boxes = [{ checked: true, dataset: { similar: '0' } }, { checked: true, dataset: { similar: '1' } }];
+  f.node('similar-list').querySelectorAll = () => boxes;
+  await f.node('similar-form').onsubmit({ preventDefault() {} });
+  await pending;
+  const apply = calls.find(([url]) => url === '/api/transactions/categorization-apply')[1];
+  assert.deepEqual(apply, { updates: [{ id: 2, category: 'Subscriptions', expectedCategory: 'Entertainment' }, { id: 3, category: 'Subscriptions', expectedCategory: null }], learnRules: true, protectCorrections: false });
+  assert.equal(dialog.open, false);
+});
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
   const f = activityFixture(); f.run('refresh.js');
   await f.context.loadCategories();
