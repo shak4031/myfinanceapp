@@ -111,7 +111,7 @@ function activityFixture() {
 }
 test('active transaction renderer applies month to rows and all summary amounts', async () => {
   const f = activityFixture(); f.run('refresh.js');
-  f.node('txn-filter-month').value = '2026-10';
+  f.node('txn-filter-period').value = 'month:2026-10';
   await f.context.loadAllTransactions();
   const html = f.node('full-txn-table').innerHTML;
   assert.match(html, /October market/);
@@ -126,7 +126,7 @@ test('active transaction renderer applies month to rows and all summary amounts'
 });
 test('transaction month, category and fixed debit filters compose and reset together', async () => {
   const f = activityFixture(); f.run('refresh.js');
-  f.node('txn-filter-month').value = '2026-10';
+  f.node('txn-filter-period').value = 'month:2026-10';
   f.node('txn-filter-category').value = 'Groceries';
   f.node('txn-filter-fixed').checked = true;
   await f.context.loadAllTransactions();
@@ -136,14 +136,14 @@ test('transaction month, category and fixed debit filters compose and reset toge
   await f.context.loadAllTransactions();
   assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October salary/);
   await f.context.resetTransactionFilters();
-  assert.equal(f.node('txn-filter-month').value, '');
+  assert.equal(f.node('txn-filter-period').value, '');
   assert.equal(f.node('txn-filter-fixed').checked, false);
   assert.match(f.node('full-txn-table').innerHTML, /September market/);
   assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
 });
 test('empty transaction periods have zero summaries and an explicit empty state', async () => {
   const f = activityFixture(); f.run('refresh.js');
-  f.node('txn-filter-month').value = '2025-01';
+  f.node('txn-filter-period').value = 'month:2025-01';
   await f.context.loadAllTransactions();
   assert.match(f.node('full-txn-table').innerHTML, /No transactions match/);
   assert.equal((f.node('txn-summary').innerHTML.match(/\$0\.00/g) || []).length, 3);
@@ -167,7 +167,7 @@ test('out-of-order transaction responses cannot overwrite newer results', async 
 });
 test('category month filters card counts and spending, and is inherited by the floating detail', async () => {
   const f = activityFixture(); f.run('refresh.js');
-  f.node('category-filter-month').value = '2026-10';
+  f.node('category-filter-period').value = 'month:2026-10';
   await f.context.loadCategories();
   assert.match(f.node('category-cards').innerHTML, /\$42\.50/);
   assert.doesNotMatch(f.node('category-cards').innerHTML, /\$62\.50/);
@@ -183,6 +183,64 @@ test('category month filters card counts and spending, and is inherited by the f
   assert.equal(f.node('mtd-dialog-period').textContent, 'All time');
   assert.equal(f.node('mtd-dialog-total').textContent, '$62.50');
   assert.equal(f.node('mtd-dialog-count').textContent, '2');
+});
+test('period presets resolve quarters, year to date, full years and multi-month selections', () => {
+  const f = fixture(); f.run('refresh.js');
+  const resolve = (spec, custom, date) => JSON.parse(JSON.stringify(f.context.resolvePeriod(spec, custom, new Date(date))));
+  assert.deepEqual(resolve('', [], '2026-10-16T12:00:00'), { months: null, label: 'All time' });
+  assert.deepEqual(resolve('this-month', [], '2026-10-16T12:00:00').months, ['2026-10']);
+  assert.deepEqual(resolve('last-month', [], '2026-01-10T12:00:00'), { months: ['2025-12'], label: 'December 2025' });
+  assert.deepEqual(resolve('last-quarter', [], '2026-10-16T12:00:00'), { months: ['2026-07', '2026-08', '2026-09'], label: 'Q3 2026' });
+  assert.deepEqual(resolve('last-quarter', [], '2026-02-01T12:00:00'), { months: ['2025-10', '2025-11', '2025-12'], label: 'Q4 2025' });
+  assert.deepEqual(resolve('this-quarter', [], '2026-11-05T12:00:00').months, ['2026-10', '2026-11']);
+  assert.equal(resolve('ytd', [], '2026-10-16T12:00:00').months.length, 10);
+  assert.equal(resolve('last-12', [], '2026-10-16T12:00:00').months[0], '2025-11');
+  assert.deepEqual(resolve('year:2025', [], '2026-10-16T12:00:00').months.slice(0, 2), ['2025-01', '2025-02']);
+  assert.deepEqual(resolve('custom', ['2026-10', '2026-08'], '2026-10-16T12:00:00'), { months: ['2026-08', '2026-10'], label: 'Aug 2026, Oct 2026' });
+});
+test('transaction search matches description, category and amount and highlights matches', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('txn-filter-search').value = 'market';
+  await f.context.loadAllTransactions();
+  let html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /October <mark>market<\/mark>/);
+  assert.match(html, /September <mark>market<\/mark>/);
+  assert.doesNotMatch(html, /October cafe|October salary/);
+  assert.match(f.node('txn-filter-status').textContent, /All time · “market” · 2 matching/);
+  f.node('txn-filter-search').value = 'october $1,000';
+  await f.context.loadAllTransactions();
+  html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /October salary/);
+  assert.doesNotMatch(html, /October market|October cafe/);
+  f.node('txn-filter-search').value = 'dining';
+  await f.context.loadAllTransactions();
+  assert.match(f.node('full-txn-table').innerHTML, /October cafe/);
+  await f.context.resetTransactionFilters();
+  assert.equal(f.node('txn-filter-search').value, '');
+  assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
+});
+test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  await f.context.loadCategories();
+  assert.match(f.node('category-filter-period').innerHTML, /value="year:2026"/);
+  assert.match(f.node('category-filter-period').innerHTML, /Last quarter/);
+  f.node('category-filter-period').value = 'custom';
+  await f.node('category-filter-period').onchange();
+  assert.equal(f.node('category-filter-months').hidden, false);
+  assert.match(f.node('category-filter-months').innerHTML, /value="2026-09"/);
+  await f.node('category-filter-months').onchange({ target: { type: 'checkbox', value: '2026-09', checked: true } });
+  assert.match(f.node('category-filter-status').textContent, /September 2026 · 1 transactions/);
+  await f.node('category-filter-months').onchange({ target: { type: 'checkbox', value: '2026-10', checked: true } });
+  assert.match(f.node('category-filter-status').textContent, /Sep 2026, Oct 2026 · 4 transactions/);
+  assert.match(f.node('category-cards').innerHTML, /\$62\.50/);
+  await f.node('category-cards').onclick({ target: { closest: () => ({ dataset: { openCategory: 'Groceries' } }) } });
+  assert.equal(f.node('mtd-dialog-period').textContent, 'Sep 2026, Oct 2026');
+  assert.equal(f.node('category-dialog-month').value, '');
+  assert.equal(f.node('mtd-dialog-total').textContent, '$62.50');
+  f.node('category-filter-period').value = 'year:2025';
+  await f.node('category-filter-period').onchange();
+  assert.equal(f.node('category-filter-months').hidden, true);
+  assert.match(f.node('category-filter-status').textContent, /2025 · 0 transactions/);
 });
 test('category load failure clears stale results and reports the error', async () => {
   const f = fixture(async () => response(500, { error: 'Service unavailable' }));
@@ -307,7 +365,8 @@ test('categories overview is focused and category administration has its own pag
   const overview = html.match(/<section id="categories-view"[\s\S]*?<\/section>/)?.[0] || '';
   assert.match(overview, /category-cards/);
   assert.match(overview, /showView\('category-admin'\)/);
-  assert.match(overview, /id="category-filter-month"/);
+  assert.match(overview, /id="category-filter-period"/);
+  assert.match(overview, /id="category-filter-months"/);
   assert.doesNotMatch(overview, /Review category suggestions|category-manager-list|merchant-rules|txn-list/);
   assert.match(html, /id="category-admin-view"/);
   assert.match(source('refresh.js'), /Saved merchant mappings/);

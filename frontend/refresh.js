@@ -15,10 +15,110 @@
     const date = new Date(`${String(value ?? '').slice(0, 10)}T00:00:00`);
     return Number.isNaN(date.getTime()) ? new Date(NaN) : date;
   };
-  window.filterTransactionsByCategoryAndMonth = (transactions, category, month) => transactions.filter(transaction =>
-    (!category || transaction.category === category) && (!month || monthKey(transaction.date) === month));
+  // `month` may be a single "YYYY-MM" key, or an array/Set of keys for multi-month periods.
+  window.filterTransactionsByCategoryAndMonth = (transactions, category, month) => {
+    const months = month && typeof month !== 'string' ? new Set(month) : null;
+    return transactions.filter(transaction => (!category || transaction.category === category) &&
+      (months ? months.has(monthKey(transaction.date)) : (!month || monthKey(transaction.date) === month)));
+  };
   const periodLabel = month => month ? new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'All time';
+  const shortMonth = key => new Date(`${key}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const PERIOD_PRESETS = [['', 'All time'], ['this-month', 'This month'], ['last-month', 'Last month'], ['this-quarter', 'This quarter'], ['last-quarter', 'Last quarter'], ['ytd', 'Year to date'], ['last-12', 'Last 12 months']];
+  // Resolves a period spec to the month keys it covers (null = all time) and a human label.
+  window.resolvePeriod = (spec = '', custom = [], today = new Date()) => {
+    const y = today.getFullYear(), m = today.getMonth(), quarter = Math.floor(m / 3);
+    const key = (year, monthIndex) => { const d = new Date(year, monthIndex, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+    const span = (startIndex, count) => Array.from({ length: count }, (_, i) => key(y, startIndex + i));
+    if (spec === 'this-month') return { months: span(m, 1), label: periodLabel(key(y, m)) };
+    if (spec === 'last-month') return { months: span(m - 1, 1), label: periodLabel(key(y, m - 1)) };
+    if (spec === 'this-quarter') return { months: span(quarter * 3, m - quarter * 3 + 1), label: `Q${quarter + 1} ${y} to date` };
+    if (spec === 'last-quarter') {
+      const start = new Date(y, quarter * 3 - 3, 1);
+      return { months: span(quarter * 3 - 3, 3), label: `Q${Math.floor(start.getMonth() / 3) + 1} ${start.getFullYear()}` };
+    }
+    if (spec === 'ytd') return { months: span(0, m + 1), label: `Year to date ${y}` };
+    if (spec === 'last-12') return { months: span(m - 11, 12), label: 'Last 12 months' };
+    const year = String(spec).match(/^year:(\d{4})$/);
+    if (year) return { months: Array.from({ length: 12 }, (_, i) => `${year[1]}-${String(i + 1).padStart(2, '0')}`), label: year[1] };
+    const single = String(spec).match(/^month:(\d{4}-\d{2})$/);
+    if (single) return { months: [single[1]], label: periodLabel(single[1]) };
+    if (spec === 'custom') {
+      const months = [...new Set(custom)].filter(Boolean).sort();
+      if (!months.length) return { months: null, label: 'All time · choose months below' };
+      if (months.length === 1) return { months, label: periodLabel(months[0]) };
+      return { months, label: months.length <= 3 ? months.map(shortMonth).join(', ') : `${months.length} selected months (${shortMonth(months[0])} – ${shortMonth(months.at(-1))})` };
+    }
+    return { months: null, label: 'All time' };
+  };
+  // Shared period selector: quick ranges, per-year options and a multi-select month picker.
+  function periodControl(prefix, onChange) {
+    const select = $(`${prefix}-period`), picker = $(`${prefix}-months`);
+    const custom = new Set();
+    let available = new Set();
+    const current = () => window.resolvePeriod(select.value, [...custom]);
+    function renderPicker() {
+      picker.hidden = select.value !== 'custom';
+      if (picker.hidden) return;
+      const years = [...new Set([...available].map(month => month.slice(0, 4)))].sort().reverse();
+      if (!years.length) years.push(String(new Date().getFullYear()));
+      picker.innerHTML = `<div class="month-picker-head"><strong>Choose one or more months</strong><span>${custom.size ? `${custom.size} selected` : 'None selected'}</span><button type="button" class="btn btn-secondary btn-compact" data-clear-months ${custom.size ? '' : 'disabled'}>Clear</button></div>` +
+        years.map(year => `<div class="month-picker-year"><button type="button" class="month-picker-year-label" data-pick-year="${year}" title="Select every month with activity in ${year}">${year}</button><div class="month-picker-grid">${MONTH_NAMES.map((name, index) => {
+          const month = `${year}-${String(index + 1).padStart(2, '0')}`;
+          const has = available.has(month);
+          return `<label class="month-chip${has ? '' : ' is-empty'}"><input type="checkbox" value="${month}" ${custom.has(month) ? 'checked' : ''} ${has || custom.has(month) ? '' : 'disabled'}><span>${name}</span></label>`;
+        }).join('')}</div></div>`).join('');
+    }
+    function sync(transactions) {
+      available = new Set(transactions.map(transaction => monthKey(transaction.date)).filter(Boolean));
+      let value = select.value || '';
+      const single = value.match(/^month:(\d{4}-\d{2})$/);
+      if (single) { custom.clear(); custom.add(single[1]); value = 'custom'; }
+      const years = [...new Set([...available].map(month => month.slice(0, 4)))].sort().reverse();
+      select.innerHTML = `<optgroup label="Quick ranges">${PERIOD_PRESETS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</optgroup>` +
+        (years.length ? `<optgroup label="Full year">${years.map(year => `<option value="year:${year}">${year}</option>`).join('')}</optgroup>` : '') +
+        '<optgroup label="Custom"><option value="custom">Choose months…</option></optgroup>';
+      select.value = value;
+      renderPicker();
+    }
+    function reset() { select.value = ''; custom.clear(); picker.hidden = true; }
+    function setMonths(months) { custom.clear(); months.forEach(month => custom.add(month)); select.value = 'custom'; }
+    select.onchange = () => { renderPicker(); return onChange(); };
+    picker.onchange = event => {
+      const box = event.target;
+      if (!box || box.type !== 'checkbox') return;
+      box.checked ? custom.add(box.value) : custom.delete(box.value);
+      renderPicker(); return onChange();
+    };
+    picker.onclick = event => {
+      const target = event.target.closest?.('button');
+      if (!target) return;
+      if (target.hasAttribute('data-clear-months')) custom.clear();
+      else if (target.dataset.pickYear) {
+        const months = [...available].filter(month => month.startsWith(target.dataset.pickYear));
+        const all = months.every(month => custom.has(month));
+        months.forEach(month => all ? custom.delete(month) : custom.add(month));
+      } else return;
+      renderPicker(); return onChange();
+    };
+    return { current, sync, reset, setMonths, custom };
+  }
+  window.matchesTransactionSearch = (transaction, query) => {
+    const tokens = String(query || '').toLowerCase().replace(/[$,]/g, '').split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const amount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
+    const haystack = `${transaction.description || ''} ${transaction.category || 'uncategorized'} ${amount}`.toLowerCase();
+    return tokens.every(token => haystack.includes(token));
+  };
+  const highlight = (text, query) => {
+    const tokens = String(query || '').trim().split(/\s+/).filter(Boolean).map(token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (!tokens.length) return escape(text);
+    return String(text ?? '').split(new RegExp(`(${tokens.join('|')})`, 'gi')).map((part, index) => index % 2 ? `<mark>${escape(part)}</mark>` : escape(part)).join('');
+  };
   let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
+  let transactionCache = null, searchTimer = null;
+  const categoryPeriod = periodControl('category-filter', () => window.loadCategories());
+  const transactionPeriod = periodControl('txn-filter', () => transactionCache ? renderTransactions() : window.loadAllTransactions());
   let detailCategory = '';
   const mtdDialog = $('mtd-transactions-dialog');
   const closeMtdDialog = () => mtdDialog.open && mtdDialog.close();
@@ -33,7 +133,7 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; categoryRequest++; transactionRequest++; detailRequest++; };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; };
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
     const alert = document.querySelector('dialog[open] [role="alert"]');
@@ -140,8 +240,9 @@
       ]);
       if (request !== categoryRequest) return;
       rules = data.rules || []; categories = data.categories || [];
-      const month = $('category-filter-month').value;
-      const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', month);
+      categoryPeriod.sync(activity.transactions || []);
+      const period = categoryPeriod.current();
+      const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', period.months);
       const counts = new Map();
       const spending = new Map();
       for (const transaction of filtered) {
@@ -149,7 +250,7 @@
         counts.set(category, (counts.get(category) || 0) + 1);
         if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + Math.abs(Number(transaction.amount) || 0));
       }
-      $('category-filter-status').textContent = `${periodLabel(month)} · ${filtered.length.toLocaleString()} transactions`;
+      $('category-filter-status').textContent = `${period.label} · ${filtered.length.toLocaleString()} transactions`;
       $('rule-category').innerHTML = categoryOptions('');
       $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
         <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
@@ -178,21 +279,25 @@
       reportError(error);
     }
   };
-  window.openCategoryTransactions = async (category, month = '') => {
+  // `period` is a month/date string, or a resolved `{ months, label }` from a period control.
+  window.openCategoryTransactions = async (category, period = '') => {
     const request = ++detailRequest;
-    const period = month ? monthKey(month) : '';
+    const resolved = period && typeof period === 'object'
+      ? period
+      : { months: period ? [monthKey(period)] : null, label: periodLabel(period ? monthKey(period) : '') };
+    const months = resolved.months;
     detailCategory = category;
-    $('category-dialog-month').value = period;
+    $('category-dialog-month').value = months && months.length === 1 ? months[0] : '';
     $('mtd-dialog-title').textContent = category;
-    $('mtd-dialog-period').textContent = periodLabel(period);
+    $('mtd-dialog-period').textContent = resolved.label;
     $('mtd-dialog-total').textContent = '—';
     $('mtd-dialog-count').textContent = '—';
-    $('mtd-dialog-content').innerHTML = '<div class="mtd-dialog-state"><div><strong>Loading transactions…</strong>Please wait while we gather this month’s activity.</div></div>';
+    $('mtd-dialog-content').innerHTML = '<div class="mtd-dialog-state"><div><strong>Loading transactions…</strong>Please wait while we gather this period’s activity.</div></div>';
     if (!mtdDialog.open) mtdDialog.showModal();
     try {
       const data = await json('/api/dashboard/all-transactions');
       if (request !== detailRequest) return;
-      const transactions = window.filterTransactionsByCategoryAndMonth(data.transactions || [], category, period)
+      const transactions = window.filterTransactionsByCategoryAndMonth(data.transactions || [], category, months)
         .sort((a, b) => transactionDate(b.date) - transactionDate(a.date));
       const spending = transactions.filter(transaction => String(transaction.direction).toUpperCase() === 'DEBIT')
         .reduce((total, transaction) => total + Math.abs(Number(transaction.amount) || 0), 0);
@@ -218,7 +323,7 @@
   $('category-cards').onclick = async event => {
     const card = event.target.closest('[data-open-category]');
     if (!card) return;
-    return window.openCategoryTransactions(card.dataset.openCategory, $('category-filter-month').value);
+    return window.openCategoryTransactions(card.dataset.openCategory, categoryPeriod.current());
   };
   $('category-create-form').onsubmit = async event => {
     event.preventDefault();
@@ -347,22 +452,37 @@
     try {
       const [allCategories, data] = await Promise.all([json('/api/categories'), json('/api/dashboard/all-transactions')]);
       if (request !== transactionRequest) return;
+      transactionCache = { allCategories, transactions: data.transactions || [] };
+      transactionPeriod.sync(transactionCache.transactions);
+      renderTransactions();
+    } catch (error) {
+      if (request !== transactionRequest) return;
+      table.innerHTML = `<tr><td colspan="5" class="empty-state" role="alert">${escape(error.message)}</td></tr>`;
+      $('txn-filter-status').textContent = 'Could not load transactions. Change a filter or reopen this page to retry.';
+    }
+  };
+  function renderTransactions() {
+    const table = $('full-txn-table');
+    const { allCategories, transactions } = transactionCache;
+    {
       const selected = $('txn-filter-category').value;
-      const month = $('txn-filter-month').value;
+      const period = transactionPeriod.current();
+      const query = String($('txn-filter-search').value || '').trim();
       $('txn-filter-category').innerHTML = '<option value="">All categories</option>' + allCategories.map(c => `<option value="${escape(c.name)}" ${selected === c.name ? 'selected' : ''}>${escape(c.name)}</option>`).join('');
-      const rows = window.filterTransactionsByCategoryAndMonth(data.transactions || [], selected, month)
+      const rows = window.filterTransactionsByCategoryAndMonth(transactions, selected, period.months)
         .filter(t => !$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))
+        .filter(t => window.matchesTransactionSearch(t, query))
         .sort((a,b) => transactionDate(b.date) - transactionDate(a.date));
       const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
       const income = total('CREDIT'), expenses = total('DEBIT');
-      $('txn-filter-status').textContent = `${periodLabel(month)} · ${rows.length.toLocaleString()} matching transactions`;
+      $('txn-filter-status').textContent = `${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions`;
       $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
-        `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">Selected filters</span></div>`).join('');
+        `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}</span></div>`).join('');
       table.innerHTML = rows.length ? rows.map((transaction, index) => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${index}">
           <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
-          <td>${escape(transaction.description)}</td>
+          <td>${highlight(transaction.description, query)}</td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
@@ -386,15 +506,16 @@
         } catch (error) { reportError(error); }
         finally { if (FinanceSession.isAuthenticated()) await loadAllTransactions(); }
       };
-    } catch (error) {
-      if (request !== transactionRequest) return;
-      table.innerHTML = `<tr><td colspan="5" class="empty-state" role="alert">${escape(error.message)}</td></tr>`;
-      $('txn-filter-status').textContent = 'Could not load transactions. Change a filter or reopen this page to retry.';
     }
+  }
+  $('txn-filter-search').oninput = () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => transactionCache ? renderTransactions() : window.loadAllTransactions(), 120);
   };
   window.resetTransactionFilters = () => {
     $('txn-filter-category').value = '';
-    $('txn-filter-month').value = '';
+    $('txn-filter-search').value = '';
+    transactionPeriod.reset();
     $('txn-filter-fixed').checked = false;
     return window.loadAllTransactions();
   };

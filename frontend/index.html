@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017c"></script>
-  <script src="client-errors.js?v=20261017c"></script>
+  <script src="session.js?v=20261017d"></script>
+  <script src="client-errors.js?v=20261017d"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -429,7 +429,7 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017c">
+  <link rel="stylesheet" href="refresh.css?v=20261017d">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -550,9 +550,9 @@
           <button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button>
         </header>
         <div class="filter-panel panel">
-          <label for="category-filter-month">Activity month<input id="category-filter-month" type="month" onchange="loadCategories()"></label>
-          <button class="btn btn-secondary" type="button" onclick="document.getElementById('category-filter-month').value = ''; loadCategories()">All time</button>
+          <label for="category-filter-period">Time period<select id="category-filter-period"><option value="">All time</option></select></label>
           <p id="category-filter-status" class="filter-status" role="status"></p>
+          <div id="category-filter-months" class="month-picker" hidden></div>
         </div>
         <div id="category-overview-summary" class="category-overview-summary"></div>
         <div id="category-cards" class="category-cards" aria-live="polite"></div>
@@ -636,18 +636,21 @@
           <button class="btn btn-primary" onclick="openImportModal()">Import statements</button>
         </header>
           <div class="filter-panel panel">
+            <label for="txn-filter-search" class="search-filter">Search transactions
+            <input id="txn-filter-search" type="search" placeholder="e.g. Netflix, Zelle, 42.50" autocomplete="off" spellcheck="false"></label>
             <label for="txn-filter-category">Category
             <select id="txn-filter-category" onchange="loadAllTransactions()">
               <option value="">All Categories</option>
             </select></label>
-            <label for="txn-filter-month">Activity month
-            <input id="txn-filter-month" type="month" onchange="loadAllTransactions()"></label>
+            <label for="txn-filter-period">Time period
+            <select id="txn-filter-period"><option value="">All time</option></select></label>
             <label class="checkbox-filter">
               <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
               Fixed bills only
             </label>
             <button class="btn btn-secondary" type="button" onclick="resetTransactionFilters()">Reset filters</button>
             <p id="txn-filter-status" class="filter-status" role="status"></p>
+            <div id="txn-filter-months" class="month-picker" hidden></div>
           </div>
         <div id="txn-summary" class="metrics-grid" aria-live="polite"></div>
         <div class="panel transaction-panel">
@@ -1048,55 +1051,64 @@
         }
       }
 
-      // Re-run for row-by-row rendering
+      // Calendar of bill cards for the current month: each bill is a small card on its due day.
       runningBalance = data.balance;
-      let timelineHtml = `
-        <div class="data-table-wrap">
-          <table class="data-table payments-table">
-            <thead>
-              <tr>
-                <th style="padding: 12px 16px;">Status</th>
-                <th>Description</th>
-                <th style="text-align: right;">Amount</th>
-                <th style="text-align: right; padding: 12px 16px;">Projected Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-
+      const hasBalance = Number.isFinite(data.balance);
+      const calToday = new Date();
+      const calYear = calToday.getFullYear(), calMonth = calToday.getMonth();
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      const leadingBlanks = new Date(calYear, calMonth, 1).getDay();
+      const fmtMoney = value => (value < 0 ? '-' : '') + '$' + Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const byDay = new Map();
+      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0;
       timeline.forEach(item => {
         const isPaid = item.status === 'processed';
-        const isOverdue = !isPaid && item.dayOfMonth < new Date().getDate();
-        
-        if (!isPaid && Number.isFinite(data.balance)) {
-          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
-        }
-
-        const isDeficit = !isPaid && Number.isFinite(data.balance) && runningBalance < 0;
-
-        timelineHtml += `
-          <tr class="${isPaid ? 'is-paid' : ''}${isDeficit ? ' is-deficit' : ''}${item.isIncome ? ' is-income' : ''}" style="color: ${isPaid ? 'var(--text-secondary)' : 'var(--text-primary)'};">
-            <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : (isDeficit ? 'var(--danger)' : 'var(--primary)')};">
-              ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
-              ${isOverdue ? '<span style="display: block; font-size: 10px;">Overdue / not recorded</span>' : ''}
-              ${isDeficit ? '<span style="display: block; font-size: 10px; color: var(--danger); font-weight: 700;">⚠️ AT RISK</span>' : ''}
-            </td>
-            <td style="padding: 12px 0;">
-              <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${escapeHtml(item.description)}</div>
-              <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(item.category)}</div>
-              ${item.sourceTransactionId ? `<button class="btn btn-secondary btn-compact" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)">Stop projecting this bill</button>` : ''}
-            </td>
-            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${isPaid ? 'var(--text-secondary)' : (item.isIncome ? 'var(--success)' : 'var(--danger)')}">
-              ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
-            </td>
-            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: ${isPaid ? 'var(--text-secondary)' : (runningBalance < 0 ? 'var(--danger)' : 'var(--text-primary)')}">
-              ${isPaid || !Number.isFinite(data.balance) ? '—' : (runningBalance < 0 ? '-' : '') + '$' + Math.abs(runningBalance).toFixed(2)}
-            </td>
-          </tr>
-        `;
+        const day = Math.min(Math.max(1, Number(item.dayOfMonth) || 1), daysInMonth);
+        const isOverdue = !isPaid && day < calToday.getDate();
+        if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
+        const isDeficit = !isPaid && hasBalance && runningBalance < 0;
+        if (isPaid) { paidTotal += item.amount; paidCount++; } else { dueTotal += item.amount; dueCount++; }
+        if (isOverdue) overdueCount++;
+        if (isDeficit) riskCount++;
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day).push({ item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance });
       });
-
-      timelineHtml += '</tbody></table></div>';
+      const statusOf = entry => entry.isPaid ? ['is-paid', 'Paid'] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Due'];
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      let cells = '';
+      for (let blank = 0; blank < leadingBlanks; blank++) cells += '<div class="pay-day is-blank" aria-hidden="true"></div>';
+      for (let day = 1; day <= daysInMonth; day++) {
+        const entries = byDay.get(day) || [];
+        const weekday = weekdays[new Date(calYear, calMonth, day).getDay()];
+        const isToday = day === calToday.getDate();
+        const unpaid = entries.filter(entry => !entry.isPaid);
+        const endBalance = unpaid.length && hasBalance ? unpaid[unpaid.length - 1].balanceAfter : null;
+        cells += `<div class="pay-day${entries.length ? ' has-items' : ''}${isToday ? ' is-today' : ''}${day < calToday.getDate() ? ' is-past' : ''}" role="listitem" aria-label="${weekday} ${day}: ${entries.length} payment${entries.length === 1 ? '' : 's'}">
+          <div class="pay-day-num"><span>${day}</span><small>${weekday}${isToday ? ' &middot; Today' : ''}</small></div>
+          <div class="pay-day-items">${entries.map(entry => {
+            const [cls, label] = statusOf(entry);
+            const { item } = entry;
+            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}" title="${escapeHtml(item.description)} ? ${escapeHtml(item.category || 'Uncategorized')} ? ${label}">
+              <div class="pay-card-top"><span class="pay-card-name">${item.isIncome ? '&#128176; ' : ''}${escapeHtml(item.description)}</span>${item.sourceTransactionId ? `<button type="button" class="pay-card-stop" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop projecting ${escapeHtml(item.description)}" title="Stop projecting this bill">&times;</button>` : ''}</div>
+              <div class="pay-card-meta"><span class="pay-card-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span><span class="pay-card-status">${label}</span></div>
+            </article>`;
+          }).join('')}</div>
+          ${endBalance === null ? '' : `<div class="pay-day-balance${endBalance < 0 ? ' is-negative' : ''}">Balance ${fmtMoney(endBalance)}</div>`}
+        </div>`;
+      }
+      const monthName = calToday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const timelineHtml = timeline.length ? `
+        <div class="pay-cal-summary">
+          <div><span>Month</span><strong>${monthName}</strong></div>
+          <div class="is-paid"><span>Paid</span><strong>${fmtMoney(paidTotal)}</strong><small>${paidCount} bill${paidCount === 1 ? '' : 's'}</small></div>
+          <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}</small></div>
+          <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '?'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After all unpaid bills'}</small></div>
+        </div>
+        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Due</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span></div>
+        <div class="pay-cal">
+          <div class="pay-cal-head" aria-hidden="true">${weekdays.map(name => `<span>${name}</span>`).join('')}</div>
+          <div class="pay-cal-grid" role="list" aria-label="Bills due in ${monthName}">${cells}</div>
+        </div>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
 
       // 2. REPEATABLE CATEGORY SPENDING (Endpoint-driven drill-down)
@@ -1806,9 +1818,9 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017c"></script>
-  <script src="refresh.js?v=20261017c"></script>
-  <script src="account.js?v=20261017c"></script>
+  <script src="ui.js?v=20261017d"></script>
+  <script src="refresh.js?v=20261017d"></script>
+  <script src="account.js?v=20261017d"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>
