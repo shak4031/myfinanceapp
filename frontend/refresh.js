@@ -63,7 +63,7 @@
   window.showView = function(view) {
     if (!FinanceSession.isAuthenticated()) return;
     const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', etl: 'Import review', payoff: 'Payoff plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
-    if (!Object.hasOwn(titles, view)) view = 'dashboard';
+    if (!Object.prototype.hasOwnProperty.call(titles, view)) view = 'dashboard';
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
     document.querySelectorAll('.nav-btn').forEach(node => {
@@ -81,6 +81,12 @@
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
   window.addEventListener('hashchange', () => window.showView(location.hash.slice(1)));
+  document.addEventListener('click', event => {
+    const link = event.target.closest?.('a[data-view]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.showView(link.dataset.view);
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && $('sidebar').classList.contains('open')) {
       closeSidebar();
