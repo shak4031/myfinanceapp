@@ -393,8 +393,8 @@ body .filter-panel .month-chip input { position: absolute; inset: 0; width: 100%
 body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty input { cursor: not-allowed; }
 /* Upcoming payments: a month calendar of compact bill cards (agenda list on small screens). */
 .pay-cal-empty { margin: 0; color: var(--text-secondary); }
-.pay-cal-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-bottom: 14px; }
-.pay-cal-summary > div { --tone: #64748b; display: grid; gap: 2px; min-width: 0; padding: 12px 14px; background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--tone); border-radius: 10px; }
+.pay-cal-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.pay-cal-summary > div { --tone: #64748b; display: grid; gap: 2px; min-width: 0; padding: 9px 14px; background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--tone); border-radius: 10px; }
 .pay-cal-summary span { color: var(--text-secondary); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
 .pay-cal-summary strong { font-size: 18px; font-weight: 720; font-variant-numeric: tabular-nums; }
 .pay-cal-summary small { color: var(--text-secondary); font-size: 12px; }
@@ -406,42 +406,145 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-cal-legend .is-overdue, .pay-card.is-overdue { --tone: #d97706; }
 .pay-cal-summary .is-deficit, .pay-cal-legend .is-deficit, .pay-card.is-deficit { --tone: #e11d48; }
 .pay-cal-summary .is-balance { --tone: #0f766e; }
-/* Week rows styled as a day strip: weekday over a large date, light dividers, compact bill cards. */
-.pay-cal { display: grid; gap: 12px; }
-.pay-week { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-.pay-week.is-current { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); box-shadow: 0 6px 18px -12px #0f766e80; }
-.pay-day { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; min-height: 132px; padding: 14px 8px 12px; border-left: 1px solid var(--divider); }
+/* Month calendar sized to fit one screen: a single weekday header, compact day cells and dense bill cards. */
+.pay-cal { overflow: hidden; background: #fff; border: 1px solid var(--border); border-radius: 14px; }
+.pay-weekdays, .pay-week { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); }
+.pay-weekdays { background: #f8fafc; border-bottom: 1px solid var(--border); }
+.pay-weekdays span { padding: 7px 8px; color: var(--text-secondary); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-align: center; text-transform: uppercase; }
+.pay-week + .pay-week { border-top: 1px solid var(--divider); }
+.pay-week.is-current { position: relative; background: color-mix(in srgb, var(--primary) 3%, #fff); }
+.pay-week.is-current::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--primary); }
+.pay-day { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 76px; padding: 6px 6px 7px; border-left: 1px solid var(--divider); }
 .pay-day:first-child { border-left: 0; }
 .pay-day.is-blank { background: repeating-linear-gradient(135deg,#f8fafc 0 8px,#f3f6f9 8px 16px); }
-.pay-day-label { color: var(--text-secondary); font-size: 13px; font-weight: 500; }
-.pay-day-num { color: var(--text-primary); font-size: 24px; font-weight: 650; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.pay-day.is-past .pay-day-label, .pay-day.is-past .pay-day-num { color: #94a3b8; }
-.pay-day.is-today { background: linear-gradient(#fff5f5, #fff 70%); }
-.pay-day.is-today .pay-day-label, .pay-day.is-today .pay-day-num { color: #e11d48; font-weight: 700; }
-.pay-day-items { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; width: 100%; margin-top: 10px; }
+.pay-day-num { display: flex; align-items: center; gap: 6px; color: var(--text-primary); font-size: 13px; font-weight: 650; line-height: 20px; font-variant-numeric: tabular-nums; }
+.pay-day.is-past .pay-day-num { color: #94a3b8; font-weight: 500; }
+.pay-day.is-today { background: #fff5f6; }
+.pay-day.is-today .pay-day-num { color: #e11d48; font-weight: 750; }
+.pay-day-today { padding: 0 6px; background: #e11d48; color: #fff; border-radius: 999px; font-size: 9px; font-weight: 750; letter-spacing: .5px; line-height: 16px; text-transform: uppercase; }
+.pay-day-items { display: grid; grid-template-columns: minmax(0,1fr); gap: 5px; width: 100%; }
 .pay-day-items:empty { display: none; }
-.pay-card { --tone: #2563eb; position: relative; display: grid; grid-template-columns: minmax(0,1fr); gap: 1px; min-width: 0; padding: 8px 9px; background: #fff; border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--border)); border-top: 3px solid var(--tone); border-radius: 9px; box-shadow: 0 1px 2px #0f172a10, 0 6px 14px -10px #0f172a40; font-size: 11.5px; line-height: 1.3; text-align: left; transition: transform .15s, box-shadow .15s; }
-.pay-card:not(.is-paid):hover { transform: translateY(-2px); box-shadow: 0 10px 20px -12px #0f172a59; }
-.pay-card.is-paid { --tone: #cbd5e1; background: #f4f6f9; border-color: #e2e8f0; box-shadow: none; filter: grayscale(1); }
+.pay-card { --tone: #2563eb; position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 1px 6px; min-width: 0; padding: 5px 7px 6px 8px; background: #fff; border: 1px solid color-mix(in srgb, var(--tone) 30%, var(--border)); border-left: 3px solid var(--tone); border-radius: 7px; box-shadow: 0 1px 2px #0f172a0d, 0 4px 10px -8px #0f172a40; font-size: 11px; line-height: 1.25; text-align: left; transition: transform .15s, box-shadow .15s; }
+.pay-card:not(.is-paid):hover { transform: translateY(-1px); box-shadow: 0 8px 16px -10px #0f172a59; }
+.pay-card.is-paid { --tone: #cbd5e1; background: #f4f6f9; border-color: #e2e8f0; border-left-color: #cbd5e1; box-shadow: none; filter: grayscale(1); }
 .pay-card.is-paid > * { color: #94a3b8 !important; }
 .pay-card.is-paid .pay-card-amount { text-decoration: line-through; text-decoration-thickness: 1px; }
-.pay-card-cat { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; padding-right: 14px; color: color-mix(in srgb, var(--tone) 75%, #0f172a); font-size: 9.5px; font-weight: 750; letter-spacing: .5px; line-height: 1.25; text-transform: uppercase; }
-.pay-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 11px; line-height: 1.3; }
+.pay-card-cat { flex: 1 0 100%; min-width: 0; overflow: hidden; padding-right: 14px; color: color-mix(in srgb, var(--tone) 75%, #0f172a); font-size: 9px; font-weight: 750; letter-spacing: .5px; line-height: 1.3; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .pay-cal-legend .is-paid { --tone: #cbd5e1; }
-.pay-card-amount { margin-top: 3px; color: var(--text-primary); font-size: 14px; font-weight: 750; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.pay-card-amount { min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 13px; font-weight: 750; letter-spacing: -.2px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pay-amt-short { display: none; }
 .pay-card.is-income .pay-card-amount { color: var(--success); }
-.pay-card-bal { display: grid; margin-top: 5px; padding-top: 5px; color: var(--text-primary); font-weight: 650; font-variant-numeric: tabular-nums; border-top: 1px dashed var(--divider); }
-.pay-card-bal small { color: var(--text-secondary); font-size: 9.5px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.pay-card-bal { order: 3; flex: 1 0 100%; min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 10.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pay-card-bal small { color: var(--text-secondary); font-size: 9px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; }
 .pay-card-bal.is-negative { color: var(--danger); }
-.pay-card-flag { justify-self: start; margin-top: 5px; padding: 1px 6px; background: color-mix(in srgb, var(--tone) 14%, #fff); color: color-mix(in srgb, var(--tone) 80%, #000); border-radius: 999px; font-size: 9.5px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; }
-.pay-card-stop { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; background: none; color: var(--text-secondary); border: 0; border-radius: 4px; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; }
-.pay-card:hover .pay-card-stop, .pay-card-stop:focus-visible { opacity: 1; }
+.pay-card-stop { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; background: none; color: var(--text-secondary); border: 0; border-radius: 4px; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.pay-card:hover .pay-card-stop, .pay-row:hover .pay-card-stop, .pay-card-stop:focus-visible { opacity: 1; }
 .pay-card-stop:hover { background: #fee2e2; color: var(--danger); }
 @media (hover: none) { .pay-card-stop { opacity: 1; } }
 /* Auto-pay vs manual: teal pill = goes out on its own; violet pill = the user must act. */
-.pay-card-mode { justify-self: start; display: inline-block; max-width: 100%; overflow: hidden; margin-top: 5px; padding: 1px 7px 1px 6px; border: 1px solid; border-radius: 999px; font-size: 9.5px; font-weight: 750; letter-spacing: .3px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.pay-card-mode::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; vertical-align: 1px; background: currentColor; border-radius: 50%; }
-@media (max-width: 720px) { .pay-card-mode-cta { display: none; } }
+.pay-card-mode { order: 2; display: inline-block; max-width: 100%; overflow: hidden; margin-top: 0; padding: 0 6px 0 5px; border: 1px solid; border-radius: 999px; font-size: 8.5px; font-weight: 750; letter-spacing: .3px; line-height: 15px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.pay-cal .pay-card-mode { padding: 0 5px; letter-spacing: .2px; }
+.pay-cal .pay-card-mode::before { display: none; }
+.pay-card-mode::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 4px; vertical-align: 1px; background: currentColor; border-radius: 50%; }
+
+/* List layout */
+.pay-list { margin: 0; padding: 0; overflow: hidden; list-style: none; background: #fff; border: 1px solid var(--border); border-radius: 14px; }
+.pay-row { --tone: #2563eb; display: grid; grid-template-columns: 46px minmax(0,1fr) auto 112px 124px 24px; align-items: center; gap: 14px; padding: 10px 14px 10px 13px; border-left: 3px solid var(--tone); transition: background .15s; }
+.pay-row + .pay-row, .pay-list-today + .pay-row { border-top: 1px solid var(--divider); }
+.pay-row:hover { background: #f8fafc; }
+.pay-row.is-paid { --tone: #cbd5e1; background: #fafbfc; }
+.pay-row.is-paid > * { color: #94a3b8 !important; }
+.pay-row.is-paid .pay-row-amount { text-decoration: line-through; text-decoration-thickness: 1px; }
+.pay-row.is-upcoming { --tone: #2563eb; }
+.pay-row.is-overdue { --tone: #d97706; }
+.pay-row.is-deficit { --tone: #e11d48; }
+.pay-row-date { display: grid; justify-items: center; line-height: 1.1; }
+.pay-row-date small { color: var(--text-secondary); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+.pay-row-date strong { color: var(--text-primary); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pay-row-main { display: grid; min-width: 0; gap: 1px; }
+.pay-row-main .pay-card-cat { padding: 0; }
+.pay-row-name { overflow: hidden; color: var(--text-primary); font-size: 13.5px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.pay-row-tags { display: flex; align-items: center; gap: 6px; }
+.pay-row-tags .pay-card-mode { margin: 0; font-size: 9.5px; line-height: 18px; }
+.pay-row-status { padding: 0 8px; background: color-mix(in srgb, var(--tone) 13%, #fff); color: color-mix(in srgb, var(--tone) 80%, #000); border-radius: 999px; font-size: 9.5px; font-weight: 750; letter-spacing: .4px; line-height: 18px; text-transform: uppercase; white-space: nowrap; }
+.pay-row-amount { color: var(--text-primary); font-size: 14.5px; font-weight: 750; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay-row.is-income .pay-row-amount { color: var(--success); }
+.pay-row-bal { display: grid; justify-items: end; color: var(--text-primary); font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay-row-bal small { color: var(--text-secondary); font-size: 9px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; }
+.pay-row-bal.is-negative { color: var(--danger); }
+.pay-row-action { position: relative; width: 24px; height: 24px; }
+.pay-row-stop { top: 3px; right: 3px; }
+.pay-list-today { display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: #fff1f2; color: #e11d48; font-size: 10.5px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; border-top: 1px solid #fecdd3; border-bottom: 1px solid #fecdd3; }
+.pay-list-today:first-child { border-top: 0; }
+.pay-list-today::after { content: ""; flex: 1; height: 1px; background: #fda4af; }
+
+/* Layout toggle and which layout is visible */
+#upcoming-section .section-head > div:first-child { flex: 1 1 320px; min-width: 0; }
+.section-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 12px; }
+.view-toggle { display: inline-flex; padding: 3px; background: #e9eef3; border-radius: 10px; }
+.view-toggle button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: transparent; color: var(--text-secondary); border: 0; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.view-toggle button:hover { color: var(--text-primary); }
+.view-toggle button[aria-pressed="true"] { background: #fff; color: var(--text-primary); box-shadow: 0 1px 2px #0f172a1a, 0 2px 6px -2px #0f172a26; }
+.view-toggle button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.view-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.view-toggle svg circle { fill: currentColor; stroke: none; }
+#upcoming-section[data-pay-view="list"] .pay-cal, #upcoming-section:not([data-pay-view="list"]) .pay-list { display: none; }
+
+/* Medium widths: tighter cells so the full week still fits without sideways scrolling. */
+@media (max-width: 1000px) {
+  .pay-day { padding: 5px 4px 6px; }
+  .pay-card { padding: 4px 5px 5px 6px; }
+  .pay-card-amount { font-size: 12px; }
+  .pay-card-mode { padding: 0 4px; }
+  .pay-row { grid-template-columns: 42px minmax(0,1fr) 104px 112px 24px; }
+  .pay-row-tags { grid-column: 2; grid-row: 2; margin-top: -4px; }
+  .pay-row-date { grid-row: 1 / span 2; }
+  .pay-row-amount, .pay-row-bal, .pay-row-action { grid-row: 1 / span 2; }
+}
+/* Short screens (laptops): denser month so the whole calendar fits without vertical scrolling. */
+@media (max-height: 860px) and (min-width: 641px) {
+  .pay-cal-summary { gap: 8px; margin-bottom: 10px; }
+  .pay-cal-summary > div { gap: 0; padding: 6px 12px; }
+  .pay-cal-summary span { font-size: 10px; }
+  .pay-cal-summary strong { font-size: 15px; line-height: 1.3; }
+  .pay-cal-summary small { display: none; }
+  .pay-cal-legend { margin-bottom: 8px; }
+  .pay-weekdays span { padding: 5px 6px; }
+  .pay-day { min-height: 58px; gap: 3px; padding: 3px 5px 5px; }
+  .pay-day-num { font-size: 12px; line-height: 17px; }
+  .pay-day-items { gap: 3px; }
+  .pay-card { padding: 3px 6px 4px 7px; }
+  .pay-card-amount { font-size: 12px; }
+  .pay-cal .pay-card-mode { display: none; }
+  .pay-card.mode-auto .pay-card-cat::before, .pay-card.mode-manual .pay-card-cat::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; vertical-align: 1px; border-radius: 50%; background: #14b8a6; }
+  .pay-card.mode-manual .pay-card-cat::before { background: #6d28d9; }
+}
+/* Phones: each bill becomes a compact amount chip so the whole month fits; the list shows full detail. */
+@media (max-width: 640px) {
+  .pay-weekdays span { padding: 6px 0; font-size: 9.5px; letter-spacing: .3px; }
+  .pay-day { min-height: 52px; gap: 3px; padding: 4px 2px 5px; align-items: center; }
+  .pay-day-num { font-size: 12px; line-height: 16px; }
+  .pay-day-today { display: none; }
+  .pay-day.is-today .pay-day-num { padding: 0 5px; background: #e11d48; color: #fff; border-radius: 999px; }
+  .pay-day-items { gap: 3px; }
+  .pay-card { padding: 2px 2px; border-width: 0; border-radius: 5px; background: color-mix(in srgb, var(--tone) 14%, #fff); box-shadow: none; text-align: center; }
+  .pay-card.is-paid { background: #eef1f4; }
+  .pay-card.mode-manual:not(.is-paid) { box-shadow: inset 0 0 0 1.5px #6d28d9; }
+  .pay-cal :is(.pay-card-cat, .pay-card-bal, .pay-card-mode, .pay-card-stop, .pay-amt-full) { display: none; }
+  .pay-amt-short { display: inline; }
+  .pay-card-amount { color: color-mix(in srgb, var(--tone) 80%, #0f172a); font-size: 10px; letter-spacing: -.3px; }
+  .pay-row { grid-template-columns: 38px minmax(0,1fr) auto; gap: 4px 10px; padding: 10px 10px 10px 9px; }
+  .pay-row-date { grid-row: 1 / span 3; }
+  .pay-row-main { grid-column: 2; grid-row: 1; }
+  .pay-row-tags { grid-column: 2; grid-row: 2; margin: 0; flex-wrap: wrap; }
+  .pay-row-amount { grid-column: 3; grid-row: 1; font-size: 14px; }
+  .pay-row-bal { grid-column: 3; grid-row: 2; font-size: 12px; }
+  .pay-row-action { grid-column: 3; grid-row: 3; justify-self: end; width: 20px; height: 20px; }
+  .pay-row-stop { top: 1px; right: 1px; }
+  .pay-row-name { font-size: 13px; }
+  .pay-row.is-paid .pay-row-bal { display: none; }
+  .section-head-actions { width: 100%; justify-content: space-between; }
+}
 .pay-card-mode.is-auto { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
 .pay-card-mode.is-manual { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
 .pay-card:not(.is-paid) .pay-card-mode.is-manual { background: #6d28d9; color: #fff; border-color: #6d28d9; box-shadow: 0 2px 6px -2px #6d28d980; }
@@ -481,12 +584,7 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
   .similar-amt { grid-column: 3; grid-row: 1; }
   .similar-row input { grid-row: 1 / span 2; }
 }
-@media (max-width: 1280px) { .pay-cal-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-/* Narrow screens: each week row scrolls sideways, like a day strip. */
-@media (max-width: 1000px) {
-  .pay-week { grid-template-columns: repeat(7,minmax(118px,1fr)); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-  .pay-day { scroll-snap-align: start; }
-}
+@media (max-width: 900px) { .pay-cal-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 768px) {
   #dashboard-payments { padding: 16px; }
   body .filter-panel .search-filter, .month-picker { grid-column: 1 / -1; }

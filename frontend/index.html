@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017i"></script>
-  <script src="client-errors.js?v=20261017i"></script>
+  <script src="session.js?v=20261017l"></script>
+  <script src="client-errors.js?v=20261017l"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -433,8 +433,8 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017i">
-  <link rel="stylesheet" href="analytics.css?v=20261017i">
+  <link rel="stylesheet" href="refresh.css?v=20261017l">
+  <link rel="stylesheet" href="analytics.css?v=20261017l">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -543,7 +543,13 @@
               <h2>Upcoming payments &amp; projected runway</h2>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
             </div>
-            <div id="cashflow-safety-badge"></div>
+            <div class="section-head-actions">
+              <div id="cashflow-safety-badge"></div>
+              <div class="view-toggle" role="group" aria-label="Upcoming payments layout">
+                <button type="button" data-pay-view="calendar" onclick="setPayView('calendar')" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>Calendar</button>
+                <button type="button" data-pay-view="list" onclick="setPayView('list')" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4h8.5M5.5 8h8.5M5.5 12h8.5"/><circle cx="2.5" cy="4" r=".9"/><circle cx="2.5" cy="8" r=".9"/><circle cx="2.5" cy="12" r=".9"/></svg>List</button>
+              </div>
+            </div>
           </div>
           <div id="dashboard-payments"></div>
         </div>
@@ -1098,28 +1104,35 @@
       const statusOf = entry => entry.isPaid ? ['is-paid', 'Paid'] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
       const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const todayNum = calToday.getDate();
-      // Week rows (Sun-Sat) styled as a day strip; days outside this month stay empty.
-      const dayColumn = day => {
+      const shortMoney = value => '$' + (Math.abs(value) >= 1000 ? (Math.abs(value) / 1000).toFixed(Math.abs(value) >= 10000 ? 0 : 1) + 'k' : Math.round(Math.abs(value)).toLocaleString('en-US'));
+      const stopButton = (entry, cls) => entry.item.sourceTransactionId && !entry.isPaid
+        ? `<button type="button" class="${cls}" data-id="${escapeHtml(entry.item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop projecting ${escapeHtml(entry.item.description)}" title="Stop projecting this bill">&times;</button>` : '';
+      const modeChip = (entry, long) => {
+        const { item } = entry;
+        if (item.isIncome) return '';
+        if (item.payMode === 'auto') return `<span class="pay-card-mode is-auto" title="Goes out automatically">${long ? 'Auto-pay' : 'Auto'}</span>`;
+        if (item.payMode === 'manual') return `<span class="pay-card-mode is-manual" title="${entry.isPaid ? 'Paid manually' : 'You need to make this payment'}">Manual${entry.isPaid || !long ? '' : ' · pay it'}</span>`;
+        return '';
+      };
+      // Month grid: one weekday header, then compact week rows sized to fit a single screen.
+      const dayCell = day => {
         if (day < 1 || day > daysInMonth) return '<div class="pay-day is-blank" aria-hidden="true"></div>';
         const entries = byDay.get(day) || [];
         const weekday = weekdays[new Date(calYear, calMonth, day).getDay()];
         const isToday = day === todayNum;
         return `<div class="pay-day${entries.length ? ' has-items' : ''}${isToday ? ' is-today' : ''}${day < todayNum ? ' is-past' : ''}" role="listitem" aria-label="${weekday} ${day}${isToday ? ', today' : ''}: ${entries.length} payment${entries.length === 1 ? '' : 's'}">
-          <div class="pay-day-label">${isToday ? 'Today' : weekday}</div>
-          <div class="pay-day-num">${day}</div>
+          <div class="pay-day-num">${day}${isToday ? '<span class="pay-day-today">Today</span>' : ''}</div>
           <div class="pay-day-items">${entries.map(entry => {
             const [cls, label] = statusOf(entry);
             const { item } = entry;
             const balance = entry.isPaid ? 'Paid' : hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;';
-            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}" title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${label}">
-              ${item.sourceTransactionId && !entry.isPaid ? `<button type="button" class="pay-card-stop" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop projecting ${escapeHtml(item.description)}" title="Stop projecting this bill">&times;</button>` : ''}
+            const sign = item.isIncome ? '+' : '&minus;';
+            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}" title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
+              ${stopButton(entry, 'pay-card-stop')}
               <span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span>
-              <span class="pay-card-name">${escapeHtml(item.description)}</span>
-              <span class="pay-card-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
-              <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}"><small>${entry.isPaid ? 'Status' : 'Balance after'}</small>${balance}</span>
-              ${entry.isPaid || cls === 'is-upcoming' ? '' : `<span class="pay-card-flag">${label}</span>`}
-              ${item.isIncome ? '' : item.payMode === 'auto' ? `<span class="pay-card-mode is-auto" title="Goes out automatically">Auto-pay</span>`
-                : item.payMode === 'manual' ? `<span class="pay-card-mode is-manual" title="${entry.isPaid ? 'Paid manually' : 'You need to make this payment'}">Manual${entry.isPaid ? '' : '<span class="pay-card-mode-cta"> · pay it</span>'}</span>` : ''}
+              <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
+              <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? 'Paid' : `<small>Bal</small> ${balance}`}</span>
+              ${modeChip(entry, false)}
             </article>`;
           }).join('')}</div>
         </div>`;
@@ -1127,8 +1140,29 @@
       let weeksHtml = '';
       for (let start = 1 - leadingBlanks; start <= daysInMonth; start += 7) {
         const isCurrentWeek = todayNum >= start && todayNum < start + 7;
-        weeksHtml += `<div class="pay-week${isCurrentWeek ? ' is-current' : ''}" role="list" aria-label="Week of ${calToday.toLocaleDateString('en-US', { month: 'short' })} ${Math.max(1, start)}">${Array.from({ length: 7 }, (_, i) => dayColumn(start + i)).join('')}</div>`;
+        weeksHtml += `<div class="pay-week${isCurrentWeek ? ' is-current' : ''}" role="list" aria-label="Week of ${calToday.toLocaleDateString('en-US', { month: 'short' })} ${Math.max(1, start)}">${Array.from({ length: 7 }, (_, i) => dayCell(start + i)).join('')}</div>`;
       }
+      const weekHead = `<div class="pay-weekdays" aria-hidden="true">${weekdays.map(name => `<span>${name}</span>`).join('')}</div>`;
+      // List view: the same bills in date order, with a "today" marker between paid and upcoming.
+      let listHtml = '', todayMarked = false;
+      [...byDay.keys()].sort((a, b) => a - b).forEach(day => byDay.get(day).forEach(entry => {
+        if (!todayMarked && day >= todayNum) {
+          todayMarked = true;
+          listHtml += `<li class="pay-list-today" aria-label="Today"><span>Today &middot; ${calToday.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span></li>`;
+        }
+        const [cls, label] = statusOf(entry);
+        const { item } = entry;
+        const date = new Date(calYear, calMonth, day);
+        listHtml += `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}">
+          <span class="pay-row-date"><small>${weekdays[date.getDay()]}</small><strong>${day}</strong></span>
+          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${escapeHtml(item.description)}</span></span>
+          <span class="pay-row-tags"><span class="pay-row-status">${label}</span>${modeChip(entry, true)}</span>
+          <span class="pay-row-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
+          <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? '<small>Status</small>Paid' : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
+          <span class="pay-row-action">${stopButton(entry, 'pay-card-stop pay-row-stop')}</span>
+        </li>`;
+      }));
+      if (!todayMarked) listHtml += `<li class="pay-list-today"><span>Today &middot; nothing else due this month</span></li>`;
       const monthName = calToday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       const timelineHtml = timeline.length ? `
         <div class="pay-cal-summary">
@@ -1138,8 +1172,10 @@
           <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After all unpaid bills'}</small></div>
         </div>
         <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
-        <div class="pay-cal" aria-label="Bills due in ${monthName}">${weeksHtml}</div>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
+        <div class="pay-cal" aria-label="Bills due in ${monthName}">${weekHead}${weeksHtml}</div>
+        <ol class="pay-list" aria-label="Bills due in ${monthName}, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
+      if (typeof window.setPayView === 'function') window.setPayView();
 
       // 2. REPEATABLE CATEGORY SPENDING (Endpoint-driven drill-down)
       const catRes = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
@@ -1849,14 +1885,14 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017i"></script>
-  <script src="refresh.js?v=20261017i"></script>
-  <script src="account.js?v=20261017i"></script>
-  <script src="pro-charts.js?v=20261017i"></script>
-  <script src="pro-core.js?v=20261017i"></script>
-  <script src="pro-dashboard.js?v=20261017i"></script>
-  <script src="pro-categories.js?v=20261017i"></script>
-  <script src="analytics.js?v=20261017i"></script>
+  <script src="ui.js?v=20261017l"></script>
+  <script src="refresh.js?v=20261017l"></script>
+  <script src="account.js?v=20261017l"></script>
+  <script src="pro-charts.js?v=20261017l"></script>
+  <script src="pro-core.js?v=20261017l"></script>
+  <script src="pro-dashboard.js?v=20261017l"></script>
+  <script src="pro-categories.js?v=20261017l"></script>
+  <script src="analytics.js?v=20261017l"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

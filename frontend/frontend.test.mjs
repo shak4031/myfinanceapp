@@ -352,6 +352,28 @@ test('pay-mode column, filter and similar-payment prompt mark auto-pay and manua
   assert.deepEqual(updates, [{ ids: [1], pay_mode: 'auto' }, { ids: [2], pay_mode: 'auto' }]);
   assert.equal(dialog.open, false);
 });
+test('upcoming payments switch between calendar and list views and remember the choice', () => {
+  const f = fixture(); f.run('refresh.js');
+  const buttons = ['calendar', 'list'].map(view => ({ dataset: { payView: view }, pressed: null, setAttribute(name, value) { this.pressed = value; } }));
+  const query = f.context.document.querySelectorAll;
+  f.context.document.querySelectorAll = selector => selector === 'button[data-pay-view]' ? buttons : query(selector);
+  const section = f.node('upcoming-section');
+  assert.equal(f.context.setPayView(), 'calendar', 'works without localStorage or matchMedia');
+  assert.equal(section.dataset.payView, 'calendar');
+  const store = new Map();
+  f.context.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  f.context.matchMedia = () => ({ matches: true });
+  assert.equal(f.context.setPayView(), 'list', 'phones default to the list');
+  f.context.setPayView('calendar');
+  assert.deepEqual(buttons.map(button => button.pressed), ['true', 'false']);
+  assert.equal(f.context.setPayView(), 'calendar', 'stored choice wins over the screen-size default');
+  f.context.setPayView('list');
+  assert.equal(section.dataset.payView, 'list');
+  assert.deepEqual(buttons.map(button => button.pressed), ['false', 'true']);
+  const html = source('index.html');
+  assert.match(html, /data-pay-view="calendar"[^>]*onclick="setPayView\('calendar'\)"/);
+  assert.match(html, /data-pay-view="list"[^>]*onclick="setPayView\('list'\)"/);
+});
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
   const f = activityFixture(); f.run('refresh.js');
   await f.context.loadCategories();

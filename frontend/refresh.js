@@ -182,6 +182,19 @@
     if (alert) alert.textContent = message;
     else notify(message);
   };
+  // Upcoming payments layout: calendar or list. The choice is remembered; phones default to the list.
+  const PAY_VIEW_KEY = 'myfinance.payView';
+  window.setPayView = view => {
+    let stored = null;
+    try { stored = window.localStorage?.getItem(PAY_VIEW_KEY); } catch { /* storage unavailable */ }
+    if (view === 'calendar' || view === 'list') { try { window.localStorage?.setItem(PAY_VIEW_KEY, view); } catch { /* storage unavailable */ } }
+    else view = stored === 'calendar' || stored === 'list' ? stored
+      : (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'calendar');
+    const section = $('upcoming-section');
+    if (section) section.dataset.payView = view;
+    document.querySelectorAll?.('button[data-pay-view]')?.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.payView === view)));
+    return view;
+  };
   window.removeFixedTemplate = async id => {
     if (!await FinanceUI.confirm('Remove the Fixed flag from this merchant’s matching transactions? This stops its bill projection; no transactions are deleted.')) return;
     try {
