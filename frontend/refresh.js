@@ -127,12 +127,15 @@
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
   // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
-  window.findSimilarTransactions = (transactions, source, category) => {
+  // `change` is a category name, or { isFixed } for the fixed-bill flag; rows already in that state are skipped.
+  window.findSimilarTransactions = (transactions, source, change) => {
     const key = window.merchantKey(source?.description);
-    if (!key || !category) return [];
+    const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
+    if (!key || (!byFixed && !change)) return [];
+    const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed : t => t.category !== change;
     const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
     return transactions
-      .filter(t => String(t.id) !== String(source.id) && t.category !== category && String(t.direction).toUpperCase() === direction && window.merchantKey(t.description) === key)
+      .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && window.merchantKey(t.description) === key)
       .map(transaction => ({ transaction, sameAmount: Math.abs(Math.abs(Number(transaction.amount) || 0) - amount) <= Math.max(1, amount * 0.1) }))
       .sort((a, b) => (b.sameAmount - a.sameAmount) || (transactionDate(b.transaction.date) - transactionDate(a.transaction.date)));
   };
@@ -500,15 +503,22 @@
     $('similar-apply').disabled = !count;
   }
   // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
-  function promptSimilarTransactions(source, category, items) {
-    similarState = { category, items, updated: 0 };
+  // `change` is a category name, or { isFixed } for the fixed-bill flag.
+  function promptSimilarTransactions(source, change, items) {
+    const byFixed = typeof change === 'object';
+    similarState = { change, byFixed, items, updated: 0 };
     const strong = items.filter(item => item.sameAmount).length;
-    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : ''}Choose which should also move to <strong>${escape(category)}</strong>.`;
+    const action = byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change)}</strong>`;
+    const fixedLabel = value => value ? 'Fixed bill' : 'Not fixed';
+    $('similar-title').textContent = byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : ''}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
+      const from = byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
+      const to = byFixed ? fixedLabel(change.isFixed) : escape(change);
       return `<label class="similar-row${sameAmount ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
-        <span class="similar-desc">${escape(transaction.description)}<small>${escape(transaction.category || 'Uncategorized')} &rarr; ${escape(category)}${sameAmount ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount ? '' : ' &middot; different amount'}</small></span>
         <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
     }).join('');
     $('similar-error').textContent = '';
@@ -526,10 +536,12 @@
     if (!selected.length) return similarDialog.close();
     $('similar-apply').disabled = true; $('similar-error').textContent = '';
     try {
-      const result = await json('/api/transactions/categorization-apply', 'POST', {
-        updates: selected.map(t => ({ id: Number(t.id), category: similarState.category, expectedCategory: t.category ?? null })),
-        learnRules: true, protectCorrections: false
-      });
+      const result = similarState.byFixed
+        ? await json('/api/transactions/update-fixed-many', 'POST', { ids: selected.map(t => Number(t.id)), is_fixed: similarState.change.isFixed })
+        : await json('/api/transactions/categorization-apply', 'POST', {
+          updates: selected.map(t => ({ id: Number(t.id), category: similarState.change, expectedCategory: t.category ?? null })),
+          learnRules: true, protectCorrections: false
+        });
       similarState.updated = Number(result?.updated ?? selected.length);
       similarDialog.close();
     } catch (error) {
@@ -573,8 +585,12 @@
         event.target.disabled = true;
         try {
           if (event.target.matches('[data-fixed]')) {
-            await json('/api/transactions/update-fixed', 'POST', { id: item.id, is_fixed: event.target.checked, apply_to_all: false });
-            notify('Fixed flag saved for this transaction. Upcoming bills update from your marked debits.');
+            const isFixed = event.target.checked;
+            await json('/api/transactions/update-fixed', 'POST', { id: item.id, is_fixed: isFixed, apply_to_all: false });
+            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { isFixed });
+            const extra = similar.length ? await promptSimilarTransactions(item, { isFixed }, similar) : 0;
+            const verb = isFixed ? 'Marked as a fixed bill' : 'No longer a fixed bill';
+            notify(`${verb}: this${extra ? ` and ${extra} similar transaction${extra === 1 ? '' : 's'}` : ' transaction only'}. Upcoming bills update from your marked debits.`);
           } else {
             const category = event.target.value;
             await json('/api/transactions/update-transaction', 'POST', { id: item.id, category, apply_to_all: false });

@@ -201,6 +201,13 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal((await request('/api/transactions/update-fixed', { id: 1, is_fixed: true })).status, 200);
     const flags = (await client.query('SELECT is_fixed,category FROM transactions WHERE user_id=1 ORDER BY id')).rows;
     assert.deepEqual(flags, [{ is_fixed: true, category: 'Other' }, { is_fixed: true, category: 'Dining' }]);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 3], is_fixed: false })).status, 404);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: ['1'], is_fixed: false })).status, 400);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 1], is_fixed: false })).status, 400);
+    assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
+    assert.deepEqual(await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: false }), { status: 200, body: { success: true, updated: 2 } });
+    assert.deepEqual((await client.query('SELECT is_fixed FROM transactions WHERE user_id=1 ORDER BY id')).rows.map(row => row.is_fixed), [false, false]);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: true })).body.updated, 2);
     assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining', is_fixed: false })).status, 200);
     assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
     const mapped = (await client.query("SELECT c.name,l.pattern,l.match_type FROM transaction_labels l JOIN categories c ON c.id=l.category_id WHERE l.pattern='MY STORE'")).rows[0];

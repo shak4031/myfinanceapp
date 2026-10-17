@@ -239,6 +239,40 @@ test('similar-payment matcher normalizes statement noise with regex and weighs a
   const similar = f.context.findSimilarTransactions(rows, rows[0], 'Subscriptions');
   assert.deepEqual(similar.map(item => [item.transaction.id, item.sameAmount]), [['2', true], ['3', true], ['4', false]]);
   assert.equal(f.context.findSimilarTransactions(rows, rows[0], '').length, 0);
+  rows[1].is_fixed = true;
+  const fixedMatches = f.context.findSimilarTransactions(rows, rows[0], { isFixed: true });
+  assert.deepEqual(fixedMatches.map(item => item.transaction.id), ['3', '6', '4']);
+  assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], { isFixed: false }).map(item => item.transaction.id), ['2']);
+});
+test('marking a fixed bill offers similar payments and flags only the confirmed ones', async () => {
+  const calls = [];
+  const transactions = [
+    { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', is_fixed: false },
+    { id: '2', date: '2026-08-31', description: 'VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', is_fixed: false },
+    { id: '3', date: '2026-04-20', description: 'VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA', amount: 15.49, direction: 'DEBIT', category: 'Subscriptions', is_fixed: false }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/categories') return response(200, [{ name: 'Subscriptions' }]);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+    return response(200, { success: true, updated: 2 });
+  });
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const box = { checked: true, disabled: false, matches: selector => selector === '[data-fixed]', closest: () => ({ dataset: { transaction: '0' } }) };
+  const pending = f.node('full-txn-table').onchange({ target: box });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+  assert.equal(dialog.open, true);
+  assert.equal(f.node('similar-title').textContent, 'Mark similar payments as fixed?');
+  assert.match(f.node('similar-list').innerHTML, /Not fixed &rarr; Fixed bill/);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="1" >/);
+  f.node('similar-list').querySelectorAll = () => [{ checked: true, dataset: { similar: '0' } }, { checked: true, dataset: { similar: '1' } }];
+  await f.node('similar-form').onsubmit({ preventDefault() {} });
+  await pending;
+  assert.deepEqual(calls.find(([url]) => url === '/api/transactions/update-fixed')[1], { id: '1', is_fixed: true, apply_to_all: false });
+  assert.deepEqual(calls.find(([url]) => url === '/api/transactions/update-fixed-many')[1], { ids: [2, 3], is_fixed: true });
+  assert.equal(dialog.open, false);
 });
 test('changing a category offers similar payments and applies only the confirmed ones', async () => {
   const calls = [];
