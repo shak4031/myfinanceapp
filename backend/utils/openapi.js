@@ -33,6 +33,7 @@ export function openApiSpec() {
       '/api/admin/users/{id}/password-reset': { post: op('Admin', 'Email the user a password reset link (admin never sees it)', pathId) },
       '/api/admin/users/{id}/revoke-sessions': { post: op('Admin', 'Sign the user out everywhere', pathId) },
       '/api/admin/users/{id}/unlock': { post: op('Admin', 'Clear failed-attempt lockouts for the user', pathId) },
+      '/api/admin/users/{id}/license': { post: op('Admin', 'Grant or revoke MyFinance Pro', pathId, body({ action: 'grant' })) },
       '/api/admin/support-grants': { get: op('Admin', 'Active support grants customers have given') },
       '/api/admin/support-sessions': { post: op('Admin', 'Start a consented support session (view as customer)', body({ grantId: 1 })) },
       '/api/dashboard/summary': { post: op('Finance', 'Income, spending and balance summary', body({ dateFilter: 'current' })) },
@@ -45,7 +46,12 @@ export function openApiSpec() {
       '/api/debts': { get: op('Finance', 'List debts') },
       '/api/goals': { get: op('Finance', 'List savings goals') },
       '/api/goals/funding-analysis': { get: op('Finance', 'Goal funding plan and coaching') },
-      '/api/categories': { get: op('Finance', 'List categories') }
+      '/api/categories': { get: op('Finance', 'List categories') },
+      '/api/license': { get: op('Pro', 'Current plan, trial status and Pro features') },
+      '/api/license/trial': { post: op('Pro', 'Start the one-time 7-day MyFinance Pro trial', body({})) },
+      '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
+      '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, subscriptions and merchants') },
+      '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics', query('type', 'from', 'to')) }
     }
   };
 }

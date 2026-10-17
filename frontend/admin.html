@@ -37,10 +37,13 @@
     details.op textarea { min-height: 90px; font-family: Consolas, monospace; font-size: 12px; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .actions .btn { padding: 6px 10px; font-size: 12px; }
+    .plan-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; background: #eef2f7; color: #475569; }
+    .plan-pill.is-pro { background: #f3efff; color: #6d28d9; }
+    .plan-pill.is-trial { background: #fffbeb; color: #b45309; }
     .warn { background: #fff4d6; border: 1px solid #e8c56f; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; color: #5c4210; }
     #admin-toast { position: fixed; bottom: 20px; right: 20px; background: #203d30; color: #fff; padding: 12px 18px; border-radius: 12px; max-width: 420px; }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017g">
+  <link rel="stylesheet" href="refresh.css?v=20261017h">
 </head>
 <body>
   <div class="admin-shell">
@@ -121,7 +124,7 @@
     </div>
   </div>
   <div id="admin-toast" hidden role="status"></div>
-  <script src="ui.js?v=20261017g"></script>
-  <script src="admin.js?v=20261017g"></script>
+  <script src="ui.js?v=20261017h"></script>
+  <script src="admin.js?v=20261017h"></script>
 </body>
 </html>

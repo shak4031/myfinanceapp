@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -565,4 +565,74 @@ test('successful logout clears protected markup before reload', async () => {
   assert.equal(f.node('.app-container').innerHTML, 'CLEAN');
   assert.equal(f.context.reloaded, true);
   assert.equal(f.context.FinanceSession.isAuthenticated(), false);
+});
+const loadPro = (fetchImpl) => {
+  const f = fixture(fetchImpl);
+  for (const file of ['refresh.js', 'pro-charts.js', 'pro-core.js', 'pro-dashboard.js', 'pro-categories.js', 'analytics.js']) f.run(file);
+  return f;
+};
+test('Pro scripts load without a browser and expose their APIs', () => {
+  const f = loadPro();
+  assert.equal(typeof f.context.FinancePro.openUpgrade, 'function');
+  assert.equal(typeof f.context.loadAnalyticsPage, 'function');
+  assert.equal(typeof f.context.ProCharts.donut, 'function');
+});
+test('Pro chart helpers produce scalable SVG', () => {
+  const { ProCharts } = loadPro().context;
+  assert.equal(ProCharts.niceMax(1234), 2000);
+  assert.equal(ProCharts.compact(15400), '$15.4k');
+  assert.equal(ProCharts.compact(154000), '$154k');
+  const bars = ProCharts.bars({ labels: ['Jan', 'Feb'], values: [100, 250], lines: [{ values: [null, 175], className: 'sma' }] });
+  assert.match(bars, /viewBox="0 0 640 230"/);
+  assert.equal((bars.match(/<rect class="bar/g) || []).length, 2);
+  const donut = ProCharts.donut([{ label: 'A <b>', value: 60, color: '#000' }, { label: 'B', value: 40, color: '#fff' }], { centerValue: '$100' });
+  assert.equal((donut.match(/class="slice"/g) || []).length, 2);
+  assert.match(donut, /A &lt;b&gt;: \$60 \(60%\)/);
+});
+test('category analytics derive monthly series and only show a histogram for 2+ months', () => {
+  const { FinanceProCategories: C } = loadPro().context;
+  const transactions = [
+    { category: 'Dining', date: '2026-01-05', amount: 100, direction: 'DEBIT' },
+    { category: 'Dining', date: '2026-03-05', amount: 300, direction: 'DEBIT' },
+    { category: 'Groceries', date: '2026-03-07', amount: 100, direction: 'DEBIT' },
+    { category: 'Transfers', date: '2026-03-08', amount: 900, direction: 'DEBIT' },
+    { category: 'Salary', date: '2026-03-09', amount: 5000, direction: 'CREDIT' }
+  ];
+  const months = C.periodMonths({ months: null }, transactions);
+  assert.deepEqual([...months], ['2026-01', '2026-02', '2026-03']);
+  const stats = C.categoryStats(transactions, months);
+  assert.equal(stats.total, 500);
+  const dining = stats.categories.get('Dining');
+  assert.deepEqual([...dining.series], [100, 0, 300]);
+  assert.equal(dining.share, 0.8);
+  assert.equal(stats.categories.get('Transfers').share, null);
+  assert.match(C.cardExtra(dining, months, 'above'), /pro-hist/);
+  const single = C.categoryStats(transactions, ['2026-03']);
+  assert.doesNotMatch(C.cardExtra(single.categories.get('Dining'), ['2026-03'], 'inline'), /pro-hist/);
+});
+test('Pro gating opens the upgrade dialog for free accounts and offers the one-time trial', async () => {
+  const f = loadPro(async url => url === '/api/license'
+    ? response(200, { tier: 'free', source: 'none', active: false, trialAvailable: true, plan: { name: 'MyFinance Pro', price: 4.99 }, features: [{ id: 'insights', title: 'Insights', text: 'x' }] })
+    : response(200, {}));
+  const { FinancePro } = f.context;
+  f.node('pro-dialog').tagName = 'DIALOG';
+  await FinancePro.ensureEntitlement();
+  assert.equal(FinancePro.isActive(), false);
+  assert.match(f.node('pro-nav-badge').innerHTML, /pro-lock/);
+  assert.equal(FinancePro.requirePro('Budgets are Pro'), false);
+  const dialog = f.node('pro-dialog');
+  assert.equal(dialog.open, true);
+  assert.match(dialog.innerHTML, /Start 7-day free trial/);
+  assert.match(dialog.innerHTML, /\$4\.99/);
+  FinancePro.setEntitlement({ tier: 'trial', source: 'trial', active: true, daysLeft: 3, features: [] });
+  assert.equal(FinancePro.requirePro('x'), true);
+  assert.match(f.node('pro-nav-badge').innerHTML, /TRIAL/);
+});
+test('analytics page shows a locked preview without Pro', async () => {
+  const f = loadPro(async url => url === '/api/license'
+    ? response(200, { tier: 'free', source: 'trial-expired', active: false, trialAvailable: false, features: [] })
+    : response(402, { error: 'Pro required', code: 'PRO_REQUIRED' }));
+  await f.context.loadAnalyticsPage();
+  assert.match(f.node('analytics-content').innerHTML, /Your Pro trial has ended/);
+  assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });

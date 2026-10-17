@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017g"></script>
-  <script src="client-errors.js?v=20261017g"></script>
+  <script src="session.js?v=20261017h"></script>
+  <script src="client-errors.js?v=20261017h"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -429,7 +429,8 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017g">
+  <link rel="stylesheet" href="refresh.css?v=20261017h">
+  <link rel="stylesheet" href="analytics.css?v=20261017h">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -476,6 +477,7 @@
         <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
         <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
+        <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Payoff plan</a></li>
         <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals</a></li>
@@ -556,6 +558,15 @@
         </div>
         <div id="category-overview-summary" class="category-overview-summary"></div>
         <div id="category-cards" class="category-cards" aria-live="polite"></div>
+      </section>
+
+      <!-- PRO ANALYTICS -->
+      <section id="analytics-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">MYFINANCE PRO &middot; ANALYTICS</p><h1>Your spending, like a market</h1><p class="muted">Trends, moving averages, forecasts and signals across every category, so you can act before the month gets away from you.</p></div>
+          <div class="pro-header-actions" id="analytics-actions"></div>
+        </header>
+        <div id="analytics-content" class="analytics-content" aria-live="polite"></div>
       </section>
 
       <section id="category-admin-view" class="view">
@@ -1154,6 +1165,7 @@
       
       catHtml += '</div></div>';
       document.getElementById('upcoming-section').insertAdjacentHTML('afterend', catHtml);
+      window.emitFinanceEvent?.('mtd:rendered', { categories });
     }
 
     async function toggleFixed(txnId, isFixed) {
@@ -1824,9 +1836,14 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017g"></script>
-  <script src="refresh.js?v=20261017g"></script>
-  <script src="account.js?v=20261017g"></script>
+  <script src="ui.js?v=20261017h"></script>
+  <script src="refresh.js?v=20261017h"></script>
+  <script src="account.js?v=20261017h"></script>
+  <script src="pro-charts.js?v=20261017h"></script>
+  <script src="pro-core.js?v=20261017h"></script>
+  <script src="pro-dashboard.js?v=20261017h"></script>
+  <script src="pro-categories.js?v=20261017h"></script>
+  <script src="analytics.js?v=20261017h"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

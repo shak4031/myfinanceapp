@@ -1,4 +1,4 @@
-export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals'];
+export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -133,6 +133,19 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE transaction_labels ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key;
     ALTER TABLE transaction_labels DROP CONSTRAINT IF EXISTS transaction_labels_pattern_key;
+    -- Pro licensing is account metadata: only the administrative connection may read or change it.
+    CREATE TABLE IF NOT EXISTS user_licenses (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      plan TEXT NOT NULL DEFAULT 'pro',
+      trial_started_at TIMESTAMPTZ, trial_ends_at TIMESTAMPTZ,
+      granted_at TIMESTAMPTZ, granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      revoked_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS category_budgets (
+      id SERIAL PRIMARY KEY, category TEXT NOT NULL,
+      monthly_amount NUMERIC(14,2) NOT NULL CHECK (monthly_amount > 0),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -147,6 +160,7 @@ export async function migratePrivateSchema(client) {
   }
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
+    CREATE UNIQUE INDEX IF NOT EXISTS category_budgets_user_category_key ON category_budgets (user_id, category);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
     DO $$ BEGIN
@@ -167,7 +181,7 @@ export async function migratePrivateSchema(client) {
       EXECUTE format('GRANT finance_app_runtime TO %I', current_user);
     END $$;
     GRANT USAGE ON SCHEMA public TO finance_app_runtime;
-    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events
+    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses
       FROM PUBLIC, finance_app_runtime;
   `);
   for (const table of PRIVATE_TABLES) {

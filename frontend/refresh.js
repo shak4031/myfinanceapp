@@ -141,8 +141,13 @@
   };
   let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
   let transactionCache = null, searchTimer = null;
+  // Lets optional modules (e.g. Pro analytics) enhance views without coupling to their internals.
+  window.emitFinanceEvent = (name, detail) => {
+    if (typeof CustomEvent === 'function' && typeof document.dispatchEvent === 'function') document.dispatchEvent(new CustomEvent(name, { detail }));
+  };
   const categoryPeriod = periodControl('category-filter', () => window.loadCategories());
   const transactionPeriod = periodControl('txn-filter', () => transactionCache ? renderTransactions() : window.loadAllTransactions());
+  window.currentTransactionPeriod = () => transactionPeriod.current();
   let detailCategory = '';
   const mtdDialog = $('mtd-transactions-dialog');
   const closeMtdDialog = () => mtdDialog.open && mtdDialog.close();
@@ -186,7 +191,7 @@
   // Navigation is explicit: labels can change without breaking the active state.
   window.showView = function(view) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', etl: 'Import review', payoff: 'Payoff plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Payoff plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
     if (!Object.prototype.hasOwnProperty.call(titles, view)) view = 'dashboard';
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
@@ -201,7 +206,7 @@
     closeSidebar();
     if (location.hash !== `#${view}`) history.pushState(null, '', `#${view}`);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
   window.addEventListener('hashchange', () => window.showView(location.hash.slice(1)));
@@ -291,6 +296,7 @@
           <span class="category-card-copy"><span class="category-card-total">${money(spending.get(category.name) || 0)}</span><small>spent · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
         </button>`;
       }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
+      window.emitFinanceEvent('categories:rendered', { period, transactions: filtered, allTransactions: activity.transactions || [], categories });
       $('category-replacement').innerHTML = categories
         .filter(category => String(category.id) !== String(deletingCategory?.id))
         .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');

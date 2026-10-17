@@ -80,12 +80,25 @@
     openTab('audit');
   });
 
+  function planCell(user) {
+    const license = user.license || { tier: 'free' };
+    const detail = license.tier === 'trial' ? `Trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro · owner' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
+    return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>`;
+  }
+  function planButton(user) {
+    const license = user.license || { tier: 'free' };
+    if (license.source === 'owner') return '';
+    return license.tier === 'pro'
+      ? `<button class="btn btn-secondary" data-action="license-revoke" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Revoke Pro</button>`
+      : `<button class="btn btn-primary" data-action="license-grant" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Grant Pro</button>`;
+  }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
-    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
-      rows.map(user => `<tr><td>${esc(user.id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td>${esc(user.role)}</td>
+    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
+      rows.map(user => `<tr><td>${esc(user.id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td>${esc(user.role)}</td><td>${planCell(user)}</td>
         <td>${esc(when(user.last_login))}</td><td>${esc(user.failed_logins_24h)}</td><td>${esc(user.active_sessions)}</td><td>${esc(user.active_grants)}</td>
         <td class="actions">
+          ${planButton(user)}
           <button class="btn btn-secondary" data-action="password-reset" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Email reset link</button>
           <button class="btn btn-secondary" data-action="unlock" data-id="${esc(user.id)}">Unlock</button>
           <button class="btn btn-secondary" data-action="revoke-sessions" data-id="${esc(user.id)}">Sign out everywhere</button>
@@ -101,12 +114,15 @@
     const prompts = {
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
       'revoke-sessions': 'Sign this user out of every device?',
-      unlock: 'Clear failed sign-in lockouts for this user?'
+      unlock: 'Clear failed sign-in lockouts for this user?',
+      'license-grant': `Grant MyFinance Pro ($4.99/month) to ${email}? Analytics, budgets and exports unlock immediately.`,
+      'license-revoke': `Revoke MyFinance Pro from ${email}? Their budgets are kept but Pro features will be locked.`
     };
     if (!await FinanceUI.confirm(prompts[action])) return;
     try {
-      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' });
-      toast(result.message || 'Done. The action was recorded in the audit log.');
+      const license = action.startsWith('license-');
+      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${license ? 'license' : action}`, { method: 'POST', body: JSON.stringify(license ? { action: action.slice(8) } : {}) });
+      toast(license ? `MyFinance Pro ${action === 'license-grant' ? 'granted' : 'revoked'}. The change was recorded in the audit log.` : result.message || 'Done. The action was recorded in the audit log.');
       await loadUsers();
     } catch (error) { toast(error.message); }
   });

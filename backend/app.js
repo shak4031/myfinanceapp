@@ -17,6 +17,9 @@ import bulkImport from './routes/bulk-import.js';
 import categories from './routes/categories.js';
 import categorizations from './routes/categorizations.js';
 import clientErrors from './routes/clientErrors.js';
+import license from './routes/license.js';
+import budgets from './routes/budgets.js';
+import analytics from './routes/analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,6 +113,9 @@ app.use('/api/import', importCsv);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categories', categories);
 app.use('/api/categorizations', categorizations);
+app.use('/api/license', license);
+app.use('/api/budgets', budgets);
+app.use('/api/analytics', analytics);
 app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
 // Global application logs and legacy fixture imports are never exposed to users.
 app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Server logs are not available through the application' }));
