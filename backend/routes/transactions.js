@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Database from '../db.js';
 import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
+import { isPayMode } from '../utils/payMode.js';
 
 const router = Router();
 const db = new Database();
@@ -110,6 +111,21 @@ router.post('/update-fixed-many', route(async (req, res) => {
     const found = (await client.query(`SELECT id FROM transactions WHERE id=ANY($1::integer[]) AND ${TENANT} FOR UPDATE`, [ids])).rows.length;
     if (found !== ids.length) throw failure(404, 'Transaction not found');
     return (await client.query(`UPDATE transactions SET is_fixed=$1 WHERE id=ANY($2::integer[]) AND ${TENANT}`, [is_fixed, ids])).rowCount;
+  });
+  res.json({ success: true, updated });
+}));
+
+router.post('/update-pay-mode', route(async (req, res) => {
+  const { ids, pay_mode } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || !isPayMode(pay_mode)
+    || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length) {
+    throw failure(400, "ids (unique positive integers, at most 5000) and pay_mode ('auto', 'manual' or null) are required");
+  }
+  const updated = await db.transaction(async client => {
+    const found = (await client.query(`SELECT id,direction FROM transactions WHERE id=ANY($1::integer[]) AND ${TENANT} FOR UPDATE`, [ids])).rows;
+    if (found.length !== ids.length) throw failure(404, 'Transaction not found');
+    if (found.some(row => String(row.direction).toUpperCase() !== 'DEBIT')) throw failure(400, 'Only outgoing payments can be auto-pay or manual');
+    return (await client.query(`UPDATE transactions SET pay_mode=$1 WHERE id=ANY($2::integer[]) AND ${TENANT}`, [pay_mode, ids])).rowCount;
   });
   res.json({ success: true, updated });
 }));

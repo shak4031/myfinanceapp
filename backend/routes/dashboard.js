@@ -444,7 +444,8 @@ router.post('/upcoming-payments', async (req, res) => {
         amount,
         direction,
         label_id,
-        is_fixed
+        is_fixed,
+        pay_mode
       FROM transactions
       WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
       [currentUserId(), dateString(previousMonth), dateString(today)]
@@ -665,6 +666,7 @@ router.get('/all-transactions', async (req, res) => {
         direction,
         category,
         is_fixed,
+        pay_mode,
         user_id
       FROM transactions
       WHERE user_id = $1

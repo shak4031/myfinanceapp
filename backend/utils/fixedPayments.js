@@ -38,7 +38,7 @@ function accountKey(tx) {
   return (tx.description || '').match(/(?:\bx+|\*{2,})\d{2,4}\b/i)?.[0].toUpperCase().replace(/^[X*]+/, '') || '';
 }
 
-function sameBill(a, b) {
+export function sameBill(a, b) {
   if (accountKey(a) !== accountKey(b)) return false;
   return (a.label_id != null && b.label_id != null && String(a.label_id) === String(b.label_id))
     || merchantKey(a) === merchantKey(b);
@@ -66,6 +66,11 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
     if (!templates.some(template => sameBill(template, tx))) templates.push(tx);
   }
   const thisMonth = debits.filter(tx => tx.parsed.year === year && tx.parsed.month === month && tx.parsed.day <= today.getDate());
+  // Pay mode belongs to the bill: use the row's own value, else the newest row of the same bill that has one.
+  const withMode = debits.filter(tx => tx.pay_mode === 'auto' || tx.pay_mode === 'manual')
+    .sort((a, b) => (b.parsed.year - a.parsed.year) || (b.parsed.month - a.parsed.month) || (b.parsed.day - a.parsed.day) || Number(b.id) - Number(a.id));
+  const payModeOf = (tx, template) => (tx.pay_mode === 'auto' || tx.pay_mode === 'manual') ? tx.pay_mode
+    : withMode.find(row => sameBill(template, row))?.pay_mode ?? null;
   const timeline = [];
   const paidIds = new Set();
   for (const template of templates) {
@@ -76,7 +81,7 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
         paidIds.add(tx.id);
         timeline.push({
           id: tx.id, description: tx.description, category: template.category || 'Other',
-          amount: tx.amount, dayOfMonth: tx.parsed.day, isIncome: false, status: 'processed'
+          amount: tx.amount, dayOfMonth: tx.parsed.day, isIncome: false, status: 'processed', payMode: payModeOf(tx, template)
         });
       }
     } else {
@@ -84,7 +89,7 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
         sourceTransactionId: template.id,
         description: getCanonicalMerchant(template.description), category: template.category || 'Other',
         amount: template.amount, dayOfMonth: Math.min(template.parsed.day, monthEnd),
-        isIncome: false, status: 'projected'
+        isIncome: false, status: 'projected', payMode: payModeOf(template, template)
       });
     }
   }

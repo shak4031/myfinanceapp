@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017h"></script>
-  <script src="client-errors.js?v=20261017h"></script>
+  <script src="session.js?v=20261017i"></script>
+  <script src="client-errors.js?v=20261017i"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -394,6 +394,10 @@
         text-align: center;
         font-size: 11px !important;
       }
+      #full-txn-table td:nth-child(5) select {
+        font-size: 10px !important;
+        padding: 4px 18px 4px 6px !important;
+      }
       #full-txn-table td:last-child {
         white-space: nowrap;
         font-size: 12px !important;
@@ -402,7 +406,7 @@
         padding: 8px !important;
         overflow-x: auto;
       }
-      #full-txn-table { min-width: 500px; }
+      #full-txn-table { min-width: 600px; }
 
       /* Nav buttons — wider touch targets */
       .nav-btn { padding: 14px 16px; font-size: 15px; }
@@ -429,8 +433,8 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017h">
-  <link rel="stylesheet" href="analytics.css?v=20261017h">
+  <link rel="stylesheet" href="refresh.css?v=20261017i">
+  <link rel="stylesheet" href="analytics.css?v=20261017i">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -655,6 +659,13 @@
             </select></label>
             <label for="txn-filter-period">Time period
             <select id="txn-filter-period"><option value="">All time</option></select></label>
+            <label for="txn-filter-paymode">Pays by
+            <select id="txn-filter-paymode" onchange="loadAllTransactions()">
+              <option value="">All payments</option>
+              <option value="auto">Auto-pay</option>
+              <option value="manual">Manual</option>
+              <option value="unset">Not set</option>
+            </select></label>
             <label class="checkbox-filter">
               <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
               Fixed bills only
@@ -667,7 +678,7 @@
         <div class="panel transaction-panel">
           <table class="transactions-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
-              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
+              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="padding: 12px;" title="Auto-pay goes out on its own; Manual needs you to pay it">Pays by</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
             </thead>
             <tbody id="full-txn-table"></tbody>
           </table>
@@ -1071,14 +1082,14 @@
       const leadingBlanks = new Date(calYear, calMonth, 1).getDay();
       const fmtMoney = value => (value < 0 ? '-' : '') + '$' + Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const byDay = new Map();
-      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0;
+      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0, manualDueCount = 0;
       timeline.forEach(item => {
         const isPaid = item.status === 'processed';
         const day = Math.min(Math.max(1, Number(item.dayOfMonth) || 1), daysInMonth);
         const isOverdue = !isPaid && day < calToday.getDate();
         if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
         const isDeficit = !isPaid && hasBalance && runningBalance < 0;
-        if (isPaid) { paidTotal += item.amount; paidCount++; } else { dueTotal += item.amount; dueCount++; }
+        if (isPaid) { paidTotal += item.amount; paidCount++; } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual' && !item.isIncome) manualDueCount++; }
         if (isOverdue) overdueCount++;
         if (isDeficit) riskCount++;
         if (!byDay.has(day)) byDay.set(day, []);
@@ -1107,6 +1118,8 @@
               <span class="pay-card-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
               <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}"><small>${entry.isPaid ? 'Status' : 'Balance after'}</small>${balance}</span>
               ${entry.isPaid || cls === 'is-upcoming' ? '' : `<span class="pay-card-flag">${label}</span>`}
+              ${item.isIncome ? '' : item.payMode === 'auto' ? `<span class="pay-card-mode is-auto" title="Goes out automatically">Auto-pay</span>`
+                : item.payMode === 'manual' ? `<span class="pay-card-mode is-manual" title="${entry.isPaid ? 'Paid manually' : 'You need to make this payment'}">Manual${entry.isPaid ? '' : '<span class="pay-card-mode-cta"> · pay it</span>'}</span>` : ''}
             </article>`;
           }).join('')}</div>
         </div>`;
@@ -1121,10 +1134,10 @@
         <div class="pay-cal-summary">
           <div><span>Month</span><strong>${monthName}</strong></div>
           <div class="is-paid"><span>Paid</span><strong>${fmtMoney(paidTotal)}</strong><small>${paidCount} bill${paidCount === 1 ? '' : 's'}</small></div>
-          <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}</small></div>
+          <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
           <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After all unpaid bills'}</small></div>
         </div>
-        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span></div>
+        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
         <div class="pay-cal" aria-label="Bills due in ${monthName}">${weeksHtml}</div>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
 
@@ -1836,14 +1849,14 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017h"></script>
-  <script src="refresh.js?v=20261017h"></script>
-  <script src="account.js?v=20261017h"></script>
-  <script src="pro-charts.js?v=20261017h"></script>
-  <script src="pro-core.js?v=20261017h"></script>
-  <script src="pro-dashboard.js?v=20261017h"></script>
-  <script src="pro-categories.js?v=20261017h"></script>
-  <script src="analytics.js?v=20261017h"></script>
+  <script src="ui.js?v=20261017i"></script>
+  <script src="refresh.js?v=20261017i"></script>
+  <script src="account.js?v=20261017i"></script>
+  <script src="pro-charts.js?v=20261017i"></script>
+  <script src="pro-core.js?v=20261017i"></script>
+  <script src="pro-dashboard.js?v=20261017i"></script>
+  <script src="pro-categories.js?v=20261017i"></script>
+  <script src="analytics.js?v=20261017i"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

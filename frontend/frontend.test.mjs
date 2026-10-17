@@ -226,6 +226,9 @@ test('similar-payment matcher normalizes statement noise with regex and weighs a
   assert.equal(key('DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA'), 'NETFLIX');
   assert.equal(key('VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA'), 'NETFLIX');
   assert.equal(key('ZELLE TO JOHN SMITH 12345'), 'ZELLE JOHN');
+  assert.equal(key('BILL PAY PSEG ELECTRIC'), 'PSEG');
+  assert.equal(key('ONLINE PMT COMCAST XFINITY'), 'COMCAST');
+  assert.equal(key('AUTO PAY GEICO'), key('GEICO AUTO'));
   assert.notEqual(key('ZELLE TO MARY JONES'), key('ZELLE TO JOHN SMITH'));
   const rows = [
     { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Entertainment' },
@@ -303,6 +306,50 @@ test('changing a category offers similar payments and applies only the confirmed
   await pending;
   const apply = calls.find(([url]) => url === '/api/transactions/categorization-apply')[1];
   assert.deepEqual(apply, { updates: [{ id: 2, category: 'Subscriptions', expectedCategory: 'Entertainment' }, { id: 3, category: 'Subscriptions', expectedCategory: null }], learnRules: true, protectCorrections: false });
+  assert.equal(dialog.open, false);
+});
+test('pay-mode column, filter and similar-payment prompt mark auto-pay and manual debits', async () => {
+  const calls = [];
+  const transactions = [
+    { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', pay_mode: null },
+    { id: '2', date: '2026-08-31', description: 'VISA DDA PUR AP 490641 NETFLIX COM NETFLIX COM * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', pay_mode: 'manual' },
+    { id: '3', date: '2026-07-28', description: 'DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', pay_mode: 'auto' },
+    { id: '4', date: '2026-07-15', description: 'PAYROLL ACME', amount: 2000, direction: 'CREDIT', category: 'Salary', pay_mode: null }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/categories') return response(200, [{ name: 'Subscriptions' }, { name: 'Salary' }]);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+    return response(200, { success: true, updated: 1 });
+  });
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const html = f.node('full-txn-table').innerHTML;
+  assert.equal((html.match(/data-paymode/g) || []).length, 3);
+  assert.match(html, /paymode-select is-manual[\s\S]*value="manual" selected/);
+  assert.match(html, /paymode-na/);
+  for (const [filter, expected] of [['auto', ['3']], ['manual', ['2']], ['unset', ['1']], ['', ['1', '2', '3', '4']]]) {
+    assert.deepEqual(transactions.filter(t => f.context.matchesPayModeFilter(t, filter)).map(t => t.id), expected, filter);
+  }
+  f.node('txn-filter-paymode').value = 'manual';
+  await f.context.loadAllTransactions();
+  assert.match(f.node('txn-filter-status').textContent, /1 matching/);
+  await f.context.resetTransactionFilters();
+  assert.equal(f.node('txn-filter-paymode').value, '');
+  assert.deepEqual(f.context.findSimilarTransactions(transactions, transactions[0], { payMode: 'auto' }).map(item => item.transaction.id), ['2']);
+  const select = { value: 'auto', disabled: false, matches: selector => selector === '[data-paymode]', closest: () => ({ dataset: { transaction: '0' } }) };
+  const pending = f.node('full-txn-table').onchange({ target: select });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+  assert.equal(dialog.open, true);
+  assert.equal(f.node('similar-title').textContent, 'Apply to similar payments?');
+  assert.match(f.node('similar-list').innerHTML, /Manual &rarr; Auto-pay/);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="0" checked/);
+  f.node('similar-list').querySelectorAll = () => [{ checked: true, dataset: { similar: '0' } }];
+  await f.node('similar-form').onsubmit({ preventDefault() {} });
+  await pending;
+  const updates = calls.filter(([url]) => url === '/api/transactions/update-pay-mode').map(([, body]) => body);
+  assert.deepEqual(updates, [{ ids: [1], pay_mode: 'auto' }, { ids: [2], pay_mode: 'auto' }]);
   assert.equal(dialog.open, false);
 });
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {

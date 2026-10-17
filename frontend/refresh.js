@@ -4,6 +4,16 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
   const money = value => value == null || !Number.isFinite(Number(value)) ? 'Not enough data' : Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const fixed = value => value === true || value === 1 || value === 'true';
+  const payModeOf = t => (t?.pay_mode === 'auto' || t?.pay_mode === 'manual') ? t.pay_mode : null;
+  const PAY_LABEL = { auto: 'Auto-pay', manual: 'Manual' };
+  const payLabel = mode => PAY_LABEL[mode] || 'Not set';
+  window.payModeOf = payModeOf;
+  // '' = all; 'unset' = debits with no method yet; 'auto'/'manual' match debits only.
+  window.matchesPayModeFilter = (t, filter) => {
+    if (!filter) return true;
+    if (String(t?.direction).toUpperCase() !== 'DEBIT') return false;
+    return filter === 'unset' ? payModeOf(t) === null : payModeOf(t) === filter;
+  };
   const monthKey = value => {
     const dateText = String(value ?? '');
     const isoDate = dateText.match(/^(\d{4})-(\d{2})/);
@@ -116,7 +126,7 @@
     return String(text ?? '').split(new RegExp(`(${tokens.join('|')})`, 'gi')).map((part, index) => index % 2 ? `<mark>${escape(part)}</mark>` : escape(part)).join('');
   };
   // Statement noise around the merchant name: bank rails, card networks, web suffixes and filler words.
-  const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
+  const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY AUTO PAY BILL BILLPAY MOBILE WEB BANKING PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
   // Person-to-person rails need the payee too, otherwise every Zelle/Venmo payment would match.
   const PAYMENT_RAILS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH']);
   window.merchantTokens = description => [...new Set(String(description ?? '').toUpperCase().split(/[^A-Z0-9]+/)
@@ -127,12 +137,15 @@
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
   // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
-  // `change` is a category name, or { isFixed } for the fixed-bill flag; rows already in that state are skipped.
+  // `change` is a category name, { isFixed } for the fixed-bill flag, or { payMode } for auto-pay/manual; rows already in that state are skipped.
   window.findSimilarTransactions = (transactions, source, change) => {
     const key = window.merchantKey(source?.description);
     const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
-    if (!key || (!byFixed && !change)) return [];
-    const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed : t => t.category !== change;
+    const byPay = change && typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
+    if (!key || (!byFixed && !byPay && !change)) return [];
+    const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed
+      : byPay ? t => payModeOf(t) !== (change.payMode || null)
+      : t => t.category !== change;
     const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
     return transactions
       .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && window.merchantKey(t.description) === key)
@@ -509,22 +522,26 @@
     $('similar-apply').disabled = !count;
   }
   // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
-  // `change` is a category name, or { isFixed } for the fixed-bill flag.
+  // `change` is a category name, { isFixed } for the fixed-bill flag, or { payMode } for auto-pay/manual.
   function promptSimilarTransactions(source, change, items) {
-    const byFixed = typeof change === 'object';
-    similarState = { change, byFixed, items, updated: 0 };
+    const byPay = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
+    const byFixed = typeof change === 'object' && !byPay;
+    similarState = { change, byFixed, byPay, items, updated: 0 };
     const strong = items.filter(item => item.sameAmount).length;
-    const action = byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change)}</strong>`;
+    const action = byPay ? (change.payMode ? `also be marked <strong>${payLabel(change.payMode)}</strong>` : 'also have their <strong>payment method cleared</strong>')
+      : byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change)}</strong>`;
     const fixedLabel = value => value ? 'Fixed bill' : 'Not fixed';
-    $('similar-title').textContent = byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
-    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : ''}Choose which should ${action}.`;
+    $('similar-title').textContent = byPay ? 'Apply to similar payments?' : byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
+    const hint = byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
+      : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${hint}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
-      const from = byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
-      const to = byFixed ? fixedLabel(change.isFixed) : escape(change);
-      return `<label class="similar-row${sameAmount ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount ? 'checked' : ''}>
+      const from = byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
+      const to = byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
+      return `<label class="similar-row${sameAmount || byPay ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || byPay ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
-        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount || byPay ? '' : ' &middot; different amount'}</small></span>
         <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
     }).join('');
     $('similar-error').textContent = '';
@@ -542,7 +559,9 @@
     if (!selected.length) return similarDialog.close();
     $('similar-apply').disabled = true; $('similar-error').textContent = '';
     try {
-      const result = similarState.byFixed
+      const result = similarState.byPay
+        ? await json('/api/transactions/update-pay-mode', 'POST', { ids: selected.map(t => Number(t.id)), pay_mode: similarState.change.payMode || null })
+        : similarState.byFixed
         ? await json('/api/transactions/update-fixed-many', 'POST', { ids: selected.map(t => Number(t.id)), is_fixed: similarState.change.isFixed })
         : await json('/api/transactions/categorization-apply', 'POST', {
           updates: selected.map(t => ({ id: Number(t.id), category: similarState.change, expectedCategory: t.category ?? null })),
@@ -565,6 +584,7 @@
       $('txn-filter-category').innerHTML = '<option value="">All categories</option>' + allCategories.map(c => `<option value="${escape(c.name)}" ${selected === c.name ? 'selected' : ''}>${escape(c.name)}</option>`).join('');
       const rows = window.filterTransactionsByCategoryAndMonth(transactions, selected, period.months)
         .filter(t => !$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))
+        .filter(t => window.matchesPayModeFilter(t, $('txn-filter-paymode').value))
         .filter(t => window.matchesTransactionSearch(t, query))
         .sort((a,b) => transactionDate(b.date) - transactionDate(a.date));
       const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
@@ -581,9 +601,12 @@
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
           <td style="text-align:center"><input data-fixed type="checkbox" aria-label="Fixed bill: ${escape(transaction.description)}" ${fixed(transaction.is_fixed) ? 'checked' : ''} ${debit ? '' : 'disabled title="Only debit payments can be fixed bills"'}></td>
+          <td>${debit ? `<select data-paymode class="paymode-select is-${payModeOf(transaction) || 'unset'}" aria-label="How ${escape(transaction.description)} is paid">
+            ${['', 'auto', 'manual'].map(mode => `<option value="${mode}" ${(payModeOf(transaction) || '') === mode ? 'selected' : ''}>${payLabel(mode || null)}</option>`).join('')}
+          </select>` : '<span class="paymode-na" title="Money in does not need paying">—</span>'}</td>
           <td class="${debit ? 'amount-debit' : 'amount-credit'}" style="text-align:right">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="5" class="empty-state">No transactions match these filters.</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="empty-state">No transactions match these filters.</td></tr>';
       table.onchange = async event => {
         const row = event.target.closest('[data-transaction]');
         if (!row) return;
@@ -597,6 +620,13 @@
             const extra = similar.length ? await promptSimilarTransactions(item, { isFixed }, similar) : 0;
             const verb = isFixed ? 'Marked as a fixed bill' : 'No longer a fixed bill';
             notify(`${verb}: this${extra ? ` and ${extra} similar transaction${extra === 1 ? '' : 's'}` : ' transaction only'}. Upcoming bills update from your marked debits.`);
+          } else if (event.target.matches('[data-paymode]')) {
+            const payMode = event.target.value || null;
+            await json('/api/transactions/update-pay-mode', 'POST', { ids: [Number(item.id)], pay_mode: payMode });
+            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { payMode });
+            const extra = similar.length ? await promptSimilarTransactions(item, { payMode }, similar) : 0;
+            const verb = payMode ? `Set to ${payLabel(payMode)}` : 'Payment method cleared';
+            notify(`${verb} for this${extra ? ` and ${extra} similar payment${extra === 1 ? '' : 's'}` : ' payment only'}.`);
           } else {
             const category = event.target.value;
             await json('/api/transactions/update-transaction', 'POST', { id: item.id, category, apply_to_all: false });
@@ -618,6 +648,7 @@
     $('txn-filter-search').value = '';
     transactionPeriod.reset();
     $('txn-filter-fixed').checked = false;
+    $('txn-filter-paymode').value = '';
     return window.loadAllTransactions();
   };
 

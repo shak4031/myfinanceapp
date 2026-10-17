@@ -83,7 +83,8 @@ async function fixture() {
     CREATE TABLE transactions (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
-      label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE);
+      label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
     INSERT INTO categories (user_id,name) VALUES (2,'Foreign');
     INSERT INTO transactions (description,category,is_fixed) VALUES ('MY STORE','Other',TRUE),('MY STORE','Dining',FALSE);
@@ -172,6 +173,29 @@ test('import uses one rule snapshot, user rule category and explicit label flags
     assert.equal(rows[4].category, 'Other');
     assert.equal(rows[4].is_fixed, false);
     assert.equal(rows[5].user_id, 1);
+    assert.deepEqual(rows.slice(2).map(row => row.pay_mode), [null, null, null, null]);
+  } finally { await pg.close(); }
+});
+
+test('import inherits auto-pay/manual from earlier payments to the same bill, else detects it from wording', async () => {
+  const { pg, client } = await fixture();
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category,pay_mode) VALUES
+      ('2026-01-05','VISA DDA PUR AP 420429 NETFLIX COM 408 CA',15.49,'DEBIT','Other','auto'),
+      ('2026-01-06','ONLINE PMT CITI CARD X1234',300,'DEBIT','Other','manual')`);
+    const config = await loadCategorization(client);
+    const make = (description, amount = 15.49, direction = 'DEBIT') => ({ date: '2026-02-05', description, amount, direction });
+    await importTransactions(client, [
+      make('DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS CA'),
+      make('ONLINE PMT CITI CARD X1234', 280),
+      make('CITI CARD X9999 PAYMENT', 50),
+      make('PSEG AUTOPAY 0001', 120),
+      make('BILL PAY VERIZON', 90),
+      make('UNKNOWN STORE', 12),
+      make('NETFLIX COM REFUND', 15.49, 'CREDIT')
+    ], config, 'test');
+    const modes = (await client.query("SELECT description,pay_mode FROM transactions WHERE date='2026-02-05' ORDER BY id")).rows.map(row => row.pay_mode);
+    assert.deepEqual(modes, ['auto', 'manual', null, 'auto', 'manual', null, null]);
   } finally { await pg.close(); }
 });
 
@@ -208,6 +232,21 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.deepEqual(await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: false }), { status: 200, body: { success: true, updated: 2 } });
     assert.deepEqual((await client.query('SELECT is_fixed FROM transactions WHERE user_id=1 ORDER BY id')).rows.map(row => row.is_fixed), [false, false]);
     assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: true })).body.updated, 2);
+    await client.query("UPDATE transactions SET direction='DEBIT' WHERE id IN (1,3)");
+    await client.query("UPDATE transactions SET direction='CREDIT' WHERE id=2");
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: 'sometimes' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1] })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [], pay_mode: 'auto' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 1], pay_mode: 'auto' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 3], pay_mode: 'auto' })).status, 404);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 2], pay_mode: 'auto' })).status, 400);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, null);
+    assert.deepEqual(await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: 'manual' }), { status: 200, body: { success: true, updated: 1 } });
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, 'manual');
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: null })).body.updated, 1);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, null);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=3')).rows[0].pay_mode, null);
+    await client.query('UPDATE transactions SET direction=NULL WHERE id IN (1,2,3)');
     assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining', is_fixed: false })).status, 200);
     assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
     const mapped = (await client.query("SELECT c.name,l.pattern,l.match_type FROM transaction_labels l JOIN categories c ON c.id=l.category_id WHERE l.pattern='MY STORE'")).rows[0];

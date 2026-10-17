@@ -438,6 +438,22 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-card:hover .pay-card-stop, .pay-card-stop:focus-visible { opacity: 1; }
 .pay-card-stop:hover { background: #fee2e2; color: var(--danger); }
 @media (hover: none) { .pay-card-stop { opacity: 1; } }
+/* Auto-pay vs manual: teal pill = goes out on its own; violet pill = the user must act. */
+.pay-card-mode { justify-self: start; display: inline-block; max-width: 100%; overflow: hidden; margin-top: 5px; padding: 1px 7px 1px 6px; border: 1px solid; border-radius: 999px; font-size: 9.5px; font-weight: 750; letter-spacing: .3px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.pay-card-mode::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; vertical-align: 1px; background: currentColor; border-radius: 50%; }
+@media (max-width: 720px) { .pay-card-mode-cta { display: none; } }
+.pay-card-mode.is-auto { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
+.pay-card-mode.is-manual { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.pay-card:not(.is-paid) .pay-card-mode.is-manual { background: #6d28d9; color: #fff; border-color: #6d28d9; box-shadow: 0 2px 6px -2px #6d28d980; }
+.pay-card.is-paid .pay-card-mode { background: transparent; border-color: #e2e8f0; }
+.pay-cal-legend .is-mode-auto { --tone: #14b8a6; }
+.pay-cal-legend .is-mode-manual { --tone: #6d28d9; }
+.pay-cal-legend .is-mode-auto::before, .pay-cal-legend .is-mode-manual::before { border-radius: 50%; }
+.paymode-select { min-width: 104px; font-weight: 600; }
+.paymode-select.is-auto { color: #0f766e; background-color: #f0fdfa; border-color: #99f6e4; }
+.paymode-select.is-manual { color: #6d28d9; background-color: #f5f3ff; border-color: #ddd6fe; }
+.paymode-select.is-unset { color: var(--text-secondary); }
+.paymode-na { color: var(--text-secondary); }
 /* Similar-transactions confirmation dialog */
 .editor.similar-dialog { width: min(720px,94vw); display: none; }
 .editor.similar-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }

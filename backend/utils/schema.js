@@ -80,6 +80,17 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_corrected BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_category TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMPTZ;
+    -- 'auto' = autopay / recurring pull, 'manual' = the user must pay it, NULL = not set.
+    -- The first migration pre-fills debits whose statement wording makes the method clear (see utils/payMode.js).
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transactions' AND column_name='pay_mode') THEN
+        ALTER TABLE transactions ADD COLUMN pay_mode TEXT CHECK (pay_mode IN ('auto','manual'));
+        UPDATE transactions SET pay_mode = CASE
+          WHEN description ~* '\\m(auto ?-? ?pay|auto ?debit|recurring)\\M' THEN 'auto'
+          WHEN description ~* '\\m(bill ?pay|online +(banking +)?(pmt|payment)|mobile +(pmt|payment)|web +pmt)\\M' THEN 'manual'
+        END WHERE UPPER(direction) = 'DEBIT';
+      END IF;
+    END $$;
     CREATE TABLE IF NOT EXISTS staging_transactions (
       id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT,
       balance NUMERIC(14,2), source TEXT, status TEXT DEFAULT 'pending', error_message TEXT,

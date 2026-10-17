@@ -43,6 +43,7 @@ export function openApiSpec() {
       '/api/transactions': { post: op('Finance', 'List transactions', body({ dateFilter: 'current' })) },
       '/api/transactions/categorization-rules': { get: op('Finance', 'List categorization rules') },
       '/api/transactions/categorization-preview': { post: op('Finance', 'Preview category suggestions', body({ scope: 'uncategorized' })) },
+      '/api/transactions/update-pay-mode': { post: op('Finance', "Mark outgoing payments as auto-pay or manual (pay_mode 'auto', 'manual' or null)", body({ ids: [1], pay_mode: 'auto' })) },
       '/api/debts': { get: op('Finance', 'List debts') },
       '/api/goals': { get: op('Finance', 'List savings goals') },
       '/api/goals/funding-analysis': { get: op('Finance', 'Goal funding plan and coaching') },

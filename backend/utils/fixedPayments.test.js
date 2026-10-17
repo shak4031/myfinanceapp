@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildUpcomingPayments, isFixedPayment } from './fixedPayments.js';
+import { detectPayMode, inheritPayMode } from './payMode.js';
 
 const today = new Date(2026, 9, 14);
 const tx = (id, changes = {}) => ({
@@ -30,8 +31,37 @@ test('last month flagged debit supplies its exact amount and payment day, not ol
   ], today);
   assert.deepEqual(result, [{
     sourceTransactionId: 3, description: 'PSEG', category: 'Utilities',
-    amount: 125.50, dayOfMonth: 20, isIncome: false, status: 'projected'
+    amount: 125.50, dayOfMonth: 20, isIncome: false, status: 'projected', payMode: null
   }]);
+});
+
+test('statement wording reveals auto-pay or manual payments; anything else stays unset', () => {
+  for (const text of ['PSEG AUTOPAY 0001', 'Verizon Auto-Pay', 'AUTO PAY CHASE', 'GEICO AUTO DEBIT', 'NETFLIX RECURRING']) assert.equal(detectPayMode(text), 'auto', text);
+  for (const text of ['BILL PAY VERIZON', 'BILLPAY PSEG', 'ONLINE PMT CITI', 'Online Banking Payment to CRD 1234', 'MOBILE PAYMENT AMEX', 'WEB PMT OLLO']) assert.equal(detectPayMode(text), 'manual', text);
+  for (const text of ['AUTOMOTIVE PARTS', 'NETFLIX COM', 'ZELLE TO JOHN', '', null]) assert.equal(detectPayMode(text), null, String(text));
+});
+
+test('a new debit inherits the newest explicit pay mode of the same bill, never for credits', () => {
+  const history = [
+    { description: 'PSEG PAYMENT', pay_mode: 'manual' },
+    { description: 'PSEG PAYMENT AUTOPAY', pay_mode: 'auto' },
+    { description: 'OLLO PAYMENT X1234', pay_mode: 'auto' }
+  ];
+  assert.equal(inheritPayMode({ description: 'PSEG   PAYMENT', direction: 'debit' }, history), 'manual');
+  assert.equal(inheritPayMode({ description: 'OLLO PAYMENT X1234', direction: 'DEBIT' }, history), 'auto');
+  assert.equal(inheritPayMode({ description: 'OLLO PAYMENT X5678', direction: 'DEBIT' }, history), null);
+  assert.equal(inheritPayMode({ description: 'PSEG PAYMENT', direction: 'CREDIT' }, history), null);
+  assert.equal(inheritPayMode({ description: 'NEW GYM AUTOPAY', direction: 'DEBIT' }, history), 'auto');
+});
+
+test('upcoming bills carry their own pay mode, or the newest one set on another payment of the same bill', () => {
+  const result = buildUpcomingPayments([
+    tx(1, { date: '2026-08-20', is_fixed: false, pay_mode: 'auto' }),
+    tx(2),
+    tx(3, { description: 'VERIZON', date: '2026-09-12', pay_mode: 'manual' }),
+    tx(4, { description: 'OLLO PAYMENT', date: '2026-09-25' })
+  ], today);
+  assert.deepEqual(Object.fromEntries(result.map(row => [row.description, row.payMode])), { PSEG: 'auto', VERIZON: 'manual', OLLO: null });
 });
 
 test('a flagged shopping transaction enters the schedule and unflagging removes it', () => {
