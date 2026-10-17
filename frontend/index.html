@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017b"></script>
-  <script src="client-errors.js?v=20261017b"></script>
+  <script src="session.js?v=20261017c"></script>
+  <script src="client-errors.js?v=20261017c"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -429,7 +429,7 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017b">
+  <link rel="stylesheet" href="refresh.css?v=20261017c">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -1125,14 +1125,11 @@
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
         catHtml += `
           <button type="button" class="metric-card list-item mtd-category-card" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="window.openCategoryTransactions(this.dataset.category, this.dataset.month)">
-            <div style="display: flex; justify-content: space-between; align-items: start;">
-              <span style="font-size: 24px;">${icon}</span>
-              <div style="text-align: right;">
-                <div class="metric-label">${escapeHtml(cat.name)}</div>
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary)">$${cat.totalSpending.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${cat.transactionCount} txns</div>
-              </div>
-            </div>
+            <span class="mtd-card-head"><span class="mtd-card-icon" aria-hidden="true">${icon}</span><strong>${escapeHtml(cat.name)}</strong><span class="mtd-card-arrow" aria-hidden="true">↗</span></span>
+            <span class="mtd-card-body">
+              <span class="mtd-card-total">$${cat.totalSpending.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              <small>spent · ${cat.transactionCount} transaction${cat.transactionCount === 1 ? '' : 's'}</small>
+            </span>
           </button>
         `;
       });
@@ -1809,9 +1806,9 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017b"></script>
-  <script src="refresh.js?v=20261017b"></script>
-  <script src="account.js?v=20261017b"></script>
+  <script src="ui.js?v=20261017c"></script>
+  <script src="refresh.js?v=20261017c"></script>
+  <script src="account.js?v=20261017c"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

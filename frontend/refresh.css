@@ -330,13 +330,26 @@ body .metric-card { position: relative; overflow: hidden; }
 .metric-card.expense { --accent: var(--danger); }
 .metric-card.net { --accent: #2563eb; }
 .metric-card.balance { --accent: #0f766e; }
-body .mtd-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 14px; }
-body .mtd-category-card { padding: 16px 18px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; box-shadow: none; font: inherit; transition: border-color .15s, background .15s, box-shadow .15s; }
-body .mtd-category-card:hover { background: #fff; border-color: var(--primary); box-shadow: 0 8px 18px -10px #0f172a40; }
-.mtd-category-card > div { justify-content: flex-start !important; align-items: center !important; gap: 14px; }
-.mtd-category-card > div > span:first-child { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; font-size: 22px !important; background: #fff; border: 1px solid var(--border); border-radius: 11px; }
-.mtd-category-card > div > div { min-width: 0; text-align: left !important; }
-.mtd-category-card .metric-value { margin: 2px 0; }
+/* Month-to-date tiles mirror the Categories cards: white, accented, divided, on a tinted well. */
+#mtd-spending-section { background: #f3f6fa; }
+#mtd-spending-section > .mtd-grid { margin: 0; padding: 24px; }
+body .mtd-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 18px; }
+body .mtd-category-card { --mtd-accent: #38bdf8; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; background: #fff; color: var(--text-primary); border: 1px solid #cfd8e3; border-top: 4px solid var(--mtd-accent); border-radius: 14px; box-shadow: 0 1px 2px #0f172a14, 0 10px 22px -12px #0f172a33; font: inherit; text-align: left; transition: transform .15s, border-color .15s, box-shadow .15s; }
+body .mtd-category-card:hover { transform: translateY(-3px); border-color: var(--mtd-accent); box-shadow: 0 16px 28px -14px #0f172a4d; }
+.mtd-grid .mtd-category-card:nth-child(6n+1) { --mtd-accent: #10b981; }
+.mtd-grid .mtd-category-card:nth-child(6n+2) { --mtd-accent: #38bdf8; }
+.mtd-grid .mtd-category-card:nth-child(6n+3) { --mtd-accent: #818cf8; }
+.mtd-grid .mtd-category-card:nth-child(6n+4) { --mtd-accent: #fbbf24; }
+.mtd-grid .mtd-category-card:nth-child(6n+5) { --mtd-accent: #fb7185; }
+.mtd-grid .mtd-category-card:nth-child(6n+6) { --mtd-accent: #fb923c; }
+body .mtd-grid .mtd-category-card { padding: 0; }
+.mtd-card-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--divider); }
+.mtd-card-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; font-size: 21px; background: color-mix(in srgb, var(--mtd-accent) 18%, #fff); border-radius: 10px; }
+.mtd-card-head strong { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 650; overflow-wrap: anywhere; }
+.mtd-card-arrow { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #f1f5f9; color: #334155; font-size: 14px; }
+.mtd-card-body { display: grid; gap: 3px; padding: 14px 16px 16px; }
+.mtd-card-total { font-size: 22px; font-weight: 720; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.mtd-card-body small { color: var(--text-secondary); font-size: 12px; }
 body .transaction-panel { padding: 0; }
 .transactions-table { width: 100%; border-collapse: collapse; }
 .transactions-table th { background: #f1f5f9; }
@@ -389,7 +402,13 @@ body .sidebar { overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #334
   .section-panel > :not(.section-head) { margin: 16px; }
   .section-panel > #dashboard-payments { margin: 0; }
   .data-table th, .data-table td { padding: 10px 12px !important; }
-  body .mtd-grid { grid-template-columns: 1fr; }
+  body .mtd-grid { grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap: 12px; }
+  #mtd-spending-section > .mtd-grid { padding: 16px; }
+  .mtd-card-head { padding: 12px; gap: 10px; }
+  .mtd-card-icon { width: 34px; height: 34px; font-size: 18px; }
+  .mtd-card-arrow { display: none; }
+  .mtd-card-body { padding: 12px; }
+  .mtd-card-total { font-size: 19px; }
   .transactions-table th:first-child, .transactions-table td:first-child { padding-left: 12px !important; }
   .transactions-table th:last-child, .transactions-table td:last-child { padding-right: 12px !important; }
   .category-card-copy strong { max-width: none; font-size: 14px; }
