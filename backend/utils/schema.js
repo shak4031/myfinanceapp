@@ -1,4 +1,4 @@
-export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets'];
+export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -157,6 +157,18 @@ export async function migratePrivateSchema(client) {
       monthly_amount NUMERIC(14,2) NOT NULL CHECK (monthly_amount > 0),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS focus BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS custom_rank INTEGER;
+    ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS monthly_contribution NUMERIC(14,2);
+    ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS contribution_day INTEGER;
+    -- One row per user: debt-free program and goal settings plus per-month flexible amounts.
+    CREATE TABLE IF NOT EXISTS money_plans (
+      id SERIAL PRIMARY KEY, debt_strategy TEXT NOT NULL DEFAULT 'avalanche', debt_budget NUMERIC(14,2),
+      goal_strategy TEXT NOT NULL DEFAULT 'priority', goal_budget NUMERIC(14,2),
+      flex JSONB NOT NULL DEFAULT '{}'::jsonb, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -172,6 +184,7 @@ export async function migratePrivateSchema(client) {
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS category_budgets_user_category_key ON category_budgets (user_id, category);
+    CREATE UNIQUE INDEX IF NOT EXISTS money_plans_user_key ON money_plans (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
     DO $$ BEGIN

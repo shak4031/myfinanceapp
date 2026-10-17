@@ -205,7 +205,11 @@ calendar-filter, filtered-summary, and request-order regressions.
   Matching uses the merchant/label and distinguishes masked account numbers.
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
   with past due days remain in the projection and are labelled overdue.
-  Assumed payroll deposits and optional debt-payoff-plan payments are not added.
+- **Income is projected too.** Credits categorised as Salary/Income are treated as
+  fixed automatically; the pay cadence (weekly, biweekly on a weekday, semi-monthly
+  or monthly) is detected from the last months of deposits, and expected paychecks
+  are added to the running balance. Debt-free-plan and goal contributions appear as
+  violet **Flexible** cards that can be adjusted or skipped for a single month.
 - The **Fixed Payment flag is authoritative** for debit transactions: the app
   does not reject your selection because of its category or merchant name.
   Unflagged transactions do not create bill templates; credits do not create
@@ -225,17 +229,18 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 - Complete transaction history per category
 - Back button to return to overview
 
-### Debt Payoff Tab ✅
-- Credit card list with balances
-- APR and credit limit display
-- Progress bar toward payoff
-- Color-coded status indicators
+### Debt-free plan tab
+- Include or exclude any loan, card or other debt; star one as your focus
+- Free strategies: **Avalanche** (highest APR first) and **Snowball** (smallest balance first)
+- Pro strategies: **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
+- APR-driven guidance, a suggested extra payment, and a debt-free date chart vs. minimums only
+- Pro what-if simulator (extra per month and lump sums)
+- Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
 
-### Savings Goals Tab ✅
-- Goal list with targets
-- Current vs. target amounts
-- Progress bars
-- Deadline display
+### Goals tab
+- Money-flow view: income streams, monthly surplus, debt extra, goal budget, unassigned
+- Free strategies: priority order and nearest deadline; Pro: balanced funding and what-ifs
+- Per-goal monthly contribution, contribution day, include toggle, status and timeline
 
 ### File Import ✅
 - CSV upload from banks

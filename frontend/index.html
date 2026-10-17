@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js?v=20261017m"></script>
-  <script src="client-errors.js?v=20261017m"></script>
+  <script src="session.js?v=20261017o"></script>
+  <script src="client-errors.js?v=20261017o"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -433,8 +433,9 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017m">
-  <link rel="stylesheet" href="analytics.css?v=20261017m">
+  <link rel="stylesheet" href="refresh.css?v=20261017o">
+  <link rel="stylesheet" href="analytics.css?v=20261017o">
+  <link rel="stylesheet" href="plan.css?v=20261017o">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen" aria-label="Account access">
@@ -483,7 +484,7 @@
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
-        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Payoff plan</a></li>
+        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan</a></li>
         <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals</a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
@@ -541,7 +542,7 @@
           <div class="section-head">
             <div>
               <h2>Upcoming payments &amp; projected runway</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Fixed bills, expected paychecks and your debt-free and savings plan on the day they happen. The running balance starts from your latest recorded balance.</div>
             </div>
             <div class="section-head-actions">
               <div id="cashflow-safety-badge"></div>
@@ -587,51 +588,12 @@
         <div id="category-admin-content"></div>
       </section>
 
-      <!-- DEBT PAYOFF PLAN -->
+      <!-- DEBT-FREE PROGRAM -->
       <section id="payoff-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Debt payoff plan</h1><p class="muted">Build a realistic plan, starting with your highest-interest debt.</p></div>
+          <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Your debt-free plan</h1><p class="muted">Every balance in one place. Pick a strategy, set what you can afford and watch the finish line move closer.</p></div>
         </header>
-        <div class="filter-panel panel">
-          <div><span class="metric-label">Total debt</span><div id="payoff-total-debt" class="metric-value">$0.00</div></div>
-          <label>Monthly budget ($)<input id="payoff-budget" type="number" min="0" step="0.01" placeholder="Enter budget" onchange="loadPayoffPlan()"></label>
-          <button class="btn btn-primary" onclick="openDebtEditor()">Add debt or loan</button>
-        </div>
-
-        <!-- Timeline visualization -->
-        <div class="panel" style="padding: 24px; margin-bottom: 12px;">
-          <h3 style="margin-bottom: 16px;">Your avalanche projection</h3>
-          <p class="muted">Minimums first, then extra money to the highest APR. Estimates use monthly interest, no new charges, and your entered budget; lender calculations may differ.</p>
-          <div id="payoff-timeline-chart" style="display: flex; flex-direction: column; gap: 16px;"></div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 350px; gap: 32px;">
-          <div class="panel" style="padding: 24px;">
-            <h3 style="margin-bottom: 16px;">Step-by-Step Payment Schedule</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr style="text-align: left; color: var(--text-secondary); font-size: 12px; border-bottom: 1px solid var(--border);">
-                  <th style="padding: 12px;">Priority</th>
-                  <th>Account</th>
-                  <th style="text-align: right;">Balance</th>
-                  <th style="text-align: right;">This Month's Payment</th>
-                  <th style="text-align: center;">Due Day</th>
-                </tr>
-              </thead>
-              <tbody id="payoff-schedule-body"></tbody>
-            </table>
-          </div>
-
-          <div class="panel" style="padding: 24px; background: var(--bg-tertiary);">
-            <h3 style="margin-bottom: 16px;">🏆 Achievements</h3>
-            <div id="achievements-list" style="display: flex; flex-direction: column; gap: 12px;">
-              <div class="list-item" style="background: var(--bg-secondary); border-radius: 8px;">
-                <div style="font-weight: 700; color: var(--warning);">⭐ Program Goal: Debt Freedom</div>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Build a plan around your actual balances, rates, and minimum payments. Keep an emergency cushion and check your savings goals before increasing the budget.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div id="plan-debt-root" class="plan-root"></div>
       </section>
 
       <!-- INSIGHTS -->
@@ -718,15 +680,9 @@
       <!-- GOALS -->
       <section id="goals-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Savings goals</h1><p class="muted">Turn your next milestone into a plan you can follow.</p></div>
-          <button class="btn btn-primary" onclick="openAddGoalModal()">New goal</button>
+          <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Savings goals</h1><p class="muted">Every goal gets a monthly amount that fits next to your bills and your debt-free plan.</p></div>
         </header>
-
-        <!-- Funding Overview -->
-        <div id="goals-funding-overview" class="panel" style="padding: 20px; margin-bottom: 16px;"></div>
-
-        <!-- Goals Grid -->
-        <div id="goals-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px;"></div>
+        <div id="plan-goals-root" class="plan-root"></div>
       </section>
 
     </main>
@@ -844,6 +800,18 @@
             <option value="🎮">🎮 Entertainment</option>
           </select>
         </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label for="goal-monthly" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Monthly amount ($)</label>
+            <input id="goal-monthly" type="number" min="0" step="5" placeholder="Automatic" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+          <div>
+            <label for="goal-day" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Set aside on day</label>
+            <input id="goal-day" type="number" min="1" max="31" step="1" placeholder="Payday" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+        </div>
+        <p class="goal-plan-hint">Leave the monthly amount blank and the planner works it out from your target date and budget. It appears on your dashboard calendar on payday unless you pick a day.</p>
+        <label class="goal-include"><input id="goal-included" type="checkbox" checked> Include in my monthly plan</label>
         <p id="goal-error" role="alert"></p>
         <button class="btn btn-primary" onclick="saveGoal()" style="width: 100%; margin-top: 8px;">Create Goal</button>
       </div>
@@ -1045,7 +1013,7 @@
       // Scan through to find min balance & jeopardy
       timeline.forEach(item => {
         if (item.status !== 'processed' && Number.isFinite(data.balance)) {
-          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
+          runningBalance = Math.round((runningBalance + (item.isIncome ? item.amount : -item.amount)) * 100) / 100;
 
           if (runningBalance < minProjectedBalance) {
             minProjectedBalance = runningBalance;
@@ -1088,20 +1056,23 @@
       const leadingBlanks = new Date(calYear, calMonth, 1).getDay();
       const fmtMoney = value => (value < 0 ? '-' : '') + '$' + Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const byDay = new Map();
-      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0, manualDueCount = 0;
+      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0, manualDueCount = 0, incomeReceived = 0, incomeExpected = 0, nextPay = null;
       timeline.forEach(item => {
         const isPaid = item.status === 'processed';
         const day = Math.min(Math.max(1, Number(item.dayOfMonth) || 1), daysInMonth);
-        const isOverdue = !isPaid && day < calToday.getDate();
-        if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
-        const isDeficit = !isPaid && hasBalance && runningBalance < 0;
-        if (isPaid) { paidTotal += item.amount; paidCount++; } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual' && !item.isIncome) manualDueCount++; }
+        const isOverdue = !isPaid && !item.isIncome && day < calToday.getDate();
+        if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance + (item.isIncome ? item.amount : -item.amount)) * 100) / 100;
+        const isDeficit = !isPaid && !item.isIncome && hasBalance && runningBalance < 0;
+        if (item.isIncome) { if (isPaid) incomeReceived += item.amount; else { incomeExpected += item.amount; if (!nextPay) nextPay = { day, item }; } }
+        else if (isPaid) { paidTotal += item.amount; paidCount++; } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual') manualDueCount++; }
         if (isOverdue) overdueCount++;
         if (isDeficit) riskCount++;
         if (!byDay.has(day)) byDay.set(day, []);
         byDay.get(day).push({ item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance });
       });
-      const statusOf = entry => entry.isPaid ? ['is-paid', 'Paid'] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
+      const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : 'Paid';
+      const flexAttrs = item => item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"` : '';
+      const statusOf = entry => entry.item.isIncome ? (entry.isPaid ? ['is-paid', 'Received'] : ['is-upcoming', 'Expected']) : entry.isPaid ? ['is-paid', doneLabel(entry.item)] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
       const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const todayNum = calToday.getDate();
       const shortMoney = value => '$' + (Math.abs(value) >= 1000 ? (Math.abs(value) / 1000).toFixed(Math.abs(value) >= 10000 ? 0 : 1) + 'k' : Math.round(Math.abs(value)).toLocaleString('en-US'));
@@ -1109,7 +1080,8 @@
         ? `<button type="button" class="${cls}" data-id="${escapeHtml(entry.item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop projecting ${escapeHtml(entry.item.description)}" title="Stop projecting this bill">&times;</button>` : '';
       const modeChip = (entry, long) => {
         const { item } = entry;
-        if (item.isIncome) return '';
+        if (item.isIncome) return long && item.cadenceLabel ? `<span class="pay-card-mode is-income" title="Detected pay schedule">${escapeHtml(item.cadenceLabel)}</span>` : '';
+        if (item.flexible) return `<span class="pay-card-mode is-flex" title="Flexible: select to adjust this month">${long ? 'Flexible' : 'Flex'}</span>`;
         if (item.payMode === 'auto') return `<span class="pay-card-mode is-auto" title="Goes out automatically">${long ? 'Auto-pay' : 'Auto'}</span>`;
         if (item.payMode === 'manual') return `<span class="pay-card-mode is-manual" title="${entry.isPaid ? 'Paid manually' : 'You need to make this payment'}">Manual${entry.isPaid || !long ? '' : ' · pay it'}</span>`;
         return '';
@@ -1125,13 +1097,13 @@
           <div class="pay-day-items">${entries.map(entry => {
             const [cls, label] = statusOf(entry);
             const { item } = entry;
-            const balance = entry.isPaid ? 'Paid' : hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;';
+            const balance = hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;';
             const sign = item.isIncome ? '+' : '&minus;';
-            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}" title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
+            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}"${flexAttrs(item)} title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
               ${stopButton(entry, 'pay-card-stop')}
-              <span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span>
+              <span class="pay-card-cat">${escapeHtml(item.label || item.category || 'Uncategorized')}</span>
               <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
-              <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? 'Paid' : `<small>Bal</small> ${balance}`}</span>
+              <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? doneLabel(item) : `<small>Bal</small> ${balance}`}</span>
               ${modeChip(entry, false)}
             </article>`;
           }).join('')}</div>
@@ -1153,12 +1125,12 @@
         const [cls, label] = statusOf(entry);
         const { item } = entry;
         const date = new Date(calYear, calMonth, day);
-        listHtml += `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}">
+        listHtml += `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}"${flexAttrs(item)}>
           <span class="pay-row-date"><small>${weekdays[date.getDay()]}</small><strong>${day}</strong></span>
           <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${escapeHtml(item.description)}</span></span>
           <span class="pay-row-tags"><span class="pay-row-status">${label}</span>${modeChip(entry, true)}</span>
           <span class="pay-row-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
-          <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? '<small>Status</small>Paid' : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
+          <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? `<small>Status</small>${doneLabel(item)}` : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
           <span class="pay-row-action">${stopButton(entry, 'pay-card-stop pay-row-stop')}</span>
         </li>`;
       }));
@@ -1167,11 +1139,12 @@
       const timelineHtml = timeline.length ? `
         <div class="pay-cal-summary">
           <div><span>Month</span><strong>${monthName}</strong></div>
+          <div class="is-income"><span>Income still coming</span><strong>${incomeExpected ? '+' + fmtMoney(incomeExpected) : fmtMoney(0)}</strong><small>${nextPay ? `Next ${weekdays[new Date(calYear, calMonth, nextPay.day).getDay()]} ${nextPay.day}${nextPay.item.cadenceLabel ? ` &middot; ${escapeHtml(nextPay.item.cadenceLabel)}` : ''}` : incomeReceived ? `${fmtMoney(incomeReceived)} received` : 'Tag paychecks as Salary to project them'}</small></div>
           <div class="is-paid"><span>Paid</span><strong>${fmtMoney(paidTotal)}</strong><small>${paidCount} bill${paidCount === 1 ? '' : 's'}</small></div>
           <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
-          <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After all unpaid bills'}</small></div>
+          <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected end balance</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After unpaid bills and expected income'}</small></div>
         </div>
-        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
+        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span><span class="is-income">Income</span><span class="is-flex">Flexible plan</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
         <div class="pay-cal" aria-label="Bills due in ${monthName}">${weekHead}${weeksHtml}</div>
         <ol class="pay-list" aria-label="Bills due in ${monthName}, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
@@ -1390,127 +1363,6 @@
        loadEtlStaging();
     }
 
-    async function loadPayoffPlan() {
-      const scheduleBody = document.getElementById('payoff-schedule-body');
-      const totalDebtEl = document.getElementById('payoff-total-debt');
-      scheduleBody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center;">Calculating payoff sequence...</td></tr>';
-
-      try {
-        const res = await fetch('/api/debts', { method: 'POST' });
-        const debts = await res.json();
-        
-        // Sort by APR (Avalanche) - We need APR from backend. 
-        // The current endpoint /api/debts provides: card_name, balance, apr, limit
-        debts.sort((a,b) => b.apr - a.apr);
-        
-        let totalDebt = 0;
-        let html = '';
-        
-        debts.forEach((d, index) => {
-          totalDebt += d.balance;
-          const isTopPriority = index === 0;
-          const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
-          const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
-          const payment = isTopPriority ? (monthlyCommitment - othersMinTotal) : (d.min_payment || 35);
-
-          html += `
-            <tr style="border-bottom: 1px solid var(--border); ${isTopPriority ? 'background: rgba(74, 158, 255, 0.05);' : ''}">
-              <td style="padding: 16px;">
-                <span style="background: ${isTopPriority ? 'var(--primary)' : 'var(--bg-tertiary)'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
-                  ${isTopPriority ? '🚀 ACTIVE ATTACK' : '#' + (index + 1)}
-                </span>
-              </td>
-              <td>
-                <div style="font-weight: 600;">${d.card_name}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${d.apr}% APR</div>
-              </td>
-              <td style="text-align: right; font-weight: 500;">$${d.balance.toLocaleString()}</td>
-              <td style="text-align: right; font-weight: 700; color: ${isTopPriority ? 'var(--success)' : 'var(--text-primary)'};">
-                $${payment.toFixed(2)}
-              </td>
-              <td style="text-align: center; color: var(--text-secondary); font-size: 12px;">—</td>
-            </tr>
-          `;
-        });
-
-        totalDebtEl.textContent = '$' + totalDebt.toLocaleString(undefined, {minimumFractionDigits: 2});
-        scheduleBody.innerHTML = html;
-
-        // Generate Timeline Chart
-        generateTimelineChart(debts);
-      } catch (err) { scheduleBody.innerHTML = '<tr><td colspan="5" style="color: var(--danger)">Failed to load payoff plan</td></tr>'; }
-    }
-
-    function generateTimelineChart(debts) {
-      const chartContainer = document.getElementById('payoff-timeline-chart');
-      chartContainer.innerHTML = '';
-
-      // Deep copy debts to avoid mutating main state
-      let activeDebts = debts.map(d => ({ ...d }));
-      const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
-      const timelineMonths = 600;
-      
-      const today = new Date();
-      
-      let totalOutstanding = activeDebts.reduce((sum, d) => sum + d.balance, 0);
-      const initialMax = totalOutstanding;
-
-      for (let m = 0; m < timelineMonths; m++) {
-        const targetMonth = new Date(today.getFullYear(), today.getMonth() + m, 1);
-        const monthLabel = targetMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-        // Calculate payoff step
-        // 1. Pay minimums first
-        let availableExtra = monthlyCommitment;
-        activeDebts.forEach(d => {
-          const min = Math.min(d.balance, d.min_payment || 35);
-          d.balance -= min;
-          availableExtra -= min;
-        });
-
-        // 2. Apply extra to highest APR (Avalanche)
-        activeDebts.sort((a,b) => b.apr - a.apr);
-        for (let d of activeDebts) {
-          if (d.balance > 0 && availableExtra > 0) {
-            const extraPayment = Math.min(d.balance, availableExtra);
-            d.balance -= extraPayment;
-            availableExtra -= extraPayment;
-          }
-        }
-
-        const currentTotal = activeDebts.reduce((sum, d) => sum + d.balance, 0);
-        const percentagePaid = ((initialMax - currentTotal) / initialMax) * 100;
-        
-        // Determine which card is being actively attacked or fully paid off
-        let attackFocus = 'Fully Debt Free! 🎉';
-        const activeAttackCard = activeDebts.find(d => d.balance > 0);
-        if (activeAttackCard) {
-          attackFocus = `Focus: paying off 💰 <strong>${activeAttackCard.card_name}</strong>`;
-        }
-
-        const stepHtml = `
-          <div style="display: grid; grid-template-columns: 100px 100px 1fr; align-items: center; gap: 16px;">
-            <div style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">${monthLabel}</div>
-            <div style="font-weight: 700; font-size: 14px; text-align: right; color: var(--primary);">$${Math.round(currentTotal).toLocaleString()}</div>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div style="display: flex; height: 16px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: 100%;">
-                <div style="background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%); width: ${percentagePaid.toFixed(1)}%; height: 100%; transition: width 0.5s ease;"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
-                <span>${percentagePaid.toFixed(0)}% paid</span>
-                <span>${attackFocus}</span>
-              </div>
-            </div>
-          </div>
-        `;
-        chartContainer.insertAdjacentHTML('beforeend', stepHtml);
-
-        if (currentTotal <= 0) {
-          break; // Stop drafting timeline months once fully debt-free
-        }
-      }
-    }
-
     function notify(msg) {
       const t = document.createElement('div');
       t.className = 'toast';
@@ -1682,171 +1534,6 @@
       document.getElementById('goal-priority').value = '1';
     }
 
-    async function saveGoal() {
-      const name = document.getElementById('goal-name').value.trim();
-      const target = parseFloat(document.getElementById('goal-target').value);
-      const current = parseFloat(document.getElementById('goal-current').value) || 0;
-      const targetDate = document.getElementById('goal-date').value;
-      const priority = parseInt(document.getElementById('goal-priority').value) || 1;
-      const icon = document.getElementById('goal-icon').value;
-
-      if (!name || !target) { notify('Name and target amount required'); return; }
-
-      try {
-        const res = await fetch('/api/goals', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, target_amount: target, current_amount: current, target_date: targetDate, priority, icon })
-        });
-        const data = await res.json();
-        if (data.success) {
-          notify(`✓ Goal "${name}" created!`);
-          closeAddGoalModal();
-          loadGoals();
-        } else {
-          notify(`❌ ${data.error}`);
-        }
-      } catch (err) { notify('❌ Failed to save goal'); }
-    }
-
-    async function deleteGoal(id) {
-      if (!await FinanceUI.confirm('Delete this goal?', { action: 'Delete goal' })) return;
-      try {
-        await fetch(`/api/goals/${id}`, { method: 'DELETE' });
-        notify('Goal deleted');
-        loadGoals();
-      } catch (err) { notify('❌ Delete failed'); }
-    }
-
-    async function contributeToGoal(id) {
-      const amount = await FinanceUI.amount('Enter savings already set aside. This records progress; it does not transfer money.');
-      if (amount == null) return;
-      if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) { notify('Enter a positive amount.'); return; }
-      try {
-        const res = await fetch(`/api/goals/${id}/contribute`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: parseFloat(amount) })
-        });
-        const data = await res.json();
-        if (data.success) {
-          notify(`✓ Contributed $${amount}`);
-          loadGoals();
-        }
-      } catch (err) { notify('❌ Contribution failed'); }
-    }
-
-    async function loadGoals() {
-      try {
-        // Load goals with projection data
-        const res = await fetch('/api/goals');
-        const goals = await res.json();
-
-        // Load funding summary
-        const summaryRes = await fetch('/api/goals/funding-analysis');
-        const summary = await summaryRes.json();
-
-        // Render summary banner
-        const overviewEl = document.getElementById('goals-funding-overview');
-        if (summary.total_goals) {
-          const isOk = summary.gap <= 0;
-          overviewEl.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-              <div style="display: flex; gap: 24px; flex-wrap: wrap;">
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Monthly Income</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--success);">$${summary.total_discretionary ? summary.total_discretionary.toLocaleString() : '0'}</div>
-                </div>
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Suggested Contributions</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--primary);">$${summary.total_suggested_monthly ? summary.total_suggested_monthly.toLocaleString() : '0'}</div>
-                </div>
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total Remaining</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">$${summary.total_remaining ? summary.total_remaining.toLocaleString() : '0'}</div>
-                </div>
-              </div>
-              <div style="font-size: 13px; color: ${isOk ? 'var(--success)' : 'var(--warning)'}; font-weight: 600; text-align: right; max-width: 300px;">
-                ${summary.summary || ''}
-              </div>
-            </div>
-          `;
-        }
-
-        // Render goals grid
-        const listEl = document.getElementById('goals-list');
-        if (goals.length === 0) {
-          listEl.innerHTML = `<div style="grid-column: 1/-1; padding: 60px; text-align: center; color: var(--text-secondary);"><div style="font-size: 32px; margin-bottom: 12px;">🎯</div><h3>No goals yet</h3><p>Click "+ New Goal" to start saving!</p></div>`;
-          return;
-        }
-
-        listEl.innerHTML = goals.map(g => {
-          const progress = parseFloat(g.progress_pct) || 0;
-          const achievable = g.achievable;
-          const daysUntil = g.target_date ? Math.ceil((localDate(g.target_date) - new Date()) / (1000*60*60*24)) : null;
-
-          return `
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;">
-              <div style="padding: 20px; border-bottom: 1px solid var(--border);">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 32px;">${g.icon}</span>
-                    <div>
-                      <div style="font-weight: 700; font-size: 16px;">${g.name}</div>
-                      <div style="font-size: 11px; color: var(--text-secondary);">Priority #${g.priority}${g.target_date ? ' &middot; Due ' + localDate(g.target_date).toLocaleDateString() : ''}</div>
-                    </div>
-                  </div>
-                  <button onclick="deleteGoal(${g.id})" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; padding: 4px;">&times;</button>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-                  <div><span style="font-size: 24px; font-weight: 700; color: var(--primary);">$${(g.current_amount || 0).toLocaleString()}</span><span style="color: var(--text-secondary);"> / $${(g.target_amount || 0).toLocaleString()}</span></div>
-                  <div style="font-weight: 700; color: ${progress >= 100 ? 'var(--success)' : 'var(--primary)'};">${progress}%</div>
-                </div>
-
-                <div style="height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden;">
-                  <div style="height: 100%; width: ${Math.min(progress, 100)}%; background: ${progress >= 100 ? 'var(--success)' : g.color || 'var(--primary)'}; border-radius: 4px; transition: width 0.5s ease;"></div>
-                </div>
-              </div>
-
-              <div style="padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
-                ${g.target_date ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">📅</span>
-                    <span style="font-size: 12px; color: var(--text-secondary);">${daysUntil > 0 ? daysUntil + ' days' : 'Overdue'} remaining</span>
-                  </div>
-                ` : ''}
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-size: 12px;">💰</span>
-                  <span style="font-size: 12px; color: var(--text-secondary);">Need $${(g.remaining || 0).toLocaleString()} more</span>
-                </div>
-                ${g.suggested_monthly > 0 ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">📊</span>
-                    <span style="font-size: 12px; color: ${achievable ? 'var(--success)' : 'var(--warning)'};">
-                      Suggest $${g.suggested_monthly}/mo${achievable ? '' : ' (short $' + g.monthly_shortfall + ')'}
-                    </span>
-                  </div>
-                ` : ''}
-                ${g.projected_date ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">🎯</span>
-                    <span style="font-size: 12px; color: var(--text-secondary);">Projected: ${localDate(g.projected_date).toLocaleDateString()}</span>
-                  </div>
-                ` : ''}
-
-                <div style="margin-top: auto; padding-top: 12px; display: flex; gap: 8px;">
-                  <button onclick="contributeToGoal(${g.id})" class="btn btn-primary" style="flex: 1; font-size: 12px; padding: 8px;">+ Add Funds</button>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-      } catch (err) {
-        document.getElementById('goals-list').innerHTML = `<div style="padding: 40px; text-align: center; color: var(--danger);">Failed to load goals</div>`;
-      }
-    }
-
-    // --- Sidebar Toggle (Mobile) ---
     function toggleSidebar() {
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('sidebar-overlay');
@@ -1885,14 +1572,15 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017m"></script>
-  <script src="refresh.js?v=20261017m"></script>
-  <script src="account.js?v=20261017m"></script>
-  <script src="pro-charts.js?v=20261017m"></script>
-  <script src="pro-core.js?v=20261017m"></script>
-  <script src="pro-dashboard.js?v=20261017m"></script>
-  <script src="pro-categories.js?v=20261017m"></script>
-  <script src="analytics.js?v=20261017m"></script>
+  <script src="ui.js?v=20261017o"></script>
+  <script src="refresh.js?v=20261017o"></script>
+  <script src="account.js?v=20261017o"></script>
+  <script src="pro-charts.js?v=20261017o"></script>
+  <script src="pro-core.js?v=20261017o"></script>
+  <script src="pro-dashboard.js?v=20261017o"></script>
+  <script src="pro-categories.js?v=20261017o"></script>
+  <script src="analytics.js?v=20261017o"></script>
+  <script src="plan.js?v=20261017o"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

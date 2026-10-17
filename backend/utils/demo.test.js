@@ -105,6 +105,23 @@ test('demo account resets cleanly, signs in with the published password and unlo
     assert.ok(!transactions.body.transactions.some(row => row.description === 'KEEP ME'));
     const upcoming = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
     assert.equal(upcoming.status, 200);
+    assert.ok(upcoming.body.some(item => item.isIncome), 'paychecks are part of the upcoming calendar');
+    const plan = await call('/api/plan', { cookie });
+    assert.equal(plan.status, 200);
+    assert.deepEqual([plan.body.debtPlan.strategy, plan.body.debtPlan.budget, plan.body.debtPlan.extra], ['avalanche', 1117.66, 400]);
+    assert.deepEqual([plan.body.income.streams[0].cadence, plan.body.income.streams[0].label], ['biweekly', 'Every other Friday']);
+    assert.equal(plan.body.goalPlan.goals.length, 3);
+    const flex = await call('/api/plan/flex', { cookie, method: 'PUT', body: { key: 'debt-extra', amount: 150 } });
+    assert.equal(flex.status, 200);
+    assert.equal(flex.body.thisMonth.find(item => item.key === 'debt-extra').amount, 150);
+    assert.equal((await call('/api/plan/flex', { cookie, method: 'PUT', body: { key: 'bogus', amount: 1 } })).status, 400);
+    const withFlex = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    assert.equal(withFlex.body.find(item => item.key === 'debt-extra').amount, 150);
+    const settings = await call('/api/plan/settings', { cookie, method: 'PUT', body: { debt_strategy: 'interest', goal_strategy: 'balanced' } });
+    assert.deepEqual([settings.status, settings.body.debtPlan.strategy, settings.body.goalPlan.strategy], [200, 'interest', 'balanced']);
+    const whatIf = await call('/api/plan/what-if', { cookie, body: { extra: 250, lumpSum: 1000, goalId: plan.body.goalPlan.goals[0].id, goalMonthly: 900 } });
+    assert.equal(whatIf.status, 200);
+    assert.ok(whatIf.body.debt.monthsSaved > 0 && whatIf.body.goal.finishDate);
     const analytics = await call('/api/analytics', { cookie });
     assert.equal(analytics.status, 200);
     for (const path of ['/api/budgets', '/api/goals', '/api/debts', '/api/categories']) {

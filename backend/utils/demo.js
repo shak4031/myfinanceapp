@@ -121,15 +121,16 @@ export function buildDemoData(now = new Date()) {
     transactions,
     budgets: [['Groceries', 750], ['Dining', 400], ['Shopping', 450], ['Gas', 220], ['Entertainment', 150], ['Subscriptions', 60], ['Transportation', 120]],
     goals: [
-      { name: 'Emergency fund', target_amount: 20000, current_amount: 11800, target_date: ahead(10), priority: 1, icon: 'Save', color: '#369c85', notes: 'Six months of essential expenses.' },
-      { name: 'Japan trip', target_amount: 6000, current_amount: 1850, target_date: ahead(8), priority: 2, icon: 'Play', color: '#ce7eab', notes: 'Two weeks in Tokyo and Kyoto.' },
-      { name: 'New car down payment', target_amount: 8000, current_amount: 2400, target_date: ahead(18), priority: 3, icon: 'Car', color: '#8a9c79', notes: null }
+      { name: 'Emergency fund', target_amount: 20000, current_amount: 11800, target_date: ahead(10), priority: 1, icon: '🛡️', color: '#369c85', notes: 'Six months of essential expenses.' },
+      { name: 'Japan trip', target_amount: 6000, current_amount: 1850, target_date: ahead(8), priority: 2, icon: '✈️', color: '#ce7eab', notes: 'Two weeks in Tokyo and Kyoto.' },
+      { name: 'New car down payment', target_amount: 8000, current_amount: 2400, target_date: ahead(18), priority: 3, icon: '🚗', color: '#8a9c79', notes: null }
     ],
     debts: [
       { name: 'Chase Sapphire', balance: 3840.12, apr: 24.99, credit_limit: 12000, min_payment: 95, due_date: '25', debt_type: 'credit_card', payment_in_history: true },
       { name: 'Toyota auto loan', balance: 14620.55, apr: 5.9, credit_limit: 0, min_payment: 412.66, due_date: '12', debt_type: 'auto_loan', payment_in_history: true },
       { name: 'Nelnet student loan', balance: 18210.4, apr: 4.5, credit_limit: 0, min_payment: 210, due_date: '28', debt_type: 'student_loan', payment_in_history: true }
     ],
+    debtBudget: 1117.66,
     rules: [
       ['WHOLE FOODS|TRADER JOE|SHOPRITE|COSTCO', 'Grocery stores', 'Groceries'],
       ['STARBUCKS|CHIPOTLE|SHAKE SHACK|DOORDASH|SWEETGREEN', 'Restaurants & coffee', 'Dining'],
@@ -153,7 +154,7 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['transactions', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
+  for (const table of ['money_plans', 'transactions', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
@@ -177,6 +178,8 @@ export async function resetDemoAccount(client, now = new Date()) {
     await client.query(`INSERT INTO credit_cards (name,balance,apr,credit_limit,min_payment,due_date,debt_type,payment_in_history)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [debt.name, debt.balance, debt.apr, debt.credit_limit, debt.min_payment, debt.due_date, debt.debt_type, debt.payment_in_history]);
   }
+  // Minimums ($717.66) plus $400 extra a month, so the debt-free program and its calendar card have something to show.
+  await client.query("INSERT INTO money_plans (debt_strategy,debt_budget,goal_strategy) VALUES ('avalanche',$1,'priority')", [data.debtBudget]);
   await client.query('RESET ROLE');
   return { userId: Number(userId), transactions: data.transactions.length };
 }

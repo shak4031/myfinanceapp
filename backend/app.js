@@ -20,6 +20,7 @@ import clientErrors from './routes/clientErrors.js';
 import license from './routes/license.js';
 import budgets from './routes/budgets.js';
 import analytics from './routes/analytics.js';
+import moneyPlan from './routes/plan.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -116,6 +117,7 @@ app.use('/api/categorizations', categorizations);
 app.use('/api/license', license);
 app.use('/api/budgets', budgets);
 app.use('/api/analytics', analytics);
+app.use('/api/plan', moneyPlan);
 app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
 // Global application logs and legacy fixture imports are never exposed to users.
 app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Server logs are not available through the application' }));

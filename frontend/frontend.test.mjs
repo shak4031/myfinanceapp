@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -573,16 +573,99 @@ test('money, fixed flag, and HTML escaping handle untrusted and missing values',
   assert.equal(tools.fixed('true'), true);
   assert.equal(tools.escape(`"><img onerror='x'>&`), '&quot;&gt;&lt;img onerror=&#39;x&#39;&gt;&amp;');
 });
-test('avalanche includes interest, honors budget, and does not mutate debts', () => {
+test('the planner owns debt math: the client simulator is gone', () => {
   const f = fixture(); f.run('refresh.js');
-  const debts = [{ balance: 100, apr: 12, min_payment: 10 }];
-  const plan = f.context.FinanceTools.simulate(debts, 50);
-  assert.equal(plan.months.length, 3);
-  assert.equal(plan.months[0], 51);
-  assert.equal(plan.months.at(-1), 0);
-  assert.equal(debts[0].balance, 100);
-  assert.match(f.context.FinanceTools.simulate(debts, 5).reason, /below minimum/);
-  assert.match(f.context.FinanceTools.simulate([{ balance: 1000, apr: 30, min_payment: 1 }], 1).reason, /50 years/);
+  assert.equal(f.context.FinanceTools.simulate, undefined);
+  assert.doesNotMatch(source('index.html'), /function generateTimelineChart|async function loadPayoffPlan|payoff-schedule-body/);
+});
+const planPayload = (overrides = {}) => ({
+  month: '2026-10', pro: false,
+  summary: { avgMonthlyIncome: 6000, avgMonthlyExpenses: 4800, monthlySurplus: 1200, savingsRate: 0.2, monthsUsed: 3, debtExtra: 400, goalBudget: 800, available: 800, unassigned: 100 },
+  income: { streams: [{ name: 'ACME PAYROLL', label: 'Every other Thursday', amount: 2450 }] },
+  debtPlan: {
+    strategies: [
+      { id: 'avalanche', name: 'Avalanche', tagline: 'Highest APR first', pro: false, locked: false },
+      { id: 'snowball', name: 'Snowball', tagline: 'Smallest balance first', pro: false, locked: false },
+      { id: 'interest', name: 'Interest cost', tagline: 'Biggest interest bill first', pro: true, locked: true }
+    ],
+    strategy: 'avalanche', recommended: 'avalanche', strategyLocked: false, budget: 1117.66, budgetIsSet: true, minimums: 717.66, extra: 400,
+    totals: { balance: 18000, monthlyInterest: 210, weightedApr: 14.2, included: 2, excluded: 0, count: 2 },
+    plan: { feasible: true, debtFree: true, months: 24, debtFreeDate: '2028-09', totalInterest: 2900, series: [18000, 17000, 0] },
+    baseline: { series: [18000, 17800, 17600, 17400] },
+    comparison: [
+      { id: 'avalanche', feasible: true, debtFree: true, debtFreeDate: '2028-09', totalInterest: 2900 },
+      { id: 'snowball', feasible: true, debtFree: true, debtFreeDate: '2028-10', totalInterest: 3100 },
+      { id: 'interest', locked: true }
+    ],
+    suggestion: { extra: 250, budget: 1367.66, debtFreeDate: '2028-03', interestSaved: 400 },
+    guidance: [{ severity: 'warning', title: '<Card> is your most expensive money', detail: 'x' }],
+    debts: [
+      { id: 1, name: '<Visa>', debt_type: 'credit_card', balance: 6000, apr: 24.99, min_payment: 180, credit_limit: 10000, due_day: 3, included: true, focus: false, rank: 1, monthlyInterest: 125, payoffDate: '2027-06', thisMonth: { minimum: 180, extra: 400 } },
+      { id: 2, name: 'Car loan', debt_type: 'auto_loan', balance: 12000, apr: 6.5, min_payment: 420, credit_limit: 0, due_day: 15, included: false, focus: false, rank: null, monthlyInterest: 65, thisMonth: { minimum: 0, extra: 0 } }
+    ],
+    interestSavedVsMinimums: 5200, monthsSavedVsMinimums: 40
+  },
+  goalPlan: {
+    strategies: [
+      { id: 'priority', name: 'Priority order', tagline: 'Most important first', locked: false },
+      { id: 'balanced', name: 'Balanced', tagline: 'Everything moves together', pro: true, locked: true }
+    ],
+    strategy: 'priority', strategyLocked: false, budget: 800, budgetIsSet: false, defaultBudget: 800, requiredTotal: 650, allocatedTotal: 700, guidance: [],
+    goals: [{ id: 7, name: 'Emergency <fund>', icon: '🛡️', kind: 'emergency', priority: 1, target: 10000, current: 2500, remaining: 7500, targetDate: '2027-06-01', targetMonth: 9, included: true, manual: null, contributionDay: null, required: 833.33, allocated: 700, finishMonth: 11, finishDate: '2027-08', status: 'behind', progress: 25, gap: 133.33 }]
+  },
+  thisMonth: [{ key: 'debt-extra', planKind: 'debt-extra', flexible: true, description: 'Extra payment · <Visa>', amount: 400, defaultAmount: 400, dayOfMonth: 3, status: 'projected' }],
+  flex: {}, settings: {}, ...overrides
+});
+const loadPlan = (fetchImpl) => {
+  const f = fixture(fetchImpl);
+  for (const file of ['refresh.js', 'pro-charts.js', 'pro-core.js', 'plan.js']) f.run(file);
+  return f;
+};
+test('debt-free page renders strategies, escaped debts, Pro locks and calendar items', async () => {
+  const requests = [];
+  const f = loadPlan(async (url, options = {}) => { requests.push([url, options.method || 'GET', options.body]); return response(200, planPayload()); });
+  await f.context.loadPayoffPlan();
+  const html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /September 2028/);
+  assert.match(html, /data-act="debt-strategy" data-id="interest"[\s\S]*?plan-pro-tag/);
+  assert.match(html, /Recommended/);
+  assert.match(html, /&lt;Visa&gt;/);
+  assert.doesNotMatch(html, /<Visa>/);
+  assert.match(html, /Paying as usual/);
+  assert.match(html, /Add \$250\/mo/);
+  assert.match(html, /Unlock with Pro/);
+  assert.match(html, /data-act="flex" data-key="debt-extra"/);
+  assert.match(html, /class="pro-chart"/);
+  assert.equal(requests[0][0], '/api/plan');
+  const rows = f.context.FinancePlan.debtRows();
+  assert.equal(rows[0].due_date, 3);
+});
+test('goals page shows the surplus split, status and pay cadence', async () => {
+  const f = loadPlan(async () => response(200, planPayload()));
+  await f.context.loadGoals();
+  const html = f.node('plan-goals-root').innerHTML;
+  assert.match(html, /Every other Thursday/);
+  assert.match(html, /Emergency &lt;fund&gt;/);
+  assert.match(html, /Behind/);
+  assert.match(html, /Needs \$833\.33\/mo/);
+  assert.match(html, /plan-flowbar/);
+  assert.match(html, /plan-gantt-row/);
+  const row = f.context.FinancePlan.goalRows()[0];
+  assert.equal(row.target_amount, 10000);
+  assert.equal(row.target_date, '2027-06-01');
+});
+test('a failed plan load shows a retry instead of stale numbers', async () => {
+  const f = loadPlan(async () => response(500, { error: 'Plan offline' }));
+  await f.context.loadPayoffPlan();
+  assert.match(f.node('plan-debt-root').innerHTML, /Plan offline[\s\S]*data-act="retry"/);
+});
+test('the dashboard calendar adds income, flexible plan items and the paycheck summary', () => {
+  const html = source('index.html');
+  assert.match(html, /runningBalance \+ \(item\.isIncome \? item\.amount : -item\.amount\)/);
+  assert.match(html, /data-flex-key=/);
+  assert.match(html, /Income still coming/);
+  assert.match(html, /<script src="plan\.js\?v=/);
+  assert.match(html, /id="goal-monthly"[\s\S]*id="goal-day"[\s\S]*id="goal-included"/);
 });
 test('financial loads are blocked until a verified session', async () => {
   const requests = [];

@@ -175,7 +175,7 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); };
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
     const alert = document.querySelector('dialog[open] [role="alert"]');
@@ -217,7 +217,7 @@
   // Navigation is explicit: labels can change without breaking the active state.
   window.showView = function(view) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Payoff plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', settings: 'Settings & support' };
     if (!Object.prototype.hasOwnProperty.call(titles, view)) view = 'dashboard';
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
@@ -703,12 +703,12 @@
     }
   };
   const originalCloseGoal = closeAddGoalModal;
-  window.closeAddGoalModal = function() { originalCloseGoal(); goalEditing = null; $('goal-kind').value = 'general'; $('goal-notes').value = ''; };
+  window.closeAddGoalModal = function() { originalCloseGoal(); goalEditing = null; $('goal-kind').value = 'general'; $('goal-notes').value = ''; $('goal-monthly').value = ''; $('goal-day').value = ''; $('goal-included').checked = true; };
   window.openAddGoalModal = function(id = null) {
     closeAddGoalModal();
     $('goal-error').textContent = '';
     goalEditing = id;
-    const goal = goals.find(g => String(g.id) === String(id));
+    const goal = (window.FinancePlan?.goalRows?.() || goals).find(g => String(g.id) === String(id));
     if (goal) {
       $('goal-name').value = goal.name; $('goal-target').value = goal.target_amount; $('goal-current').value = goal.current_amount;
       $('goal-date').value = goal.target_date?.slice(0,10) || ''; $('goal-priority').value = goal.priority;
@@ -716,6 +716,9 @@
       const kind = String(goal.notes || '').match(/^\[plan:(general|car|college|emergency)\]\s*/);
       $('goal-kind').value = kind?.[1] || 'general';
       $('goal-notes').value = String(goal.notes || '').replace(/^\[plan:\w+\]\s*/, '');
+      $('goal-monthly').value = goal.monthly_contribution ?? '';
+      $('goal-day').value = goal.contribution_day ?? '';
+      $('goal-included').checked = goal.included !== false;
     }
     $('add-goal-modal').querySelector('h2').textContent = goal ? 'Edit savings goal' : 'A goal worth making room for';
     $('add-goal-modal').querySelector('button[onclick="saveGoal()"]').textContent = goal ? 'Save goal' : 'Create goal';
@@ -724,62 +727,34 @@
   window.saveGoal = async function() {
     $('goal-error').textContent = '';
     const target = Number($('goal-target').value), current = Number($('goal-current').value || 0);
+    const monthlyText = String($('goal-monthly').value ?? '').trim(), dayText = String($('goal-day').value ?? '').trim();
+    const monthly = monthlyText === '' ? null : Number(monthlyText), day = dayText === '' ? null : Number(dayText);
     if (!$('goal-name').value.trim() || target <= 0 || !Number.isFinite(target) || current < 0 || !Number.isFinite(current)) {
       $('goal-error').textContent = 'Enter a name, positive target, and nonnegative current savings.';
       return;
     }
+    if (monthly != null && (!Number.isFinite(monthly) || monthly < 0)) { $('goal-error').textContent = 'Enter a monthly amount of $0 or more, or leave it blank for automatic.'; return; }
+    if (day != null && (!Number.isInteger(day) || day < 1 || day > 31)) { $('goal-error').textContent = 'Choose a day of the month from 1 to 31, or leave it blank.'; return; }
     const button = $('add-goal-modal').querySelector('button[onclick="saveGoal()"]');
     button.disabled = true;
     try {
-      await json(goalEditing == null ? '/api/goals' : `/api/goals/${encodeURIComponent(goalEditing)}`, goalEditing == null ? 'POST' : 'PUT', { name: $('goal-name').value.trim(), target_amount: target, current_amount: current, target_date: $('goal-date').value || null, priority: Number($('goal-priority').value) || 1, icon: $('goal-icon').value, notes: `[plan:${$('goal-kind').value}] ${$('goal-notes').value.trim()}` });
+      await json(goalEditing == null ? '/api/goals' : `/api/goals/${encodeURIComponent(goalEditing)}`, goalEditing == null ? 'POST' : 'PUT', { name: $('goal-name').value.trim(), target_amount: target, current_amount: current, target_date: $('goal-date').value || null, priority: Number($('goal-priority').value) || 1, icon: $('goal-icon').value, notes: `[plan:${$('goal-kind').value}] ${$('goal-notes').value.trim()}`, monthly_contribution: monthly, contribution_day: day, included: $('goal-included').checked !== false });
       closeAddGoalModal(); await loadGoals(); notify('Goal saved.');
     } catch (error) { reportError(error); }
     finally { button.disabled = false; }
   };
-  window.loadGoals = async function() {
-    try {
-      const [items, plan] = await Promise.all([json('/api/goals'),json('/api/goals/funding-analysis')]); goals = items;
-      $('goals-funding-overview').innerHTML = `<h2>Can your goals work together?</h2><p class="muted">Plan a car in six months, college, and an emergency cushion without counting the same dollar twice.</p>${fundingMarkup(plan)}<p class="muted">Recording savings updates progress only. This app does not move money or connect to your bank.</p>`;
-      $('goals-list').innerHTML = goals.map((goal,index) => {
-        const progress = Math.min(100, Math.max(0, Number(goal.current_amount) / Number(goal.target_amount) * 100));
-        const analysis = (plan.goals || []).find(g => String(g.id) === String(goal.id));
-        return `<article class="panel plan-card"><div class="eyebrow">${escape(String(goal.notes || '').match(/^\[plan:(\w+)\]/)?.[1] || 'SAVINGS')} · PRIORITY ${Number(goal.priority) || 1}</div><h2>${escape(goal.icon || '🎯')} ${escape(goal.name)}</h2><div><strong>${money(goal.current_amount)}</strong> <span class="muted">of ${money(goal.target_amount)}</span></div><progress aria-label="Savings progress for ${escape(goal.name)}" value="${progress}" max="100"></progress><p class="muted">${goal.target_date ? `Target ${escape(goal.target_date.slice(0,10))}` : 'No deadline set'}<br>${analysis?.requiredMonthly == null ? 'Set a deadline for a monthly savings requirement.' : `${money(analysis.requiredMonthly)} / month needed · ${escape(analysis.status)}`}</p><p>${escape(String(goal.notes || '').replace(/^\[plan:\w+\]\s*/, ''))}</p><div class="toolbar"><button class="btn btn-primary" data-goal-action="contribute" data-goal="${index}">Record savings</button><button class="btn btn-secondary" data-goal-action="edit" data-goal="${index}">Edit</button><button class="btn btn-secondary" data-goal-action="delete" data-goal="${index}">Delete</button></div></article>`;
-      }).join('') || '<div class="panel plan-card"><h3>Your next chapter starts with a goal.</h3><p class="muted">Add your target amount and a realistic deadline to build a shared savings plan.</p></div>';
-    } catch (error) { $('goals-list').textContent = error.message; }
-  };
-  $('goals-list').onclick = async event => {
-    const button = event.target.closest('[data-goal-action]');
-    if (!button) return;
-    const goal = goals[Number(button.dataset.goal)];
-    if (button.dataset.goalAction === 'edit') return openAddGoalModal(goal.id);
-    button.disabled = true;
-    try {
-      if (button.dataset.goalAction === 'delete') {
-        if (!await FinanceUI.confirm(`Delete "${goal.name}"?`, { action: 'Delete goal' })) return;
-        await json(`/api/goals/${encodeURIComponent(goal.id)}`, 'DELETE');
-      } else {
-        const amount = await FinanceUI.amount('Enter savings already set aside. This records progress; it does not transfer money.');
-        if (amount == null) return;
-        if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new Error('Enter a positive amount.');
-        await json(`/api/goals/${encodeURIComponent(goal.id)}/contribute`, 'POST', { amount: Number(amount) });
-      }
-      await loadGoals();
-    } catch (error) { reportError(error); }
-    finally { button.disabled = false; }
-  };
-
   const dialog = document.createElement('dialog');
   dialog.id = 'debt-dialog'; dialog.className = 'editor';
   dialog.setAttribute('aria-label', 'Debt or loan details');
-  dialog.innerHTML = `<form id="debt-form"><h2>Debt or loan details</h2><label>Name<input name="name" required maxlength="100"></label><label>Type<select name="debt_type"><option value="credit_card">Credit card</option><option value="auto_loan">Auto loan</option><option value="student_loan">Student loan</option><option value="personal_loan">Personal loan</option><option value="mortgage">Mortgage</option><option value="other">Other</option></select></label><label>Current balance ($)<input name="balance" type="number" min="0" step=".01" required></label><label>APR (%)<input name="apr" type="number" min="0" max="1000" step=".001" required></label><label>Minimum monthly payment ($)<input name="min_payment" type="number" min="0" step=".01" required></label><label style="display:flex;align-items:center;gap:10px"><input name="payment_in_history" type="checkbox" checked>Monthly payment already included in imported spending</label><p class="muted">Leave checked for existing payments already in your statements. Uncheck for a new loan: its minimum payment is reserved in your savings plan without double-counting existing loans.</p><label>Credit limit ($, optional)<input name="credit_limit" type="number" min="0" step=".01"></label><label>Due day (optional)<input name="due_date" type="number" min="1" max="31" step="1"></label><p id="debt-error" role="alert"></p><div class="toolbar"><button class="btn btn-primary">Save debt</button><button class="btn btn-secondary" type="button" id="debt-cancel">Cancel</button></div></form>`;
+  dialog.innerHTML = `<form id="debt-form"><h2>Debt or loan details</h2><label>Name<input name="name" required maxlength="100"></label><label>Type<select name="debt_type"><option value="credit_card">Credit card</option><option value="auto_loan">Auto loan</option><option value="student_loan">Student loan</option><option value="personal_loan">Personal loan</option><option value="mortgage">Mortgage</option><option value="other">Other</option></select></label><label>Current balance ($)<input name="balance" type="number" min="0" step=".01" required></label><label>APR (%)<input name="apr" type="number" min="0" max="1000" step=".001" required></label><label>Minimum monthly payment ($)<input name="min_payment" type="number" min="0" step=".01" required></label><label style="display:flex;align-items:center;gap:10px"><input name="payment_in_history" type="checkbox" checked>Monthly payment already included in imported spending</label><p class="muted">Leave checked for existing payments already in your statements. Uncheck for a new loan: its minimum payment is reserved in your savings plan without double-counting existing loans.</p><label style="display:flex;align-items:center;gap:10px"><input name="included" type="checkbox" checked>Include in my debt-free program</label><label>Credit limit ($, optional)<input name="credit_limit" type="number" min="0" step=".01"></label><label>Due day (optional)<input name="due_date" type="number" min="1" max="31" step="1"></label><p id="debt-error" role="alert"></p><div class="toolbar"><button class="btn btn-primary">Save debt</button><button class="btn btn-secondary" type="button" id="debt-cancel">Cancel</button></div></form>`;
   document.body.appendChild(dialog);
   let debtEditing = null;
   $('debt-cancel').onclick = () => dialog.close();
   window.openDebtEditor = function(id = null) {
     debtEditing = id; $('debt-form').reset(); $('debt-error').textContent = '';
-    const item = debts.find(d => String(d.id) === String(id));
+    const item = (window.FinancePlan?.debtRows?.() || debts).find(d => String(d.id) === String(id));
     if (item) for (const field of ['name','debt_type','balance','apr','min_payment','credit_limit','due_date']) $('debt-form').elements[field].value = item[field] ?? (field === 'name' ? item.card_name : '');
-    $('debt-form').elements.payment_in_history.checked = item ? item.payment_in_history !== false : true;
+    $('debt-form').elements.payment_in_history.checked = item ? item.payment_in_history !== false : true; $('debt-form').elements.included.checked = item ? item.included !== false : true;
     dialog.showModal();
   };
   $('debt-form').onsubmit = async event => {
@@ -787,7 +762,7 @@
     const data = Object.fromEntries(new FormData(form));
     for (const field of ['balance','apr','min_payment','credit_limit']) data[field] = data[field] === '' ? null : Number(data[field]);
     data.due_date = data.due_date || null;
-    data.payment_in_history = form.elements.payment_in_history.checked;
+    data.payment_in_history = form.elements.payment_in_history.checked; data.included = form.elements.included.checked;
     button.disabled = true;
     try {
       await json(debtEditing == null ? '/api/debts' : `/api/debts/${encodeURIComponent(debtEditing)}`, debtEditing == null ? 'POST' : 'PUT', data);
@@ -795,56 +770,6 @@
     } catch (error) { $('debt-error').textContent = error.message; }
     finally { button.disabled = false; }
   };
-  function simulate(items, budget) {
-    const active = items.filter(d => d.balance > 0).map(d => ({ ...d, balance: Number(d.balance) })).sort((a,b) => Number(b.apr)-Number(a.apr));
-    const months = [];
-    for (let index = 0; index < 600 && active.some(d => d.balance > .005); index++) {
-      for (const item of active) item.balance += item.balance * Number(item.apr) / 1200;
-      let available = budget;
-      const minimums = active.map(d => Math.min(d.balance, Number(d.min_payment)));
-      if (minimums.reduce((a,b) => a+b,0) > budget + .005) return { months, reason: 'Budget is below minimum payments. Increase it or contact your lenders before using this projection.' };
-      active.forEach((d,i) => { d.balance -= minimums[i]; available -= minimums[i]; });
-      for (const item of active) { const extra = Math.min(available, item.balance); item.balance -= extra; available -= extra; }
-      const balance = active.reduce((sum,d) => sum+d.balance,0);
-      months.push(balance);
-    }
-    return { months, reason: months.at(-1) > .005 ? 'Not paid off within 50 years at this budget. Interest may be outpacing payments.' : '' };
-  }
-  window.loadPayoffPlan = async function() {
-    try {
-      debts = (await json('/api/debts')).sort((a,b) => Number(b.apr)-Number(a.apr));
-      const total = debts.reduce((sum,d) => sum+Number(d.balance),0);
-      const minimum = debts.reduce((sum,d) => sum + (Number(d.balance) > 0 ? Math.min(Number(d.balance) * (1 + Number(d.apr) / 1200),Number(d.min_payment)) : 0),0);
-      $('payoff-total-debt').textContent = money(total);
-      $('payoff-budget').placeholder = `Minimums ${money(minimum)}`;
-      const entered = $('payoff-budget').value !== '';
-      const budget = entered ? Number($('payoff-budget').value) : minimum;
-      let extra = Math.max(0,budget-minimum);
-      $('payoff-schedule-body').innerHTML = debts.map((item,index) => {
-        const owed = Number(item.balance) * (1 + Number(item.apr) / 1200);
-        const base = Math.min(owed,Number(item.min_payment));
-        const added = Math.min(extra,Math.max(0,owed-base)); extra -= added;
-        return `<tr><td style="padding:14px">${index+1}</td><td><strong>${escape(item.name || item.card_name)}</strong><div class="muted">${escape(item.debt_type?.replaceAll('_',' ') || 'credit card')} · ${Number(item.apr)}% APR</div><div class="toolbar"><button class="btn btn-secondary" data-debt-edit="${index}">Edit</button><button class="btn btn-secondary" data-debt-delete="${index}">Delete</button></div></td><td style="text-align:right">${money(item.balance)}</td><td style="text-align:right">${budget < minimum ? 'Budget too low' : money(base+added)}</td><td style="text-align:center">${escape(item.due_date || '—')}</td></tr>`;
-      }).join('') || '<tr><td colspan="5" style="padding:24px">No debts yet. Add a credit card or loan to build your plan.</td></tr>';
-      if (!total) { $('payoff-timeline-chart').textContent = 'No outstanding debt to project.'; return; }
-      if (budget <= 0 || !Number.isFinite(budget)) { $('payoff-timeline-chart').textContent = 'Enter a positive monthly budget to estimate repayment.'; return; }
-      const result = simulate(debts,budget);
-      $('payoff-timeline-chart').innerHTML = `<p class="coach-note">${!entered ? 'Using your recorded minimum payments until you enter a budget. ' : ''}${result.reason ? escape(result.reason) : `Estimated payoff: ${result.months.length} months at ${money(budget)} per month.`}</p>${result.months.filter((_,i) => i < 12 || i === result.months.length-1).map((balance,index) => {
-        const month = index < 12 ? index+1 : result.months.length;
-        return `<div><div class="toolbar" style="justify-content:space-between"><span>Month ${month}</span><strong>${money(balance)} remaining</strong></div><progress aria-label="Remaining balance month ${month}" value="${Math.min(total,balance)}" max="${total}"></progress></div>`;
-      }).join('')}`;
-    } catch (error) { $('payoff-schedule-body').textContent = error.message; }
-  };
-  $('payoff-schedule-body').onclick = async event => {
-    const edit = event.target.closest('[data-debt-edit]'), remove = event.target.closest('[data-debt-delete]');
-    if (edit) return openDebtEditor(debts[Number(edit.dataset.debtEdit)].id);
-    if (!remove) return;
-    const debt = debts[Number(remove.dataset.debtDelete)];
-    if (!await FinanceUI.confirm(`Delete "${debt.name || debt.card_name}" from your plan?`, { action: 'Delete debt' })) return;
-    remove.disabled = true;
-    try { await json(`/api/debts/${encodeURIComponent(debt.id)}`, 'DELETE'); await loadPayoffPlan(); }
-    catch (error) { reportError(error); remove.disabled = false; }
-  };
   // Expose pure utilities for lightweight VM regression tests.
-  window.FinanceTools = { escape, money, fixed, simulate };
+  window.FinanceTools = { escape, money, fixed };
 })();

@@ -4,6 +4,8 @@ import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { buildUpcomingPayments } from '../utils/fixedPayments.js';
 import { currentUserId } from '../utils/tenant.js';
+import { buildPlanPayments, computePlan, loadPlanInputs } from '../utils/moneyPlan.js';
+import { getEntitlement } from '../utils/license.js';
 
 const router = Router();
 const db = new Database();
@@ -450,7 +452,17 @@ router.post('/upcoming-payments', async (req, res) => {
       WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
       [currentUserId(), dateString(previousMonth), dateString(today)]
     );
-    res.json(buildUpcomingPayments(transactions, today));
+    const bills = buildUpcomingPayments(transactions, today);
+    // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
+    let extras = [];
+    try {
+      const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
+      const plan = computePlan(inputs, { pro: !!entitlement.active, now: today });
+      extras = [...plan.incomeItems, ...buildPlanPayments(plan, today)];
+    } catch (error) {
+      log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
+    }
+    res.json([...bills, ...extras].sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome)));
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });

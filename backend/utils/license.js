@@ -11,6 +11,7 @@ export const PRO_FEATURES = Object.freeze([
   { id: 'forecast', title: 'Forecasts', text: 'Month-end spend forecast and a 6-month cash-flow projection.' },
   { id: 'subscriptions', title: 'Subscription radar', text: 'Recurring charges, annual cost and price-increase alerts.' },
   { id: 'anomalies', title: 'Unusual activity', text: 'Charges that are far above normal for a merchant or category.' },
+  { id: 'planning', title: 'Debt & goal planner', text: 'Interest-cost, cash-flow and custom payoff orders, balanced goal funding and what-if simulations.' },
   { id: 'export', title: 'Export', text: 'Download filtered transactions and analytics as CSV.' }
 ]);
 
