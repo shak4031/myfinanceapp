@@ -129,7 +129,7 @@ const isFixed = tx => tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed =
 // Completed months only: the current month is still filling up and would read as a false drop.
 function monthlySeries(transactions, today) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
-  const byCategory = new Map(), entries = new Map(), oneOffs = new Map();
+  const byCategory = new Map(), visitCounts = new Map(), entries = new Map(), oneOffs = new Map();
   let firstIndex = Infinity, firstDay = 1;
   for (const tx of transactions) {
     const parsed = parseTxDate(tx.date);
@@ -146,25 +146,26 @@ function monthlySeries(transactions, today) {
   }
   for (const [id, list] of entries) {
     const typical = median(list.map(entry => entry.amount));
-    const series = Array(HISTORY).fill(0), skipped = [];
+    const series = Array(HISTORY).fill(0), visits = Array(HISTORY).fill(0), skipped = [];
     for (const entry of list) {
       if (!isFixed(entry.tx) && entry.amount >= Math.max(ONE_OFF_MIN, typical * ONE_OFF_MULTIPLE)) {
         skipped.push({ date: entry.iso, description: entry.tx.description || '', amount: round(entry.amount) });
-      } else series[entry.slot] += entry.amount;
+      } else { series[entry.slot] += entry.amount; visits[entry.slot] += 1; }
     }
     byCategory.set(id, series);
+    visitCounts.set(id, visits);
     oneOffs.set(id, skipped.sort((a, b) => b.date.localeCompare(a.date)));
   }
   // A history that starts mid-month makes the first month look artificially cheap, so it is skipped.
   const startIndex = firstIndex + (firstDay > 3 ? 1 : 0);
   const available = Number.isFinite(firstIndex) ? Math.max(0, Math.min(HISTORY, currentIndex - startIndex)) : 0;
-  return { byCategory, oneOffs, available, currentIndex };
+  return { byCategory, visitCounts, oneOffs, available, currentIndex };
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthLabel = index => `${MONTH_NAMES[index % 12]} ${Math.floor(index / 12)}`;
 
-function analyzeCategory(category, series, context) {
+function analyzeCategory(category, series, context, visits = null) {
   const { profile, currentIndex } = context;
   const n = series.length;
   const last = n => series.slice(-n);
@@ -236,11 +237,39 @@ function analyzeCategory(category, series, context) {
   const opportunity = potential >= 10 && (benchmarkStatus === 'high' || benchmarkStatus === 'above' || rising)
     ? { target: round(target), basis: seasonalTarget ? 'same-months-last-year' : 'your-history', monthly: round(potential), annual: round(potential * 12), monthsAtTarget } : null;
 
+  // Your own distribution over the last 12 months: the 5th-95th percentile is the range 9 in 10 of your months fall in.
+  // A "spike" is a latest month above the 95th percentile of the months before it.
+  const year = last(Math.min(12, n)), prior = year.slice(0, -1), latest = series[n - 1];
+  const range = { p5: round(quantile(year, 0.05)), p50: round(quantile(year, 0.5)), p95: round(quantile(year, 0.95)),
+    latest: round(latest), month: monthLabel(currentIndex - 1), months: year.length,
+    higherThan: prior.filter(value => value < latest).length, compared: prior.length };
+  const spike = prior.length >= 5 && latest > quantile(prior, 0.95) && latest - median(prior) >= 25;
+
+  // Price vs volume: was the change driven by more purchases or by pricier ones? Compared with the same three months
+  // last year when there is enough history (seasons cancel out), otherwise with the three months before.
+  let driver = null;
+  const lag = n >= 15 ? 12 : n >= 6 ? 3 : null;
+  if (lag && visits) {
+    const nowSpend = sum(last(3)), nowCount = sum(visits.slice(-3));
+    const thenSpend = sum(series.slice(n - 3 - lag, n - lag)), thenCount = sum(visits.slice(n - 3 - lag, n - lag));
+    if (nowCount && thenCount && thenSpend > 0) {
+      const visitsNow = nowCount / 3, visitsThen = thenCount / 3, ticketNow = nowSpend / nowCount, ticketThen = thenSpend / thenCount;
+      const change = (nowSpend - thenSpend) / 3;
+      // Spending = visits x average ticket; split the change into its volume and price parts.
+      const volume = (visitsNow - visitsThen) * ticketThen, price = (ticketNow - ticketThen) * visitsNow;
+      driver = { basis: lag === 12 ? 'same-months-last-year' : 'previous-3-months', visitsNow: round(visitsNow, 1), visitsThen: round(visitsThen, 1),
+        ticketNow: round(ticketNow), ticketThen: round(ticketThen), change: round(change), volume: round(volume), price: round(price),
+        cause: Math.abs(change) < Math.max(15, thenSpend / 3 * 0.1) ? 'steady'
+          : Math.min(Math.abs(volume), Math.abs(price)) >= 0.4 * Math.max(Math.abs(volume), Math.abs(price)) && Math.sign(volume) === Math.sign(price) ? 'both'
+          : Math.abs(volume) >= Math.abs(price) ? 'visits' : 'price' };
+    }
+  }
+
   return {
     id: category.id, label: category.label, covers: category.covers, seasonal: !!category.seasonal,
     average3: round(avg3), expected, vsTypical: round(vsTypical, 4), benchmarkStatus,
     crossover, momentum, band, upMonths, upWindow: Math.max(0, recent.length - 1),
-    support: round(support), normal: round(normal), opportunity,
+    support: round(support), normal: round(normal), opportunity, rising: !!rising, spike, range, driver,
     series: series.map(value => round(value)),
     months: series.map((_, index) => monthLabel(currentIndex - n + index))
   };
@@ -268,23 +297,132 @@ function headline(row, who) {
   return parts.join(' ');
 }
 
-export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date() } = {}) {
+const SMALL_PURCHASE = 20;
+const WORKDAYS_PER_MONTH = 21.7;
+const merchantName = text => String(text || '').toUpperCase().replace(/[#*].*$|\d.*$/, '').trim().split(/\s+/).slice(0, 2).join(' ') || 'Other';
+
+// Where money went over the last three full months: the same window and transfer rule as the "typical monthly surplus"
+// every other page shows, so the "left over" figure here matches the dashboard.
+const FLOW_ITEMS = 5, FLOW_MIN_SHARE = 0.03;
+function flowGroup(totals, income, months, restLabel) {
+  const items = [...totals.entries()].map(([label, amount]) => ({ label, amount: amount / months, id: benchmarkCategoryFor(label)?.id || null }))
+    .sort((a, b) => b.amount - a.amount);
+  const shown = items.filter((item, index) => index < FLOW_ITEMS && item.amount >= income * FLOW_MIN_SHARE);
+  const rest = sum(items.slice(shown.length).map(item => item.amount));
+  if (rest >= 1) shown.push({ label: restLabel, amount: rest, id: null, rest: true });
+  return { total: round(sum(items.map(item => item.amount))), items: shown.map(item => ({ ...item, amount: round(item.amount) })) };
+}
+
+function moneyFlow(transactions, today, typical) {
+  const currentIndex = today.getFullYear() * 12 + today.getMonth();
+  const months = new Set(), fixedTotals = new Map(), everydayTotals = new Map(), merchants = new Map();
+  let income = 0, recorded = 0, smallCount = 0, smallTotal = 0;
+  for (const tx of transactions) {
+    const parsed = parseTxDate(tx.date);
+    const amount = Math.abs(Number(tx.amount));
+    if (!parsed || !Number.isFinite(amount) || isTransferRow(tx)) continue;
+    const offset = currentIndex - (parsed.year * 12 + parsed.month);
+    if (offset < 1 || offset > 3) continue;
+    months.add(offset);
+    const direction = String(tx.direction).toUpperCase();
+    if (direction === 'CREDIT') { income += amount; continue; }
+    if (direction !== 'DEBIT') continue;
+    recorded += amount;
+    const label = tx.category || 'Uncategorized';
+    const totals = isFixed(tx) ? fixedTotals : everydayTotals;
+    totals.set(label, (totals.get(label) || 0) + amount);
+    if (!isFixed(tx) && amount < SMALL_PURCHASE) {
+      smallCount += 1; smallTotal += amount;
+      const name = merchantName(tx.description);
+      merchants.set(name, (merchants.get(name) || 0) + 1);
+    }
+  }
+  const m = months.size;
+  if (!m) return { flow: null, small: null };
+  const monthlyIncome = income / m;
+  // Minimum payments for debts not yet visible in imported history are part of the shared surplus figure.
+  const debt = typical?.avgMonthlyExpenses != null ? Math.max(0, round(typical.avgMonthlyExpenses - recorded / m)) : 0;
+  const [topMerchant, topCount] = [...merchants.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+  return {
+    flow: {
+      months: m, income: round(monthlyIncome),
+      fixed: flowGroup(fixedTotals, monthlyIncome, m, 'Other bills'),
+      everyday: flowGroup(everydayTotals, monthlyIncome, m, 'Everything else'),
+      debt: debt >= 1 ? debt : 0,
+      left: round(monthlyIncome - recorded / m - (debt >= 1 ? debt : 0))
+    },
+    small: smallCount ? { under: SMALL_PURCHASE, perMonth: round(smallCount / m, 1), monthly: round(smallTotal / m), annual: round(smallTotal / m * 12),
+      topMerchant: topMerchant || null, topMerchantPerMonth: topCount ? round(topCount / m, 1) : null } : null
+  };
+}
+// Plain-language discoveries, each with one big figure. Ordered by how actionable they are; at most four are shown.
+function buildInsights({ categories, opportunities, flow, small }) {
+  const money = value => `$${Math.round(value).toLocaleString('en-US')}`;
+  const byId = new Map(categories.map(row => [row.id, row]));
+  const insights = [];
+  const top = opportunities[0];
+  if (top) {
+    const row = byId.get(top.id);
+    const reached = row.opportunity.monthsAtTarget;
+    insights.push({ id: 'top-saving', tone: 'good', figure: `${money(top.annual)}/yr`, title: `Bring ${top.label} back to ${money(top.target)} a month`,
+      detail: `${reached ? `You already managed it in ${reached} of the last ${Math.min(12, row.series.length)} months. ` : ''}That is ${money(top.monthly)} a month back in your pocket.` });
+  }
+  const spike = categories.filter(row => row.spike).sort((a, b) => (b.range.latest - b.range.p50) - (a.range.latest - a.range.p50))[0];
+  if (spike) {
+    const r = spike.range;
+    insights.push({ id: 'spike', tone: 'bad', figure: 'Top 5%', title: `${spike.label} in ${r.month.split(' ')[0]} was unusually high`,
+      detail: `${money(r.latest)}, higher than ${r.higherThan} of the ${r.compared} months before it. Your usual range is ${money(r.p5)} to ${money(r.p95)}.` });
+  }
+  // Only categories the Compass already flags, so the explanation never contradicts the signals.
+  const moving = categories.filter(row => row.driver && row.driver.change > 0 && row.driver.cause !== 'steady'
+    && (row.rising || row.benchmarkStatus === 'high' || row.benchmarkStatus === 'above')).sort((a, b) => b.driver.change - a.driver.change)[0];
+  if (moving) {
+    const d = moving.driver, when = d.basis === 'same-months-last-year' ? 'the same months last year' : 'the three months before';
+    const visits = `${d.visitsNow.toFixed(1)} purchases a month against ${d.visitsThen.toFixed(1)}`, tickets = `about ${money(d.ticketNow)} each against ${money(d.ticketThen)}`;
+    insights.push({
+      both: { title: `${moving.label}: more often, and pricier`, detail: `${visits} in ${when}, and ${tickets}. Both levers are worth pulling.` },
+      visits: { title: `${moving.label} is up because you go more often`, detail: `${visits} in ${when}, at ${tickets}. Fewer trips is the lever.` },
+      price: { title: `${moving.label} costs more per purchase`, detail: `${tickets} in ${when}, and you buy about as often. Trading down, not cutting out, is the lever.` }
+    }[d.cause]);
+    Object.assign(insights[insights.length - 1], { id: 'driver', tone: 'warn', figure: `+${money(d.change)}/mo` });
+  }
+  if (small && small.annual >= 300) {
+    insights.push({ id: 'small', tone: 'warn', figure: `${money(small.annual)}/yr`, title: `on purchases under ${money(small.under)}`,
+      detail: `About ${Math.round(small.perMonth)} small purchases a month add up to ${money(small.monthly)}.${small.topMerchant ? ` Most often at ${small.topMerchant} (${Math.round(small.topMerchantPerMonth)} times a month).` : ''}` });
+  }
+  const perDay = flow?.income > 0 ? flow.income / WORKDAYS_PER_MONTH : null;
+  const heavy = perDay && (byId.get(top?.id) || [...categories].sort((a, b) => b.average3 - a.average3)[0]);
+  if (heavy) {
+    insights.push({ id: 'work-days', tone: 'info', figure: `${(heavy.average3 / perDay).toFixed(1)} days`, title: `of work pays for ${heavy.label} each month`,
+      detail: `Your take-home averages ${money(flow.income)} a month, about ${money(perDay)} for each working day. ${heavy.label} averages ${money(heavy.average3)}.` });
+  }
+  const win = categories.filter(row => row.range.compared >= 5 && row.range.higherThan === 0 && row.range.latest > 0)
+    .sort((a, b) => (b.range.p50 - b.range.latest) - (a.range.p50 - a.range.latest))[0];
+  if (win) {
+    insights.push({ id: 'win', tone: 'good', figure: `${money(win.range.p50 - win.range.latest)} under`, title: `${win.label} in ${win.range.month.split(' ')[0]} was your lowest in a year`,
+      detail: `${money(win.range.latest)} against your usual ${money(win.range.p50)}. Whatever you did, it worked.` });
+  }
+  return insights.slice(0, 4);
+}
+export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date(), typical = null } = {}) {
   const normalized = normalizeProfile(profile);
   const profileSet = !!(normalized && (normalized.size || normalized.region || normalized.housing));
-  const { byCategory, oneOffs, available, currentIndex } = monthlySeries(transactions, today);
+  const { byCategory, visitCounts, oneOffs, available, currentIndex } = monthlySeries(transactions, today);
   const who = profileLabel(normalized);
   const base = { source: SOURCE, profile: normalized, profileSet, comparedWith: who, monthsAnalyzed: available, categories: [], opportunities: [] };
   if (available < 3) return { ...base, status: 'needs-history' };
   const context = { profile: normalized, currentIndex };
   const categories = BENCHMARK_CATEGORIES
     .filter(category => byCategory.has(category.id))
-    .map(category => ({ ...analyzeCategory(category, byCategory.get(category.id).slice(-available), context), oneOffs: oneOffs.get(category.id) || [] }))
+    .map(category => ({ ...analyzeCategory(category, byCategory.get(category.id).slice(-available), context, visitCounts.get(category.id).slice(-available)), oneOffs: oneOffs.get(category.id) || [] }))
     .filter(row => row.average3 > 0);
   const opportunities = categories.filter(row => row.opportunity)
     .sort((a, b) => b.opportunity.monthly - a.opportunity.monthly)
     .map(row => ({ id: row.id, label: row.label, monthly: row.opportunity.monthly, annual: row.opportunity.annual, target: row.opportunity.target, message: headline(row, who) }));
+  const { flow, small } = moneyFlow(transactions, today, typical);
   return {
-    ...base, status: 'ok', categories, opportunities,
+    ...base, status: 'ok', categories, opportunities, flow, small,
+    insights: buildInsights({ categories, opportunities, flow, small }),
     potentialMonthly: round(sum(opportunities.map(item => item.monthly))),
     potentialAnnual: round(sum(opportunities.map(item => item.annual)))
   };

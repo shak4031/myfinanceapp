@@ -105,3 +105,89 @@ test('fewer than three completed months reports needs-history', () => {
   assert.deepEqual(mf.opportunities, []);
   assert.equal(buildMoneyFlowSignals().status, 'needs-history');
 });
+
+// Several purchases a month: `plan` is oldest first, ending with September 2026, each entry [count, ticket].
+function visits(category, plan) {
+  return plan.flatMap(([count, ticket], i) => {
+    const d = new Date(2026, 9 - (plan.length - i), 1);
+    return Array.from({ length: count }, (_, k) => ({ date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(k + 1).padStart(2, '0')}`, description: `CAFE ${k}`, amount: ticket, direction: 'DEBIT', category }));
+  });
+}
+
+test('the normal range is your own 5th-95th percentile and a top-5% month is a spike', () => {
+  const months = [200, 210, 190, 205, 195, 200, 215, 185, 200, 210, 190, 330];
+  const result = buildMoneyFlowSignals({ transactions: history('Groceries', months), today: TODAY });
+  const row = result.categories.find(c => c.id === 'groceries');
+  assert.equal(row.range.months, 12);
+  assert.equal(row.range.latest, 330);
+  assert.equal(row.range.month, 'Sep 2026');
+  assert.equal(row.range.higherThan, 11);
+  assert.equal(row.range.compared, 11);
+  assert.ok(row.range.p5 <= row.range.p50 && row.range.p50 <= row.range.p95, JSON.stringify(row.range));
+  assert.ok(row.range.p5 >= 185 && row.range.p50 >= 195 && row.range.p50 <= 210);
+  assert.equal(row.spike, true);
+  const calm = buildMoneyFlowSignals({ transactions: history('Groceries', months.map(() => 200).fill(205, -1)), today: TODAY });
+  assert.equal(calm.categories[0].spike, false, 'a small move over the median is not a spike');
+  assert.equal(calm.categories[0].range.higherThan, 11);
+});
+
+test('the purchases x size split says whether more visits or pricier visits drove a change', () => {
+  const steady = [[4, 25], [4, 25], [4, 25]];
+  const more = buildMoneyFlowSignals({ transactions: visits('Dining', [...steady, [8, 25], [8, 25], [8, 25]]), today: TODAY }).categories[0].driver;
+  assert.equal(more.basis, 'previous-3-months');
+  assert.equal(more.cause, 'visits');
+  assert.equal(more.visitsThen, 4); assert.equal(more.visitsNow, 8);
+  assert.equal(more.ticketThen, 25); assert.equal(more.ticketNow, 25);
+  assert.equal(more.change, 100);
+  const pricier = buildMoneyFlowSignals({ transactions: visits('Dining', [...steady, [4, 50], [4, 50], [4, 50]]), today: TODAY }).categories[0].driver;
+  assert.equal(pricier.cause, 'price');
+  const both = buildMoneyFlowSignals({ transactions: visits('Dining', [...steady, [6, 35], [6, 35], [6, 35]]), today: TODAY }).categories[0].driver;
+  assert.equal(both.cause, 'both');
+  assert.equal(Math.round(both.volume + both.price), both.change, 'volume and price add up to the change');
+  const flat = buildMoneyFlowSignals({ transactions: visits('Dining', [...steady, ...steady]), today: TODAY }).categories[0].driver;
+  assert.equal(flat.cause, 'steady');
+  const yearAgo = buildMoneyFlowSignals({ transactions: visits('Dining', Array.from({ length: 15 }, (_, i) => i >= 12 ? [6, 25] : [4, 25])), today: TODAY }).categories[0].driver;
+  assert.equal(yearAgo.basis, 'same-months-last-year');
+});
+
+test('the money flow splits income into fixed bills, everyday spending and left over, without transfers', () => {
+  const months = [3, 2, 1].map(back => { const d = new Date(2026, 9 - back, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
+  const transactions = months.flatMap(m => [
+    { date: `${m}-01`, description: 'PAYROLL', amount: 5000, direction: 'CREDIT', category: 'Income' },
+    { date: `${m}-02`, description: 'MORTGAGE', amount: 2000, direction: 'DEBIT', category: 'Mortgage', is_fixed: true },
+    { date: `${m}-03`, description: 'MARKET', amount: 400, direction: 'DEBIT', category: 'Groceries' },
+    { date: `${m}-04`, description: 'BISTRO', amount: 300, direction: 'DEBIT', category: 'Dining' },
+    { date: `${m}-05`, description: 'TO SAVINGS', amount: 1000, direction: 'DEBIT', category: 'Transfer', transfer_kind: 'savings' },
+    ...Array.from({ length: 10 }, (_, k) => ({ date: `${m}-${String(k + 10)}`, description: `STARBUCKS #${k}`, amount: 6, direction: 'DEBIT', category: 'Coffee' }))
+  ]);
+  const result = buildMoneyFlowSignals({ transactions, today: TODAY, typical: { avgMonthlyExpenses: 2760 + 150 } });
+  const { flow, small } = result;
+  assert.equal(flow.months, 3);
+  assert.equal(flow.income, 5000);
+  assert.equal(flow.fixed.total, 2000);
+  assert.equal(flow.everyday.total, 760, 'the savings transfer is not spending');
+  assert.equal(flow.debt, 150, 'minimums the surplus counts but history does not show');
+  assert.equal(flow.left, 2090);
+  assert.equal(flow.income, flow.fixed.total + flow.everyday.total + flow.debt + flow.left);
+  assert.deepEqual(flow.everyday.items.map(i => i.label), ['Groceries', 'Dining', 'Everything else'], 'items under 3% of income are grouped');
+  assert.equal(flow.everyday.items.find(i => i.label === 'Dining').id, 'dining');
+  assert.deepEqual({ perMonth: small.perMonth, monthly: small.monthly, annual: small.annual, topMerchant: small.topMerchant }, { perMonth: 10, monthly: 60, annual: 720, topMerchant: 'STARBUCKS' });
+  assert.ok(result.insights.length <= 4);
+  assert.ok(result.insights.some(i => i.id === 'small'), 'small purchases over $300 a year are worth a card');
+});
+
+test('insights lead with the biggest saving and never exceed four cards', () => {
+  const profile = { size: 1, region: 'south', housing: 'rent' };
+  const transactions = [
+    ...visits('Dining', [...Array(9).fill([6, 30]), [12, 40], [12, 40], [14, 40]]),
+    ...history('Groceries', [300, 310, 290, 300, 305, 295, 300, 310, 290, 300, 305, 600]),
+    ...history('Shopping', [200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310])
+  ];
+  const result = buildMoneyFlowSignals({ transactions, profile, today: TODAY });
+  assert.ok(result.opportunities.length > 0);
+  assert.ok(result.insights.length >= 2 && result.insights.length <= 4, result.insights.map(i => i.id).join());
+  assert.equal(result.insights[0].id, 'top-saving');
+  assert.equal(new Set(result.insights.map(i => i.id)).size, result.insights.length);
+  assert.ok(result.insights.some(i => i.id === 'spike'), 'the September grocery jump is called out');
+  for (const insight of result.insights) for (const key of ['figure', 'title', 'detail', 'tone']) assert.ok(insight[key], `${insight.id}.${key}`);
+});

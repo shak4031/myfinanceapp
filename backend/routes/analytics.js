@@ -33,9 +33,10 @@ router.get('/', async (req, res, next) => {
   try {
     const now = new Date();
     const [inputs, planInputs] = await Promise.all([loadInputs(), loadPlanInputs(db, now)]);
+    const typical = typicalSurplus(planInputs, now);
     res.json({
-      ...buildAnalytics({ ...inputs, typical: typicalSurplus(planInputs, now) }),
-      moneyFlow: buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now })
+      ...buildAnalytics({ ...inputs, typical }),
+      moneyFlow: buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical })
     });
   } catch (error) { next(error); }
 });

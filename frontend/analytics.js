@@ -213,6 +213,150 @@
       .filter(Boolean).map(t => `<span class="pro-mf-chip">${esc(t)}</span>`).join('');
   }
 
+  const shortLabel = label => String(label).split(/ [&(]/)[0];
+  const isAbove = c => c.benchmarkStatus === 'high' || c.benchmarkStatus === 'above';
+  const isUnusual = c => !!c.spike || c.band?.position === 'above';
+  // One colour language across the page: act now (red), worth watching (amber), on track (neutral).
+  const tone = c => !c ? null : [isAbove(c), c.rising, isUnusual(c)].filter(Boolean).length >= 2 || c.opportunity ? 'act' : isAbove(c) || c.rising || isUnusual(c) ? 'watch' : 'ok';
+  const TONE_COLORS = { act: '#e11d48', watch: '#f59e0b', ok: '#8b5cf6' };
+
+  function compassHero(mf) {
+    const { money, esc } = pro().format;
+    const household = `<div class="pro-hero-household"><span>Compared with ${esc(mf.comparedWith)}</span>${householdChips(mf)}
+      <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="household-edit">${mf.profileSet ? 'Edit household' : 'Set your household'}</button></div>${householdForm(mf)}
+      ${mf.profileSet ? '' : '<p class="pro-mf-hint">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}`;
+    if (mf.status !== 'ok' || !mf.categories.length) {
+      return `<section class="pro-compass-hero panel"><div class="pro-hero-main"><p class="pro-hero-eyebrow">SPENDING COMPASS</p><strong class="pro-hero-figure is-small">Your compass needs a little more history</strong>
+        <p class="pro-hero-sub">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see your compass.</p>${household}</div></section>`;
+    }
+    const plan = mf.opportunities.length
+      ? `<ol class="pro-hero-plan">${mf.opportunities.map(o => {
+        const c = mf.categories.find(row => row.id === o.id);
+        return `<li><span><b>${esc(shortLabel(o.label))}</b><small>${money(c?.average3 ?? o.target + o.monthly, true)} &rarr; ${money(o.target, true)} a month</small></span><strong>${money(o.monthly, true)}<small>/mo</small></strong></li>`;
+      }).join('')}</ol>`
+      : `<p class="pro-hero-clear">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
+    const figure = mf.opportunities.length ? `${money(mf.potentialMonthly, true)} a month` : 'On course';
+    const sub = mf.opportunities.length
+      ? `${money(mf.potentialAnnual, true)} a year &middot; ${money(mf.potentialAnnual * 5, true)} over 5 years, by returning to levels you have already reached.`
+      : 'Your everyday spending is in line with similar households and holding steady.';
+    return `<section class="pro-compass-hero panel"><div class="pro-hero-main"><p class="pro-hero-eyebrow">YOUR COMPASS FOUND</p><strong class="pro-hero-figure">${figure}</strong><p class="pro-hero-sub">${sub}</p>${household}</div>
+      <div class="pro-hero-side"><p class="pro-hero-eyebrow">YOUR PLAN</p>${plan}</div></section>`;
+  }
+
+  function compassInsights(mf) {
+    const { esc } = pro().format;
+    if (!mf.insights?.length) return '';
+    return `<section class="pro-insights" aria-label="What stood out">${mf.insights.map(i => `<article class="pro-insight tone-${esc(i.tone)}" data-insight="${esc(i.id)}">
+      <strong>${esc(i.figure)}</strong><h3>${esc(i.title)}</h3><p>${esc(i.detail)}</p></article>`).join('')}</section>`;
+  }
+
+  // Sankey diagram: income on the left, fixed bills / everyday spending / left over in the middle, categories on the right.
+  function flowSankey(mf) {
+    const { money, esc } = pro().format;
+    const f = mf.flow;
+    if (!f || !(f.income > 0)) return card('Where your money flows', '', '<p class="pro-empty">Import a few months of income and spending to see where your money goes.</p>');
+    const byId = new Map(mf.categories.map(c => [c.id, c]));
+    const W = 760, H = 340, NODE = 14, X1 = 250, X2 = 520, GAP = 12, CHILD_GAP = 6;
+    const shortfall = Math.max(0, -f.left);
+    const middle = [
+      { key: 'fixed', label: 'Fixed bills', value: f.fixed.total, color: '#64748b', children: f.fixed.items },
+      { key: 'everyday', label: 'Everyday spending', value: f.everyday.total, color: '#7c3aed', children: f.everyday.items },
+      { key: 'debt', label: 'Debt minimums not yet imported', value: f.debt, color: '#475569', children: [] },
+      { key: 'left', label: 'Left over', value: Math.max(0, f.left), color: '#10b981', children: [] }
+    ].filter(node => node.value > 0);
+    const total = Math.max(f.income + shortfall, middle.reduce((s, n) => s + n.value, 0));
+    const scale = (H - GAP * (middle.length - 1)) / total;
+    const band = (x0, a0, a1, x2, b0, b1, color, title) => {
+      const mx = (x0 + x2) / 2;
+      return `<path d="M${x0} ${a0.toFixed(1)}C${mx} ${a0.toFixed(1)} ${mx} ${b0.toFixed(1)} ${x2} ${b0.toFixed(1)}L${x2} ${b1.toFixed(1)}C${mx} ${b1.toFixed(1)} ${mx} ${a1.toFixed(1)} ${x0} ${a1.toFixed(1)}Z" fill="${color}" fill-opacity=".28"><title>${esc(title)}</title></path>`;
+    };
+    const pctOf = value => `${Math.round(value / f.income * 100)}% of income`;
+    let svg = '', labels = '', y = 0, source = 0, rightY = 0;
+    const incomeH = f.income * scale;
+    svg += `<rect x="0" y="0" width="${NODE}" height="${incomeH.toFixed(1)}" rx="3" fill="#059669"><title>Income ${money(f.income, true)} a month</title></rect>`;
+    labels += `<text x="${NODE + 8}" y="16" class="pro-sk-label">Income</text><text x="${NODE + 8}" y="32" class="pro-sk-value">${money(f.income, true)}/mo</text>`;
+    if (shortfall) {
+      svg += `<rect x="0" y="${incomeH.toFixed(1)}" width="${NODE}" height="${(shortfall * scale).toFixed(1)}" rx="3" fill="#e11d48"><title>Spent more than came in: ${money(shortfall, true)} a month</title></rect>`;
+      labels += `<text x="${NODE + 8}" y="${(incomeH + 14).toFixed(1)}" class="pro-sk-label is-bad">Overspent ${money(shortfall, true)}</text>`;
+    }
+    for (const node of middle) {
+      const h = node.value * scale;
+      svg += band(NODE, source, source + h, X1, y, y + h, node.color, `${node.label}: ${money(node.value, true)} a month (${pctOf(node.value)})`);
+      svg += `<rect x="${X1}" y="${y.toFixed(1)}" width="${NODE}" height="${Math.max(h, 1.5).toFixed(1)}" rx="3" fill="${node.color}"/>`;
+      const ly = Math.min(Math.max(y + Math.min(h / 2, 14) + 4, 12), H - 4);
+      labels += `<text x="${X1 + NODE + 8}" y="${ly.toFixed(1)}" class="pro-sk-label pro-sk-halo">${esc(node.label)} <tspan class="pro-sk-value">${money(node.value, true)}</tspan></text>`;
+      let childY = Math.max(rightY, y - CHILD_GAP * (node.children.length - 1) / 2), offset = y;
+      const span = node.children.reduce((s, c) => s + c.amount * scale, 0) + CHILD_GAP * Math.max(0, node.children.length - 1);
+      if (childY + span > H) childY = Math.max(rightY, H - span);
+      for (const child of node.children) {
+        const ch = child.amount * scale;
+        const t = tone(child.id ? byId.get(child.id) : null);
+        const color = t && t !== 'ok' ? TONE_COLORS[t] : node.color;
+        svg += band(X1 + NODE, offset, offset + ch, X2, childY, childY + ch, color, `${child.label}: ${money(child.amount, true)} a month (${pctOf(child.amount)})`);
+        svg += `<rect x="${X2}" y="${childY.toFixed(1)}" width="${NODE}" height="${Math.max(ch, 1.5).toFixed(1)}" rx="3" fill="${color}"/>`;
+        labels += `<text x="${X2 + NODE + 8}" y="${(childY + ch / 2 + 4).toFixed(1)}" class="pro-sk-label${t === 'act' ? ' is-bad' : ''}">${esc(shortLabel(child.label))} <tspan class="pro-sk-value">${money(child.amount, true)}</tspan></text>`;
+        offset += ch; childY += ch + CHILD_GAP;
+      }
+      if (node.children.length) rightY = childY;
+      source += h; y += h + GAP;
+    }
+    const per100 = value => money(Math.round(value / f.income * 100), true);
+    const split = [['fixed bills', f.fixed.total], ['everyday spending', f.everyday.total], ['debt not yet imported', f.debt]]
+      .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
+    split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
+    const svgEl = `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}">${svg}${labels}</svg>`;
+    return card(`Where your money flows${how(`Monthly average of the last ${f.months} full month${f.months === 1 ? '' : 's'}. Transfers between your own accounts are left out, so "left over" is the same typical monthly surplus your dashboard shows. Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
+      `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-2');
+  }
+
+  // Three-set Venn diagram: the categories where several independent signals agree are the ones worth acting on.
+  function signalVenn(mf) {
+    const { esc } = pro().format;
+    const regions = { a: [100, 100], b: [320, 100], c: [210, 262], ab: [210, 74], ac: [146, 192], bc: [274, 192], abc: [210, 148] };
+    const placed = {}, clear = [];
+    for (const c of mf.categories) {
+      const key = `${isAbove(c) ? 'a' : ''}${c.rising ? 'b' : ''}${isUnusual(c) ? 'c' : ''}`;
+      if (!key) clear.push(shortLabel(c.label)); else (placed[key] ||= []).push(c);
+    }
+    const names = Object.entries(placed).map(([key, list]) => {
+      const [x, y0] = regions[key];
+      const start = y0 - (list.length - 1) * 8;
+      return list.map((c, i) => `<text x="${x}" y="${start + i * 16}" class="pro-venn-name${key.length >= 2 ? ' is-act' : ''}" text-anchor="middle">${esc(shortLabel(c.label))}</text>`).join('');
+    }).join('');
+    const svg = `<svg class="pro-venn" viewBox="0 0 420 322" role="img" aria-label="Signals overlap: ${Object.entries(placed).map(([k, l]) => `${l.map(c => shortLabel(c.label)).join(', ')} in ${k.length} signal${k.length === 1 ? '' : 's'}`).join('; ') || 'no category flagged'}">
+      <circle cx="150" cy="118" r="100" class="pro-venn-a"/><circle cx="270" cy="118" r="100" class="pro-venn-b"/><circle cx="210" cy="205" r="100" class="pro-venn-c"/>
+      <text x="58" y="14" class="pro-venn-set">Above similar homes</text><text x="362" y="14" class="pro-venn-set" text-anchor="end">Trending up</text><text x="210" y="320" class="pro-venn-set" text-anchor="middle">Unusual last month</text>
+      ${placed.abc ? '<text x="210" y="128" class="pro-venn-tag" text-anchor="middle">ACT NOW</text>' : ''}${names}</svg>`;
+    const foot = clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : '';
+    return card(`Where the signals overlap${how('Above similar homes: your 3-month average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trending up: up more than 10% on the same months last year (confirmed by the recent trend), or the 3-month average clearly above the 12-month average. Unusual last month: last month was above the 95th percentile of the months before it, or above its 2-standard-deviation band. One signal is worth watching; where two or three overlap, the habit is real and worth changing.')}`,
+      'One signal is worth watching. Where circles overlap, act.', `${svg}${foot}`);
+  }
+
+  // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.
+  function rangeStrips(mf) {
+    const { money, esc } = pro().format;
+    const rows = mf.categories.map(c => {
+      const r = c.range, months = c.series.slice(-r.months);
+      const max = Math.max(r.p95, r.latest, c.expected || 0, ...months) * 1.08 || 1;
+      const at = value => `${Math.min(100, Math.max(0, value / max * 100)).toFixed(1)}%`;
+      const t = c.spike ? 'tone-bad' : r.latest > r.p50 ? 'tone-warn' : 'tone-good';
+      const rank = r.compared ? (r.higherThan === r.compared ? `Highest in ${r.compared + 1} months` : r.higherThan === 0 ? `Lowest in ${r.compared + 1} months` : `Above ${r.higherThan} of ${r.compared} prior months`) : '';
+      return `<li class="pro-range-row">
+        <div class="pro-range-name"><b>${esc(shortLabel(c.label))}</b><small>${esc(r.month.split(' ')[0])}: ${money(r.latest, true)}</small></div>
+        <div class="pro-range-track" role="img" aria-label="${esc(c.label)}: last month ${money(r.latest, true)}; your usual range ${money(r.p5, true)} to ${money(r.p95, true)}; median ${money(r.p50, true)}${c.expected ? `; similar households ${money(c.expected, true)}` : ''}">
+          <span class="pro-range-band" style="left:${at(r.p5)};width:calc(${at(r.p95)} - ${at(r.p5)})"></span>
+          <span class="pro-range-median" style="left:${at(r.p50)}"></span>
+          ${months.map(v => `<i style="left:${at(v)}"></i>`).join('')}
+          ${c.expected ? `<span class="pro-range-typical" style="left:${at(c.expected)}" title="Similar households: ${money(c.expected, true)}"></span>` : ''}
+          <span class="pro-range-latest ${t}" style="left:${at(r.latest)}" title="${esc(r.month)}: ${money(r.latest, true)}"></span>
+        </div>
+        <div class="pro-range-note"><b class="${t}">${esc(rank)}</b><small>Usual ${money(r.p5, true)}&ndash;${money(r.p95, true)}${c.expected ? ` &middot; similar homes ${money(c.expected, true)}` : ''}</small></div></li>`;
+    }).join('');
+    const legend = '<div class="pro-range-legend"><span><i class="is-band"></i>Your usual range (5th&ndash;95th percentile)</span><span><i class="is-median"></i>Your median</span><span><i class="is-dot"></i>Each month</span><span><i class="is-latest"></i>Last month</span><span><i class="is-typical"></i>Similar households</span></div>';
+    return card(`Your normal range${how('Each row uses the last 12 full months of that category, scaled to itself. The shaded bar runs from your 5th to your 95th percentile month, so 9 in 10 of your months fall inside it. A last month beyond the right edge of the bar is a top-5% month. The diamond is what similar households spend, from the U.S. Bureau of Labor Statistics. Large one-off purchases are set aside.')}`,
+      'Where last month landed against your own history and against similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
+  }
+
   function compassReadings(mf) {
     const { money, esc } = pro().format;
     const momentum = c => c.momentum
@@ -222,6 +366,8 @@
       : `${money(c.crossover.fast, true)} / ${money(c.crossover.slow, true)}<small>${c.crossover.crossed === 'up' ? '<span class="pro-move is-bad">crossed above</span>' : c.crossover.crossed === 'down' ? '<span class="pro-move is-good">crossed below</span>' : c.crossover.state === 'above' ? 'fast above slow' : c.crossover.state === 'below' ? 'fast below slow' : 'flat'}${c.crossover.seasonal ? ' &middot; seasonal' : ''}</small>`;
     const band = c => !c.band ? '&mdash;'
       : `<span class="pro-signal ${c.band.position === 'above' ? 'is-above' : c.band.position === 'below' ? 'is-below' : 'is-inline'}">${c.band.position === 'inside' ? 'Normal' : c.band.position === 'above' ? 'Breakout' : 'Unusually low'}</span><small>${esc(c.band.month)}: ${money(c.band.latest, true)} (${money(c.band.lower, true)}&ndash;${money(c.band.upper, true)})</small>`;
+    const driver = c => !c.driver ? '&mdash;'
+      : `${c.driver.visitsNow.toFixed(1)} &times; ${money(c.driver.ticketNow, true)}<small>was ${c.driver.visitsThen.toFixed(1)} &times; ${money(c.driver.ticketThen, true)}</small>`;
     const rows = mf.categories.map(c => {
       const [label, cls] = MF_STATUS[c.benchmarkStatus] || ['&mdash;', 'is-inline'];
       return `<tr><th scope="row"><span>${esc(c.label)}</span><small>${esc(c.covers)}</small></th>
@@ -229,32 +375,24 @@
         <td class="num">${money(c.expected, true)}<small>${c.vsTypical == null ? '' : `${c.vsTypical >= 0 ? '+' : ''}${Math.round(c.vsTypical * 100)}%`}</small></td>
         <td class="num"><span class="pro-signal ${cls}">${label}</span></td>
         <td class="num">${momentum(c)}</td><td class="num">${cross(c)}</td><td class="num">${band(c)}</td>
-        <td class="num">${c.upMonths} of ${c.upWindow}<small>months up</small></td></tr>`;
+        <td class="num">${c.upMonths} of ${c.upWindow}<small>months up</small></td><td class="num">${driver(c)}</td></tr>`;
     }).join('');
-    const table = `<div class="table-scroll"><table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const table = `<div class="table-scroll"><table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th><th scope="col" class="num">Purchases &times; size</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     const oneOffs = mf.categories.flatMap(c => c.oneOffs.map(o => ({ ...o, label: c.label })));
     const oneOffNote = oneOffs.length ? `<p class="pro-footnote">Set aside as one-off purchases: ${oneOffs.slice(0, 5).map(o => `${esc(o.description)} ${money(o.amount, true)} (${dateShort(o.date)}, ${esc(o.label)})`).join('; ')}${oneOffs.length > 5 ? ` and ${oneOffs.length - 5} more` : ''}.</p>` : '';
-    return card(`Category readings${how(MF_HOW)}`, 'Each category read like a price chart: where it sits against typical, which way it is moving and whether this month broke out of its normal range', `${table}${oneOffNote}`);
+    return `<details class="pro-mf-details panel"><summary><span>Technical readings</span><small>Moving averages, momentum, volatility bands and breadth for each category</small></summary>
+      <div class="pro-mf-details-body"><p class="pro-footnote">${MF_HOW}</p>${table}${oneOffNote}</div></details>`;
   }
 
   function compassPage(a) {
-    const { money, esc } = pro().format;
+    const { esc } = pro().format;
     const mf = a.moneyFlow;
     if (!mf) return '<p class="pro-empty panel">The Spending Compass is not available yet. Try again in a moment.</p>';
-    const comparison = card('Your comparison', `Compared with ${esc(mf.comparedWith)}`,
-      `<div class="pro-mf-household">${householdChips(mf)}</div>
-      <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="household-edit">${mf.profileSet ? 'Edit household' : 'Set your household'}</button>${householdForm(mf)}
-      ${mf.profileSet ? '' : '<p class="pro-mf-hint">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}
-      <p class="pro-footnote">Typical spending: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used.</p>`);
-    if (mf.status !== 'ok' || !mf.categories.length) {
-      return `<div class="pro-compass"><div class="pro-compass-top">${card('Where you could save', '', '<p class="pro-empty">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see your compass.</p>')}${comparison}</div></div>`;
-    }
-    const opps = mf.opportunities.map(o => `<li><div><strong>${esc(o.label)}</strong><p>${esc(o.message)}</p></div><div class="num"><strong class="is-good">${money(o.monthly, true)}</strong><small>a month</small></div></li>`).join('');
-    const savings = mf.opportunities.length
-      ? `<div class="pro-mf-total"><span>Realistic savings found</span><strong>${money(mf.potentialMonthly, true)} a month</strong><small>${money(mf.potentialAnnual, true)} a year, using levels you have already reached</small></div><ol class="pro-mf-opps">${opps}</ol>`
-      : `<p class="pro-empty is-good">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
-    return `<div class="pro-compass"><div class="pro-compass-top">${card('Where you could save', 'Categories that are above similar households or trending up, with a target you have already hit', savings)}${comparison}</div>${compassReadings(mf)}</div>
-      <p class="pro-footnote">Mortgage, rent, loans, insurance and internet are left out because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
+    const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
+    if (mf.status !== 'ok' || !mf.categories.length) return `<div class="pro-compass">${compassHero(mf)}${source}</div>`;
+    return `<div class="pro-compass">${compassHero(mf)}${compassInsights(mf)}
+      <div class="pro-grid pro-compass-grid">${flowSankey(mf)}${signalVenn(mf)}${rangeStrips(mf)}</div>
+      ${compassReadings(mf)}${source}</div>`;
   }
 
   const HEADERS = {
@@ -273,7 +411,8 @@
     const { money } = pro().format;
     const found = a?.moneyFlow?.potentialMonthly;
     const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
-    return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}</nav>`;
+    const help = tab === 'compass' ? '<a class="pro-tab-help" href="#tutorials/compass">&#9654; How it works</a>' : '';
+    return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}${help}</nav>`;
   }
 
   function render(a) {

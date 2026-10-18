@@ -445,9 +445,99 @@
         { id: 'done', title: 'You are ready', caption: 'You are ready. Import a statement, search anything and fix rows in place. Your categories and forecast stay in sync.',
           render: () => outro("You're ready", 'Import · search · edit in place', 'Open my transactions') }
       ]
+    },
+    {
+      id: 'compass', title: 'Spending Compass', blurb: 'Pro: see where your money flows, which habits stand out against similar households and your own history, and what to change.', emoji: '🧭',
+      cta: { label: 'Open my Spending Compass', view: 'analytics/compass' },
+      scenes: [
+        { id: 'intro', title: 'Welcome', caption: 'The Spending Compass shows where your money goes, which habits stand out against households like yours and against your own history, and where you could realistically save.',
+          render: () => intro('TUTORIAL · UNDER 2 MINUTES', 'Spending Compass', 'Where your money goes. What stands out. What to change.', ['🧭', '🍽️', '⚡', '💰']) },
+        { id: 'open', title: 'Find the Compass', caption: 'Open Analytics and choose the Spending Compass tab. The top of the page says what the Compass found, $170 a month or about $10,000 over five years, and lists your plan: each category, where it is now and the level to bring it back to. Spending Compass is part of MyFinance Pro.',
+          render: () => `${chip(1, 'Find the Compass')}
+            <div class="tm-row-head"><div><h3>${swap('Your spending, like a market', 'Spending Compass', 1.4)}</h3><small>Analytics</small></div></div>
+            <div class="tm-tabs"><i class="tm-tab-drop" ${at(1.3)}>Overview</i><i class="tm-tab-pick" ${at(1.3)} data-id="tab">Spending Compass <em class="tut-pop" ${at(0.6)}>$170/mo</em></i></div>
+            <div class="tm-hero tut-in" ${at(1.9)}>
+              <div><small>YOUR COMPASS FOUND</small><b>$170 a month</b><span>$2,043 a year · $10,216 over 5 years</span></div>
+              <ol>
+                <li class="tut-in" ${at(3.2)}><span><b>Dining</b><small>$452 → $323 a month</small></span><strong>$129</strong></li>
+                <li class="tut-in" ${at(3.8)}><span><b>Utilities</b><small>$440 → $399 a month</small></span><strong>$41</strong></li>
+              </ol>
+            </div>${cursor('tab', 0.4)}` },
+        { id: 'household', title: 'Set your household', caption: 'Tell the Compass how many people live with you, your region and whether you rent or own. Typical spending comes from the government Consumer Expenditure Survey for households like yours. No other MyFinance user\'s data is ever used.',
+          render: () => `${chip(2, 'Set your household')}
+            <div class="tm-split tm-split-tight">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>YOUR COMPARISON</small>
+                ${[['People in your household', '2'], ['Region', 'Northeast'], ['Home', 'Own']].map(([k, v], i) => `<div class="tm-kv tut-in" ${at(0.8 + i * 0.4)}><span>${k}</span><b>${v}</b></div>`).join('')}
+                <span class="tm-btn tm-btn-primary tut-in" ${at(2)} data-id="save">Save household</span>
+                <p class="tm-hint tut-in" ${at(2.4)}>Until you set it, you are compared with the average U.S. household.</p>
+              </div>
+              <div class="tm-panel tm-panel-dark tut-in" ${at(1.2)}><small>TYPICAL SPENDING FROM</small>
+                <b class="tm-lg">U.S. Bureau of Labor Statistics</b><span class="tm-pill">Consumer Expenditure Survey · 2024</span>
+                <div class="tm-kv tut-in" ${at(3.6)}><span>Adjusted for household size, region, rent or own</span></div>
+                <div class="tm-kv tut-in" ${at(4.2)}><span>🔒 No other MyFinance user's data is used</span></div>
+              </div>
+            </div>${cursor('save', 2.6)}${toast('Household saved. Your comparison is updated.', 3.6)}` },
+        { id: 'flow', title: 'Where your money flows', caption: 'Where your money flows follows each dollar of income into fixed bills, everyday spending and what is left over. A red ribbon is a category worth acting on. Beside it, the cards show what stood out, such as $1,435 a year on purchases under $20.',
+          render: () => {
+            const rib = (x0, a0, a1, x1, b0, b1, cls, delay) => { const m = (x0 + x1) / 2; return `<path class="tm-rib ${cls} tut-in" ${at(delay)} d="M${x0} ${a0}C${m} ${a0} ${m} ${b0} ${x1} ${b0}L${x1} ${b1}C${m} ${b1} ${m} ${a1} ${x0} ${a1}Z"/>`; };
+            return `${chip(3, 'Where your money flows')}
+            <div class="tm-split tm-split-tight tm-split-wide">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>INCOME $8,405 A MONTH</small>
+                <svg class="tm-sankey" viewBox="0 0 360 172" aria-hidden="true">
+                  <rect x="0" y="0" width="8" height="158" rx="2" class="tm-node-in"/>
+                  ${rib(8, 0, 81, 110, 0, 81, 'is-fixed', 0.8)}${rib(8, 81, 123, 110, 87, 129, 'is-day', 1.2)}${rib(8, 123, 158, 110, 135, 170, 'is-left', 1.6)}
+                  <rect x="110" y="0" width="8" height="81" rx="2" class="tm-node-fixed"/><rect x="110" y="87" width="8" height="42" rx="2" class="tm-node-day"/><rect x="110" y="135" width="8" height="35" rx="2" class="tm-node-left"/>
+                  ${rib(118, 87, 99, 215, 88, 100, 'is-day', 2.2)}${rib(118, 99, 107, 215, 105, 113, 'is-act', 2.6)}${rib(118, 107, 129, 215, 118, 140, 'is-day', 2.4)}
+                  <rect x="215" y="88" width="8" height="12" rx="2" class="tm-node-day"/><rect x="215" y="105" width="8" height="8" rx="2" class="tm-node-act"/><rect x="215" y="118" width="8" height="22" rx="2" class="tm-node-day"/>
+                  <text x="124" y="16">Fixed bills $4,294</text><text x="124" y="104" class="tm-halo">Everyday $2,252</text><text x="124" y="156" class="tm-good">Left over $1,858</text>
+                  <text x="229" y="97">Groceries</text><text x="229" y="113" class="tm-bad">Dining $452</text><text x="229" y="133">Everything else</text>
+                </svg>
+              </div>
+              <div class="tm-insights">
+                <div class="tm-insight is-warn tut-in" ${at(3.4)} data-id="small"><b>$1,435 a year</b><span>on purchases under $20</span><small>STARBUCKS, 9 times a month</small></div>
+                <div class="tm-insight is-bad tut-in" ${at(4.6)}><b>+$107 a month</b><span>Dining: more often, and pricier</span><small>19 visits at $24, was 17 at $21</small></div>
+                <div class="tm-insight tut-in" ${at(5.8)}><b>1.2 days</b><span>of work a month go to Dining</span></div>
+              </div>
+            </div>${cursor('small', 3.8)}`;
+          } },
+        { id: 'signals', title: 'Read the signals', caption: 'Where the signals overlap sorts each category into three circles: above similar homes, trending up, and an unusual last month. Where circles overlap, act. Your normal range shows the band that 9 in 10 of your months fall in, and where last month landed. The crossover, momentum, breakout and breadth readings sit under Technical readings.',
+          render: () => `${chip(4, 'Read the signals')}
+            <div class="tm-split tm-split-tight tm-split-wide">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>WHERE THE SIGNALS OVERLAP</small>
+                <svg class="tm-venn" viewBox="0 0 240 200" aria-hidden="true">
+                  <circle cx="92" cy="78" r="60" class="is-a tut-pop" ${at(0.8)}/><circle cx="148" cy="78" r="60" class="is-b tut-pop" ${at(1.4)}/><circle cx="120" cy="128" r="60" class="is-c tut-pop" ${at(2)}/>
+                  <text x="14" y="12">Above similar homes</text><text x="232" y="12" text-anchor="end">Trending up</text><text x="120" y="198" text-anchor="middle">Unusual month</text>
+                  <text x="120" y="60" text-anchor="middle" class="tm-bad tut-in" ${at(3)}>Dining</text><text x="178" y="74" text-anchor="middle" class="tut-in" ${at(3.6)}>Utilities</text><text x="62" y="74" text-anchor="middle" class="tut-in" ${at(3.9)}>Gas</text>
+                </svg>
+                <span class="tm-pill tm-pill-act tut-pop" ${at(4.4)}>Two signals agree: act on Dining</span>
+              </div>
+              <div class="tm-panel tut-in" ${at(6)}><small>YOUR NORMAL RANGE · 5TH–95TH PERCENTILE</small>
+                <div class="tm-range"><span>Dining</span><div><i class="tm-range-band" style="left:35%;width:58%"></i><i class="tm-range-typ" style="left:80%"></i><i class="tm-range-dot is-warn tut-pop" ${at(8, 'left:85%')}></i></div><b class="tm-warn">Higher than 10 of 11</b></div>
+                <div class="tm-range"><span>Groceries</span><div><i class="tm-range-band" style="left:56%;width:37%"></i><i class="tm-range-typ" style="left:66%"></i><i class="tm-range-dot is-good tut-pop" ${at(9, 'left:53%')}></i></div><b class="tm-good">Lowest in a year</b></div>
+                <p class="tm-hint tut-in" ${at(10)}>Shaded: your usual range. Dot: last month. Diamond: similar households.</p>
+              </div>
+            </div>` },
+        { id: 'fair', title: 'One-offs and seasons', caption: 'The Compass keeps the reading fair. A big one-off, at least $250 and five times your usual charge, is set aside so it does not look like a habit. Seasonal bills like energy are compared with the same months last year, so a cold winter is not a false alarm.',
+          render: () => `${chip(5, 'One-offs and seasons')}
+            <div class="tm-split tm-split-tight">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>ONE-OFF PURCHASES</small>
+                <div class="tm-kv"><span>SAFEWAY · Groceries</span><b>$86.40</b></div>
+                <div class="tm-kv tm-hl" ${at(1.4)}><span>BEST BUY · Shopping</span><b>$1,249.99</b></div>
+                <span class="tm-sig is-ok tut-pop" ${at(2.2)}>Set aside · not a habit</span>
+                <p class="tm-hint tut-in" ${at(2.8)}>At least $250 and 5× your usual charge in that category.</p>
+              </div>
+              <div class="tm-panel tut-in" ${at(3.6)}><small>SEASONAL BILLS · ENERGY</small>
+                <div class="tm-vs"><span>This winter</span><div class="tm-bar"><span class="tut-grow" ${at(4.4, '--w:100%')}></span></div><b>$440</b></div>
+                <div class="tm-vs"><span>Last winter</span><div class="tm-bar tm-bar-typ"><span class="tut-grow" ${at(4.8, '--w:91%')}></span></div><b>$399</b></div>
+                <p class="tm-hint tut-in" ${at(5.6)}>Compared with the same months last year, not with summer.</p>
+              </div>
+            </div>` },
+        { id: 'done', title: 'You are ready', caption: 'You are ready. Set your household once, check the Compass after each import and pick one category to bring back to a level you have already reached.',
+          render: () => outro("You're ready", 'Follow the flow · read the signals · save', 'Open my Spending Compass') }
+      ]
     }
   ];
-  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null], 'fixed-bills': ['fixed', null], income: ['fixed', 'income'], categorization: ['categories', null], 'which-page': ['transactions', 'why'] };
+  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null], 'fixed-bills': ['fixed', null], income: ['fixed', 'income'], categorization: ['categories', null], 'which-page': ['transactions', 'why'], 'spending-compass': ['compass', null], 'compass-signals': ['compass', 'signals'] };
 
   const sceneDuration = scene => scene.duration || Math.max(6500, scene.caption.split(/\s+/).length * 330 + 1800);
 

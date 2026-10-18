@@ -1102,23 +1102,40 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   const overview = f.node('analytics-content').innerHTML;
   assert.match(overview, /class="pro-tab is-active" aria-current="page">Overview/);
   assert.match(overview, /href="#analytics\/compass" data-view="analytics\/compass"[^>]*>Spending Compass<span class="pro-tab-badge">\$\d[\d,]*\/mo/);
-  assert.doesNotMatch(overview, /Realistic savings found|Category readings/);
+  assert.doesNotMatch(overview, /YOUR COMPASS FOUND|Where your money flows|Technical readings/);
+  assert.doesNotMatch(overview, /#tutorials\/compass/);
   assert.equal(f.node('analytics-heading').textContent, 'Your spending, like a market');
 
   await f.context.loadAnalyticsPage(false, 'compass');
   const html = f.node('analytics-content').innerHTML;
   assert.equal(f.node('analytics-heading').textContent, 'Spending Compass');
   assert.match(html, /class="pro-tab is-active" aria-current="page">Spending Compass/);
-  assert.match(html, /Category readings/);
+  assert.match(html, /class="pro-tab-help" href="#tutorials\/compass">[^<]*How it works/);
   assert.match(html, /Compared with a typical 2-person household in the Northeast that owns its home/);
   assert.doesNotMatch(html, /Monthly spend trend|Category signals/);
-  assert.match(html, /Realistic savings found/);
-  assert.match(html, /Dining averages/);
+  const mf = payload.moneyFlow;
+  // Hero: savings now, per year and over five years, with a plan item per opportunity.
+  assert.match(html, /YOUR COMPASS FOUND<\/p><strong class="pro-hero-figure">\$\d[\d,]* a month/);
+  assert.match(html, /over 5 years/);
+  assert.equal((html.match(/<ol class="pro-hero-plan">[\s\S]*?<\/ol>/)[0].match(/<li>/g) || []).length, mf.opportunities.length);
+  assert.match(html, /<b>Dining<\/b><small>\$\d[\d,]* &rarr; \$\d[\d,]* a month/);
+  // Insight cards, money-flow Sankey, signal Venn and the percentile range strips.
+  assert.equal((html.match(/class="pro-insight tone-/g) || []).length, mf.insights.length);
+  assert.ok(mf.insights.length >= 2 && mf.insights.length <= 4);
+  assert.match(html, /Where your money flows/);
+  assert.match(html, /<svg class="pro-sankey"[^>]*aria-label="Money flow: income/);
+  assert.match(html, /Of every \$100 you bring home: .*left over/);
+  assert.match(html, /<svg class="pro-venn"/);
+  assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual last month/);
+  assert.equal((html.match(/class="pro-range-row"/g) || []).length, mf.categories.length);
+  assert.match(html, /5th&ndash;95th percentile/);
+  assert.match(html, /<details class="pro-mf-details panel"><summary><span>Technical readings/);
+  assert.match(html, /Purchases &times; size/);
   assert.match(html, /data-analytics-action="household-save"/);
   assert.match(html, /Consumer Expenditure Survey/);
-  assert.doesNotMatch(html, /undefined|NaN/);
+  assert.doesNotMatch(html, /undefined|NaN|Infinity/);
   await f.context.loadAnalyticsPage(true);
-  assert.match(f.node('analytics-content').innerHTML, /Category readings/, 'a reload after saving stays on the Compass');
+  assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
 });
 
 const browserBits = (f, { reduced = true } = {}) => {
@@ -1180,7 +1197,7 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   browserBits(f);
   f.run('tutorial.js');
   const tours = f.context.FinanceTutorials;
-  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions');
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,compass');
   tours.open('debt-strategies');
   assert.equal(tours.state.tutorial.id, 'debt');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
@@ -1195,6 +1212,37 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   tours.go(99);
   assert.equal(tours.state.index, tours.state.tutorial.scenes.length - 1);
   assert.match(f.node('tutorial-root').innerHTML, /All tutorials/);
+});
+test('spending compass tutorial walks through the plan, money flow, overlapping signals and fairness', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  tours.open('compass');
+  const tutorial = tours.state.tutorial;
+  assert.equal(tutorial.id, 'compass');
+  assert.equal(tutorial.cta.view, 'analytics/compass');
+  assert.equal(tutorial.scenes.map(scene => scene.id).join(), 'intro,open,household,flow,signals,fair,done');
+  tutorial.scenes.forEach((scene, index) => {
+    tours.go(index);
+    assert.match(f.node('tut-canvas').innerHTML, /\S/, `compass/${scene.id} renders`);
+    assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]/, `compass/${scene.id} has no template leaks`);
+  });
+  const total = tutorial.scenes.reduce((sum, scene) => sum + Math.max(6500, scene.caption.split(/\s+/).length * 330 + 1800), 0);
+  assert.ok(total >= 60000 && total < 120000, `"under 2 minutes" matches the real length (${total} ms)`);
+  tours.open('spending-compass');
+  assert.equal(tours.state.tutorial.id, 'compass');
+  tours.open('compass-signals');
+  assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'signals');
+  assert.match(f.node('tut-caption').textContent, /above similar homes[\s\S]*trending up[\s\S]*unusual last month[\s\S]*9 in 10/i);
+  assert.match(f.node('tut-canvas').innerHTML, /tm-venn[\s\S]*tm-range-band/);
+  tours.open('compass/flow');
+  assert.match(f.node('tut-caption').textContent, /fixed bills, everyday spending and what is left over/);
+  assert.match(f.node('tut-canvas').innerHTML, /tm-sankey[\s\S]*tm-insight/);
+  tours.open('compass/household');
+  assert.match(f.node('tut-caption').textContent, /No other MyFinance user's data/);
+  tours.open('compass/fair');
+  assert.match(f.node('tut-caption').textContent, /\$250[\s\S]*same months last year/);
 });
 test('fixed, categories and transactions tutorials explain when to use each page', () => {
   const f = fixture();

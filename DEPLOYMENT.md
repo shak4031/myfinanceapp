@@ -287,6 +287,20 @@ Mortgage, rent, loans, insurance and internet are left out because they are cont
 - **Targets:** never below a level the user already reached (25th percentile of the last 12
   months) and never above their median or the typical household; seasonal bills use the same
   months last year.
+- **Page layout:** the hero shows the monthly, yearly and 5-year savings plus a plan (now → target per
+  category). Next come up to four "What stood out" cards (`moneyFlow.insights`: top saving, unusual month,
+  more visits vs pricier visits, purchases under $20, days of work, a recent win). Then a Sankey of the
+  last 3 full months (`moneyFlow.flow`: income → fixed bills / everyday / debt minimums not yet imported
+  / left over). Its "left over" uses the same transfer rule and window as the typical monthly surplus, so
+  it matches the dashboard. A three-set Venn follows (above similar homes, trending up, unusual last
+  month), then a strip chart per category of the user's own 5th–95th percentile range over 12 months
+  with last month and the typical household marked. The indicator table sits in a collapsed
+  "Technical readings" section.
+- **Statistics are honest about their source:** percentiles and spikes (last month above the 95th
+  percentile of the prior months and at least $25 over their median) come only from the user's own
+  history. The BLS survey publishes means, so the page never claims a household percentile.
+  "Purchases × size" splits a change into more visits vs a higher average ticket, comparing with the
+  same 3 months last year once 15 months exist.
 - **No other users' data is used.** A pooled MyFinance comparison is a later option and should
   be opt-in, anonymised and shown only for groups of at least 50 households.
 
