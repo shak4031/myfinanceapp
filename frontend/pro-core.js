@@ -166,7 +166,7 @@
       <h2 id="pro-dialog-title">${plusRequired ? 'A plan for less debt. More life.' : 'Turn money insights into better habits.'}</h2>
       ${reason ? `<p class="pro-reason">${esc(reason)}</p>` : ''}
       <div class="upgrade-plans" role="radiogroup" aria-label="Choose a plan">
-      ${option('pro', 'Pro', plan.price, '/ month', 'Understand your patterns: budgets, spending insights, forecasts, subscription radar and CSV exports.', 'Does not unlock Debt Free or Savings Goals.')}
+      ${option('pro', 'Pro', plan.price, '/ month', 'Understand your patterns: budgets, spending insights, forecasts, recurring-charge alerts and CSV exports.', 'Does not unlock Debt Free or Savings Goals.')}
       ${option('pro_plus', 'Pro Plus', plusPlan.price, '/ month total', 'Everything in Pro, plus Debt Free and Savings Goals: payoff strategies, monthly targets and what-if planning.', `Pro + $${Number(plusPlan.additionalPrice).toFixed(2)}/month. Not a second $9.98 charge.`)}</div></div>
       <ul class="pro-feature-grid">${features}</ul>
       <div class="pro-dialog-foot">${status}<div class="pro-actions"><button type="button" class="btn btn-secondary" data-pro-close>Not now</button>${trial}${action}</div></div>`;

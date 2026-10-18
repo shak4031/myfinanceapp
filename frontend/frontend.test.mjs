@@ -920,7 +920,8 @@ test('feature spotlight rotates through Free, Pro and Pro Plus features', () => 
   assert.equal(tour.current(), 6);
   assert.match(stage.innerHTML, /PRO PLUS[\s\S]*a deadline/);
   click({ id: '', dataset: { mkGo: '3' } });
-  assert.match(stage.innerHTML, /mk-fx-flip[\s\S]*subscriptions/);
+  assert.match(stage.innerHTML, /mk-fx-flip[\s\S]*repeat charges/);
+  assert.doesNotMatch(stage.innerHTML, /subscription/i);
   click({ id: 'marketing-spotlight-toggle', dataset: {} });
   assert.equal(f.node('marketing-spotlight').classList.contains('is-running'), false, 'pause stops rotation');
   f.node('marketing-spotlight-dots').listeners.animationend({ animationName: 'mk-fill' });
