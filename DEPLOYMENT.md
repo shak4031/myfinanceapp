@@ -33,6 +33,9 @@ SMTP_FROM="MyFinanceApp <no-reply@your-domain>"
 AUDIT_HASH_SECRET=<random-secret-at-least-32-characters>
 AUDIT_RETENTION_DAYS=365     # 30 to 3650
 ALERT_WEBHOOK_URL=<optional Slack/Discord-compatible incoming webhook>
+LOG_MONITOR_TOKEN=<random-secret-at-least-32-characters>  # enables /api/monitor/logs for CI checks
+LOG_RETENTION_DAYS=30        # stored warnings/errors (app_logs), 1 to 3650
+LOG_MEMORY_ENTRIES=5000      # recent lines per instance for the "Everything" view
 ```
 
 Generate a setup token (and `AUDIT_HASH_SECRET`) locally with:
@@ -135,6 +138,28 @@ advertise these capabilities.
   Lines also go to `logs/app-YYYY-MM-DD.log` (`LOG_DIR` to move,
   `LOG_TO_FILE=false` to disable). Test runs do not write log files.
 
+### Where support sees the logs
+
+- **Admin console → App logs** (`/admin.html`, admin accounts only). Filter by
+  level (errors / warnings and errors / everything), time range (15 minutes to 30 days),
+  text and request ID; optional 30-second auto-refresh. A **Problems** list
+  groups repeated failures by cause with counts, routes, first/last seen and
+  example request IDs; click a request ID to see every line from that request.
+  The Overview shows app log errors and warnings for the last 24 hours.
+- Messages are redacted before storage (emails, money amounts, long numbers,
+  passwords/tokens), so support never sees customer financial data. Each view
+  is recorded in the audit trail as `admin.logs_viewed`.
+- Warnings and errors are stored in the `app_logs` table (all instances, kept
+  `LOG_RETENTION_DAYS`, purged daily) and survive restarts. Info lines are kept
+  in memory on each instance only (`LOG_MEMORY_ENTRIES`), so "Everything" shows
+  info from the instance that answered.
+- API: `GET /api/admin/logs?level=warn&since=24h&q=&requestId=&limit=200`
+  (admin session) and `GET /api/monitor/logs?since=30m&level=warn` with
+  `Authorization: Bearer $LOG_MONITOR_TOKEN` for automation. The monitor
+  endpoint is read-only, returns warnings/errors only, answers 404 until the
+  token is configured and audits rejected tokens as `monitor.denied`. Its JSON
+  includes `status: "ok" | "errors"`, `summary`, `causes` and `entries`.
+
 ## Release gate (run before every deploy)
 
 1. `npm run release:check` runs all tests, then `scripts/release-smoke.js`. The
@@ -142,33 +167,40 @@ advertise these capabilities.
    oldest production schema with legacy MM/DD/YYYY and unreadable dates, runs
    the migration twice (as a restart would), loads the demo data, imports bank
    CSVs and calls every dashboard, analytics, plan and goals endpoint as the
-   owner and the demo user. **Any 5xx response or error-level log line blocks
-   the release** and is listed with its cause and request ID.
+   owner and the demo user. It then reads the results through
+   `/api/admin/logs` and `/api/monitor/logs`, the same APIs support uses, and
+   checks that every error the app wrote reached them. **Any 5xx response or
+   error-level log line blocks the release** and is listed with its cause and
+   request ID.
 2. `.github/workflows/release-check.yml` runs the same check on every push and
    pull request. In Railway, enable **Settings → Deploy → Wait for CI** so a
    failing check stops the deploy.
-3. After deploying, scan production logs and roll back on any error:
-   `railway logs | npm run logs:scan -- --since 30m` (exit code 1 when errors
-   are found; add `--fail-on warn` to include warnings). It also reads files:
-   `npm run logs:scan -- logs/app-2026-10-18.log`.
-4. When a customer reports "The request could not be completed", search the
-   logs for the `requestId` they were shown.
+3. After deploying, check the live app and roll back on failure:
+   `APP_URL=https://<app> LOG_MONITOR_TOKEN=<token> npm run deploy:check`
+   checks `/api/health` and the application logs (`SINCE=30m` default,
+   `FAIL_ON=warn` to include warnings) and exits 1 on errors or 5xx responses.
+4. `.github/workflows/log-monitor.yml` runs the same check every 30 minutes
+   (and on demand) once the repository secrets `APP_URL` and
+   `LOG_MONITOR_TOKEN` are set; a failed run emails the repository owners.
+5. `npm run logs:scan -- logs/app-2026-10-18.log` (or `railway logs | npm run
+   logs:scan -- --since 30m`) scans raw log output from files or stdin.
+6. When a customer reports "The request could not be completed", paste the
+   `requestId` they were shown into **Admin console → App logs**.
 
 ## Admin console
 
 Open `/admin.html` while signed in as an admin (account 1 is the admin). It
 provides service health and configuration warnings, user search (account
 metadata only, never financial data), password-reset email, unlock, sign out
-everywhere, a dedicated **Error logs** view filterable by time range and request
-ID, a separate **Audit trail** filterable by event, outcome, user, email or
+everywhere, **App logs** (see "Where support sees the logs"), a dedicated
+**Error logs** view filterable by time range and request ID, a separate **Audit trail** filterable by event, outcome, user, email or
 request ID, support sessions, and an API explorer generated from
 `/api/admin/openapi.json` that can send test requests and shows status, latency
 and request ID. Customers can never reach admin endpoints.
 
-Use the request ID shown in the Error logs view to locate the matching entry in
-the hosting provider's restricted stdout logs when a server stack trace is
-needed. The app deliberately does not provide a browser endpoint for global
-operator log files. Frontend HTML, JavaScript and CSS responses require
+Use the request ID shown in the Error logs or App logs view to find the matching
+entry. Stack traces are only in the hosting provider's restricted stdout logs;
+the app does not serve raw operator log files to the browser. Frontend HTML, JavaScript and CSS responses require
 revalidation so deployments do not silently reuse stale cached app assets.
 
 ## Consent-based support access

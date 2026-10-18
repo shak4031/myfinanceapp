@@ -43,6 +43,15 @@
     .plan-pill.is-trial { background: #fffbeb; color: #b45309; }
     .plan-pill.is-requested { margin-top: 4px; background: #fff7ed; color: #c2410c; border: 1px dashed #fdba74; }
     .warn { background: #fff4d6; border: 1px solid #e8c56f; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; color: #5c4210; }
+    .level-pill { display: inline-block; min-width: 46px; text-align: center; border-radius: 6px; padding: 2px 6px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+    .level-error { background: #fbe4e1; color: #b84239; } .level-warn { background: #fff4d6; color: #8a5a00; } .level-info { background: #eef2f7; color: #475569; }
+    .log-causes { display: grid; gap: 8px; margin: 12px 0 16px; }
+    .log-cause { border: 1px solid #eedbd8; border-left: 4px solid #b84239; border-radius: 10px; padding: 10px 12px; background: #fffaf9; }
+    .log-cause.warn { border-color: #f0e2bd; border-left-color: #c99520; background: #fffdf6; }
+    .log-cause small { color: #63716a; }
+    .log-ok { border-left: 4px solid #257252; background: #f3faf6; border-radius: 10px; padding: 10px 12px; margin: 12px 0 16px; color: #1f5a40; font-weight: 600; }
+    .filters label.inline { display: flex; align-items: center; gap: 6px; }
+    #logs td:nth-child(4) { word-break: break-word; }
     #admin-toast { position: fixed; bottom: 20px; right: 20px; background: #203d30; color: #fff; padding: 12px 18px; border-radius: 12px; max-width: 420px; }
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261017r">
@@ -68,6 +77,7 @@
     <div id="admin-app" hidden>
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="logs">App logs</button>
         <button data-tab="users">Users</button>
         <button data-tab="errors">Error logs</button>
         <button data-tab="audit">Audit trail</button>
@@ -80,6 +90,21 @@
           <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>
           <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead.</p>
           <div id="users" class="table-scroll"></div>
+        </div>
+      </section>
+      <section data-panel="logs" hidden>
+        <div class="card">
+          <div class="filters">
+            <label>Level<select id="logs-level"><option value="error">Errors only</option><option value="warn" selected>Warnings &amp; errors</option><option value="info">Everything</option></select></label>
+            <label>Time range<select id="logs-since"><option value="15m">Last 15 minutes</option><option value="1h">Last hour</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
+            <label>Search<input id="logs-q" placeholder="module, message or route"></label>
+            <label>Request ID<input id="logs-request" placeholder="Paste request ID" style="width:280px"></label>
+            <button class="btn btn-primary" id="logs-search">Search logs</button>
+            <label class="inline"><input type="checkbox" id="logs-live"> Auto-refresh every 30s</label>
+          </div>
+          <p class="muted">Server application logs with problems grouped by cause. Messages are redacted (amounts, emails, tokens), so no customer financial data is shown. Warnings and errors are kept for every server instance; “Everything” adds recent info lines from the instance that answered. Click a request ID to see every line from that request.</p>
+          <div id="logs-summary" aria-live="polite"></div>
+          <div id="logs" class="table-scroll"></div>
         </div>
       </section>
       <section data-panel="errors" hidden>
@@ -127,6 +152,6 @@
   </div>
   <div id="admin-toast" hidden role="status"></div>
   <script src="ui.js?v=20261017r"></script>
-  <script src="admin.js?v=20261018c"></script>
+  <script src="admin.js?v=20261018d"></script>
 </body>
 </html>

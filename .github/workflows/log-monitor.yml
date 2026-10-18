@@ -1,0 +1,29 @@
+name: Production log monitor
+
+# Every 30 minutes (and on demand) ask the live app for errors in its application logs.
+# Needs repository secrets APP_URL and LOG_MONITOR_TOKEN; the job is skipped until both are set.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: How far back to check (for example 30m, 2h, 1d)
+        default: 35m
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      APP_URL: ${{ secrets.APP_URL }}
+      LOG_MONITOR_TOKEN: ${{ secrets.LOG_MONITOR_TOKEN }}
+      SINCE: ${{ github.event.inputs.since || '35m' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.APP_URL != '' && env.LOG_MONITOR_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.APP_URL != '' && env.LOG_MONITOR_TOKEN != ''
+        with:
+          node-version: 22
+      - run: node scripts/check-deploy.js
+        if: env.APP_URL != '' && env.LOG_MONITOR_TOKEN != ''

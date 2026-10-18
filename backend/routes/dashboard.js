@@ -712,7 +712,7 @@ router.post('/update-category', async (req, res) => {
     if (!validCategory) return res.status(400).json({ error: 'Choose one of your categories' });
     await db.run('UPDATE transactions SET category = $1, previous_category = category, category_corrected = TRUE, correction_timestamp = NOW() WHERE id = $2 AND user_id = $3', [new_category, transaction_id, currentUserId()]);
 
-    log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: "${oldTxn.description}" | ${oldCategory} → ${new_category}`);
+    log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: ${oldCategory} → ${new_category}`);
 
     res.json({
       success: true,

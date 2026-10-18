@@ -30,6 +30,7 @@ export function openApiSpec() {
       '/api/admin/overview': { get: op('Admin', 'Health, configuration and 24-hour security/error counts') },
       '/api/admin/users': { get: op('Admin', 'Search accounts (no financial data)', query('q')) },
       '/api/admin/audit': { get: op('Admin', 'Search the audit and error log', query('eventType', 'outcome', 'userId', 'requestId', 'email', 'beforeId', 'limit')) },
+      '/api/admin/logs': { get: op('Admin', 'Redacted application logs with grouped problems (level: error|warn|info; since: 15m, 24h, 7d or ISO time)', query('level', 'since', 'q', 'requestId', 'limit')) },
       '/api/admin/users/{id}/password-reset': { post: op('Admin', 'Email the user a password reset link (admin never sees it)', pathId) },
       '/api/admin/users/{id}/revoke-sessions': { post: op('Admin', 'Sign the user out everywhere', pathId) },
       '/api/admin/users/{id}/unlock': { post: op('Admin', 'Clear failed-attempt lockouts for the user', pathId) },

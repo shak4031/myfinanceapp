@@ -7,6 +7,8 @@ import { mailConfigured, sendSecurityNotice } from '../utils/mailer.js';
 import { issuePasswordReset, attemptKeysForEmail, supportCookieName, cookieOptions } from './auth.js';
 import { openApiSpec } from '../utils/openapi.js';
 import { log } from '../utils/logger.js';
+import { queryLogs, parseSince, logRetentionDays } from '../utils/logStore.js';
+import { monitorEnabled } from './monitor.js';
 import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.js';
 import { isDemoEmail } from '../utils/demo.js';
 
@@ -41,7 +43,10 @@ router.get('/overview', async (req, res, next) => {
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
            AND event_type = 'client.error') AS browser_errors_24h,
         (SELECT COUNT(*)::int FROM support_grants WHERE revoked_at IS NULL AND expires_at > NOW()) AS active_support_grants,
-        (SELECT COUNT(*)::int FROM user_licenses WHERE requested_plan IS NOT NULL) AS pending_plan_requests
+        (SELECT COUNT(*)::int FROM user_licenses WHERE requested_plan IS NOT NULL) AS pending_plan_requests,
+        (SELECT COUNT(*)::int FROM app_logs WHERE created_at > NOW() - INTERVAL '24 hours' AND level = 'error'
+           AND source NOT IN ('http.request', 'server.error')) AS app_errors_24h,
+        (SELECT COUNT(*)::int FROM app_logs WHERE created_at > NOW() - INTERVAL '24 hours' AND level = 'warn') AS app_warnings_24h
     `)).rows[0]);
     res.json({
       status: 'healthy',
@@ -53,6 +58,8 @@ router.get('/overview', async (req, res, next) => {
       alertWebhookConfigured: Boolean(process.env.ALERT_WEBHOOK_URL),
       registrationEnabled: process.env.ALLOW_REGISTRATION === 'true',
       auditRetentionDays: auditRetentionDays(),
+      logRetentionDays: logRetentionDays(),
+      monitorTokenConfigured: monitorEnabled(),
       stats
     });
   } catch (error) { next(error); }
@@ -143,6 +150,24 @@ router.get('/errors', async (req, res, next) => {
       ORDER BY a.id DESC LIMIT 300
     `, params)).rows);
     res.json(rows);
+  } catch (error) { next(error); }
+});
+
+router.get('/logs', async (req, res, next) => {
+  try {
+    const level = ['error', 'warn', 'info'].includes(req.query.level) ? req.query.level : 'warn';
+    const since = parseSince(typeof req.query.since === 'string' ? req.query.since : '', '24h');
+    const result = await queryLogs({
+      level, since,
+      q: typeof req.query.q === 'string' ? req.query.q : '',
+      requestId: typeof req.query.requestId === 'string' ? req.query.requestId : '',
+      limit: Number(req.query.limit) || 200
+    });
+    // Auto-refresh polls are not audited individually; the first view of each search is.
+    if (req.query.refresh !== '1') {
+      recordAudit(req, 'admin.logs_viewed', 'success', { status: 200, detail: { level, since: result.since, filtered: Boolean(req.query.q || req.query.requestId) } });
+    }
+    res.json(result);
   } catch (error) { next(error); }
 });
 

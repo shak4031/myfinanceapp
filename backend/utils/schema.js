@@ -61,6 +61,13 @@ export async function migratePrivateSchema(client) {
     DROP TRIGGER IF EXISTS audit_events_no_update ON audit_events;
     CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events
       FOR EACH ROW EXECUTE FUNCTION audit_events_append_only();
+    -- Redacted warning/error application logs for the admin console and monitoring (no financial data).
+    CREATE TABLE IF NOT EXISTS app_logs (
+      id BIGSERIAL PRIMARY KEY, entry_id TEXT UNIQUE, created_at TIMESTAMPTZ NOT NULL, level TEXT NOT NULL,
+      source TEXT, message TEXT, request_id TEXT, route TEXT, status INTEGER, instance TEXT
+    );
+    CREATE INDEX IF NOT EXISTS app_logs_created_idx ON app_logs (created_at DESC);
+    CREATE INDEX IF NOT EXISTS app_logs_request_idx ON app_logs (request_id);
     CREATE TABLE IF NOT EXISTS categories (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, icon TEXT, color TEXT
     );
@@ -213,7 +220,7 @@ export async function migratePrivateSchema(client) {
       EXECUTE format('GRANT finance_app_runtime TO %I', current_user);
     END $$;
     GRANT USAGE ON SCHEMA public TO finance_app_runtime;
-    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses
+    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses, app_logs
       FROM PUBLIC, finance_app_runtime;
   `);
   await normalizeStoredDates(client);

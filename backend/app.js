@@ -22,6 +22,7 @@ import license from './routes/license.js';
 import budgets from './routes/budgets.js';
 import analytics from './routes/analytics.js';
 import moneyPlan from './routes/plan.js';
+import monitor from './routes/monitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -104,6 +105,8 @@ import staging from './routes/staging.js';
 
 // Routes BEFORE static files
 app.use('/api/auth', auth);
+// Token-authenticated (not session) so CI and uptime monitors can read redacted error logs.
+app.use('/api/monitor', monitor);
 app.use('/api', requireUser);
 app.use('/api/client-errors', clientErrors);
 app.use('/api/support-access', supportAccess);
@@ -123,8 +126,8 @@ app.use('/api/budgets', budgets);
 app.use('/api/analytics', analytics);
 app.use('/api/plan', moneyPlan);
 app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
-// Global application logs and legacy fixture imports are never exposed to users.
-app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Server logs are not available through the application' }));
+// Global application logs are only available to administrators (/api/admin/logs) and monitors (/api/monitor/logs).
+app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Use the admin console App logs tab (/api/admin/logs)' }));
 app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
@@ -152,7 +155,8 @@ app.use((err, req, res, next) => {
   const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
   if (status >= 500) {
     res.locals.errorAudited = true;
-    structuredLog('error', { event: 'server.exception', requestId: req.id, name: err.name, code: err.code, stack: err.stack });
+    structuredLog('error', { event: 'server.exception', requestId: req.id, method: req.method, path: req.originalUrl.split('?')[0], status,
+      name: err.name, code: err.code, message: typeof err.message === 'string' ? safeErrorMessage(err.message) : undefined, stack: err.stack });
     recordAudit(req, 'server.error', 'error', { status, detail: {
       name: err.name, code: err.code || null, source: 'exception',
       ...(typeof err.message === 'string' ? { message: safeErrorMessage(err.message) } : {})

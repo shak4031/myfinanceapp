@@ -2,6 +2,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logsDir = process.env.LOG_DIR || path.join(__dirname, '../../logs');
@@ -12,6 +13,10 @@ const WARN_TEXT = /\b(could not|unable to|unavailable|denied|warning)\b|❌|⚠/
 const quiet = () => process.env.LOG_QUIET === 'true' || (Boolean(process.env.NODE_TEST_CONTEXT) && !process.env.SHOW_TEST_LOGS);
 const listeners = new Set();
 let dirReady = false;
+let sequence = 0;
+
+/** Identifies this server process so entries from several instances can be told apart. */
+export const INSTANCE_ID = (process.env.RAILWAY_REPLICA_ID || randomUUID()).slice(0, 8);
 
 /** Per-request context (request ID, route) attached to every log line written while handling that request. */
 export const requestContext = new AsyncLocalStorage();
@@ -35,7 +40,7 @@ export function onLogEntry(listener) {
 export function writeEntry(entry) {
   const level = LEVELS.has(entry.level) ? entry.level : 'info';
   const context = requestContext.getStore();
-  const record = { time: new Date().toISOString(), ...entry, level, ...(context && !entry.requestId ? { requestId: context.requestId, route: context.route } : {}) };
+  const record = { time: new Date().toISOString(), ...entry, level, id: `${INSTANCE_ID}-${Date.now().toString(36)}-${++sequence}`, ...(context && !entry.requestId ? { requestId: context.requestId, route: context.route } : {}) };
   for (const listener of listeners) {
     try { listener(record); } catch { /* listeners must never break logging */ }
   }

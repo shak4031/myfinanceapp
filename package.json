@@ -7,6 +7,7 @@
     "release:check": "npm test && node scripts/release-smoke.js",
     "smoke": "node scripts/release-smoke.js",
     "logs:scan": "node scripts/scan-logs.js",
+    "deploy:check": "node scripts/check-deploy.js",
     "dev": "node backend/server.js",
     "build": "echo 'Build frontend with Vite'",
     "start": "node backend/server.js"

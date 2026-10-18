@@ -1,6 +1,8 @@
 // Release smoke check: boots the real app against an in-memory PostgreSQL (PGlite) that starts from an
 // old-style schema, loads realistic data, calls every read endpoint the UI uses and fails on any 5xx
 // response or any error-level log entry. Run with `npm run release:check` before every deploy.
+// The verdict comes from the same log APIs support uses (/api/admin/logs and /api/monitor/logs), cross-checked
+// against an in-process listener so a log line that never reaches the API also blocks the release.
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 
@@ -8,6 +10,8 @@ process.env.LOG_QUIET = 'true';
 process.env.LOG_TO_FILE = 'false';
 process.env.OWNER_SETUP_TOKEN = 'release-smoke-setup-token-longer-than-32-characters';
 process.env.ALLOW_REGISTRATION = 'true';
+process.env.LOG_MONITOR_TOKEN = 'release-smoke-monitor-token-longer-than-32-characters';
+const startedAt = new Date().toISOString();
 delete process.env.NODE_ENV;
 
 const { onLogEntry } = await import('../backend/utils/logger.js');
@@ -34,6 +38,7 @@ pg.Pool.prototype.connect = async function connect() {
 const { migratePrivateSchema } = await import('../backend/utils/schema.js');
 const { resetDemoAccount, DEMO_EMAIL, DEMO_PASSWORD } = await import('../backend/utils/demo.js');
 const { default: app } = await import('../backend/app.js');
+const { startLogStore, flushLogStore } = await import('../backend/utils/logStore.js');
 
 async function migrate(extra) {
   const client = await pg.Pool.prototype.connect();
@@ -100,6 +105,7 @@ try {
   // Oldest production shape: a transactions table created before created_at/user_id existed.
   await database.exec('CREATE TABLE transactions (id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT, balance NUMERIC(14,2), source TEXT)');
   await migrate();
+  startLogStore({ intervalMs: 60000 });
   const owner = await call('POST', '/api/auth/setup', { name: 'Owner', email: 'owner@example.com', password: 'release-smoke-password-123', setupToken: process.env.OWNER_SETUP_TOKEN });
   if (owner.status !== 200 && owner.status !== 201) throw new Error(`Owner setup failed with ${owner.status}: ${owner.text}`);
   const ownerCookie = cookieOf(owner);
@@ -123,10 +129,38 @@ try {
     for (const [method, path, body] of READS) { await call(method, path, body, cookie); calls++; }
   }
   console.log(`Release smoke: ${calls} endpoint calls across ${accounts.length} accounts`);
+  await validateThroughLogApis(ownerCookie);
 } catch (error) {
   failures.push(`Smoke run crashed: ${error.stack || error.message}`);
 } finally {
   server.close();
+}
+
+async function validateThroughLogApis(ownerCookie) {
+  await flushLogStore();
+  const since = encodeURIComponent(startedAt);
+  const admin = await call('GET', `/api/admin/logs?level=warn&since=${since}&limit=1000`, undefined, ownerCookie);
+  if (admin.status !== 200) return failures.push(`GET /api/admin/logs -> ${admin.status}: ${admin.text.slice(0, 200)}`);
+  const adminLogs = JSON.parse(admin.text);
+  if (!adminLogs.coverage.databaseAvailable) failures.push('Admin log viewer could not read stored logs (app_logs)');
+  for (const cause of adminLogs.causes.filter(cause => cause.level === 'error')) {
+    failures.push(`App logs x${cause.count}: ${cause.source}: ${cause.message}${cause.routes.length ? ` [${cause.routes.join(', ')}]` : ''}`);
+  }
+  for (const failed of adminLogs.summary.failedRequests) failures.push(`App logs: ${failed.count} failed request(s) on ${failed.route}`);
+  const expected = entries.filter(entry => entry.level === 'error').length;
+  if (adminLogs.summary.counts.error !== expected) {
+    failures.push(`Log API reported ${adminLogs.summary.counts.error} errors but the app wrote ${expected}; logs are not reaching support`);
+  }
+
+  const denied = await fetch(`${base}/api/monitor/logs`, { headers: { Authorization: 'Bearer wrong-token' } });
+  if (denied.status !== 401) failures.push(`Monitor endpoint accepted a wrong token (status ${denied.status})`);
+  const monitor = await fetch(`${base}/api/monitor/logs?since=${since}`, { headers: { Authorization: `Bearer ${process.env.LOG_MONITOR_TOKEN}` } });
+  if (monitor.status !== 200) return failures.push(`GET /api/monitor/logs -> ${monitor.status}`);
+  const monitored = await monitor.json();
+  if (monitored.status !== (adminLogs.summary.counts.error || adminLogs.summary.failedRequests.length ? 'errors' : 'ok')) {
+    failures.push(`Monitor endpoint status "${monitored.status}" disagrees with the admin log viewer`);
+  }
+  console.log(`Log APIs: ${adminLogs.summary.counts.error} errors, ${adminLogs.summary.counts.warn} warnings since ${startedAt}; monitor status ${monitored.status}`);
 }
 
 const errors = entries.filter(entry => entry.level === 'error');

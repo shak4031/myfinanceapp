@@ -59,7 +59,7 @@ class PDFParser {
         const transaction = this.parseTransactionLine(line, statementType);
         if (transaction) {
           transactions.push(transaction);
-          log('PDF_PARSER', `Parsed transaction: ${transaction.description} (${transaction.amount})`);
+          log('PDF_PARSER', `Parsed transaction dated ${transaction.date}`, 'debug');
         }
       }
 
