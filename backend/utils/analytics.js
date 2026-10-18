@@ -176,30 +176,38 @@ const CADENCES = [
   { id: 'annual', min: 350, max: 380, perYear: 1, maxCv: 0.35 }
 ];
 
-// Recurring bills, debt payments and everyday shopping repeat too, but they are not subscriptions you can cancel.
-const NON_SUBSCRIPTION_CATEGORY = /mortgage|\brent\b|loan|credit\s*card|debt|insurance|utilit|internet|phone|wireless|cable|\btax|grocer|\bgas\b|fuel|dining|restaurant|shopping|salary|income|payroll/i;
-const NON_SUBSCRIPTION_DESCRIPTION = /MORTGAGE|\bLOANS?\b|STUDENT|NELNET|NAVIENT|SALLIE|FINANCIAL\s+AUTOPAY|AUTO\s+FINANCE|CARD\s+(?:ONLINE\s+)?(?:PAYMENT|PMT)|CREDIT\s*CARD|CRD\s+EPAY|INSURANCE|GEICO|PROGRESSIVE|ALLSTATE|STATE\s*FARM|ELECTRIC|\bWATER\b|\bPSEG\b|COMCAST|XFINITY|VERIZON|T-MOBILE|AT&T|SPECTRUM|E-?ZPASS|REPLENISH|\bRENT\b|\bIRS\b|COSTCO\s+WHOLESALE/i;
+// Everyday shopping and income can repeat at a steady price, but they are habits, not recurring payments.
+const HABIT_CATEGORY = /grocer|\bgas\b|fuel|dining|restaurant|shopping|salary|income|payroll/i;
+const HABIT_DESCRIPTION = /COSTCO\s+(?:WHOLESALE|WHSE)|E-?ZPASS|REPLENISH/i;
+// Payments that are usually bills: a hint to mark them fixed, never a reason to hide them.
+const BILL_CATEGORY = /mortgage|\brent\b|loan|credit\s*card|debt|insurance|utilit|internet|phone|wireless|cable|\btax/i;
+const BILL_DESCRIPTION = /MORTGAGE|\bLOANS?\b|STUDENT|NELNET|NAVIENT|SALLIE|FINANCIAL\s+(?:AUTOPAY|PMT)|AUTO\s+FINANCE|CARD\s+(?:ONLINE\s+)?(?:PAYMENT|PMT)|CREDIT\s*(?:CARD|CRD)|CRD\s+EPAY|INSURANCE|\bINS\b|GEICO|PROGRESSIVE|ALLSTATE|STATE\s*FARM|ELECTRIC|\bWATER\b|\bPSEG\b|COMCAST|XFINITY|VERIZON|T-MOBILE|AT&T|SPECTRUM|\bRENT\b|\bIRS\b/i;
 
-export function isSubscriptionCandidate(tx) {
-  return !NON_SUBSCRIPTION_CATEGORY.test(tx.category || '') && !NON_SUBSCRIPTION_DESCRIPTION.test(tx.description || '');
+export function isRecurringCandidate(tx) {
+  return !HABIT_CATEGORY.test(tx.category || '') && !HABIT_DESCRIPTION.test(tx.description || '');
 }
 
-// A subscription charges the same price again and again (allowing occasional price steps); habits vary every time.
+export function looksLikeBill(tx) {
+  return BILL_CATEGORY.test(tx.category || '') || BILL_DESCRIPTION.test(tx.description || '');
+}
+
+// A recurring payment charges the same price again and again (allowing occasional price steps); habits vary every time.
 function steadyPrice(amounts) {
   if (amounts.length < 2) return true;
   const repeats = amounts.slice(1).filter((amount, index) => Math.abs(amount - amounts[index]) <= Math.max(0.01, amounts[index] * 0.01)).length;
   return repeats / (amounts.length - 1) >= 0.6;
 }
 
-function buildSubscriptions(rows, context) {
+// Every steady, regularly scheduled charge. `fixed` says whether the user already marked it as a fixed payment.
+function buildRecurring(rows, context) {
   const since = context.end.getTime() - 400 * DAY_MS;
   const groups = new Map();
   for (const tx of rows) {
-    if (!tx.debit || tx.transfer || !tx.merchant || tx.date.getTime() < since || !isSubscriptionCandidate(tx)) continue;
+    if (!tx.debit || tx.transfer || !tx.merchant || tx.date.getTime() < since || !isRecurringCandidate(tx)) continue;
     if (!groups.has(tx.merchant)) groups.set(tx.merchant, []);
     groups.get(tx.merchant).push(tx);
   }
-  const subscriptions = [];
+  const recurring = [];
   for (const list of groups.values()) {
     list.sort((a, b) => a.date - b.date);
     const intervals = list.slice(1).map((tx, index) => Math.round((tx.date - list[index].date) / DAY_MS));
@@ -209,15 +217,16 @@ function buildSubscriptions(rows, context) {
     const amounts = list.map(tx => tx.amount);
     const typical = median(amounts);
     if (stdev(amounts) / mean(amounts) > cadence.maxCv || !steadyPrice(amounts)) continue;
-    // Most gaps must follow the cadence, otherwise it is a habit (e.g. groceries), not a subscription.
+    // Most gaps must follow the cadence, otherwise it is a habit (e.g. groceries), not a recurring payment.
     const regular = intervals.filter(gap => gap >= cadence.min * 0.8 && gap <= cadence.max * 1.2).length;
     if (regular / intervals.length < 0.6) continue;
     const latest = list[list.length - 1];
     const previous = median(list.slice(Math.max(0, list.length - 4), -1).map(tx => tx.amount));
     const change = previous ? latest.amount - previous : 0;
     const daysSince = Math.round((context.end - latest.date) / DAY_MS);
-    subscriptions.push({
-      merchant: getCanonicalMerchant(latest.description), category: latest.category, fixed: latest.fixed,
+    recurring.push({
+      id: latest.id, merchant: getCanonicalMerchant(latest.description), category: latest.category,
+      fixed: list.some(tx => tx.fixed), likelyBill: list.some(looksLikeBill),
       cadence: cadence.id, charges: list.length, amount: round(latest.amount), typical: round(typical),
       annualCost: round(latest.amount * cadence.perYear), monthlyCost: round(latest.amount * cadence.perYear / 12),
       lastDate: latest.iso, nextDate: isoDay(new Date(latest.date.getTime() + interval * DAY_MS)),
@@ -226,7 +235,7 @@ function buildSubscriptions(rows, context) {
       priceChangePct: previous && Math.abs(change) >= Math.max(0.5, previous * 0.02) ? round(change / previous, 4) : 0
     });
   }
-  return subscriptions.sort((a, b) => b.active - a.active || b.annualCost - a.annualCost);
+  return recurring.sort((a, b) => b.active - a.active || b.annualCost - a.annualCost);
 }
 
 function buildMerchants(rows, context) {
@@ -328,7 +337,7 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
     cashflow: { startBalance: latestBalance == null ? null : round(Number(latestBalance)), months: cashflow,
       basis: Number.isFinite(surplus) ? 'typical-surplus' : 'recent-averages', monthsUsed: typical?.monthsUsed ?? null },
     anomalies: buildAnomalies(rows, categories, context),
-    subscriptions: buildSubscriptions(rows, context),
+    recurring: buildRecurring(rows, context),
     merchants: buildMerchants(rows, context),
     weekdays: [0, 1, 2, 3, 4, 5, 6].map(weekday => round(sum(rows
       .filter(tx => tx.debit && !tx.transfer && end - tx.date <= 90 * DAY_MS && tx.date.getDay() === weekday)

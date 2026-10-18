@@ -66,7 +66,7 @@ export function openApiSpec() {
         delete: op('Pro', 'Cancel the pending plan request')
       },
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
-      '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, subscriptions and merchants') },
+      '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, recurring charges and merchants') },
       '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics', query('type', 'from', 'to')) }
     }
   };

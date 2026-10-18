@@ -1,4 +1,4 @@
-// MyFinance Pro analytics page: KPIs, forecast, cash flow, trends, category signals, subscriptions and more.
+// MyFinance Pro analytics page: KPIs, forecast, cash flow, trends, category signals, recurring charges and more.
 (() => {
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null;
@@ -137,16 +137,20 @@
       rows.length ? `<div class="table-scroll"><table class="pro-table" id="pro-signals-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` : '<p class="pro-empty">Import a few months of transactions to see category signals.</p>', 'span-3');
   }
 
-  function subscriptionsCard(a) {
+  function recurringCard(a) {
     const { money, esc } = pro().format;
-    const active = a.subscriptions.filter(s => s.active);
+    const all = a.recurring || [];
+    const unmarked = all.filter(s => !s.fixed);
+    const fixedCount = all.filter(s => s.fixed && s.active).length;
+    const active = unmarked.filter(s => s.active);
     const monthly = active.reduce((sum, s) => sum + s.monthlyCost, 0);
     const increases = active.filter(s => s.priceChangePct > 0.02);
-    const list = a.subscriptions.slice(0, 12).map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; next ${s.active ? dateShort(s.nextDate) : 'stopped'}</small></div>
-      <div class="num"><strong>${money(s.amount)}</strong>${s.priceChangePct > 0.02 ? `<small class="pro-move is-bad">▲ ${Math.round(s.priceChangePct * 100)}% price increase</small>` : `<small>${money(s.annualCost, true)} / yr</small>`}</div></li>`).join('');
-    const body = `<div class="pro-mini-stats"><div><span>Active${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly). Mortgage, rent, loan and card payments, insurance, utilities, phone and internet bills, and everyday shopping are left out because they are bills or habits, not subscriptions you can cancel. Those appear on your bill calendar.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
-      ${list ? `<ul class="pro-list is-scroll">${list}</ul>` : '<p class="pro-empty">No recurring charges detected yet.</p>'}`;
-    return card('Subscription radar', 'Recurring charges detected automatically, with price-increase alerts', body);
+    const list = unmarked.slice(0, 12).map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; ${s.active ? `next ${dateShort(s.nextDate)}` : 'stopped'}${s.likelyBill ? ' &middot; looks like a bill' : ''}</small></div>
+      <div class="num"><strong>${money(s.amount)}</strong>${s.priceChangePct > 0.02 ? `<small class="pro-move is-bad">▲ ${Math.round(s.priceChangePct * 100)}% price increase</small>` : `<small>${money(s.annualCost, true)} / yr</small>`}${s.active && s.id != null ? `<button type="button" class="btn btn-secondary btn-compact" data-analytics-action="mark-fixed" data-id="${esc(s.id)}" data-merchant="${esc(s.merchant)}" title="Mark every ${esc(s.merchant)} charge as a fixed payment, including future imports">Mark fixed</button>` : ''}</div></li>`).join('');
+    const note = fixedCount ? `<p class="muted">${fixedCount} other recurring payment${fixedCount === 1 ? ' is' : 's are'} already marked fixed and on your bill calendar.</p>` : '';
+    const body = `<div class="pro-mini-stats"><div><span>Not marked fixed${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly) where none of the charges is marked as a fixed payment. Groceries, gas, dining, shopping and transfers between your own accounts are left out. Mark real bills as fixed so they appear on your bill calendar and month-end forecast; review the rest and cancel what you no longer use.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
+      ${list ? `<ul class="pro-list is-scroll">${list}</ul>` : `<p class="pro-empty">${all.length ? 'Every recurring charge is already marked fixed.' : 'No recurring charges detected yet.'}</p>`}${note}`;
+    return card('Recurring charges not marked fixed', 'Payments that repeat on a schedule but are not marked as fixed bills. Mark the real bills fixed; review the rest.', body);
   }
 
   function anomaliesCard(a) {
@@ -188,7 +192,7 @@
     const { esc } = pro().format;
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
-    $('analytics-content').innerHTML = `${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${subscriptionsCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    $('analytics-content').innerHTML = `${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
   }
 
   globalThis.loadAnalyticsPage = async function(force = false) {
@@ -210,6 +214,20 @@
     }
   };
 
+  async function markFixed(button) {
+    button.disabled = true;
+    button.textContent = 'Saving…';
+    try {
+      await pro().request('/api/transactions/update-fixed', { method: 'POST', body: JSON.stringify({ id: Number(button.dataset.id), is_fixed: true, apply_to_all: true }) });
+      pro().invalidateAnalytics();
+      await globalThis.loadAnalyticsPage(true);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Mark fixed';
+      globalThis.alert?.(`Could not mark ${button.dataset.merchant || 'this charge'} as fixed: ${error.message}`);
+    }
+  }
+
   document.addEventListener('click', event => {
     const target = event.target?.closest?.('#analytics-view [data-analytics-action], #analytics-view [data-sort], #analytics-view [data-open]');
     if (!target || !pro()) return;
@@ -227,6 +245,7 @@
     if (action === 'retry') return globalThis.loadAnalyticsPage(true);
     if (action === 'upgrade') return pro().openUpgrade();
     if (action === 'budgets') return pro().openBudgets();
+    if (action === 'mark-fixed') return markFixed(target);
     if (!pro().requirePro('CSV export is part of MyFinance Pro.')) return;
     if (action === 'export-transactions') location.href = '/api/analytics/export.csv?type=transactions';
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';

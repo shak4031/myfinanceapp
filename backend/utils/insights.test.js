@@ -84,7 +84,7 @@ test('free users get a Pro teaser; Pro users get budget and trend signals', () =
       { name: 'Transfers', transfer: true, mtd: 5000, budgetStatus: 'over', budgetUsed: 9 }
     ],
     anomalies: [{ type: 'charge', merchant: 'BEST BUY', amount: 899, ratio: 6.2, date: '2026-10-09' }],
-    subscriptions: [{ merchant: 'Netflix', active: true, amount: 22.99, priceChange: 3, priceChangePct: 0.15, annualCost: 275.88 }],
+    recurring: [{ merchant: 'Netflix', active: true, amount: 22.99, priceChange: 3, priceChangePct: 0.15, annualCost: 275.88 }],
     forecast: { projected: 4200 }, kpis: { avgMonthlySpend: 3000 }
   };
   const result = buildInsights({ today, balance: 1000, upcoming: [], analytics, pro: true });

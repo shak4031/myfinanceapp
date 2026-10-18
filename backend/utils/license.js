@@ -14,7 +14,7 @@ export const PRO_FEATURES = Object.freeze([
   { id: 'budgets', title: 'Budgets', text: 'Monthly budgets per category with live progress and projected overspend.' },
   { id: 'charts', title: 'Charts', text: 'Category pie view and month-by-month histograms on every category card.' },
   { id: 'forecast', title: 'Forecasts', text: 'Month-end spend forecast and a 6-month cash-flow projection.' },
-  { id: 'subscriptions', title: 'Subscription radar', text: 'Recurring charges, annual cost and price-increase alerts.' },
+  { id: 'subscriptions', title: 'Recurring charges', text: 'Repeating payments not marked as fixed bills, with annual cost and price-increase alerts.' },
   { id: 'anomalies', title: 'Unusual activity', text: 'Charges that are far above normal for a merchant or category.' },
   { id: 'export', title: 'Export', text: 'Download filtered transactions and analytics as CSV.' }
 ]);

@@ -54,9 +54,10 @@ export function buildDemoData(now = new Date()) {
     bill(1, 'ROCKET MORTGAGE AUTOPAY', 2184.37, 'Mortgage', 'auto');
     bill(6, 'NETFLIX.COM', ago <= 2 ? 17.99 : 15.49, 'Subscriptions', 'auto');
     bill(9, 'GEICO AUTO PAY', ago <= 5 ? 198.52 : 186.4, 'Insurance', 'auto');
-    bill(10, 'SPOTIFY USA', 11.99, 'Subscriptions', 'auto');
+    // Not marked fixed yet, so Analytics can suggest them as recurring charges to review.
+    add(day(10), 'SPOTIFY USA', 11.99, 'Subscriptions', { payMode: 'auto' });
     bill(12, 'TOYOTA FINANCIAL AUTOPAY', 412.66, 'Car Loans', 'auto');
-    bill(14, 'APPLE.COM/BILL', 2.99, 'Subscriptions', 'auto');
+    add(day(14), 'APPLE.COM/BILL', 2.99, 'Subscriptions', { payMode: 'auto' });
     bill(15, 'BILL PAY PSEG ELECTRIC & GAS', 128 + (winter ? 115 : 0) + (summer ? 88 : 0) + between(0, 34), 'Utilities', 'manual');
     bill(17, 'PLANET FITNESS', 24.99, 'Healthcare', 'auto');
     bill(18, 'ONLINE PMT COMCAST XFINITY', ago <= 4 ? 99.99 : 89.99, 'Internet', 'manual');
@@ -64,7 +65,7 @@ export function buildDemoData(now = new Date()) {
     bill(25, 'CHASE CARD ONLINE PAYMENT', between(640, 1150), 'Credit Cards', 'manual');
     bill(27, 'BILL PAY TOWNSHIP WATER', between(48, 72), 'Utilities', 'manual');
     bill(28, 'NELNET STUDENT LOAN AUTOPAY', 210, 'Other', 'auto');
-    if (ago <= 6) bill(3, 'NYTIMES DIGITAL SUB', 4, 'Subscriptions', 'auto');
+    if (ago <= 6) add(day(3), 'NYTIMES DIGITAL SUB', 4, 'Subscriptions', { payMode: 'auto' });
     if (ago === 8) add(day(3), 'AMAZON PRIME*MEMBERSHIP', 139, 'Subscriptions', { payMode: 'auto' });
 
     // Both sides of the monthly savings transfer are imported, so they pair up and never count as spending.

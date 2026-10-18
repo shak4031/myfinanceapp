@@ -81,15 +81,18 @@ test('buildAnalytics computes category signals, budgets, KPIs and excludes trans
   assert.equal(result.cashflow.months[0].balance, Math.round((5000 + result.cashflow.months[0].net) * 100) / 100);
 });
 
-test('buildAnalytics finds subscriptions, price increases, anomalies and top merchants', () => {
+test('buildAnalytics finds recurring charges, price increases, anomalies and top merchants', () => {
   const result = buildAnalytics({ transactions: sampleTransactions(), today });
-  const netflix = result.subscriptions.find(s => s.merchant === 'NETFLIX');
-  assert.ok(netflix, 'Netflix is detected as a subscription');
+  const netflix = result.recurring.find(s => s.merchant === 'NETFLIX');
+  assert.ok(netflix, 'Netflix is detected as recurring');
+  assert.equal(netflix.fixed, false);
+  assert.equal(netflix.likelyBill, false);
+  assert.ok(netflix.id, 'the latest charge id is returned so it can be marked fixed');
   assert.equal(netflix.cadence, 'monthly');
   assert.equal(netflix.active, true);
   assert.equal(netflix.priceChange, 2);
   assert.ok(netflix.annualCost > 200);
-  assert.ok(!result.subscriptions.some(s => /SHOPRITE/.test(s.merchant)), 'growing grocery spend is not a subscription');
+  assert.ok(!result.recurring.some(s => /SHOPRITE/.test(s.merchant)), 'growing grocery spend is not recurring');
   const coffee = result.anomalies.find(a => a.type === 'charge' && /STARBUCKS/.test(a.merchant));
   assert.ok(coffee, 'a 15x coffee charge is unusual');
   assert.equal(coffee.typical, 6);
@@ -97,7 +100,7 @@ test('buildAnalytics finds subscriptions, price increases, anomalies and top mer
   assert.ok(!result.merchants.some(m => /TRANSFER|SAVINGS/.test(m.merchant)));
 });
 
-test('the subscription radar skips bills, debt payments, stores and one-off purchases', () => {
+test('recurring charges flag what is not marked fixed and skip stores and one-off purchases', () => {
   const rows = [];
   for (let offset = -6; offset <= 0; offset++) {
     rows.push(tx(offset, 1, 2184.37, 'Mortgage', 'ROCKET MORTGAGE AUTOPAY', { is_fixed: true }));
@@ -110,8 +113,13 @@ test('the subscription radar skips bills, debt payments, stores and one-off purc
     rows.push(tx(offset, 9, 15.49, 'Subscriptions', 'NETFLIX.COM'));
   }
   const result = buildAnalytics({ transactions: rows, today });
-  const active = result.subscriptions.filter(s => s.active).map(s => s.merchant);
-  assert.deepEqual(active, ['NETFLIX']);
+  const active = new Map(result.recurring.filter(s => s.active).map(s => [s.merchant, s]));
+  assert.deepEqual([...active.keys()].sort(), ['CHASE CREDIT CRD', 'COMCAST-XFINITY', 'GEICO AUTO INS', 'NETFLIX', 'ROCKET MONEY', 'TOYOTA FINANCIAL PMT'].sort());
+  assert.equal(active.get('ROCKET MONEY').fixed, true, 'a payment marked fixed is reported as fixed');
+  const unmarked = [...active.values()].filter(s => !s.fixed);
+  assert.deepEqual(unmarked.filter(s => s.likelyBill).map(s => s.merchant).sort(), ['CHASE CREDIT CRD', 'COMCAST-XFINITY', 'GEICO AUTO INS', 'TOYOTA FINANCIAL PMT']);
+  assert.deepEqual(unmarked.filter(s => !s.likelyBill).map(s => s.merchant), ['NETFLIX']);
+  assert.ok(![...active.keys()].some(name => /COSTCO|AMC/.test(name)), 'varying store and movie spend is not recurring');
 });
 
 test('the cash-flow surplus uses the shared typical surplus when it is supplied', () => {
@@ -132,7 +140,7 @@ test('buildAnalytics handles an empty account', () => {
   assert.equal(result.categories.length, 0);
   assert.equal(result.kpis.savingsRate, null);
   assert.equal(result.cashflow.startBalance, null);
-  assert.equal(result.subscriptions.length, 0);
+  assert.equal(result.recurring.length, 0);
 });
 
 test('toCsv quotes values and neutralises spreadsheet formulas', () => {
