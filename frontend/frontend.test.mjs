@@ -1085,7 +1085,7 @@ test('analytics page shows a locked preview without Pro', async () => {
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });
 
-test('analytics page renders money flow signals from real demo analytics', async () => {
+test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
@@ -1098,15 +1098,27 @@ test('analytics page renders money flow signals from real demo analytics', async
   const f = loadPro(async url => url === '/api/license'
     ? response(200, { tier: 'pro', source: 'owner', active: true, features: [] })
     : response(200, payload));
-  await f.context.loadAnalyticsPage(true);
+  await f.context.loadAnalyticsPage(true, '');
+  const overview = f.node('analytics-content').innerHTML;
+  assert.match(overview, /class="pro-tab is-active" aria-current="page">Overview/);
+  assert.match(overview, /href="#analytics\/compass" data-view="analytics\/compass"[^>]*>Spending Compass<span class="pro-tab-badge">\$\d[\d,]*\/mo/);
+  assert.doesNotMatch(overview, /Realistic savings found|Category readings/);
+  assert.equal(f.node('analytics-heading').textContent, 'Your spending, like a market');
+
+  await f.context.loadAnalyticsPage(false, 'compass');
   const html = f.node('analytics-content').innerHTML;
-  assert.match(html, /Money flow signals/);
-  assert.match(html, /a typical 2-person household in the Northeast that owns its home/);
+  assert.equal(f.node('analytics-heading').textContent, 'Spending Compass');
+  assert.match(html, /class="pro-tab is-active" aria-current="page">Spending Compass/);
+  assert.match(html, /Category readings/);
+  assert.match(html, /Compared with a typical 2-person household in the Northeast that owns its home/);
+  assert.doesNotMatch(html, /Monthly spend trend|Category signals/);
   assert.match(html, /Realistic savings found/);
   assert.match(html, /Dining averages/);
   assert.match(html, /data-analytics-action="household-save"/);
   assert.match(html, /Consumer Expenditure Survey/);
   assert.doesNotMatch(html, /undefined|NaN/);
+  await f.context.loadAnalyticsPage(true);
+  assert.match(f.node('analytics-content').innerHTML, /Category readings/, 'a reload after saving stays on the Compass');
 });
 
 const browserBits = (f, { reduced = true } = {}) => {
@@ -1241,6 +1253,14 @@ test('the router keeps a tutorial sub-path and hands it to the player', () => {
   assert.equal(opened.join(), 'debt-strategies');
   f.context.showView('payoff/anything');
   assert.equal(f.context.location.hash, '#payoff');
+  const tabs = [];
+  f.context.loadAnalyticsPage = (force, sub) => tabs.push(sub);
+  f.context.showView('analytics/compass');
+  assert.equal(f.context.location.hash, '#analytics/compass');
+  assert.equal(f.node('current-page').textContent, 'Spending Compass');
+  f.context.showView('analytics/unknown');
+  assert.equal(f.context.location.hash, '#analytics');
+  assert.deepEqual(tabs, ['compass', '']);
 });
 test('strategy cards explain the dates, the first target and identical orders', async () => {
   const payload = planPayload();

@@ -262,7 +262,7 @@ and classifies existing rows once. Older imports have no account; the Accounts
 page lists them by import source so the user can assign each one, after which
 transfers are re-matched.
 
-## Money flow signals (Pro, Analytics page)
+## Spending Compass (Pro, Analytics > Spending Compass, `#analytics/compass`)
 
 Compares seven standard categories (groceries, dining, utilities and energy, gas and
 charging, shopping, entertainment and subscriptions, out-of-pocket healthcare) with a

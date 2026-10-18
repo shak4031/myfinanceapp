@@ -235,13 +235,15 @@
   window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf') { selectImportFile('pdf', file); window.FinanceAccounts?.suggestFromFile(file); } };
 
   // Navigation is explicit: labels can change without breaking the active state.
-  // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial.
+  // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
     const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', accounts: 'Accounts', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
-    if (view !== 'tutorials') sub = '';
+    if (view === 'analytics') sub = sub === 'compass' ? sub : '';
+    else if (view !== 'tutorials') sub = '';
+    const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : titles[view];
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
     document.querySelectorAll('.nav-btn').forEach(node => {
@@ -250,13 +252,13 @@
       if (active) node.setAttribute('aria-current', 'page');
       else node.removeAttribute('aria-current');
     });
-    $('current-page').textContent = titles[view];
-    document.title = `${titles[view]} · MyFinance`;
+    $('current-page').textContent = title;
+    document.title = `${title} · MyFinance`;
     closeSidebar();
     const hash = `#${view}${sub ? `/${sub}` : ''}`;
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
   window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });

@@ -15,7 +15,7 @@ export const PRO_FEATURES = Object.freeze([
   { id: 'charts', title: 'Charts', text: 'Category pie view and month-by-month histograms on every category card.' },
   { id: 'forecast', title: 'Forecasts', text: 'Month-end spend forecast and a 6-month cash-flow projection.' },
   { id: 'subscriptions', title: 'Recurring charges', text: 'Repeating payments not marked as fixed bills, with annual cost and price-increase alerts.' },
-  { id: 'money-flow', title: 'Money flow signals', text: 'Your spending against similar households, with trend, momentum and breakout signals that point to realistic savings.' },
+  { id: 'money-flow', title: 'Spending Compass', text: 'Your spending against similar households, with trend, momentum and breakout signals that point to realistic savings.' },
   { id: 'anomalies', title: 'Unusual activity', text: 'Charges that are far above normal for a merchant or category.' },
   { id: 'export', title: 'Export', text: 'Download filtered transactions and analytics as CSV.' }
 ]);

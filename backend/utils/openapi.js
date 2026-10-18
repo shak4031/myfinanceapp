@@ -66,8 +66,8 @@ export function openApiSpec() {
         delete: op('Pro', 'Cancel the pending plan request')
       },
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
-      '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, recurring charges, merchants and money flow signals (moneyFlow) against BLS household benchmarks') },
-      '/api/analytics/household': { put: op('Pro', 'Set the household used for benchmarks; each field may be null', body({ size: 4, region: 'northeast', housing: 'own' })) },
+      '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, recurring charges, merchants, plus Spending Compass data (moneyFlow) against BLS household benchmarks') },
+      '/api/analytics/household': { put: op('Pro', 'Set the household the Spending Compass compares with; each field may be null', body({ size: 4, region: 'northeast', housing: 'own' })) },
       '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics', query('type', 'from', 'to')) }
     }
   };

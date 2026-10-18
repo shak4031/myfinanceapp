@@ -1,7 +1,8 @@
-// MyFinance Pro analytics page: KPIs, forecast, cash flow, trends, category signals, money flow signals, recurring charges and more.
+// MyFinance Pro analytics: the Overview tab (KPIs, forecast, cash flow, trends, category signals, recurring charges and more)
+// and the Spending Compass tab (household benchmarks and chart-style signals with realistic savings).
 (() => {
   const $ = id => document.getElementById(id);
-  let request = 0, sortKey = 'mtd', sortDir = -1, current = null;
+  let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
   const pro = () => globalThis.FinancePro;
   const charts = () => globalThis.ProCharts;
   const dateShort = iso => iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '&mdash;';
@@ -204,25 +205,16 @@
     </form>`;
   }
 
-  function moneyFlowCard(a) {
-    const { money, esc } = pro().format;
-    const mf = a.moneyFlow;
-    if (!mf) return '';
-    const title = `Money flow signals${how(MF_HOW)}`;
-    const subtitle = `Your standard categories against ${esc(mf.comparedWith)}, read the way a trader reads a chart`;
+  function householdChips(mf) {
+    const { esc } = pro().format;
     const p = mf.profile || {};
-    const chips = mf.profileSet
-      ? [p.size ? `${p.size}${p.size >= 8 ? '+' : ''} ${p.size === 1 ? 'person' : 'people'}` : null, p.region ? REGION_NAMES[p.region] : null, p.housing ? (p.housing === 'own' ? 'Own home' : 'Rent') : null].filter(Boolean).map(t => `<span class="pro-mf-chip">${esc(t)}</span>`).join('')
-      : '<span class="pro-mf-chip is-empty">Household not set</span>';
-    const household = `<div class="pro-mf-household"><span>Compared with</span>${chips}<button type="button" class="link-button" data-analytics-action="household-edit">${mf.profileSet ? 'Edit' : 'Set your household'}</button></div>${householdForm(mf)}
-      ${mf.profileSet ? '' : '<p class="pro-banner">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}`;
-    if (mf.status !== 'ok' || !mf.categories.length) {
-      return card(title, subtitle, `${household}<p class="pro-empty">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see signals.</p>`, 'span-3');
-    }
-    const opps = mf.opportunities.map(o => `<li><div><strong>${esc(o.label)}</strong><p>${esc(o.message)}</p></div><div class="num"><strong class="is-good">${money(o.monthly, true)}</strong><small>a month</small></div></li>`).join('');
-    const summary = mf.opportunities.length
-      ? `<div class="pro-mf-total"><span>Realistic savings found</span><strong>${money(mf.potentialMonthly, true)} a month</strong><small>${money(mf.potentialAnnual, true)} a year, using levels you have already reached</small></div><ol class="pro-mf-opps">${opps}</ol>`
-      : `<p class="pro-empty is-good">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
+    if (!mf.profileSet) return '<span class="pro-mf-chip is-empty">Household not set</span>';
+    return [p.size ? `${p.size}${p.size >= 8 ? '+' : ''} ${p.size === 1 ? 'person' : 'people'}` : null, p.region ? REGION_NAMES[p.region] : null, p.housing ? (p.housing === 'own' ? 'Own home' : 'Rent') : null]
+      .filter(Boolean).map(t => `<span class="pro-mf-chip">${esc(t)}</span>`).join('');
+  }
+
+  function compassReadings(mf) {
+    const { money, esc } = pro().format;
     const momentum = c => c.momentum
       ? `${arrow(c.momentum.change)}<small>${c.momentum.basis === 'year-over-year' ? 'vs same months last year' : 'per month, 6 months'}${c.momentum.confirmed === false && c.momentum.change > 0.1 ? ' &middot; not confirmed by recent trend' : ''}</small>`
       : `<span class="pro-move is-flat">&mdash;</span><small>${c.seasonal ? 'seasonal: needs 15 months' : 'needs 6 months'}</small>`;
@@ -242,20 +234,65 @@
     const table = `<div class="table-scroll"><table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     const oneOffs = mf.categories.flatMap(c => c.oneOffs.map(o => ({ ...o, label: c.label })));
     const oneOffNote = oneOffs.length ? `<p class="pro-footnote">Set aside as one-off purchases: ${oneOffs.slice(0, 5).map(o => `${esc(o.description)} ${money(o.amount, true)} (${dateShort(o.date)}, ${esc(o.label)})`).join('; ')}${oneOffs.length > 5 ? ` and ${oneOffs.length - 5} more` : ''}.</p>` : '';
-    const source = `<p class="pro-footnote">Typical spending: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, adjusted for your household. Survey figures are ${mf.source.year} dollars and are a guide, not a rule. Mortgage, rent, loans, insurance and internet are left out because they are contracted bills.</p>`;
-    return card(title, subtitle, `${household}${summary}${table}${oneOffNote}${source}`, 'span-3');
+    return card(`Category readings${how(MF_HOW)}`, 'Each category read like a price chart: where it sits against typical, which way it is moving and whether this month broke out of its normal range', `${table}${oneOffNote}`);
+  }
+
+  function compassPage(a) {
+    const { money, esc } = pro().format;
+    const mf = a.moneyFlow;
+    if (!mf) return '<p class="pro-empty panel">The Spending Compass is not available yet. Try again in a moment.</p>';
+    const comparison = card('Your comparison', `Compared with ${esc(mf.comparedWith)}`,
+      `<div class="pro-mf-household">${householdChips(mf)}</div>
+      <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="household-edit">${mf.profileSet ? 'Edit household' : 'Set your household'}</button>${householdForm(mf)}
+      ${mf.profileSet ? '' : '<p class="pro-mf-hint">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}
+      <p class="pro-footnote">Typical spending: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used.</p>`);
+    if (mf.status !== 'ok' || !mf.categories.length) {
+      return `<div class="pro-compass"><div class="pro-compass-top">${card('Where you could save', '', '<p class="pro-empty">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see your compass.</p>')}${comparison}</div></div>`;
+    }
+    const opps = mf.opportunities.map(o => `<li><div><strong>${esc(o.label)}</strong><p>${esc(o.message)}</p></div><div class="num"><strong class="is-good">${money(o.monthly, true)}</strong><small>a month</small></div></li>`).join('');
+    const savings = mf.opportunities.length
+      ? `<div class="pro-mf-total"><span>Realistic savings found</span><strong>${money(mf.potentialMonthly, true)} a month</strong><small>${money(mf.potentialAnnual, true)} a year, using levels you have already reached</small></div><ol class="pro-mf-opps">${opps}</ol>`
+      : `<p class="pro-empty is-good">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
+    return `<div class="pro-compass"><div class="pro-compass-top">${card('Where you could save', 'Categories that are above similar households or trending up, with a target you have already hit', savings)}${comparison}</div>${compassReadings(mf)}</div>
+      <p class="pro-footnote">Mortgage, rent, loans, insurance and internet are left out because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
+  }
+
+  const HEADERS = {
+    overview: ['MYFINANCE PRO &middot; ANALYTICS', 'Your spending, like a market', 'Trends, moving averages, forecasts and signals across every category, so you can act before the month gets away from you.'],
+    compass: ['MYFINANCE PRO &middot; SPENDING COMPASS', 'Spending Compass', 'How your everyday spending compares with similar households, which way each category is heading, and where you could realistically save.']
+  };
+
+  function renderHeader() {
+    const [eyebrow, heading, intro] = HEADERS[tab];
+    if ($('analytics-eyebrow')) $('analytics-eyebrow').innerHTML = eyebrow;
+    if ($('analytics-heading')) $('analytics-heading').textContent = heading;
+    if ($('analytics-intro')) $('analytics-intro').textContent = intro;
+  }
+
+  function tabs(a) {
+    const { money } = pro().format;
+    const found = a?.moneyFlow?.potentialMonthly;
+    const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
+    return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}</nav>`;
   }
 
   function render(a) {
     const { esc } = pro().format;
+    if (tab === 'compass') {
+      $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
+      return;
+    }
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
-    $('analytics-content').innerHTML = `${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${moneyFlowCard(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
   }
 
-  globalThis.loadAnalyticsPage = async function(force = false) {
+  // `sub` comes from the route (#analytics or #analytics/compass); reloads after a save keep the current tab.
+  globalThis.loadAnalyticsPage = async function(force = false, sub) {
     const content = $('analytics-content');
     if (!content || !pro()) return;
+    if (sub !== undefined) tab = sub === 'compass' ? 'compass' : 'overview';
+    renderHeader();
     const run = ++request;
     content.innerHTML = '<div class="pro-loading"><span></span><span></span><span></span></div>';
     const entitlement = await pro().ensureEntitlement();
