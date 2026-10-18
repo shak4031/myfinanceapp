@@ -4,6 +4,8 @@ import { requirePro } from '../utils/license.js';
 import { buildAnalytics, toCsv } from '../utils/analytics.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
+import { cashBalance } from '../utils/transfers.js';
+import { currentUserId } from '../utils/tenant.js';
 
 const router = Router();
 const db = new Database();
@@ -13,13 +15,15 @@ router.use(requirePro);
 async function loadInputs() {
   return db.transaction(async client => {
     const transactions = (await client.query(
-      'SELECT id, date, description, amount, direction, category, is_fixed, label_id FROM transactions ORDER BY date, id')).rows;
+      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind FROM transactions ORDER BY date, id')).rows;
     const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
-    const latest = (await client.query(`
-      SELECT balance FROM transactions WHERE balance IS NOT NULL AND date::date <= CURRENT_DATE
-      ORDER BY date::date DESC, id DESC LIMIT 1`)).rows[0];
-    return { transactions, budgets, latestBalance: latest ? Number(latest.balance) : null };
+    // Starting cash is checking accounts only, matching the dashboard.
+    const balances = (await client.query('SELECT id, date, balance, account_id FROM transactions WHERE balance IS NOT NULL')).rows;
+    const accounts = (await client.query('SELECT id, kind FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return { transactions, budgets, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
   });
 }
 
@@ -66,7 +70,8 @@ router.get('/export.csv', async (req, res, next) => {
         { label: 'Category', value: tx => tx.category || 'Other' },
         { label: 'Direction', value: tx => tx.direction },
         { label: 'Amount', value: tx => Number(tx.amount).toFixed(2) },
-        { label: 'Fixed bill', value: tx => (tx.is_fixed ? 'yes' : 'no') }
+        { label: 'Fixed bill', value: tx => (tx.is_fixed ? 'yes' : 'no') },
+        { label: 'Transfer (not counted)', value: tx => tx.transfer_kind || '' }
       ]);
     }
     const stamp = new Date().toISOString().slice(0, 10);

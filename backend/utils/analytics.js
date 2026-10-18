@@ -1,8 +1,9 @@
 import { getCanonicalMerchant, parseTxDate } from './normalize.js';
 import { buildUpcomingPayments } from './fixedPayments.js';
+import { TRANSFER_CATEGORY, isTransferRow } from './transfers.js';
 
-// Money moved between your own accounts is not spending or income.
-export const TRANSFER_CATEGORY = /^(?:transfers?|internal transfers?|savings|savings transfer)$/i;
+// Money moved between your own accounts is not spending or income (see utils/transfers.js).
+export { TRANSFER_CATEGORY };
 const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
 const PAYMENT_RAILS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH']);
 const DAY_MS = 86400000;
@@ -49,13 +50,15 @@ function normalize(transactions, today) {
     if (!parsed || !Number.isFinite(amount) || amount === 0) return null;
     const date = new Date(parsed.year, parsed.month, parsed.day);
     if (date > end) return null;
-    const category = tx.category || 'Other';
+    const transfer = isTransferRow(tx);
+    // Transfers are grouped under a transfer category so they can be listed but never counted.
+    const category = transfer && !TRANSFER_CATEGORY.test(tx.category || '') ? 'Transfer' : tx.category || 'Other';
     return {
       id: tx.id, description: tx.description || '', amount, date, iso: parsed.iso, category,
       monthIndex: parsed.year * 12 + parsed.month, day: parsed.day,
       debit: String(tx.direction).toUpperCase() === 'DEBIT',
       fixed: tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true',
-      transfer: TRANSFER_CATEGORY.test(category), merchant: merchantKey(tx.description), raw: tx
+      transfer, merchant: merchantKey(tx.description), raw: tx
     };
   }).filter(Boolean);
 }

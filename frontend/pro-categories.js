@@ -33,10 +33,14 @@
     let total = 0;
     for (const t of transactions) {
       if (String(t.direction).toUpperCase() !== 'DEBIT') continue;
-      const name = t.category || 'Uncategorized', i = index.get(monthOf(t.date));
+      const i = index.get(monthOf(t.date));
       if (i == null) continue;
+      // The stored transfer decision wins; older data without it falls back to the category name.
+      const isTransfer = Object.prototype.hasOwnProperty.call(t, 'transfer_kind') ? t.transfer_kind != null : TRANSFER.test(t.category || '');
+      const category = t.category || 'Uncategorized';
+      const name = isTransfer && !TRANSFER.test(category) ? 'Transfer' : !isTransfer && TRANSFER.test(category) ? 'Other' : category;
       const amount = Math.abs(Number(t.amount) || 0);
-      if (!map.has(name)) map.set(name, { name, series: months.map(() => 0), total: 0, count: 0, transfer: TRANSFER.test(name) });
+      if (!map.has(name)) map.set(name, { name, series: months.map(() => 0), total: 0, count: 0, transfer: isTransfer });
       const entry = map.get(name);
       entry.series[i] += amount; entry.total += amount; entry.count += 1;
       if (!entry.transfer) total += amount;

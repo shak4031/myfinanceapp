@@ -27,12 +27,12 @@ export async function loadPlanInputs(db, now = new Date()) {
     const goals = (await client.query('SELECT * FROM savings_goals ORDER BY priority, id')).rows;
     const settings = (await client.query('SELECT * FROM money_plans LIMIT 1')).rows[0];
     const history = (await client.query(`
-      SELECT id, date, description, category, direction, amount FROM transactions
+      SELECT id, date, description, category, direction, amount, transfer_kind FROM transactions
       WHERE date::date >= (date_trunc('month', $1::date) - INTERVAL '3 months')::date
         AND date::date < date_trunc('month', $1::date)::date`, [dateString(now)])).rows;
     const recent = (await client.query(`
       SELECT id, date, description, category, direction, amount, is_fixed, pay_mode, income_role FROM transactions
-      WHERE direction = 'CREDIT' AND date::date >= $1::date AND date::date <= $2::date`, [dateString(recentStart), dateString(now)])).rows;
+      WHERE direction = 'CREDIT' AND transfer_kind IS NULL AND date::date >= $1::date AND date::date <= $2::date`, [dateString(recentStart), dateString(now)])).rows;
     return { debts, goals, settings: normalizeSettings(settings), history, recent };
   });
 }

@@ -16,12 +16,16 @@ test('demo data covers a full year with a consistent running balance and realist
   assert.equal(new Set(dates.map(date => date.slice(0, 7))).size, 13);
   assert.ok(data.transactions.length > 600);
   assert.deepEqual(buildDemoData(now), data, 'deterministic for the same day');
-  let balance = 6850;
+  const balances = { checking: 6850, savings: 9200 };
   for (const row of data.transactions) {
-    balance = Math.round((balance + (row.direction === 'CREDIT' ? row.amount : -row.amount)) * 100) / 100;
-    assert.equal(row.balance, balance);
+    balances[row.account] = Math.round((balances[row.account] + (row.direction === 'CREDIT' ? row.amount : -row.amount)) * 100) / 100;
+    assert.equal(row.balance, balances[row.account]);
   }
-  assert.ok(balance > 0, 'the account never ends overdrawn');
+  assert.ok(balances.checking > 0, 'the account never ends overdrawn');
+  assert.deepEqual(data.accounts.map(account => account.kind), ['checking', 'savings', 'credit_card']);
+  const toSavings = data.transactions.filter(row => row.description.includes('TRANSFER TO SAV'));
+  const fromChecking = data.transactions.filter(row => row.description.includes('TRANSFER FROM CHK'));
+  assert.ok(toSavings.length >= 12 && toSavings.length === fromChecking.length, 'both sides of each savings transfer are present');
   const fixed = data.transactions.filter(row => row.is_fixed);
   assert.ok(fixed.some(row => row.pay_mode === 'auto') && fixed.some(row => row.pay_mode === 'manual'));
   assert.ok(data.transactions.every(row => row.direction === 'DEBIT' || row.pay_mode === null));

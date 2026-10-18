@@ -233,6 +233,35 @@ the same database in place and assigns existing rows to account 1. Rehearse it:
 5. Only then back up production and deploy. To roll back, redeploy the previous
    version and restore the backup taken immediately before the upgrade.
 
+## Accounts and transfers
+
+Every import names the account it came from (an existing account, or a new one
+with its type and last four digits). This lets the app recognise money moving
+between your own accounts, which is shown for information and left out of every
+spending and income total (dashboard, analytics, coach, goals and debt plans).
+
+| Situation | How it is counted |
+| --- | --- |
+| Checking to checking (both yours) | Transfer, not counted |
+| Checking to savings, investment or crypto | **Saved** (shown as "Saved this month"), not spending |
+| The savings side of that same transfer | Transfer, not counted (so savings is not double counted) |
+| Interest earned on savings | Income |
+| Card or loan payment, and that card's or loan's statement is also imported | Transfer, not counted (the purchases are counted on the card) |
+| Card or loan payment, statement not imported | Counted as a bill |
+| Zelle, Venmo, PayPal, Cash App | Money out is spending ("Payments to people"); money in is "Other income", not pay |
+| Transfer to an account number we have not seen | The account is added as **Needs review** and its transfers are left out until the user picks its type |
+| Account marked "Not my account" | Transfers to it count as spending (or income) |
+
+A user's category correction always wins: setting a row to Transfer or Savings
+marks it as a transfer, and any other category makes it count. Cash on hand is the
+newest balance of each checking account; savings balances are shown on the
+Accounts page.
+
+On upgrade, the migration creates the `accounts` table and new transaction columns
+and classifies existing rows once. Older imports have no account; the Accounts
+page lists them by import source so the user can assign each one, after which
+transfers are re-matched.
+
 ## Verify on staging
 
 - An unauthenticated financial API request returns 401.
@@ -253,6 +282,10 @@ the same database in place and assigns existing rows to account 1. Rehearse it:
   not be assigned in full to every goal.
 - A loan marked as not yet included in imported spending reserves its minimum
   payment separately. Existing imported loan payments must not be counted twice.
+- Import a checking file and a savings file that both contain the same transfer.
+  The transfer appears once under "Saved this month" and the dashboard spending
+  and income totals do not include it. A transfer to an unknown account number
+  appears on the Accounts page as Needs review until its type is chosen.
 - Logout removes access, and another person's subsequent login must not show
   cached data from the previous account.
 

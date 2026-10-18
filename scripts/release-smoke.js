@@ -68,7 +68,7 @@ const READS = [
   ['GET', '/api/debts'], ['GET', '/api/goals'], ['GET', '/api/goals/funding-analysis'],
   ['GET', '/api/plan'], ['POST', '/api/plan/what-if', { extra: 100 }],
   ['GET', '/api/transactions/income-sources'], ['GET', '/api/transactions/categorization-rules'],
-  ['GET', '/api/support-access']
+  ['GET', '/api/support-access'], ['GET', '/api/accounts']
 ];
 const CSV_SAMPLES = {
   checking: `Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #
@@ -116,8 +116,12 @@ try {
     ('', 'LEGACY BLANK DATE', 1, 'DEBIT', NULL, 1)`);
   await migrate(client => resetDemoAccount(client));
 
-  for (const [source, csvData] of Object.entries(CSV_SAMPLES)) {
-    const result = await call('POST', '/api/import/import-csv', { csvData, source, accountType: source }, ownerCookie);
+  const missingAccount = await call('POST', '/api/import/import-csv', { csvData: Object.values(CSV_SAMPLES)[0], source: 'no-account.csv' }, ownerCookie);
+  if (missingAccount.status !== 400) failures.push(`CSV import without an account should be rejected, got ${missingAccount.status}`);
+  for (const [index, [source, csvData]] of Object.entries(CSV_SAMPLES).entries()) {
+    const kind = ['checking', 'savings', 'credit_card'].includes(source) ? source : 'checking';
+    const newAccount = { name: `Smoke ${source}`, kind, last4: String(1180 + index).padStart(4, '0') };
+    const result = await call('POST', '/api/import/import-csv', { csvData, source, newAccount }, ownerCookie);
     if (result.status !== 200) failures.push(`CSV import (${source}) -> ${result.status}: ${result.text.slice(0, 200)}`);
   }
 

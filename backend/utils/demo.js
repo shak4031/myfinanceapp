@@ -1,6 +1,7 @@
 import { hashPassword } from './passwords.js';
 import { seedUserCategories } from './schema.js';
 import { OWNER_USER_ID } from './license.js';
+import { reconcileTransfers } from './transfers.js';
 
 // Public showcase account. The password is intentionally published; all data is rebuilt on every reset.
 export const DEMO_EMAIL = 'demo@myfinance.app';
@@ -35,10 +36,10 @@ export function buildDemoData(now = new Date()) {
   const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const start = end - 364 * DAY_MS;
   const rows = [];
-  const add = (time, description, amount, category, { credit = false, fixed = false, payMode = null } = {}) => {
+  const add = (time, description, amount, category, { credit = false, fixed = false, payMode = null, account = 'checking' } = {}) => {
     if (time < start || time > end) return;
     rows.push({ time, date: iso(time), description, amount: cents(amount), direction: credit ? 'CREDIT' : 'DEBIT',
-      category, is_fixed: fixed, pay_mode: credit ? null : payMode });
+      category, is_fixed: fixed, pay_mode: credit ? null : payMode, account });
   };
 
   const firstMonth = new Date(start);
@@ -66,11 +67,13 @@ export function buildDemoData(now = new Date()) {
     if (ago <= 6) bill(3, 'NYTIMES DIGITAL SUB', 4, 'Subscriptions', 'auto');
     if (ago === 8) add(day(3), 'AMAZON PRIME*MEMBERSHIP', 139, 'Subscriptions', { payMode: 'auto' });
 
-    add(day(20), 'ONLINE TRANSFER TO SAVINGS', 600, 'Savings');
+    // Both sides of the monthly savings transfer are imported, so they pair up and never count as spending.
+    add(day(20), 'ONLINE TRANSFER TO SAV XXXXXX4821', 600, 'Savings');
+    add(day(20), 'ONLINE TRANSFER FROM CHK XXXXXX1180', 600, 'Transfer', { credit: true, account: 'savings' });
     add(day(4), 'E-ZPASS AUTO REPLENISH', 35, 'Transportation', { payMode: 'auto' });
-    add(day(lastDay), 'INTEREST PAYMENT', between(1.6, 3.4), 'Other', { credit: true });
-    if (rand() < 0.8) add(day(14), pick(['ZELLE TO JORDAN LEE', 'ZELLE TO SAM PATEL']), pick([60, 75, 100, 120, 150]), 'Transfer');
-    if (ago % 5 === 2) add(day(21), 'ZELLE FROM ALEX RIVERA', pick([45, 62.5, 80]), 'Transfer', { credit: true });
+    add(day(lastDay), 'INTEREST PAYMENT', between(14.2, 18.6), 'Other income', { credit: true, account: 'savings' });
+    if (rand() < 0.8) add(day(14), pick(['ZELLE TO JORDAN LEE', 'ZELLE TO SAM PATEL']), pick([60, 75, 100, 120, 150]), 'Payments to people');
+    if (ago % 5 === 2) add(day(21), 'ZELLE FROM ALEX RIVERA', pick([45, 62.5, 80]), 'Other income', { credit: true });
     if (month === 3) add(day(11), 'IRS TREAS 310 TAX REF', 1842, 'Other', { credit: true });
 
     const dining = ago <= 1 ? 1.4 : 1;
@@ -108,17 +111,24 @@ export function buildDemoData(now = new Date()) {
   }
   // One clearly unusual purchase in the last week for the anomaly view.
   add(end - 6 * DAY_MS, 'BEST BUY 00412', 1249.99, 'Shopping');
+  // A transfer to an account the demo has not described yet: the account tracker asks about ••7702.
+  add(end - 9 * DAY_MS, 'ONLINE TRANSFER TO CHK ...7702', 250, 'Other');
 
   rows.sort((a, b) => a.time - b.time || (a.direction === b.direction ? 0 : a.direction === 'CREDIT' ? -1 : 1));
-  let balance = 6850;
+  const balances = { checking: 6850, savings: 9200 };
   const transactions = rows.map(({ time, ...row }) => {
-    balance = cents(balance + (row.direction === 'CREDIT' ? row.amount : -row.amount));
-    return { ...row, balance };
+    balances[row.account] = cents(balances[row.account] + (row.direction === 'CREDIT' ? row.amount : -row.amount));
+    return { ...row, balance: balances[row.account] };
   });
 
   const ahead = months => iso(Date.UTC(new Date(end).getUTCFullYear(), new Date(end).getUTCMonth() + months, 1));
   return {
     transactions,
+    accounts: [
+      { key: 'checking', name: 'Everyday checking', kind: 'checking', institution: 'Demo Bank', last4: '1180' },
+      { key: 'savings', name: 'High-yield savings', kind: 'savings', institution: 'Demo Bank', last4: '4821' },
+      { key: 'card', name: 'Chase Sapphire', kind: 'credit_card', institution: 'Chase', last4: '3391' }
+    ],
     budgets: [['Groceries', 750], ['Dining', 400], ['Shopping', 450], ['Gas', 220], ['Entertainment', 150], ['Subscriptions', 60], ['Transportation', 120]],
     goals: [
       { name: 'Emergency fund', target_amount: 20000, current_amount: 11800, target_date: ahead(10), priority: 1, icon: '🛡️', color: '#369c85', notes: 'Six months of essential expenses.' },
@@ -154,15 +164,21 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['money_plans', 'transactions', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
+  for (const table of ['money_plans', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
+  const accountIds = {};
+  for (const account of data.accounts) {
+    accountIds[account.key] = (await client.query(`INSERT INTO accounts (name,kind,institution,last4,status) VALUES ($1,$2,$3,$4,'active') RETURNING id`,
+      [account.name, account.kind, account.institution, account.last4])).rows[0].id;
+  }
   const column = key => data.transactions.map(row => row[key]);
-  await client.query(`INSERT INTO transactions (date,description,amount,direction,balance,source,category,is_fixed,pay_mode)
-    SELECT d, de, a, di, b, 'demo', c, f, p
-    FROM unnest($1::text[], $2::text[], $3::numeric[], $4::text[], $5::numeric[], $6::text[], $7::boolean[], $8::text[]) AS t(d, de, a, di, b, c, f, p)`,
-  [column('date'), column('description'), column('amount'), column('direction'), column('balance'), column('category'), column('is_fixed'), column('pay_mode')]);
+  await client.query(`INSERT INTO transactions (date,description,amount,direction,balance,source,category,is_fixed,pay_mode,account_id)
+    SELECT d, de, a, di, b, 'demo', c, f, p, ac
+    FROM unnest($1::text[], $2::text[], $3::numeric[], $4::text[], $5::numeric[], $6::text[], $7::boolean[], $8::text[], $9::integer[]) AS t(d, de, a, di, b, c, f, p, ac)`,
+  [column('date'), column('description'), column('amount'), column('direction'), column('balance'), column('category'), column('is_fixed'), column('pay_mode'),
+    data.transactions.map(row => accountIds[row.account])]);
   for (const [pattern, label, category] of data.rules) {
     await client.query(`INSERT INTO transaction_labels (pattern,display_label,category_id,match_type,enabled,priority)
       SELECT $1,$2,id,'regex',TRUE,1 FROM categories WHERE name=$3`, [pattern, label, category]);
@@ -180,6 +196,7 @@ export async function resetDemoAccount(client, now = new Date()) {
   }
   // Minimums ($717.66) plus $400 extra a month, so the debt-free program and its calendar card have something to show.
   await client.query("INSERT INTO money_plans (debt_strategy,debt_budget,goal_strategy) VALUES ('avalanche',$1,'priority')", [data.debtBudget]);
+  await reconcileTransfers(client, userId);
   await client.query('RESET ROLE');
   return { userId: Number(userId), transactions: data.transactions.length };
 }

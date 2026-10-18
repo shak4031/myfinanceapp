@@ -60,7 +60,7 @@ export function safeToSpend(balance, runway, today) {
   };
 }
 
-export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true, incomeStreams = [], lastImport = null } = {}) {
+export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true, incomeStreams = [], lastImport = null, accounts = null } = {}) {
   const insights = [];
   const add = (insight, weight = 0) => insights.push({ ...insight, weight });
   const todayDay = today.getDate();
@@ -107,6 +107,23 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
     add({ id: 'import-stale', tone: importAge >= 14 ? 'warning' : 'info', icon: 'upload', title: `Your last import was ${importAge} days ago`,
       detail: `${lastImport.latestDate ? `Your newest transaction is from ${shortDate(lastImport.latestDate)}. ` : ''}Import your latest statement so your balance, bills and plan stay accurate.`,
       action: { label: 'Import statements', act: 'import' } }, -importAge);
+  }
+
+  // Account tracker: transfers to an account we have not classified stay out of totals until the user decides.
+  const review = accounts?.accountsToReview || [];
+  const unknown = accounts?.unknownTransfers || { count: 0, total: 0 };
+  if (review.length || unknown.count) {
+    const names = review.map(account => ({ description: account.last4 ? `••${account.last4}` : account.name }));
+    add({ id: 'accounts-review', tone: 'warning', icon: 'search',
+      title: review.length === 1 ? `Is ${names[0].description} one of your accounts?` : review.length ? `Are ${listNames(names)} your accounts?` : `${unknown.count} transfer${unknown.count === 1 ? '' : 's'} need${unknown.count === 1 ? 's' : ''} an account`,
+      detail: `${unknown.count ? `${unknown.count} transfer${unknown.count === 1 ? '' : 's'} totaling ${money(unknown.total)} ${unknown.count === 1 ? 'is' : 'are'} left out of your spending and income until you say what kind of account ${review.length === 1 ? 'it is' : 'they go to'}. ` : ''}Mark ${review.length === 1 ? 'it' : 'each one'} as savings, checking, a card, or not yours so your totals stay accurate.`,
+      action: { label: 'Review accounts', view: 'accounts' } }, -unknown.count);
+  }
+  const saved = accounts?.savedThisMonth;
+  if (saved && saved.amount > 0) {
+    add({ id: 'saved', tone: 'success', icon: 'cash', title: `You've set aside ${money(saved.amount)} this month`,
+      detail: `Money moved to savings or investments across ${saved.transfers} transfer${saved.transfers === 1 ? '' : 's'}. It counts toward your savings, not your spending.`,
+      action: { label: 'See accounts', view: 'accounts' } });
   }
 
   // Bills due in the next three days, manual ones first.
@@ -246,6 +263,7 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
       billsLeft: { count: bills.length, total: cents(bills.reduce((sum, item) => sum + Number(item.amount || 0), 0)) },
       safeToSpend: safe,
       lastImport: importAge == null ? null : { daysAgo: importAge, latestDate: lastImport.latestDate || null },
+      savedThisMonth: accounts?.savedThisMonth?.amount ?? null,
       nextIncome: nextIncome ? { amount: cents(Number(nextIncome.amount)), day: nextIncome.dayOfMonth, daysAway: nextIncome.dayOfMonth - todayDay, description: nextIncome.description || '' } : null,
       debtFreeDate: debtPlan?.plan?.debtFree ? debtPlan.plan.debtFreeDate : null
     }

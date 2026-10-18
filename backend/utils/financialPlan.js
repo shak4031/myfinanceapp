@@ -1,8 +1,11 @@
 import { parseTxDate } from './normalize.js';
+import { isTransferRow } from './transfers.js';
 
 const cents = value => Math.round(value * 100) / 100;
-const isTransfer = tx => /^(?:transfer|transfers|savings)$/i.test(tx.category || '')
-  || /\b(?:internal\s+transfer|transfer\s+(?:to|from)|xfer)\b/i.test(tx.description || '');
+// Rows loaded with transfer_kind use the account-aware classification; older callers fall back to wording.
+const isTransfer = tx => Object.prototype.hasOwnProperty.call(tx, 'transfer_kind') ? isTransferRow(tx)
+  : /^(?:transfer|transfers|savings)$/i.test(tx.category || '')
+    || /\b(?:internal\s+transfer|transfer\s+(?:to|from)|xfer)\b/i.test(tx.description || '');
 
 export function buildFinancialPlan(transactions, goals, today = new Date(), debts = []) {
   const month = today.getFullYear() * 12 + today.getMonth();

@@ -343,6 +343,8 @@ class TransactionCSVParser {
   resolveSigns(parsed, accountType) {
     const signed = parsed.filter(item => item.signedOnly);
     if (!signed.length) return 'negative-is-spending';
+    // Bank accounts always show withdrawals as negative; only card issuers differ. A savings file can be all deposits.
+    if (accountType === 'checking' || accountType === 'savings') return 'negative-is-spending';
     let negativeSpending = 0, positiveSpending = 0;
     for (const item of signed) {
       const moneyIn = item.hint === 'CREDIT' || (!item.hint && INFLOW_TEXT.test(item.description));

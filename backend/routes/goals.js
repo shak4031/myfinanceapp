@@ -11,7 +11,7 @@ const db = new Database();
 async function fundingAnalysis() {
   const goals = await db.all('SELECT * FROM savings_goals ORDER BY priority, id');
   const rows = await db.all(`
-    SELECT id, date, description, category, direction, amount FROM transactions
+    SELECT id, date, description, category, direction, amount, transfer_kind FROM transactions
     WHERE date::date >= (date_trunc('month', CURRENT_DATE) - INTERVAL '3 months')::date
       AND date::date < date_trunc('month', CURRENT_DATE)::date
   `);

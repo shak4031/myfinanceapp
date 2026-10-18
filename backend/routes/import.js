@@ -6,6 +6,9 @@ import { normalizeDescription } from '../utils/normalize.js';
 import { TENANT, classify, loadCategorization, failure } from '../utils/categorization.js';
 import { inheritPayMode } from '../utils/payMode.js';
 import { incomeKey } from '../utils/income.js';
+import { currentUserId } from '../utils/tenant.js';
+import { reconcileTransfers } from '../utils/transfers.js';
+import { resolveImportAccount } from './accounts.js';
 
 const router = express.Router();
 const db = new Database();
@@ -16,6 +19,8 @@ const route = handler => async (req, res) => {
 };
 
 const ACCOUNT_TYPES = new Set(['checking', 'savings', 'credit_card']);
+// Parser sign conventions only distinguish cards from deposit accounts.
+const PARSER_TYPE = { checking: 'checking', savings: 'savings', credit_card: 'credit_card', loan: 'credit_card', investment: 'savings', crypto: 'savings', other: 'checking', unknown: 'checking' };
 
 async function parseFile({ type, data, source, statementType, accountType }) {
   if (typeof data !== 'string' || !data.trim()) throw failure(400, 'File data is required');
@@ -33,7 +38,7 @@ async function parseFile({ type, data, source, statementType, accountType }) {
   throw failure(400, 'File type must be csv or pdf');
 }
 
-export async function importTransactions(client, transactions, config, source) {
+export async function importTransactions(client, transactions, config, source, accountId = null) {
   let imported = 0, duplicates = 0;
   // One snapshot of bills with a known pay mode, newest first, so repeat payments inherit it.
   const payHistory = (await client.query(`SELECT id,description,label_id,pay_mode FROM transactions
@@ -58,37 +63,60 @@ export async function importTransactions(client, transactions, config, source) {
     const payMode = inheritPayMode({ ...transaction, direction, label_id: suggestion.label?.id ?? null }, payHistory);
     const incomeRole = direction === 'CREDIT' ? incomeHistory.find(row => row.key === incomeKey(transaction.description))?.role ?? null : null;
     await client.query(`INSERT INTO transactions
-      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role,account_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [transaction.date, transaction.description, transaction.amount, direction, transaction.balance,
-      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole]);
+      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole, accountId]);
     imported++;
   }
   return { imported, duplicates, excluded: 0 };
 }
 
+// Imports are tied to an account so transfers between your own accounts can be recognised and left out of totals.
+async function importInto(client, body, parsed, config, fallbackSource) {
+  const account = await resolveImportAccount(client, body);
+  const result = await importTransactions(client, parsed.transactions, config, body.source || fallbackSource, account.id);
+  return { ...result, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
+}
+const summarize = transfers => ({ transfersChecked: transfers.changed, accountsDiscovered: transfers.discovered });
+// Fail fast (before parsing) when no account is given, so the user is not left waiting on a large file.
+const requireAccountChoice = body => {
+  if ((body?.accountId == null || body.accountId === '') && !body?.newAccount) throw failure(400, 'Choose which account this statement is from (accountId or newAccount is required)');
+};
+
 router.post('/import-csv', route(async (req, res) => {
   const started = Date.now();
-  const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source, accountType: req.body?.accountType });
+  requireAccountChoice(req.body);
+  const accountType = req.body.accountType || req.body.newAccount?.kind;
   const result = await db.transaction(async client => {
+    const account = await resolveImportAccount(client, req.body);
+    const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source, accountType: PARSER_TYPE[account.kind] || accountType });
     const config = await loadCategorization(client);
-    return importTransactions(client, parsed.transactions, config, req.body.source || 'csv_import');
+    const imported = await importTransactions(client, parsed.transactions, config, req.body.source || 'csv_import', account.id);
+    const transfers = await reconcileTransfers(client, currentUserId());
+    return { parsed, imported: { ...imported, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 }, ...summarize(transfers) } };
   });
-  res.json({ success: true, ...result, errors: parsed.errors.length, skipped: parsed.skipped, format: parsed.format,
+  const { parsed } = result;
+  res.json({ success: true, ...result.imported, errors: parsed.errors.length, skipped: parsed.skipped, format: parsed.format,
     parserDetails: parsed.errors.slice(0, 5), totalInFile: parsed.transactions.length, duration: Date.now() - started });
 }));
 router.post('/import-pdf', route(async (req, res) => {
   const started = Date.now();
+  requireAccountChoice(req.body);
   const parsed = await parseFile({ type: 'pdf', data: req.body?.pdfBase64, statementType: req.body?.statementType });
   const result = await db.transaction(async client => {
     const config = await loadCategorization(client);
-    return importTransactions(client, parsed.transactions, config, req.body.source || 'pdf_import');
+    const imported = await importInto(client, req.body, parsed, config, 'pdf_import');
+    return { ...imported, ...summarize(await reconcileTransfers(client, currentUserId())) };
   });
   res.json({ success: true, ...result, totalInFile: parsed.transactions.length, duration: Date.now() - started });
 }));
 router.post('/import-batch', route(async (req, res) => {
   const files = req.body?.files;
   if (!Array.isArray(files) || !files.length) throw failure(400, 'No files provided');
+  // Each file names its own account; a top-level accountId/newAccount applies to files that do not.
+  const choices = files.map(file => (file?.accountId != null || file?.newAccount ? file : { ...file, accountId: req.body.accountId, newAccount: req.body.newAccount }));
+  choices.forEach(requireAccountChoice);
   const parsed = [];
   for (const file of files) parsed.push(await parseFile(file));
   const results = await db.transaction(async client => {
@@ -96,11 +124,12 @@ router.post('/import-batch', route(async (req, res) => {
     const config = await loadCategorization(client);
     const results = [];
     for (let index = 0; index < files.length; index++) {
-      const result = await importTransactions(client, parsed[index].transactions, config, files[index].source);
+      const result = await importInto(client, choices[index], parsed[index], config, files[index].source);
       results.push({ ...result, type: files[index].type, fileName: files[index].source,
         totalInFile: parsed[index].transactions.length, errors: parsed[index].errors.length });
     }
-    return results;
+    const transfers = summarize(await reconcileTransfers(client, currentUserId()));
+    return results.map(result => ({ ...result, ...transfers }));
   });
   res.json({ success: true, results, totalImported: results.reduce((sum, row) => sum + row.imported, 0),
     totalDuplicates: results.reduce((sum, row) => sum + row.duplicates, 0) });

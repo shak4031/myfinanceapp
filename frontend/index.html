@@ -433,6 +433,39 @@
       #pdf-dropzone { padding: 24px !important; }
     }
 
+      /* Accounts page and import account picker */
+    .import-account { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .import-account > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+    .import-new-account, .acct-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+    .import-new-account[hidden] { display: none; }
+    .import-new-account label, .acct-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+    .import-new-account input, .import-new-account select, .acct-form input, .acct-form select, .acct-actions select {
+      padding: 8px 10px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+    .acct-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 8px; }
+    .acct-summary strong { display: block; font-size: 26px; margin: 4px 0; }
+    .acct-section { font-size: 17px; margin: 28px 0 12px; }
+    .acct-list { display: grid; gap: 14px; }
+    .acct-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .acct-card.acct-review { border-color: var(--warning); }
+    .acct-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .acct-head h3 { font-size: 16px; margin: 0 0 2px; }
+    .acct-balance { text-align: right; display: flex; flex-direction: column; }
+    .acct-balance strong { font-size: 18px; }
+    .acct-found { margin: 10px 0 0; font-size: 13px; }
+    .acct-stats, .acct-kind-help { font-size: 12px; margin: 8px 0 0; }
+    .acct-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+    .acct-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+    .acct-badge.warn { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
+    .acct-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .acct-table th, .acct-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
+    .acct-rules { margin-top: 28px; }
+    .acct-rules summary { cursor: pointer; font-weight: 600; }
+    .acct-rules li { margin: 8px 0; font-size: 13px; }
+    .acct-nav-badge { margin-left: auto; min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--warning); color: #1b1b1b; font-size: 11px; font-weight: 700; text-align: center; }
+    .acct-nav-badge[hidden] { display: none; }
+    .tx-transfer-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--bg-tertiary); color: var(--text-secondary); white-space: nowrap; }
+    .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
+    .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261019a">
   <link rel="stylesheet" href="analytics.css?v=20261017r">
@@ -538,6 +571,7 @@
         <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
         <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
+        <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PLUS</span></a></li>
@@ -739,6 +773,15 @@
         <div id="plan-goals-root" class="plan-root"></div>
       </section>
 
+      <!-- ACCOUNTS -->
+      <section id="accounts-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">YOUR ACCOUNTS</p><h1>Accounts</h1><p class="muted">Checking, savings, cards and loans you import. Moving money between your own accounts is shown for information and never counted as spending or income.</p></div>
+          <button class="btn btn-primary" onclick="openImportModal()">Import a statement</button>
+        </header>
+        <div id="accounts-root"></div>
+      </section>
+
       <!-- TUTORIALS -->
       <section id="tutorials-view" class="view">
         <header class="header">
@@ -765,10 +808,21 @@
       </div>
 
       <div style="padding: 24px;">
+        <div id="import-account-picker" class="import-account">
+          <label for="import-account-select">Which account is this file from? <span class="muted">(required)</span></label>
+          <select id="import-account-select" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; width: 100%;"><option value="">Loading accounts…</option></select>
+          <div id="import-new-account" class="import-new-account" hidden>
+            <label>Name<input id="import-new-name" maxlength="80" placeholder="e.g. Chase checking"></label>
+            <label>Type<select id="import-new-kind"></select></label>
+            <label>Last 4 digits<input id="import-new-last4" inputmode="numeric" maxlength="4" placeholder="1180"></label>
+            <label>Bank<input id="import-new-institution" maxlength="80" placeholder="Chase"></label>
+          </div>
+          <p class="muted" style="font-size: 12px; margin-top: 6px;">Knowing the account lets us match transfers between your own accounts, so they are not counted as spending or income.</p>
+        </div>
         <!-- CSV Import Panel -->
         <div id="import-csv-panel">
           <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
-            Upload the CSV or OFX/QFX (Quicken) download from any bank or credit card website. Columns, date formats and +/- signs are detected automatically. Pick the account type so card payments are not counted as income.
+            Upload the CSV or OFX/QFX (Quicken) download from any bank or credit card website. Columns, date formats and +/- signs are detected automatically.
           </p>
           <input type="file" id="csv-input" accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo" style="display: none;" onchange="onCsvSelected(event)">
           <div id="csv-dropzone" onclick="document.getElementById('csv-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
@@ -782,11 +836,6 @@
           <div id="csv-file-list" style="margin-top: 16px;"></div>
           <div style="margin-top: 16px; display: flex; gap: 12px; align-items: center;">
             <button class="btn btn-primary" onclick="importCSV()" style="flex: 1;" disabled id="csv-import-btn">🚀 Import CSV</button>
-            <select id="csv-source-select" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-              <option value="checking">Checking Account</option>
-              <option value="savings">Savings Account</option>
-              <option value="credit_card">Credit Card</option>
-            </select>
           </div>
         </div>
 
@@ -1485,6 +1534,8 @@
 
     async function importCSV() {
       if (!pendingCsvFile) { notify('Select a CSV file first'); return; }
+      const account = FinanceAccounts.choice();
+      if (!account) return;
 
       const resultDiv = document.getElementById('import-result');
       resultDiv.style.display = 'block';
@@ -1503,7 +1554,7 @@
 
         const res = await fetch('/api/import/import-csv', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvData, source: document.getElementById('csv-source-select').value, accountType: document.getElementById('csv-source-select').value })
+          body: JSON.stringify({ csvData, source: pendingCsvFile.name, ...account })
         });
         const data = await res.json();
         if (data.success) {
@@ -1514,7 +1565,9 @@
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
             </div>
             ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
+            ${FinanceAccounts.resultNote(data)}
           `;
+          FinanceAccounts.afterImport(data);
           pendingCsvFile = null;
           document.getElementById('csv-file-list').innerHTML = '';
           document.getElementById('csv-import-btn').disabled = true;
@@ -1550,6 +1603,8 @@
 
     async function importPDF() {
       if (!pendingPdfFile) { notify('Select a PDF first'); return; }
+      const account = FinanceAccounts.choice();
+      if (!account) return;
 
       const resultDiv = document.getElementById('import-result');
       resultDiv.style.display = 'block';
@@ -1568,7 +1623,7 @@
 
         const res = await fetch('/api/import/import-pdf', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfBase64: base64, source: 'pdf_statement', statementType: 'td-checking' })
+          body: JSON.stringify({ pdfBase64: base64, source: pendingPdfFile.name, statementType: FinanceAccounts.pdfStatementType(account), ...account })
         });
         const data = await res.json();
         if (data.success) {
@@ -1578,7 +1633,9 @@
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.totalInFile} found in PDF
             </div>
+            ${FinanceAccounts.resultNote(data)}
           `;
+          FinanceAccounts.afterImport(data);
           pendingPdfFile = null;
           document.getElementById('pdf-file-list').innerHTML = '';
           document.getElementById('pdf-import-btn').disabled = true;
@@ -1647,7 +1704,8 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261018"></script>
+  <script src="refresh.js?v=20261020a"></script>
+  <script src="accounts.js?v=20261020a"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261018c"></script>

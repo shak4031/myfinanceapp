@@ -8,6 +8,20 @@
   const PAY_LABEL = { auto: 'Auto-pay', manual: 'Manual' };
   const payLabel = mode => PAY_LABEL[mode] || 'Not set';
   window.payModeOf = payModeOf;
+  // Transfers between your own accounts are shown for information and left out of every total.
+  const isTransfer = t => t?.transfer_kind != null;
+  const TRANSFER_BADGE = {
+    internal: ['', 'Transfer · not counted', 'Moved between your own accounts. Not counted as spending or income.'],
+    savings: ['saved', 'Saved', 'Moved to or from savings. Counted as saved, not as spending or income.'],
+    unknown: ['unknown', 'Transfer · account?', 'Looks like a transfer to an account we do not know yet. Not counted until you set it on the Accounts page.']
+  };
+  const transferBadge = t => {
+    const badge = TRANSFER_BADGE[t?.transfer_kind];
+    if (!badge) return '';
+    const where = t.transfer_account_name ? ` (${t.transfer_account_name})` : '';
+    return `<span class="tx-transfer-badge ${badge[0]}" title="${escape(badge[2] + where)}">${badge[1]}</span>`;
+  };
+  window.transferBadge = transferBadge;
   // '' = all; 'unset' = debits with no method yet; 'auto'/'manual' match debits only.
   window.matchesPayModeFilter = (t, filter) => {
     if (!filter) return true;
@@ -211,16 +225,20 @@
     $(`${kind}-file-list`).textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;
     $(`${kind}-import-btn`).disabled = false;
   }
-  window.onCsvSelected = event => selectImportFile('csv', event.target.files[0]);
-  window.onPdfSelected = event => selectImportFile('pdf', event.target.files[0]);
-  window.handleCsvDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file && (file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv')) selectImportFile('csv', file); };
-  window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf') selectImportFile('pdf', file); };
+  window.onCsvSelected = event => { selectImportFile('csv', event.target.files[0]); window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
+  window.onPdfSelected = event => { selectImportFile('pdf', event.target.files[0]); window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
+  window.handleCsvDrop = event => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv')) { selectImportFile('csv', file); window.FinanceAccounts?.suggestFromFile(file); }
+  };
+  window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf') { selectImportFile('pdf', file); window.FinanceAccounts?.suggestFromFile(file); } };
 
   // Navigation is explicit: labels can change without breaking the active state.
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', accounts: 'Accounts', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view !== 'tutorials') sub = '';
@@ -238,7 +256,7 @@
     const hash = `#${view}${sub ? `/${sub}` : ''}`;
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
   window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });
@@ -361,14 +379,14 @@
       if (request !== detailRequest) return;
       const transactions = window.filterTransactionsByCategoryAndMonth(data.transactions || [], category, months)
         .sort((a, b) => transactionDate(b.date) - transactionDate(a.date));
-      const spending = transactions.filter(transaction => String(transaction.direction).toUpperCase() === 'DEBIT')
+      const spending = transactions.filter(transaction => String(transaction.direction).toUpperCase() === 'DEBIT' && !isTransfer(transaction))
         .reduce((total, transaction) => total + Math.abs(Number(transaction.amount) || 0), 0);
       $('mtd-dialog-total').textContent = money(spending);
       $('mtd-dialog-count').textContent = transactions.length.toLocaleString();
       $('mtd-dialog-content').innerHTML = transactions.length ? `<div class="mtd-transaction-list">${transactions.map(transaction => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<article class="mtd-transaction-row">
-          <div><div class="mtd-transaction-description">${escape(transaction.description || 'Transaction')}</div>
+          <div><div class="mtd-transaction-description">${escape(transaction.description || 'Transaction')}${transferBadge(transaction)}</div>
             <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div></div>
           <div class="mtd-transaction-amount ${debit ? 'debit' : 'credit'}">${debit ? '−' : '+'}${money(Math.abs(Number(transaction.amount) || 0))}</div>
         </article>`;
@@ -613,16 +631,17 @@
         .filter(t => window.matchesPayModeFilter(t, $('txn-filter-paymode').value))
         .filter(t => window.matchesTransactionSearch(t, query))
         .sort((a,b) => transactionDate(b.date) - transactionDate(a.date));
-      const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+      const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction && !isTransfer(t)).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+      const transfers = rows.filter(isTransfer).length;
       const income = total('CREDIT'), expenses = total('DEBIT');
       $('txn-filter-status').textContent = `${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions`;
       $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
-        `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}</span></div>`).join('');
+        `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}${transfers ? ` · ${transfers} transfer${transfers === 1 ? '' : 's'} not counted` : ''}</span></div>`).join('');
       table.innerHTML = rows.length ? rows.map((transaction, index) => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${index}">
           <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
-          <td>${highlight(transaction.description, query)}</td>
+          <td>${highlight(transaction.description, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>

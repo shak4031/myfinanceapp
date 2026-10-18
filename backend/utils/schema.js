@@ -1,4 +1,6 @@
-export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans'];
+import { reconcileTransfers } from './transfers.js';
+
+export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -10,7 +12,8 @@ export const DEFAULT_CATEGORIES = [
   ['Salary', 'Income', '#318966'], ['Mortgage', 'House', '#719371'],
   ['Savings', 'Save', '#369c85'], ['Credit Cards', 'Card', '#b5757b'],
   ['Car Loans', 'Loan', '#9a897d'], ['Internet', 'WiFi', '#638cb4'],
-  ['Transfer', 'Move', '#89959c'], ['Other', 'Other', '#8b929b']
+  ['Transfer', 'Move', '#89959c'], ['Payments to people', 'People', '#9d8ab8'],
+  ['Other income', 'Income', '#4f9a76'], ['Other', 'Other', '#8b929b']
 ];
 
 export async function migratePrivateSchema(client) {
@@ -103,6 +106,35 @@ export async function migratePrivateSchema(client) {
     END $$;
     -- Income override for deposits: 'income' = regular pay, 'other' = not pay (gifts, reimbursements), NULL = detect.
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS income_role TEXT CHECK (income_role IN ('income','other'));
+    -- Accounts the user owns (or that transfers point at). Transfers between them are informational, never spending.
+    CREATE TABLE IF NOT EXISTS accounts (
+      id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'unknown' CHECK (kind IN ('checking','savings','credit_card','loan','investment','crypto','other','external','unknown')),
+      institution TEXT, last4 TEXT CHECK (last4 IS NULL OR last4 ~ '^[0-9]{4}$'),
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','needs_review')),
+      suggested_kind TEXT, discovered_from TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_id INTEGER;
+    -- NULL = counts as spending/income; 'internal' | 'savings' | 'unknown' = money moved between your own accounts.
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_kind TEXT CHECK (transfer_kind IN ('internal','savings','unknown'));
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_account_id INTEGER;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_pair_id INTEGER;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_checked BOOLEAN NOT NULL DEFAULT FALSE;
+    -- A manual category choice decides whether a row is a transfer, whichever route made the change.
+    CREATE OR REPLACE FUNCTION sync_transfer_kind() RETURNS trigger AS $fn$
+    BEGIN
+      IF NEW.category_corrected AND (TG_OP = 'INSERT' OR NEW.category IS DISTINCT FROM OLD.category OR NOT OLD.category_corrected) THEN
+        NEW.transfer_kind := CASE
+          WHEN NEW.category ~* '^(transfers?|internal transfers?)$' THEN 'internal'
+          WHEN NEW.category ~* '^(savings|savings transfer)$' THEN 'savings'
+          ELSE NULL END;
+      END IF;
+      RETURN NEW;
+    END $fn$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS transactions_sync_transfer_kind ON transactions;
+    CREATE TRIGGER transactions_sync_transfer_kind BEFORE INSERT OR UPDATE ON transactions
+      FOR EACH ROW EXECUTE FUNCTION sync_transfer_kind();
     CREATE TABLE IF NOT EXISTS staging_transactions (
       id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT,
       balance NUMERIC(14,2), source TEXT, status TEXT DEFAULT 'pending', error_message TEXT,
@@ -202,6 +234,7 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS money_plans_user_key ON money_plans (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
+    CREATE INDEX IF NOT EXISTS transactions_user_account_idx ON transactions (user_id, account_id);
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'labels_tenant_category_fk') THEN
         ALTER TABLE transaction_labels ADD CONSTRAINT labels_tenant_category_fk
@@ -210,6 +243,10 @@ export async function migratePrivateSchema(client) {
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transactions_tenant_label_fk') THEN
         ALTER TABLE transactions ADD CONSTRAINT transactions_tenant_label_fk
           FOREIGN KEY (label_id, user_id) REFERENCES transaction_labels (id, user_id);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transactions_tenant_account_fk') THEN
+        ALTER TABLE transactions ADD CONSTRAINT transactions_tenant_account_fk
+          FOREIGN KEY (account_id, user_id) REFERENCES accounts (id, user_id);
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'finance_app_runtime') THEN
         CREATE ROLE finance_app_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
@@ -224,6 +261,7 @@ export async function migratePrivateSchema(client) {
       FROM PUBLIC, finance_app_runtime;
   `);
   await normalizeStoredDates(client);
+  await backfillTransfers(client);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
       ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
@@ -262,6 +300,14 @@ export async function normalizeStoredDates(client) {
       END LOOP;
     END $$;
   `);
+}
+
+// One-time (then incremental) transfer classification for rows imported before accounts existed.
+// Only users with unchecked rows are processed, so a normal restart does no work.
+export async function backfillTransfers(client) {
+  for (const table of ['transactions', 'accounts', 'categories']) await client.query(`ALTER TABLE ${table} NO FORCE ROW LEVEL SECURITY`);
+  const users = (await client.query('SELECT DISTINCT user_id FROM transactions WHERE NOT transfer_checked AND user_id IS NOT NULL', [])).rows || [];
+  for (const { user_id: userId } of users) await reconcileTransfers(client, userId);
 }
 
 export async function seedUserCategories(client, userId) {
