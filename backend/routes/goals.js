@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import Database from '../db.js';
+import { requireProPlus } from '../utils/license.js';
 import { buildFinancialPlan } from '../utils/financialPlan.js';
 import { parseTxDate } from '../utils/normalize.js';
 
 const router = Router();
+router.use(requireProPlus);
 const db = new Database();
 
 async function fundingAnalysis() {

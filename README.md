@@ -57,7 +57,7 @@ tests and HTTP account/session flows. Tests do not connect to your live database
 The server creates a showcase account on start-up: `demo@myfinance.app` /
 `password1234`. It holds a year of generated sample data (income, fixed bills
 with auto-pay/manual modes, budgets, goals, debts and categorization rules) and
-always includes MyFinance Pro. Its data is rebuilt on every deploy and nightly
+always includes MyFinance Pro Plus. Its data is rebuilt on every deploy and nightly
 at 08:00 UTC, so changes made during a demo never persist. Admins cannot grant
 or revoke its license, and password-reset emails are never sent for it. Set
 `DEMO_ACCOUNT=false` to disable it.
@@ -251,12 +251,41 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 - Complete transaction history per category
 - Back button to return to overview
 
-### Debt-free plan tab
+### Plans and the public login page
+
+The signed-out login page doubles as the public marketing page: a benefit-led
+introduction, illustrative progress preview, Free / Pro / Pro Plus comparison,
+and the existing sign-in, registration and password-recovery forms.
+
+Prices are USD per month:
+- **Free ($0):** imports, transactions, category review and the everyday dashboard.
+- **Pro ($4.99):** Free plus budgets, analytics, charts, forecasts, subscription
+  radar, unusual-charge signals and CSV exports. Does **not** unlock Debt Free
+  or Savings Goals.
+- **Pro Plus ($9.98 total):** Pro plus $4.99 for Debt Free and Savings Goals,
+  including all strategies and what-if tools.
+
+The optional, one-time seven-day trial includes **Pro Plus**, ends automatically
+and never charges. Owner and demo accounts retain full Pro Plus access. Existing
+Pro grants remain Pro-only; there is no automatic upgrade. Paid access is
+administrator-managed, not a payment subscription integration or online checkout.
+In the admin users page, choose Grant Pro, Grant Pro Plus, Change to Pro, or
+Revoke paid access. The license API accepts `action: "grant"` with
+`plan: "pro"` (default) or `"pro_plus"`; revocation uses `action: "revoke"`.
+
+The entitlement response uses `active` for Pro access and `plusActive` for
+planning access. All debt, goal and plan API operations enforce Pro Plus on the
+server and return HTTP 402 with `PRO_PLUS_REQUIRED` otherwise. The corresponding
+pages show a locked explanation and plan comparison. Losing access preserves
+saved budgets, debts, goals and settings, but removes planning extras from the
+dashboard calendar until access returns. Base income/bill tracking stays available.
+
+### Debt-free plan tab (Pro Plus only)
 - Include or exclude any loan, card or other debt; star one as your focus
-- Free strategies: **Avalanche** (highest APR first) and **Snowball** (smallest balance first)
-- Pro strategies: **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
+- Strategies: **Avalanche** (highest APR first), **Snowball** (smallest balance first),
+  **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
 - APR-driven guidance, a suggested extra payment, and a debt-free date chart vs. minimums only
-- Pro what-if simulator (extra per month and lump sums)
+- Pro Plus what-if simulator (extra per month and lump sums)
 - Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
 - **How the strategy dates work:** every strategy is simulated month by month at your
   current monthly debt budget. Each card shows the resulting debt-free month, the total
@@ -274,9 +303,9 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 - Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
   size and need no video hosting. Edit them in `frontend/tutorial.js`.
 
-### Goals tab
+### Goals tab (Pro Plus only)
 - Money-flow view: income streams, monthly surplus, debt extra, goal budget, unassigned
-- Free strategies: priority order and nearest deadline; Pro: balanced funding and what-ifs
+- Priority order, nearest deadline, balanced funding and what-ifs
 - Per-goal monthly contribution, contribution day, include toggle, status and timeline
 
 ### File Import ✅

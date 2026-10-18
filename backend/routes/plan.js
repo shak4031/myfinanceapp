@@ -1,18 +1,19 @@
 import { Router } from 'express';
 import Database from '../db.js';
-import { getEntitlement, requirePro } from '../utils/license.js';
+import { getEntitlement, requireProPlus } from '../utils/license.js';
 import { strategyIds, DEBT_STRATEGIES, monthKey } from '../utils/payoff.js';
 import { goalStrategyIds, GOAL_STRATEGIES, normalizeGoal, simulateGoals } from '../utils/goalPlan.js';
 import { FLEX_KEY, buildPlanPayments, computePlan, loadPlanInputs, normalizeSettings } from '../utils/moneyPlan.js';
 
 const router = Router();
+router.use(requireProPlus);
 const db = new Database();
 const badRequest = message => Object.assign(new Error(message), { status: 400 });
 
 async function currentPlan(req, options = {}) {
   const now = new Date();
   const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, now), getEntitlement(req.user.id)]);
-  const pro = !!entitlement.active;
+  const pro = !!entitlement.plusActive;
   return { inputs, pro, now, plan: computePlan(inputs, { pro, now, ...options }) };
 }
 
@@ -92,7 +93,7 @@ router.put('/flex', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.post('/what-if', requirePro, async (req, res, next) => {
+router.post('/what-if', async (req, res, next) => {
   try {
     const body = req.body || {};
     const extra = amountOrNull(body.extra ?? 0, 'extra amount') || 0;
@@ -114,7 +115,7 @@ router.post('/what-if', requirePro, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.put('/debt-order', requirePro, async (req, res, next) => {
+router.put('/debt-order', async (req, res, next) => {
   try {
     const ids = req.body?.ids;
     if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => !Number.isInteger(Number(id)))) throw badRequest('Provide the debts in the order to pay them');

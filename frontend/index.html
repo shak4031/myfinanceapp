@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
+  <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
   <script src="session.js?v=20261017r"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -439,17 +440,34 @@
   <link rel="stylesheet" href="welcome.css?v=20261017r">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261017r">
+  <link rel="stylesheet" href="marketing.css?v=20261017">
 </head>
 <body class="auth-pending">
-  <section id="auth-screen" class="auth-screen" aria-label="Account access">
-    <div class="auth-card">
+  <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
+    <header class="marketing-nav"><a class="marketing-brand" href="#" aria-label="MyFinance home"><span aria-hidden="true">m<span>f.</span></span> MyFinance</a><a href="#marketing-pricing">Simple pricing <span aria-hidden="true">&darr;</span></a></header>
+    <div class="marketing-hero">
+      <div class="marketing-story">
+        <p class="marketing-kicker"><span aria-hidden="true">&#10022;</span> SMALL STEPS. BIGGER POSSIBILITIES.</p>
+        <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
+        <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
+        <div class="marketing-actions"><button class="btn btn-primary" type="button" id="marketing-start">Find my starting point <span aria-hidden="true">&rarr;</span></button><a href="#marketing-pricing">See what fits me</a></div>
+        <p class="marketing-reassurance">Start free. No bank connection needed. No perfect budget required.</p>
+        <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
+          <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
+          <div class="marketing-preview-title"><span aria-hidden="true">&#10022;</span><strong>Little by little.<br>Look at you go.</strong><span class="marketing-sticker">a little<br>more possible</span></div>
+          <div class="marketing-preview-steps"><span><b>01</b> Know your spending<small>Free</small></span><span><b>02</b> Spot your patterns<small>Pro</small></span><span><b>03</b> Plan your next chapter<small>Pro Plus</small></span></div>
+          <div class="marketing-goal"><span>Emergency fund <small>Pro Plus</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
+          <p class="marketing-preview-note">Your own pace. Your own priorities. Estimates, not promises.</p>
+        </div>
+      </div>
+    <div class="marketing-access" id="marketing-access"><div class="auth-card">
       <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="MyFinance mark">
         <rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/>
         <path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/>
         <circle class="brand-mark-accent" cx="47" cy="18" r="4"/>
       </svg>
       <p class="eyebrow">MYFINANCE / YOUR NEXT CHAPTER</p>
-      <h1 id="auth-title">A clearer picture of your money.</h1>
+      <h2 id="auth-title">A clearer picture of your money.</h2>
       <p class="muted" id="auth-description">Checking your secure session…</p>
       <form id="auth-form" hidden>
         <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="100"></label>
@@ -461,8 +479,24 @@
         <button class="btn btn-secondary" id="auth-switch" type="button" hidden>Create an account</button>
         <button class="link-button" id="auth-forgot" type="button" hidden>Forgot your password?</button>
       </form>
+    </div><p class="auth-footnote">Private by design. Your financial data stays on this server.<br>MyFinance never moves your money.</p>
+    <div class="marketing-first-step"><span aria-hidden="true">&#8627;</span><p><strong>Just one small start.</strong><br>Import a statement. Get a clearer picture.<br>Choose your next step when you are ready.</p></div></div>
     </div>
-    <p class="auth-footnote">Private by design. Your financial data stays on this server.</p>
+    <section class="marketing-benefits" aria-labelledby="marketing-benefits-title"><div><p class="marketing-kicker">LESS OVERWHELM. MORE &ldquo;I CAN DO THIS.&rdquo;</p><h2 id="marketing-benefits-title">A clearer today.<br>A more intentional tomorrow.</h2></div>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">FREE</p><h3>Find your money story.</h3><p>Import CSV or PDF statements. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Notice. Adjust. Repeat.</h3><p>Category budgets, spending trends and forecasts help you spot patterns. Subscription radar and unusual-charge alerts show what deserves a closer look.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO PLUS</p><h3>Make room for what matters.</h3><p>Compare debt payoff plans and set monthly savings targets for an emergency fund, a home, college or a well-earned adventure.</p></article>
+    </section>
+    <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
+      <p class="marketing-kicker">YOUR PACE. YOUR PLAN.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Free is a real starting point. Upgrade when the next step feels right.</p>
+      <div class="marketing-plan-grid">
+        <article class="marketing-plan"><p class="marketing-tier">FREE</p><h3>Get your bearings.</h3><p class="marketing-price">$0<span>/ month</span></p><p>For getting to know your money.</p><ul><li>CSV &amp; PDF statement imports</li><li>Transactions &amp; category review</li><li>Your everyday dashboard</li><li>Free to keep using</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-marketing-start>Start with Free</button></article>
+        <article class="marketing-plan"><p class="marketing-tier">PRO</p><h3>Build better habits.</h3><p class="marketing-price">$4.99<span>/ month</span></p><p>From &ldquo;where did it go?&rdquo; to &ldquo;now I see.&rdquo;</p><ul><li>Everything in Free</li><li>Category budgets &amp; spending insights</li><li>Charts &amp; cash-flow forecasts</li><li>Subscription radar &amp; unusual charges</li><li>CSV analytics &amp; transaction exports</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-marketing-start>Explore Pro</button></article>
+        <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO PLUS</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$9.98<span>/ month total</span></p><p><strong>Pro + $4.99/month.</strong> One combined plan.</p><ul><li>Everything in Pro</li><li><strong>Debt Free page unlocked</strong></li><li>Payoff strategies &amp; estimated finish dates</li><li><strong>Savings Goals page unlocked</strong></li><li>Monthly targets &amp; progress tracking</li><li>Extra-payment &amp; savings what-ifs</li></ul><p class="marketing-plan-limit">Try Pro Plus free for 7 days. No card needed.</p><button class="btn btn-primary" type="button" data-marketing-start>Find my next step</button></article>
+      </div>
+      <p class="marketing-billing-note">Prices in USD. The optional, one-time 7-day trial includes Pro Plus and starts inside your account. It ends automatically with no charge. Paid access is currently arranged with your MyFinance administrator, not through online checkout. Pro alone does not unlock Debt Free or Savings Goals.</p>
+    </section>
+    <footer class="marketing-footer"><strong>Small steps count. So do you.</strong><p>Planning tools, not financial advice. Forecasts and payoff dates are estimates; results depend on your inputs and actions.</p></footer>
   </section>
   <div class="app-container">
     <!-- HAMBURGER BUTTON (visible on mobile) -->
@@ -487,8 +521,8 @@
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
-        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan</a></li>
-        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals</a></li>
+        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PLUS</span></a></li>
+        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PLUS</span></a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
         <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>

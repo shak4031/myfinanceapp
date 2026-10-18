@@ -31,7 +31,7 @@
     if (response.status === 402) {
       if (data?.entitlement) setEntitlement(data.entitlement);
       const error = new Error(data?.error || 'This feature is part of MyFinance Pro');
-      error.code = 'PRO_REQUIRED';
+      error.code = data?.code || 'PRO_REQUIRED';
       throw error;
     }
     if (!response.ok) throw new Error(data?.error || `Request failed (${response.status})`);
@@ -41,6 +41,7 @@
   function setEntitlement(entitlement) {
     state.entitlement = entitlement;
     document.body?.classList?.toggle('has-pro', !!entitlement?.active);
+    document.body?.classList?.toggle('has-pro-plus', !!entitlement?.plusActive);
     renderPlanChrome();
     globalThis.emitFinanceEvent?.('pro:entitlement', entitlement);
   }
@@ -49,11 +50,11 @@
     if (!force && state.entitlementPromise) return state.entitlementPromise;
     state.entitlementPromise = request('/api/license')
       .then(entitlement => { setEntitlement(entitlement); return entitlement; })
-      .catch(() => { setEntitlement({ tier: 'free', active: false, trialAvailable: false, plan: { name: 'MyFinance Pro', price: 4.99 }, features: [] }); return state.entitlement; })
       .finally(() => { state.entitlementPromise = null; });
     return state.entitlementPromise;
   }
   const isActive = () => !!state.entitlement?.active;
+  const isPlusActive = () => !!state.entitlement?.plusActive;
 
   function getAnalytics(force = false) {
     if (!force && state.analytics && Date.now() - state.analyticsAt < 15000) return Promise.resolve(state.analytics);
@@ -67,13 +68,18 @@
 
   function planLabel(entitlement = state.entitlement) {
     if (!entitlement) return { tone: 'free', title: 'Free plan', detail: 'Unlock Pro' };
+    if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro Plus trial', detail: `${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left` };
+    if (entitlement.plusActive) return { tone: 'pro', title: 'MyFinance Pro Plus', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
     if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
-    if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro trial', detail: `${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left` };
-    return { tone: 'free', title: 'Free plan', detail: entitlement.trialAvailable ? 'Try Pro free for 7 days' : 'Upgrade to Pro' };
+    return { tone: 'free', title: 'Free plan', detail: entitlement.trialAvailable ? 'Try Pro Plus free for 7 days' : 'Compare plans' };
   }
 
   function renderPlanChrome() {
     const label = planLabel();
+    document.querySelectorAll?.('.nav-btn[data-view="payoff"], .nav-btn[data-view="goals"]').forEach(node => {
+      const badge = node.querySelector('.plus-nav-badge');
+      if (badge) badge.textContent = isPlusActive() ? 'PLUS' : 'PLUS · LOCKED';
+    });
     const badge = $('pro-nav-badge');
     if (badge) {
       badge.className = `pro-nav-badge is-${label.tone}`;
@@ -109,32 +115,35 @@
     return dialog;
   }
 
-  function openUpgrade(reason = '') {
+  function openUpgrade(reason = '', requiredPlan = 'pro') {
     const entitlement = state.entitlement || {};
     const dialog = dialogShell('pro-dialog', 'pro-dialog', 'pro-dialog-title');
+    const plusRequired = requiredPlan === 'pro_plus';
     const plan = entitlement.plan || { name: 'MyFinance Pro', price: 4.99 };
+    const plusPlan = entitlement.plusPlan || { price: 9.98, additionalPrice: 4.99 };
     const supportSession = !!globalThis.FinanceSession?.currentSupport?.();
     let status = '', action = '';
-    if (entitlement.tier === 'pro') {
-      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro is active on this account${entitlement.source === 'owner' ? ' (owner license)' : entitlement.source === 'demo' ? ' (demo account)' : ''}. Every insight is unlocked.</span></p>`;
+    if (entitlement.active && entitlement.tier !== 'trial') {
+      status = `<p class="pro-status is-pro">${ICONS.check}<span>${isPlusActive() ? 'Pro Plus is active. Insights, Debt Free and Savings Goals are unlocked.' : 'Pro is active: analytics, budgets and exports are unlocked. Debt Free and Savings Goals need Pro Plus. Ask your MyFinance administrator to add Pro Plus for $4.99 more per month ($9.98 total).'}</span></p>`;
       action = '<button type="button" class="btn btn-primary" data-pro-close>Explore analytics</button>';
     } else if (entitlement.tier === 'trial') {
-      status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your free trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. Ask your MyFinance administrator to keep Pro after it ends.</span></p>`;
+      status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your Pro Plus trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. Includes Debt Free and Savings Goals. Ask your MyFinance administrator to keep your chosen plan after it ends.</span></p>`;
       action = '<button type="button" class="btn btn-primary" data-pro-close>Keep exploring</button>';
     } else if (entitlement.trialAvailable && !supportSession) {
-      status = '<p class="pro-status">No card needed. Your 7-day trial starts now and ends on its own &mdash; nothing is charged.</p>';
+      status = '<p class="pro-status">Try all Pro Plus features for 7 days. No card needed. The trial ends on its own &mdash; nothing is charged. Paid access is arranged with your MyFinance administrator; there is no checkout here.</p>';
       action = '<button type="button" class="btn btn-primary" data-pro-trial>Start 7-day free trial</button>';
     } else {
       const ended = entitlement.trialEndsAt ? ` on ${new Date(entitlement.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : '';
-      status = `<p class="pro-status is-locked">${ICONS.lock}<span>${entitlement.source === 'trial-expired' ? `Your free trial ended${esc(ended)}.` : 'Pro is not active on this account.'} Ask your MyFinance administrator to upgrade you to Pro.</span></p>`;
+      status = `<p class="pro-status is-locked">${ICONS.lock}<span>${entitlement.source === 'trial-expired' ? `Your free trial ended${esc(ended)}.` : 'A paid plan is not active on this account.'} Ask your MyFinance administrator for Pro or Pro Plus. No online checkout is available.</span></p>`;
       action = '<button type="button" class="btn btn-primary" data-pro-close>Got it</button>';
     }
     const features = (entitlement.features?.length ? entitlement.features : []).map(feature =>
       `<li><span class="pro-feature-icon">${ICONS[feature.id] || ICONS.spark}</span><span><strong>${esc(feature.title)}</strong><small>${esc(feature.text)}</small></span></li>`).join('');
-    dialog.innerHTML = `<div class="pro-hero"><span class="pro-hero-mark">${ICONS.spark}</span><p class="eyebrow">MYFINANCE PRO</p>
-      <h2 id="pro-dialog-title">See your money the way a trader sees a market</h2>
+    dialog.innerHTML = `<div class="pro-hero"><span class="pro-hero-mark">${ICONS.spark}</span><p class="eyebrow">MYFINANCE / CHOOSE YOUR NEXT STEP</p>
+      <h2 id="pro-dialog-title">${plusRequired ? 'A plan for less debt. More life.' : 'Turn money insights into better habits.'}</h2>
       ${reason ? `<p class="pro-reason">${esc(reason)}</p>` : ''}
-      <div class="pro-price"><strong>$${Number(plan.price || 4.99).toFixed(2)}</strong><span>/ month</span><em>${esc(plan.name || 'MyFinance Pro')}</em></div></div>
+      <div class="upgrade-plans"><article><h3>Pro</h3><div class="pro-price"><strong>$${Number(plan.price).toFixed(2)}</strong><span>/ month</span></div><p>Understand your patterns: budgets, spending insights, forecasts, subscription radar and CSV exports.</p><small>Does not unlock Debt Free or Savings Goals.</small></article>
+      <article class="upgrade-plus"><h3>Pro Plus</h3><div class="pro-price"><strong>$${Number(plusPlan.price).toFixed(2)}</strong><span>/ month total</span></div><p>Everything in Pro, plus Debt Free and Savings Goals: payoff strategies, monthly targets and what-if planning.</p><small>Pro + $${Number(plusPlan.additionalPrice).toFixed(2)}/month. Not a second $9.98 charge.</small></article></div></div>
       <ul class="pro-feature-grid">${features}</ul>
       <div class="pro-dialog-foot">${status}<div class="pro-actions"><button type="button" class="btn btn-secondary" data-pro-close>Not now</button>${action}</div></div>`;
     dialog.querySelectorAll('[data-pro-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
@@ -144,7 +153,7 @@
         setEntitlement(await request('/api/license/trial', { method: 'POST', body: '{}' }));
         invalidateAnalytics();
         dialog.close();
-        globalThis.notify?.('Your 7-day MyFinance Pro trial has started. Enjoy the insights!');
+        globalThis.notify?.('Your 7-day Pro Plus trial has started. Insights, Debt Free and Savings Goals are unlocked!');
         refreshCurrentView();
       } catch (error) {
         event.target.disabled = false;
@@ -161,6 +170,11 @@
   function requirePro(reason) {
     if (isActive()) return true;
     openUpgrade(reason);
+    return false;
+  }
+  function requireProPlus(reason) {
+    if (isPlusActive()) return true;
+    openUpgrade(reason, 'pro_plus');
     return false;
   }
 
@@ -227,13 +241,13 @@
   if (typeof baseShowView === 'function') {
     globalThis.showView = function(view) {
       baseShowView(view);
-      if (globalThis.FinanceSession?.isAuthenticated?.() && !state.entitlement) ensureEntitlement();
+      if (globalThis.FinanceSession?.isAuthenticated?.() && !state.entitlement) ensureEntitlement().catch(error => globalThis.notify?.(error.message));
     };
   }
 
   globalThis.FinancePro = {
-    ensureEntitlement, isActive, entitlement: () => state.entitlement, setEntitlement, getAnalytics, invalidateAnalytics,
-    openUpgrade, requirePro, openBudgets, proTag, proSwitch, prefs, request, refreshCurrentView,
+    ensureEntitlement, isActive, isPlusActive, entitlement: () => state.entitlement, setEntitlement, getAnalytics, invalidateAnalytics,
+    openUpgrade, requirePro, requireProPlus, openBudgets, proTag, proSwitch, prefs, request, refreshCurrentView,
     format: { esc, money, pct }, ICONS, planLabel
   };
 })();

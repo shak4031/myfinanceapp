@@ -40,7 +40,8 @@
   const KIND_LABEL = { general: 'Savings', car: 'Car', college: 'College', emergency: 'Emergency fund' };
 
   const state = { plan: null, pending: null, whatIf: { extra: 0, lumpSum: 0, result: null }, goalWhatIf: {} };
-  const isPro = () => state.plan ? !!state.plan.pro : !!window.FinancePro?.isActive?.();
+  let plusAccess = false;
+  const isPro = () => state.plan ? !!state.plan.pro : !!window.FinancePro?.isPlusActive?.();
   // Older rows store a word ("Save") instead of an emoji.
   const LEGACY_ICONS = { save: '🛡️', play: '✈️', car: '🚗', home: '🏠', house: '🏠', school: '🎓', education: '🎓', travel: '✈️', tech: '💻', gift: '🎁' };
   const goalIcon = value => {
@@ -54,12 +55,12 @@
     const response = await fetch(url, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     let data = {};
     try { data = await response.json(); } catch { data = {}; }
-    if (!response.ok) throw Object.assign(new Error(data.error || `Request failed (${response.status})`), { code: data.code, status: response.status });
+    if (!response.ok) throw Object.assign(new Error(data.error || `Request failed (${response.status})`), { code: data.code, status: response.status, entitlement: data.entitlement });
     return data;
   }
-  const unlock = reason => window.FinancePro?.requirePro ? window.FinancePro.requirePro(reason) : false;
+  const unlock = reason => window.FinancePro?.requireProPlus ? window.FinancePro.requireProPlus(reason) : false;
   function reportFailure(error) {
-    if (error.code === 'PRO_REQUIRED') return unlock(error.message);
+    if (error.code === 'PRO_REQUIRED' || error.code === 'PRO_PLUS_REQUIRED') return unlock(error.message);
     notifyUser(error.message || 'Something went wrong');
   }
 
@@ -88,7 +89,7 @@
     <li class="tone-${esc(item.severity)}"><span class="plan-guidance-icon">${icon(item.severity === 'success' ? 'check' : item.severity === 'info' ? 'info' : 'alert')}</span>
       <div><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></div></li>`).join('')}</ul>`
     : '<p class="plan-quiet">Nothing needs your attention right now.</p>';
-  const proBadge = () => `<span class="plan-pro-tag">${icon('lock', 11)}PRO</span>`;
+  const proBadge = () => `<span class="plan-pro-tag">${icon('lock', 11)}PRO PLUS</span>`;
   const strategyCards = (list, active, kind, numbers = () => '') => `<div class="plan-strategies" role="radiogroup" aria-label="${kind === 'debt' ? 'Payoff strategy' : 'Goal strategy'}">${list.map(item => `
     <button type="button" class="plan-strategy${item.id === active ? ' is-active' : ''}${item.locked ? ' is-locked' : ''}" role="radio" aria-checked="${item.id === active}" data-act="${kind}-strategy" data-id="${esc(item.id)}">
       <span class="plan-strategy-head"><strong>${esc(item.name)}</strong><span class="plan-strategy-badges">${item.locked ? proBadge() : `${item.recommended ? '<span class="plan-reco">Recommended</span>' : ''}${item.id === active ? `<span class="plan-check" title="Selected">${icon('check', 14)}</span>` : ''}`}</span></span>
@@ -98,8 +99,8 @@
   const toggle = (act, id, on, label) => `<button type="button" class="plan-switch${on ? ' is-on' : ''}" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}" data-id="${esc(id)}"><span></span></button>`;
   const lockedTeaser = (title, text, reason) => `<div class="plan-locked">
     <div class="plan-locked-art" aria-hidden="true"><span></span><span></span><span></span></div>
-    <div><p class="plan-eyebrow">${icon('lock', 12)} MYFINANCE PRO</p><h3>${esc(title)}</h3><p>${esc(text)}</p>
-    <button type="button" class="btn btn-primary" data-act="unlock" data-reason="${esc(reason)}">Unlock with Pro</button></div></div>`;
+    <div><p class="plan-eyebrow">${icon('lock', 12)} MYFINANCE PRO PLUS</p><h3>${esc(title)}</h3><p>${esc(text)}</p>
+    <button type="button" class="btn btn-primary" data-act="unlock" data-reason="${esc(reason)}">Unlock with Pro Plus</button></div></div>`;
 
   // ---------- debt-free program ----------
   function chart(debtPlan) {
@@ -211,7 +212,7 @@
   function whatIfPanel(p) {
     const d = p.debtPlan;
     if (!d.debts.some(item => item.included && item.balance > 0)) return '';
-    if (!isPro()) return `<section class="panel plan-card">${lockedTeaser('Simulate before you commit', 'Try a raise, a bonus or a tax refund and instantly see the new debt-free date and the interest it saves, drawn right on your chart. Reorder debts by hand with My order.', 'What-if simulations are part of MyFinance Pro')}</section>`;
+    if (!isPro()) return `<section class="panel plan-card">${lockedTeaser('Simulate before you commit', 'Try a raise, a bonus or a tax refund and instantly see the new debt-free date and the interest it saves, drawn right on your chart. Reorder debts by hand with My order.', 'What-if simulations are part of MyFinance Pro Plus')}</section>`;
     const { extra, lumpSum } = state.whatIf;
     return `<section class="panel plan-card plan-whatif">
       <header class="plan-card-head"><div><h3>${icon('spark', 16)} What if…</h3><p>Nothing is saved. Try amounts to see how fast they move the date.</p></div>
@@ -275,7 +276,7 @@
       ? `<p class="plan-strategy-note">${icon('info', 14)}<span><b>${esc(twins.map(item => item.name).join(', ').replace(/, ([^,]*)$/, ' and $1'))}</b> attack your debts in the same order with these balances and rates, so their dates and interest match. Switching between them changes nothing today; it will once your balances or rates diverge.</span></p>` : '';
     const strategyIntro = `Each card shows the month you'd be debt-free and the total interest you'd pay with that strategy at your current ${money(d.budget)}/mo budget. Every strategy pays all minimums; they differ only in where the extra money goes. Star a debt to pay it first regardless.`;
     root.innerHTML = `${hasDebts ? debtHero(p) : ''}
-      ${d.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Your saved strategy needs MyFinance Pro, so the plan is using Avalanche. <button type="button" class="link-btn" data-act="unlock" data-reason="Advanced payoff strategies are part of MyFinance Pro">Renew Pro</button></p>` : ''}
+      ${d.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Your saved strategy needs MyFinance Pro Plus, so the plan is using Avalanche. <button type="button" class="link-btn" data-act="unlock" data-reason="Advanced payoff strategies are part of MyFinance Pro Plus">Renew Pro Plus</button></p>` : ''}
       ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy${active ? ` <span class="plan-strategy-current">Using ${esc(active.name)}</span>` : ''}</h3><p>${strategyIntro}</p></div><a class="plan-help-link" href="#tutorials/debt-strategies" title="How strategies work">${icon('play', 13)} How it works</a></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}${tieNote}</section>` : ''}
       <div class="plan-columns">
         <div class="plan-col-main">
@@ -343,7 +344,7 @@
       ${goal.gap > 0 ? `<p class="plan-goal-gap">${icon('alert', 13)} Needs ${cents(goal.required)}/mo to land on time, ${cents(goal.gap)} more than it gets.</p>` : ''}
       ${goal.included && goal.remaining > 0 ? (pro ? `<label class="plan-goal-whatif">${icon('spark', 13)} Try <span class="plan-money-input sm"><span>$</span><input type="number" min="1" step="25" data-goal-whatif="${esc(goal.id)}" value="${whatIf?.monthly || ''}" placeholder="${Math.round(goal.required || goal.allocated || 100)}" aria-label="Try a monthly amount for ${esc(goal.name)}"></span>/mo
         <output>${whatIf?.result ? (whatIf.result.finishDate ? `→ ${monthLabel(whatIf.result.finishDate)} ${whatIf.result.onTime ? '<b class="is-good">on time</b>' : '<b class="is-bad">late</b>'}` : '→ not reached') : ''}</output></label>`
-        : '<button type="button" class="plan-goal-whatif is-locked" data-act="unlock" data-reason="Goal what-if simulations are part of MyFinance Pro">' + icon('lock', 12) + ' Try a different monthly amount</button>') : ''}
+        : '<button type="button" class="plan-goal-whatif is-locked" data-act="unlock" data-reason="Goal what-if simulations are part of MyFinance Pro Plus">' + icon('lock', 12) + ' Try a different monthly amount</button>') : ''}
       <footer>
         ${goal.remaining > 0 ? `<button type="button" class="btn btn-secondary btn-sm" data-act="contribute-goal" data-id="${esc(goal.id)}">Record savings</button>` : '<span class="plan-pill good">' + icon('check', 13) + 'Fully funded</span>'}
         <span class="plan-debt-actions">
@@ -379,7 +380,7 @@
     const g = p.goalPlan, pro = isPro();
     const strategies = g.strategies.map(item => ({ ...item }));
     root.innerHTML = `${moneyFlow(p)}
-      ${g.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Balanced funding needs MyFinance Pro, so goals use Priority order. <button type="button" class="link-btn" data-act="unlock" data-reason="Balanced goal funding is part of MyFinance Pro">Renew Pro</button></p>` : ''}
+      ${g.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Balanced funding needs MyFinance Pro Plus, so goals use Priority order. <button type="button" class="link-btn" data-act="unlock" data-reason="Balanced goal funding is part of MyFinance Pro Plus">Renew Pro Plus</button></p>` : ''}
       <section class="panel plan-card">
         <header class="plan-card-head"><div><h3>How goals share the budget</h3><p>Goals with a fixed monthly amount always get it first.</p></div></header>
         ${strategyCards(strategies, g.strategy, 'goal')}
@@ -407,7 +408,15 @@
     const root = $(rootId);
     if (root && !state.plan) root.innerHTML = '<div class="panel plan-loading"><span></span><span></span><span></span></div>';
     try { await refresh(); render(); }
-    catch (error) { if (root) root.innerHTML = `<div class="panel plan-empty"><h3>Could not load your plan</h3><p>${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-act="retry">Try again</button></div>`; }
+    catch (error) {
+      if (error.code === 'PRO_PLUS_REQUIRED') {
+        state.plan = null;
+        if (error.entitlement) window.FinancePro?.setEntitlement(error.entitlement);
+        if (root) root.innerHTML = `<section class="panel plan-empty plus-page-lock"><p class="plan-eyebrow">${icon('lock')} PRO PLUS</p><h2>${rootId === 'plan-debt-root' ? 'Less debt. More breathing room.' : 'Give your next chapter a plan.'}</h2><p>${rootId === 'plan-debt-root' ? 'Compare payoff strategies, see your estimated debt-free date and test the impact of extra payments.' : 'Turn an emergency fund, a home or a big life moment into monthly savings targets you can track.'}</p><p>Only with <strong>Pro Plus: $9.98/month total</strong>.<br>Everything in Pro, plus these planning tools for $4.99 more/month.</p><button type="button" class="btn btn-primary" data-act="unlock" data-reason="Debt Free and Savings Goals are exclusive to Pro Plus.">Explore Pro Plus</button><p class="muted">Pro alone does not unlock this page. Existing plans stay saved when access ends.</p></section>`;
+        return;
+      }
+      if (root) root.innerHTML = `<div class="panel plan-empty"><h3>Could not load your plan</h3><p>${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-act="retry">Try again</button></div>`;
+    }
   }
   window.loadPayoffPlan = () => load('plan-debt-root', renderDebt);
   window.loadGoals = () => load('plan-goals-root', renderGoals);
@@ -420,7 +429,7 @@
     const { act, id } = button.dataset;
     switch (act) {
       case 'retry': return renderAfter(refresh());
-      case 'unlock': return unlock(button.dataset.reason || 'This is part of MyFinance Pro');
+      case 'unlock': return unlock(button.dataset.reason || 'This is part of MyFinance Pro Plus');
       case 'add-debt': return window.openDebtEditor?.();
       case 'edit-debt': return window.openDebtEditor?.(id);
       case 'add-goal': return window.openAddGoalModal?.();
@@ -429,7 +438,7 @@
       case 'debt-strategy': case 'goal-strategy': {
         const list = act === 'debt-strategy' ? state.plan.debtPlan.strategies : state.plan.goalPlan.strategies;
         const choice = list.find(item => item.id === id);
-        if (choice?.locked) return unlock(`${choice.name} is part of MyFinance Pro`);
+        if (choice?.locked) return unlock(`${choice.name} is part of MyFinance Pro Plus`);
         if (choice?.id === (act === 'debt-strategy' ? state.plan.debtPlan.strategy : state.plan.goalPlan.strategy)) return;
         if (id === 'custom' && !state.plan.debtPlan.debts.some(debt => debt.custom_rank != null)) {
           const ids = rankedDebts().map(debt => debt.id);
@@ -451,7 +460,7 @@
       case 'toggle-focus': { const debt = findDebt(id); return debt && mutateThenReload(api(`/api/debts/${encodeURIComponent(id)}`, 'PUT', { focus: !debt.focus })); }
       case 'toggle-goal': { const goal = findGoal(id); return goal && mutateThenReload(api(`/api/goals/${encodeURIComponent(id)}`, 'PUT', { included: !goal.included })); }
       case 'move-debt': {
-        if (!unlock('Setting your own payoff order is part of MyFinance Pro')) return;
+        if (!unlock('Setting your own payoff order is part of MyFinance Pro Plus')) return;
         const ids = rankedDebts().map(debt => debt.id);
         const from = ids.findIndex(value => String(value) === String(id)), to = from + Number(button.dataset.dir);
         if (from < 0 || to < 0 || to >= ids.length) return;
@@ -621,7 +630,12 @@
   });
   // A trial or upgrade changes which strategies the server unlocks.
   document.addEventListener('pro:entitlement', event => {
-    if (state.plan && !!event.detail?.active !== !!state.plan.pro) refresh().then(renderAll).catch(() => {});
+    const next = !!event.detail?.plusActive;
+    if (next === plusAccess) return;
+    plusAccess = next;
+    if (!next) state.plan = null;
+    if ($('payoff-view')?.classList.contains('active')) window.loadPayoffPlan();
+    else if ($('goals-view')?.classList.contains('active')) window.loadGoals();
   });
   let resizeTimer = null;
   window.addEventListener?.('resize', () => {

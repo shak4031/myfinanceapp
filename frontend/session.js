@@ -34,7 +34,7 @@ window.FinanceSession = (() => {
     if (!auth && requestGeneration !== generation) throw new Error('Session changed. Request discarded.');
     if (!auth && !response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || `Request failed (${response.status})`);
+      throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, code: body.code, entitlement: body.entitlement });
     }
     if (!auth) {
       const parse = response.json.bind(response);
@@ -69,6 +69,7 @@ window.FinanceSession = (() => {
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
     el('auth-switch').hidden = recovery ? false : !registrationEnabled || mode === 'setup';
     el('auth-switch').textContent = recovery ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
+    if (mode === 'register') el('auth-description').textContent = 'Start with Free. Explore your money, then choose whether to try Pro Plus for 7 days. No card needed.';
     el('auth-forgot').hidden = mode !== 'login';
   }
   function showSupportBanner(support) {
@@ -88,6 +89,13 @@ window.FinanceSession = (() => {
   }
   async function start() {
     cleanAppMarkup = document.querySelector('.app-container').innerHTML;
+    const focusAccess = () => {
+      if (registrationEnabled && mode === 'login') { mode = 'register'; renderMode(); }
+      el('marketing-access')?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      (mode === 'setup' || mode === 'register' ? el('auth-name') : el('auth-email'))?.focus({ preventScroll: true });
+    };
+    el('marketing-start')?.addEventListener('click', focusAccess);
+    document.querySelectorAll('[data-marketing-start]').forEach(button => button.addEventListener('click', focusAccess));
     el('auth-switch').onclick = () => {
       mode = mode === 'login' ? 'register' : 'login';
       if (location.hash.startsWith('#reset-token=')) history.replaceState(null, '', location.pathname);

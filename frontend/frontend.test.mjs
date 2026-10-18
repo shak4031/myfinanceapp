@@ -847,6 +847,77 @@ test('Pro gating opens the upgrade dialog for free accounts and offers the one-t
   assert.equal(FinancePro.requirePro('x'), true);
   assert.match(f.node('pro-nav-badge').innerHTML, /TRIAL/);
 });
+test('marketing page explains the app, all prices and exclusive Pro Plus access', () => {
+  const html = source('index.html');
+  assert.match(html, /your personal money workspace/);
+  assert.match(html, /Illustrative preview/);
+  assert.match(html, /id="marketing-pricing"/);
+  assert.match(html, /\$0<span>\/ month/);
+  assert.match(html, /\$4\.99<span>\/ month/);
+  assert.match(html, /\$9\.98<span>\/ month total/);
+  assert.equal((html.match(/Debt Free &amp; Savings Goals not included/g) || []).length, 2);
+  assert.match(html, /Pro alone does not unlock Debt Free or Savings Goals/);
+  assert.match(html, /not through online checkout/);
+  assert.match(html, /ends automatically with no charge/);
+  assert.match(source('marketing.css'), /prefers-reduced-motion/);
+});
+test('marketing start opens registration only when registration is enabled', async () => {
+  for (const registrationEnabled of [true, false]) {
+    const f = fixture(async url => url.endsWith('/me') ? response(401, {}) : response(200, { setupRequired: false, registrationEnabled }));
+    f.run('session.js');
+    await f.context.FinanceSession.start();
+    f.node('marketing-start').listeners.click();
+    assert.equal(f.node('auth-title').textContent, registrationEnabled ? 'Make room for your next chapter.' : 'Welcome back.');
+    assert.equal(f.node('auth-switch').hidden, !registrationEnabled);
+  }
+});
+test('Pro does not unlock Pro Plus; trials and full-access accounts do', () => {
+  const f = loadPro();
+  const pro = f.context.FinancePro;
+  f.node('pro-dialog').tagName = 'DIALOG';
+  pro.setEntitlement({ tier: 'pro', active: true, plusActive: false, features: [] });
+  assert.equal(pro.requirePro('Budgets'), true);
+  assert.equal(pro.requireProPlus('Savings goals'), false);
+  assert.equal(f.node('pro-dialog').open, true);
+  assert.match(f.node('pro-dialog').innerHTML, /\$9\.98/);
+  assert.match(f.node('pro-dialog').innerHTML, /Does not unlock Debt Free or Savings Goals/);
+  assert.match(f.node('pro-dialog').innerHTML, /Ask your MyFinance administrator/);
+  for (const tier of ['pro_plus', 'trial', 'pro']) {
+    pro.setEntitlement({ tier, active: true, plusActive: true, daysLeft: 7, features: [] });
+    assert.equal(pro.requireProPlus('Debt free'), true);
+    assert.match(pro.planLabel().title, /Pro Plus/);
+  }
+});
+test('direct debt and goals loads show a full-page Pro Plus lock for Free and Pro', async () => {
+  for (const tier of ['free', 'pro']) {
+    const f = loadPlan(async () => response(402, { code: 'PRO_PLUS_REQUIRED', error: 'Pro Plus required', entitlement: { tier, active: tier === 'pro', plusActive: false } }));
+    await f.context.loadPayoffPlan();
+    await f.context.loadGoals();
+    for (const id of ['plan-debt-root', 'plan-goals-root']) {
+      const html = f.node(id).innerHTML;
+      assert.match(html, /plus-page-lock/);
+      assert.match(html, /\$9\.98\/month total/);
+      assert.match(html, /Explore Pro Plus/);
+      assert.doesNotMatch(html, /data-act="add-(debt|goal)"/);
+    }
+    assert.equal(f.context.FinancePlan.state.plan, null);
+    assert.equal(f.context.FinancePro.isActive(), tier === 'pro');
+    assert.equal(f.context.FinancePro.isPlusActive(), false);
+  }
+});
+test('session request errors preserve the Pro Plus gate for page loaders', async () => {
+  const f = fixture(async url => url.endsWith('/me')
+    ? response(200, { user: { id: 2, name: 'Customer' } })
+    : response(402, { code: 'PRO_PLUS_REQUIRED', error: 'Pro Plus required', entitlement: { plusActive: false } }));
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  await assert.rejects(f.context.fetch('/api/plan'), error => error.code === 'PRO_PLUS_REQUIRED' && error.status === 402 && error.entitlement.plusActive === false);
+});
+test('entitlement lookup failures remain errors rather than pretending Free is active', async () => {
+  const f = loadPro(async () => response(500, { error: 'License service unavailable' }));
+  await assert.rejects(f.context.FinancePro.ensureEntitlement(), /License service unavailable/);
+  assert.equal(f.context.FinancePro.entitlement(), null);
+});
 test('analytics page shows a locked preview without Pro', async () => {
   const f = loadPro(async url => url === '/api/license'
     ? response(200, { tier: 'free', source: 'trial-expired', active: false, trialAvailable: false, features: [] })

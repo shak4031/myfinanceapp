@@ -82,15 +82,16 @@
 
   function planCell(user) {
     const license = user.license || { tier: 'free' };
-    const detail = license.tier === 'trial' ? `Trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro · owner' : license.source === 'demo' ? 'Pro · demo' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
+    const detail = license.tier === 'trial' ? `Pro Plus trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro Plus · owner' : license.source === 'demo' ? 'Pro Plus · demo' : license.tier === 'pro_plus' ? 'Pro Plus' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
     return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>`;
   }
   function planButton(user) {
     const license = user.license || { tier: 'free' };
     if (license.source === 'owner' || license.source === 'demo') return '';
-    return license.tier === 'pro'
-      ? `<button class="btn btn-secondary" data-action="license-revoke" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Revoke Pro</button>`
-      : `<button class="btn btn-primary" data-action="license-grant" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Grant Pro</button>`;
+    const attrs = `data-id="${esc(user.id)}" data-email="${esc(user.email)}"`;
+    return `${license.tier !== 'pro' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="pro" ${attrs}>${license.tier === 'pro_plus' ? 'Change to Pro' : 'Grant Pro'}</button>` : ''}
+      ${license.tier !== 'pro_plus' ? `<button class="btn btn-primary" data-action="license-grant" data-plan="pro_plus" ${attrs}>Grant Pro Plus</button>` : ''}
+      ${license.tier === 'pro' || license.tier === 'pro_plus' || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
   }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
@@ -108,21 +109,23 @@
   }
   $('user-search').onclick = () => loadUsers().catch(error => toast(error.message));
   $('users').addEventListener('click', async event => {
-    const { action, id, email } = event.target.dataset;
+    const { action, id, email, plan = 'pro' } = event.target.dataset;
     if (!action) return;
     if (action === 'audit') { $('f-user').value = id; $('f-type').value = ''; $('f-outcome').value = ''; return openTab('audit'); }
     const prompts = {
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
       'revoke-sessions': 'Sign this user out of every device?',
       unlock: 'Clear failed sign-in lockouts for this user?',
-      'license-grant': `Grant MyFinance Pro ($4.99/month) to ${email}? Analytics, budgets and exports unlock immediately.`,
-      'license-revoke': `Revoke MyFinance Pro from ${email}? Their budgets are kept but Pro features will be locked.`
+      'license-grant': plan === 'pro_plus'
+        ? `Grant MyFinance Pro Plus ($9.98/month total: Pro + $4.99) to ${email}? This includes Pro, Debt Free and Savings Goals. No payment is collected by this action.`
+        : `Set ${email} to MyFinance Pro ($4.99/month)? Analytics, budgets and exports unlock. Debt Free and Savings Goals will be locked, with saved data kept. No payment is collected by this action.`,
+      'license-revoke': `Revoke paid access from ${email}? Budgets, debts and goals are kept, but Pro and Pro Plus features will be locked.`
     };
     if (!await FinanceUI.confirm(prompts[action])) return;
     try {
       const license = action.startsWith('license-');
-      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${license ? 'license' : action}`, { method: 'POST', body: JSON.stringify(license ? { action: action.slice(8) } : {}) });
-      toast(license ? `MyFinance Pro ${action === 'license-grant' ? 'granted' : 'revoked'}. The change was recorded in the audit log.` : result.message || 'Done. The action was recorded in the audit log.');
+      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${license ? 'license' : action}`, { method: 'POST', body: JSON.stringify(license ? { action: action.slice(8), plan } : {}) });
+      toast(license ? `Paid access ${action === 'license-grant' ? 'updated' : 'revoked'}. The change was recorded in the audit log.` : result.message || 'Done. The action was recorded in the audit log.');
       await loadUsers();
     } catch (error) { toast(error.message); }
   });

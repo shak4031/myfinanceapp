@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import Database from '../db.js';
+import { requireProPlus } from '../utils/license.js';
 
 const router = Router();
+router.use(requireProPlus);
 const db = new Database();
 const numeric = ['balance', 'apr', 'credit_limit', 'min_payment'];
 

@@ -705,7 +705,12 @@
         <div class="table-scroll"><table class="review-table"><thead><tr><th>Category</th><th>Monthly average</th><th>Period total</th></tr></thead><tbody>${(plan.categorySpending || []).map(c => `<tr><td>${escape(c.category || 'Uncategorized')}</td><td>${money(c.monthlyAverage)}</td><td>${money(c.total)}</td></tr>`).join('') || '<tr><td colspan="3">Import statements to see your spending breakdown.</td></tr>'}</tbody></table></div>
         <div class="coach-note"><strong>Your next move</strong><p>If the combined plan is short, change an amount or deadline rather than pretending the gap will disappear. Review a flexible category, set a realistic cap, and check actual spending next month. Protect essential bills and a starter emergency buffer.</p></div>
         <p class="muted">Local, deterministic guidance—not a generative AI integration, investment recommendation, or professional financial advice. No financial data is sent to third-party AI services.</p>`;
-    } catch (error) { $('insights-container').textContent = error.message; }
+    } catch (error) {
+      if (error.code === 'PRO_PLUS_REQUIRED') {
+        $('insights-container').innerHTML = '<div class="coach-note"><h3>Put your goals in the bigger picture.</h3><p>This coach combines your spending, debt and savings targets, so it is included with Pro Plus ($9.98/month total). Pro spending insights are available on the Analytics page.</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro Plus</button></div>';
+        $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Combined debt and savings coaching requires Pro Plus.', 'pro_plus');
+      } else $('insights-container').textContent = error.message;
+    }
     finally { button.disabled = false; }
   };
 

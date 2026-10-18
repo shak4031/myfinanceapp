@@ -65,6 +65,7 @@ test('audit logging, password reset, admin console and consented support access'
     const adminCookie = cookieFrom(owner);
     const customer = await call('/api/auth/register', { body: { name: 'Customer', email: 'customer@example.com', password } });
     let customerCookie = cookieFrom(customer);
+    assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 200);
     assert.equal(customer.body.user.role, 'user');
     assert.equal((await call('/api/goals', { body: { name: 'Customer car', target_amount: 30000, target_date: '2027-01-01' }, cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/goals', { body: { name: 'Owner boat', target_amount: 9000, target_date: '2027-01-01' }, cookie: adminCookie })).status, 200);

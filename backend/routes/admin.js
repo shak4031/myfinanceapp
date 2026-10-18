@@ -68,19 +68,19 @@ router.get('/users', async (req, res, next) => {
            AND a.outcome='failure' AND a.created_at > NOW() - INTERVAL '24 hours') AS failed_logins_24h,
         (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.support_grant_id IS NULL) AS active_sessions,
         (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants,
-        l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
+        l.plan AS license_plan, l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
         l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at
       FROM users u
       LEFT JOIN user_licenses l ON l.user_id = u.id
       WHERE u.password_hash IS NOT NULL AND ($1 = '' OR lower(u.email) LIKE '%' || $1 || '%' OR lower(u.name) LIKE '%' || $1 || '%')
       ORDER BY u.id LIMIT 200
     `, [q])).rows);
-    res.json(rows.map(({ license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, ...user }) => {
+    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, ...user }) => {
       const row = license_granted_at || license_revoked_at || license_trial_started_at
-        ? { granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at }
+        ? { plan: license_plan, granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at }
         : null;
-      const { tier, source, daysLeft, trialEndsAt } = entitlementFromRow(user.id, row, new Date(), user.email);
-      return { ...user, license: { tier, source, daysLeft, trialEndsAt } };
+      const { tier, source, daysLeft, trialEndsAt, plusActive } = entitlementFromRow(user.id, row, new Date(), user.email);
+      return { ...user, license: { tier, source, daysLeft, trialEndsAt, plusActive } };
     }));
   } catch (error) { next(error); }
 });
@@ -187,18 +187,20 @@ router.post('/users/:id/license', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     const action = req.body?.action;
+    const plan = req.body?.plan ?? 'pro';
     if (!['grant', 'revoke'].includes(action)) return res.status(400).json({ error: 'action must be grant or revoke' });
-    if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro' });
+    if (!['pro', 'pro_plus'].includes(plan)) return res.status(400).json({ error: 'plan must be pro or pro_plus' });
+    if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro Plus' });
     const entitlement = id && await administrativeTransaction(async client => {
       const user = await loadUser(client, id);
       if (!user) return null;
       if (isDemoEmail(user.email)) return { demo: true };
-      return setLicense(client, id, action, req.user.id);
+      return setLicense(client, id, action, req.user.id, plan);
     });
     if (!entitlement) return res.status(404).json({ error: 'User not found' });
-    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro' });
+    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro Plus' });
     await recordAudit(req, `admin.license_${action === 'grant' ? 'granted' : 'revoked'}`, 'success', { subjectUserId: id, status: 200 });
-    res.json({ success: true, license: { tier: entitlement.tier, source: entitlement.source } });
+    res.json({ success: true, license: { tier: entitlement.tier, source: entitlement.source, plusActive: entitlement.plusActive } });
   } catch (error) { next(error); }
 });
 

@@ -458,8 +458,9 @@ async function loadUpcoming(req, today = new Date()) {
   try {
     const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
     pro = !!entitlement.active;
-    plan = computePlan(inputs, { pro, now: today });
-    extras = [...plan.incomeItems, ...buildPlanPayments(plan, today)];
+    const computed = computePlan(inputs, { pro: !!entitlement.plusActive, now: today });
+    plan = entitlement.plusActive ? computed : null;
+    extras = [...computed.incomeItems, ...(plan ? buildPlanPayments(plan, today) : [])];
   } catch (error) {
     log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
   }
