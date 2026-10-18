@@ -257,6 +257,14 @@ The signed-out login page doubles as the public marketing page: a benefit-led
 introduction, illustrative progress preview, Free / Pro / Pro Plus comparison,
 and the existing sign-in, registration and password-recovery forms.
 
+The page scrolls normally while signed out and has a sticky top bar (Features,
+Free vs Pro, Pricing, Sign in) plus links back to sign-in and to the top after
+pricing. In-page links scroll without touching the app's hash router. Above the
+sign-in card, a "7 quick wins" feature spotlight (`frontend/marketing.js`)
+rotates through Free, Pro and Pro Plus capabilities with varied entrance
+effects. It has dots, arrows and a pause button, pauses on hover or focus and
+in background tabs, and does not auto-rotate when reduced motion is preferred.
+
 Prices are USD per month:
 - **Free ($0):** imports, transactions, category review and the everyday dashboard.
 - **Pro ($4.99):** Free plus budgets, analytics, charts, forecasts, subscription
@@ -294,12 +302,17 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
   results are identical; the page says so and switching shows a confirmation.
 
 ### Tutorials tab
-- Short animated walkthroughs for the **Debt-free plan**, **Savings goals** and the
-  **Dashboard**, with chapters, a progress bar, full screen, keyboard controls
-  (Space/K, ←/→, F) and optional voice narration using the browser's speech engine.
-- Deep links such as `#tutorials/debt-strategies` open a specific chapter; they are
-  linked from the Debt-free plan ("Watch the 1-min tour", "How it works"), Goals,
-  the dashboard welcome ("Tour") and Settings.
+- Short animated walkthroughs for the **Debt-free plan**, **Savings goals**, the
+  **Dashboard**, **Fixed bills & income**, **Categories** and **Transactions**, with
+  chapters, a progress bar, full screen, keyboard controls (Space/K, ←/→, F) and
+  optional voice narration using the browser's speech engine.
+- The Fixed, Categories and Transactions tours each end with a "which page when?"
+  comparison: Transactions for detail (one charge), Categories for patterns (what
+  money is for) and Fixed bills & income for timing (when money moves).
+- Deep links such as `#tutorials/debt-strategies`, `#tutorials/income` or
+  `#tutorials/which-page` open a specific chapter; they are linked from the
+  Debt-free plan ("Watch the 1-min tour", "How it works"), Goals, Categories,
+  Transactions, the dashboard welcome ("Tour") and Settings.
 - Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
   size and need no video hosting. Edit them in `frontend/tutorial.js`.
 

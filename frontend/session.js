@@ -91,7 +91,7 @@ window.FinanceSession = (() => {
     cleanAppMarkup = document.querySelector('.app-container').innerHTML;
     const focusAccess = () => {
       if (registrationEnabled && mode === 'login') { mode = 'register'; renderMode(); }
-      el('marketing-access')?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      (el('marketing-signin') || el('marketing-access'))?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
       (mode === 'setup' || mode === 'register' ? el('auth-name') : el('auth-email'))?.focus({ preventScroll: true });
     };
     el('marketing-start')?.addEventListener('click', focusAccess);

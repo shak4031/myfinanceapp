@@ -241,7 +241,7 @@
     const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, analytics: () => window.loadAnalyticsPage?.(), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
-  window.addEventListener('hashchange', () => window.showView(location.hash.slice(1)));
+  window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });
   document.addEventListener('click', event => {
     const link = event.target.closest?.('a[data-view]');
     if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

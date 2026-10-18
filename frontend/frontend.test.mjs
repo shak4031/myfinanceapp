@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -496,6 +496,7 @@ test('goal validation and save errors are visible inside the floating editor', a
 });
 test('hash navigation updates the view, breadcrumb and active parent navigation', () => {
   const f = fixture(); f.run('refresh.js');
+  f.node('body').classList.remove('auth-pending');
   f.context.location.hash = '#transactions';
   f.listeners.get('hashchange')();
   assert.equal(f.node('current-page').textContent, 'Transactions');
@@ -861,6 +862,53 @@ test('marketing page explains the app, all prices and exclusive Pro Plus access'
   assert.match(html, /ends automatically with no charge/);
   assert.match(source('marketing.css'), /prefers-reduced-motion/);
 });
+test('marketing page scrolls, has section navigation and a feature spotlight', () => {
+  const html = source('index.html');
+  const css = source('marketing.css');
+  assert.match(css, /body\.auth-pending \{[^}]*overflow: visible/);
+  assert.match(css, /\.marketing-nav \{[^}]*position: sticky/);
+  for (const id of ['marketing-spotlight', 'marketing-benefits', 'marketing-pricing', 'marketing-signin']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+    assert.match(html, new RegExp(`data-marketing-jump="${id}"`));
+  }
+  assert.match(html, /<nav class="marketing-links" aria-label="Page sections">/);
+  assert.match(html, /Back to top/);
+  assert.match(html, /<script src="marketing\.js/);
+  assert.doesNotMatch(html, /<a href="#marketing-pricing">/, 'every in-page link is handled without the app router');
+});
+test('feature spotlight rotates through Free, Pro and Pro Plus features', () => {
+  const f = fixture();
+  browserBits(f, { reduced: false });
+  f.context.document.hidden = false;
+  f.run('marketing.js');
+  const tour = f.context.FinanceMarketing;
+  assert.equal(tour.slides.length, 7);
+  assert.deepEqual([...new Set(tour.slides.map(slide => slide.tier))], ['FREE', 'PRO', 'PRO PLUS']);
+  assert.ok(new Set(tour.slides.map(slide => slide.effect)).size >= 5, 'slides use varied transitions');
+  const stage = f.node('marketing-spotlight-stage');
+  assert.match(stage.innerHTML, /mk-fx-rise[\s\S]*Drop<\/span>[\s\S]*Get the story/);
+  assert.match(f.node('marketing-spotlight-dots').innerHTML, /Show feature 7 of 7/);
+  assert.equal(f.node('marketing-spotlight').classList.contains('is-running'), true);
+  const click = target => f.node('marketing-spotlight').listeners.click({ target: { closest: () => target } });
+  click({ id: '', dataset: { mkStep: '-1' } });
+  assert.equal(tour.current(), 6);
+  assert.match(stage.innerHTML, /PRO PLUS[\s\S]*a deadline/);
+  click({ id: '', dataset: { mkGo: '3' } });
+  assert.match(stage.innerHTML, /mk-fx-flip[\s\S]*subscriptions/);
+  click({ id: 'marketing-spotlight-toggle', dataset: {} });
+  assert.equal(f.node('marketing-spotlight').classList.contains('is-running'), false, 'pause stops rotation');
+  f.node('marketing-spotlight-dots').listeners.animationend({ animationName: 'mk-fill' });
+  assert.equal(tour.current(), 3, 'a paused tour does not advance');
+  click({ id: 'marketing-spotlight-toggle', dataset: {} });
+  f.node('marketing-spotlight-dots').listeners.animationend({ animationName: 'mk-fill' });
+  assert.equal(tour.current(), 4);
+  let scrolled = '';
+  f.node('marketing-pricing').scrollIntoView = () => { scrolled = 'pricing'; };
+  let prevented = false;
+  f.node('auth-screen').listeners.click({ button: 0, preventDefault: () => { prevented = true; }, target: { closest: () => ({ dataset: { marketingJump: 'marketing-pricing' }, hasAttribute: () => false }) } });
+  assert.equal(prevented, true);
+  assert.equal(scrolled, 'pricing');
+});
 test('marketing start opens registration only when registration is enabled', async () => {
   for (const registrationEnabled of [true, false]) {
     const f = fixture(async url => url.endsWith('/me') ? response(401, {}) : response(200, { setupRequired: false, registrationEnabled }));
@@ -983,7 +1031,7 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   browserBits(f);
   f.run('tutorial.js');
   const tours = f.context.FinanceTutorials;
-  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard');
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions');
   tours.open('debt-strategies');
   assert.equal(tours.state.tutorial.id, 'debt');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
@@ -998,6 +1046,54 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   tours.go(99);
   assert.equal(tours.state.index, tours.state.tutorial.scenes.length - 1);
   assert.match(f.node('tutorial-root').innerHTML, /All tutorials/);
+});
+test('fixed, categories and transactions tutorials explain when to use each page', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  const ctas = { fixed: 'transactions', categories: 'categories', transactions: 'transactions' };
+  for (const [id, view] of Object.entries(ctas)) {
+    tours.open(id);
+    const tutorial = tours.state.tutorial;
+    assert.equal(tutorial.id, id);
+    assert.equal(tutorial.cta.view, view);
+    assert.deepEqual([tutorial.scenes[0].id, tutorial.scenes.at(-1).id], ['intro', 'done']);
+    assert.ok(tutorial.scenes.some(scene => scene.id === 'why'), `${id} has a "which page when" chapter`);
+    tutorial.scenes.forEach((scene, index) => {
+      tours.go(index);
+      assert.match(f.node('tut-canvas').innerHTML, /\S/, `${id}/${scene.id} renders`);
+      assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]/, `${id}/${scene.id} has no template leaks`);
+    });
+  }
+  tours.open('fixed/why');
+  assert.match(f.node('tut-caption').textContent, /when money moves[\s\S]*Categories when you care what money is for/);
+  tours.open('categories/why');
+  assert.match(f.node('tut-caption').textContent, /Categories answer where[\s\S]*Transactions answer what exactly happened/);
+  tours.open('transactions/why');
+  assert.match(f.node('tut-canvas').innerHTML, /For detail[\s\S]*For patterns[\s\S]*For timing/);
+  tours.open('income');
+  assert.equal(tours.state.tutorial.id, 'fixed');
+  assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'income');
+  tours.open('categorization');
+  assert.equal(tours.state.tutorial.id, 'categories');
+  const html = source('index.html');
+  assert.match(html, /href="#tutorials\/categories"/);
+  assert.match(html, /href="#tutorials\/transactions"/);
+  assert.match(html, /href="#tutorials\/fixed"/);
+});
+test('signed-out hash links never reach the app router', () => {
+  const f = fixture(); f.run('refresh.js');
+  f.context.location.hash = '#marketing-pricing';
+  f.listeners.get('hashchange')();
+  assert.equal(f.context.location.hash, '#marketing-pricing');
+  f.node('body').classList.remove('auth-pending');
+  f.context.location.hash = '#transactions';
+  f.listeners.get('hashchange')();
+  assert.equal(f.context.location.hash, '#transactions');
+  f.context.location.hash = '#marketing-pricing';
+  f.listeners.get('hashchange')();
+  assert.equal(f.context.location.hash, '#dashboard');
 });
 test('the router keeps a tutorial sub-path and hands it to the player', () => {
   const f = fixture(); f.run('refresh.js');

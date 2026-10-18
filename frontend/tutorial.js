@@ -51,6 +51,26 @@
   const weekCard = (title, amount, { tone = '', paid = false, badge = '', balance = '', id = '', delay = null, dashed = false } = {}) => `<div class="tm-pay${paid ? ' is-paid' : ''}${tone ? ` is-${tone}` : ''}${dashed ? ' is-flex' : ''}${delay != null ? ' tut-pop' : ''}" ${delay != null ? at(delay) : ''} ${id ? `data-id="${id}"` : ''}>
     <b>${esc(title)}</b><strong>${amount}</strong>${badge ? `<span class="tm-badge tm-badge-${badge.toLowerCase()}">${esc(badge)}</span>` : ''}${balance ? `<small>Bal ${balance}</small>` : ''}</div>`;
   const week = (days, opts = {}) => `<div class="tm-week${opts.cls ? ` ${opts.cls}` : ''}">${days.map(([label, num, cards = '', today]) => `<div class="tm-day${today ? ' is-today' : ''}"><span>${label} <b>${num}</b></span>${cards}</div>`).join('')}</div>`;
+  // A tick box; `on` = already ticked, `onAt` = ticks itself at that second.
+  const check = ({ on = false, onAt = null, id = '' } = {}) => `<span class="tm-check" ${id ? `data-id="${id}"` : ''}>${on ? `<i>${icon('check', 11)}</i>` : onAt != null ? `<i class="tut-on" ${at(onAt)}>${icon('check', 11)}</i>` : ''}</span>`;
+  const swap = (from, to, t) => `<span class="tm-swap-inline tm-swap-left"><span class="tut-off" ${at(t)}>${from}</span><span class="tut-on" ${at(t)}>${to}</span></span>`;
+  const txHead = (fixedLabel = 'Fixed / Income') => `<div class="tm-tr tm-th"><span>Date</span><span>Description</span><span>Category</span><span>${fixedLabel}</span><span>Pays by</span><span>Amount</span></div>`;
+  const txRow = ({ date, desc, cat = '', tick = '', pay = '', payHtml = '', amt, credit = false, cls = '', delay = null, id = '' }) => `<div class="tm-tr${cls ? ` ${cls}` : ''}${delay != null ? ' tut-in' : ''}" ${delay != null ? at(delay) : ''} ${id ? `data-id="${id}"` : ''}>
+    <span>${date}</span><b>${desc}</b><span class="tm-select">${cat || 'Uncategorized'}</span><span class="tm-tick">${tick}</span><span>${payHtml || (pay ? `<i class="tm-badge tm-badge-${pay.toLowerCase()}">${pay}</i>` : '<i class="tm-unset">—</i>')}</span><strong class="${credit ? 'is-in' : 'is-out'}">${credit ? '+' : '−'}${amt}</strong></div>`;
+  const compare = (cols, delay = 0.4) => `<div class="tm-compare tm-compare-${cols.length}">${cols.map((col, index) => `<div class="tm-compare-col tut-in${col.cls ? ` ${col.cls}` : ''}" ${at(delay + index * 0.9)}>
+    <span class="tm-emoji">${col.e}</span><b>${esc(col.title)}</b><small>${esc(col.when)}</small>
+    <ul>${col.asks.map(ask => `<li>“${esc(ask)}”</li>`).join('')}</ul></div>`).join('')}</div>`;
+  const catCard = (e, name, amount, w, delay, opts = {}) => `<div class="tm-cat tut-in${opts.cls ? ` ${opts.cls}` : ''}" ${at(delay)} ${opts.id ? `data-id="${opts.id}"` : ''}><span class="tm-emoji">${e}</span><b>${esc(name)}</b><strong>${amount}</strong><div class="tm-bar"><span class="tut-grow" ${at(delay + 0.3, `--w:${w}%`)}></span></div><small>${esc(opts.note || '')}</small></div>`;
+  // `closeAt` fades the dialog out after its button is clicked so the confirmation toast is readable.
+  const similar = (title, copy, rows, button, delay, closeAt) => `<div ${closeAt ? `class="tut-off" ${at(closeAt)}` : ''}><div class="tm-dialog tm-similar tut-pop" ${at(delay)}>
+    <b>${esc(title)}</b><small>${copy}</small>
+    ${rows.map(([text, sub, on = true]) => `<div class="tm-similar-row">${check({ on })}<span>${esc(text)}<small>${sub}</small></span></div>`).join('')}
+    <span class="tm-btn tm-btn-primary" data-id="similar-apply">${esc(button)}</span></div></div>`;
+  const PAGES = {
+    transactions: { e: '🧾', title: 'Transactions', when: 'For detail: one line, one charge.', asks: ['What was that $42.50?', 'Did my refund land?', 'Fix this one row.'] },
+    categories: { e: '🏷️', title: 'Categories', when: 'For patterns: what your money is for.', asks: ['Where does my money go?', 'Is dining creeping up?', 'Which month cost most?'] },
+    fixed: { e: '📌', title: 'Fixed bills & income', when: 'For timing: when money moves.', asks: ['Can I cover rent on the 1st?', 'When is my next payday?', 'Which bills need me?'] }
+  };
 
   // ---------- tutorials ----------
   const TUTORIALS = [
@@ -249,9 +269,185 @@
         { id: 'done', title: 'You are ready', caption: 'That is the tour. Check in each morning and let the insights tell you what needs you.',
           render: () => outro("You're ready", 'Insights · the week ahead · paydays', 'Go to your dashboard') }
       ]
+    },
+    {
+      id: 'fixed', title: 'Fixed bills & income', blurb: 'Teach MyFinance your rhythm: fixed bills, real paydays and who pays what.', emoji: '📌',
+      cta: { label: 'Mark my fixed bills', view: 'transactions' },
+      scenes: [
+        { id: 'intro', title: 'Welcome', caption: 'Fixed bills and regular income tell MyFinance when money moves. Mark them once and your calendar, payday forecast and low-balance warnings come to life.',
+          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Fixed bills & income', 'Teach it your rhythm once. Get a forecast every day.', ['🏠', '📱', '💵', '📅']) },
+        { id: 'what', title: 'What counts as fixed', caption: 'A fixed bill repeats at about the same amount on about the same day: rent, phone, insurance, streaming. Regular income is pay you can count on. Everything else is everyday spending that changes month to month.',
+          render: () => `${chip(1, 'What counts as fixed')}
+            <div class="tm-split tm-split-tight">
+              <div class="tm-panel tut-in" ${at(0.4)}><small>📌 FIXED · PREDICTABLE</small>
+                ${[['Rent', 'Every 1st', '$1,450'], ['Phone', 'Every 8th', '$65'], ['Car insurance', 'Every 15th', '$120'], ['Streaming', 'Every 22nd', '$15']].map(([n, d, a], i) => `<div class="tm-kv tut-in" ${at(0.9 + i * 0.35)}><span>${n} <em class="tm-sub">${d}</em></span><b>${a}</b></div>`).join('')}
+                <p class="tm-hint tut-in" ${at(2.6)}>Same-ish amount, same-ish day.</p></div>
+              <div class="tm-panel tut-in" ${at(1.6)}><small>🛒 EVERYDAY · VARIABLE</small>
+                ${[['Groceries', '4 trips', '$86 → $212'], ['Gas', '3 fill-ups', '$38 → $61'], ['Dining out', 'Whenever', '$12 → $94']].map(([n, d, a], i) => `<div class="tm-kv tut-in" ${at(2.1 + i * 0.35)}><span>${n} <em class="tm-sub">${d}</em></span><b>${a}</b></div>`).join('')}
+                <p class="tm-hint tut-in" ${at(3.4)}>Different every time. Leave these unticked.</p></div>
+            </div>
+            <span class="tm-tag tm-tag-gold tut-pop" ${at(4.2, 'left:226px;bottom:14px')}>💵 Regular pay is the income side of fixed</span>` },
+        { id: 'mark', title: 'Mark a fixed bill', caption: 'On Transactions, tick Fixed on any recurring bill. MyFinance finds the other months from the same biller and offers to mark them too, so one click covers your whole history.',
+          render: () => `${chip(2, 'Mark a fixed bill')}
+            <div class="tm-table">${txHead()}
+              ${txRow({ date: 'Oct 8', desc: 'VERIZON WIRELESS', cat: 'Phone', tick: check({ onAt: 1.2, id: 'tick' }), amt: '$65.00', cls: 'tm-hl-row', id: 'row' })}
+              ${txRow({ date: 'Oct 7', desc: 'TRADER JOE’S #552', cat: 'Groceries', tick: check(), amt: '$86.14' })}
+              ${txRow({ date: 'Oct 5', desc: 'SHELL OIL 5741', cat: 'Gas', tick: check(), amt: '$41.30' })}
+            </div>
+            ${similar('Mark similar payments as fixed?', 'Found <b>5</b> other transactions from <b>VERIZON</b>.', [['Sep 8 · $65.00', 'Not fixed → Fixed bill'], ['Aug 8 · $65.00', 'Not fixed → Fixed bill'], ['Jul 8 · $65.00', 'Not fixed → Fixed bill']], 'Update 5 transactions', 2, 5.2)}
+            ${cursor('tick', 0.2)}${cursor('similar-apply', 3.6, 'tick')}
+                        ${toast('Marked 6 Verizon payments as Fixed bills', 5.6)}` },
+        { id: 'income', title: 'Count your real pay', caption: 'For deposits, the same column means Income. Tick your paychecks so paydays can be forecast. Leave transfers, refunds and paybacks unticked so they never inflate your plan. Review income sorts every sender at once.',
+          render: () => `${chip(3, 'Count your real pay')}
+            <div class="tm-table">${txHead()}
+              ${txRow({ date: 'Oct 16', desc: 'ACME PAYROLL', cat: 'Income', tick: `${check({ onAt: 1, id: 'pay' })}<em class="tm-tick-label">Income</em>`, amt: '$2,100.00', credit: true, delay: 0.3 })}
+              ${txRow({ date: 'Oct 12', desc: 'TRANSFER FROM SAVINGS', cat: 'Transfer', tick: `${check()}<em class="tm-tick-label">Not income</em>`, amt: '$500.00', credit: true, delay: 0.6 })}
+              ${txRow({ date: 'Oct 9', desc: 'AMAZON REFUND', cat: 'Shopping', tick: `${check()}<em class="tm-tick-label">Not income</em>`, amt: '$42.00', credit: true, delay: 0.9 })}
+            </div>
+            <div class="tm-callouts tm-callouts-row">
+              <p class="tut-in" ${at(2)}><span>✓</span><b>Tick: paychecks</b>Salary, wages, steady side income.</p>
+              <p class="tut-in" ${at(2.8)}><span>✗</span><b>Skip: money shuffles</b>Transfers, refunds, a friend paying you back.</p>
+              <p class="tut-in" ${at(3.6)}><span>⚡</span><b>Faster: Review income</b>Pick “this is my pay” once per sender.</p>
+            </div>${cursor('pay', 0.2)}` },
+        { id: 'paymode', title: 'Auto-pay or manual', caption: 'Set how each fixed bill gets paid. Auto-pay leaves on its own. Manual means you have to pay it, so the dashboard flags it and you never miss the ones that need you.',
+          render: () => `${chip(4, 'Auto-pay or manual')}
+            <div class="tm-split tm-split-tight">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>PAYS BY</small>
+                <div class="tm-kv"><span>Rent</span><span class="tm-badge tm-badge-manual">Manual</span></div>
+                <div class="tm-kv"><span>Phone</span><span class="tm-badge tm-badge-auto">Auto</span></div>
+                <div class="tm-kv" data-id="water"><span>City Water</span>${swap('<i class="tm-unset">Not set</i>', '<span class="tm-badge tm-badge-manual">Manual</span>', 1.6)}</div>
+                <div class="tm-kv"><span>Streaming</span><span class="tm-badge tm-badge-auto">Auto</span></div>
+              </div>
+              <div class="tm-panel tm-panel-dark tut-in" ${at(2.2)}><small>ON YOUR DASHBOARD</small>
+                <b class="tm-lg">2 bills need you this week</b>
+                <div class="tm-kv"><span>Wed 15 · City Water</span><span class="tm-badge tm-badge-manual">Manual</span></div>
+                <div class="tm-kv"><span>Fri 1 · Rent</span><span class="tm-badge tm-badge-manual">Manual</span></div>
+                <span class="tm-pill tut-pop" ${at(3.4)}>Auto-pay bills run quietly in the background</span>
+              </div>
+            </div>${cursor('water', 0.4)}` },
+        { id: 'calendar', title: 'Watch the forecast appear', caption: 'Fixed bills and paydays now land on the dashboard calendar on the day they usually happen, with a running balance after each one. You can spot a short week before it arrives.',
+          render: () => `${chip(5, 'Watch the forecast appear')}
+            ${week([['Sun', 12], ['Mon', 13, weekCard('Phone', '$65', { badge: 'Auto', balance: '$1,245', delay: 0.5 })], ['Tue', 14, '', true], ['Wed', 15, weekCard('City Water', '$64', { badge: 'Manual', balance: '$1,181', delay: 1 })], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income', balance: '$3,281', delay: 1.5 })], ['Fri', 17], ['Sat', 18, weekCard('Insurance', '$120', { badge: 'Auto', balance: '$3,161', delay: 2 })]])}
+            <div class="tm-note tut-in" ${at(3)}>📉 Lowest point this week: <b>$1,181</b> on Wednesday, the day before payday. No surprises.</div>` },
+        { id: 'why', title: 'Fixed or categories?', caption: 'Use Fixed and Income when you care when money moves: it powers the calendar, payday forecast and low-balance warnings. Use Categories when you care what money is for. A bill can be both: rent is fixed and lives in Housing.',
+          render: () => `${chip(6, 'Fixed or categories?')}
+            ${compare([PAGES.fixed, PAGES.categories])}
+            <span class="tm-both tut-pop" ${at(2.6)}>🏠 Rent? <b>Both.</b> Fixed on the 1st, filed under Housing.</span>` },
+        { id: 'done', title: 'You are ready', caption: 'That is it. Tick your fixed bills, count your real pay and choose auto or manual. Your forecast does the rest.',
+          render: () => outro("You're ready", 'Tick fixed bills · count your pay · auto or manual', 'Mark my fixed bills') }
+      ]
+    },
+    {
+      id: 'categories', title: 'Categories & smart rules', blurb: 'See where your money goes, fix a label once and let rules sort future imports.', emoji: '🏷️',
+      cta: { label: 'Open my categories', view: 'categories' },
+      scenes: [
+        { id: 'intro', title: 'Welcome', caption: 'Categories turn a long list of charges into a short story: what your money is for, and where it quietly adds up.',
+          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Categories & smart rules', 'Know what your money is for.', ['🛒', '🍽️', '🏠', '🎬']) },
+        { id: 'overview', title: 'Your spending, grouped', caption: 'The Categories page groups every purchase into buckets like Housing, Groceries and Dining, with totals for the period you choose. Open any category for its merchants and month-by-month trend.',
+          render: () => `${chip(1, 'Your spending, grouped')}
+            <div class="tm-cats">
+              ${catCard('🏠', 'Housing', '$1,450', 100, 0.3, { note: '1 merchant · fixed' })}
+              ${catCard('🛒', 'Groceries', '$612', 42, 0.6, { note: '11 visits' })}
+              ${catCard('🍽️', 'Dining', '$388', 27, 0.9, { note: '↑ $96 vs last month', cls: 'is-up', id: 'dining' })}
+              ${catCard('⛽', 'Gas', '$164', 11, 1.2, { note: '4 fill-ups' })}
+              ${catCard('🎬', 'Subscriptions', '$71', 5, 1.5, { note: '5 services' })}
+              ${catCard('❓', 'Uncategorized', '$48', 3, 1.8, { note: '3 to review', cls: 'is-todo' })}
+            </div>
+            <span class="tm-tag tut-pop" ${at(3.2, 'right:44px;top:56px')}>Dining is creeping up 👀</span>${cursor('dining', 2.4)}` },
+        { id: 'fix', title: 'Fix one, fix them all', caption: 'Something in the wrong bucket? Change its category on the Transactions page. MyFinance finds other charges from the same merchant and offers to move them too, with matching amounts preselected.',
+          render: () => `${chip(2, 'Fix one, fix them all')}
+            <div class="tm-table">${txHead()}
+              ${txRow({ date: 'Oct 11', desc: 'BLUE BOTTLE COFFEE', cat: swap('Uncategorized', 'Dining', 1.3), tick: check(), amt: '$6.75', cls: 'tm-hl-row', id: 'cat' })}
+              ${txRow({ date: 'Oct 10', desc: 'TRADER JOE’S #552', cat: 'Groceries', tick: check(), amt: '$54.20' })}
+            </div>
+            ${similar('Update similar transactions?', 'Found <b>6</b> other transactions from <b>BLUE BOTTLE</b>. 4 with about the same amount are preselected.', [['Oct 4 · $6.75', 'Uncategorized → Dining'], ['Sep 27 · $6.75', 'Uncategorized → Dining'], ['Sep 3 · $18.40', 'Uncategorized → Dining · different amount', false]], 'Update 4 transactions', 2.1, 5.6)}
+                        ${cursor('cat', 0.3)}${cursor('similar-apply', 4, 'cat')}${toast('Moved 5 Blue Bottle visits to Dining', 6)}` },
+        { id: 'rules', title: 'Rules sort future imports', caption: 'Every fix teaches a rule. The next statement you import is sorted automatically for merchants you have already taught. Rename categories or tidy rules any time from Manage categories.',
+          render: () => `${chip(3, 'Rules sort future imports')}
+            <div class="tm-split tm-split-tight">
+              <div class="tm-panel tut-in" ${at(0.3)}><small>YOUR RULES · LEARNED FROM FIXES</small>
+                ${[['BLUE BOTTLE', 'Dining'], ['SHELL OIL', 'Gas'], ['TRADER JOE’S', 'Groceries'], ['NETFLIX', 'Subscriptions']].map(([m, c], i) => `<div class="tm-rule tut-in" ${at(0.7 + i * 0.4)}><code>${m}</code><span>→</span><b>${c}</b></div>`).join('')}
+              </div>
+              <div class="tm-panel tm-panel-dark tut-in" ${at(2.4)}><small>NEXT IMPORT · NOVEMBER.CSV</small>
+                <div class="tm-swap-num"><b class="tut-off" ${at(3.4)}>84 new</b><b class="tut-on" ${at(3.4)}>79 sorted</b></div>
+                <div class="tm-flow-bar"><span class="is-debt tut-grow" ${at(3.5, '--w:94%')}></span></div>
+                <span class="tm-pill tut-pop" ${at(4)}>Only 5 left for you to review</span>
+              </div>
+            </div>` },
+        { id: 'period', title: 'Compare time periods', caption: 'Pick all time, one month or a few months together. Totals and cards update instantly, so you can see whether a change you made last month is working.',
+          render: () => `${chip(4, 'Compare time periods')}
+            <div class="tm-row-head"><div><h3>Categories</h3><small>Time period</small></div><span class="tm-toggle"><i class="tut-off" ${at(1.4)}>September</i><i class="tut-on" ${at(1.4)} data-id="oct">October</i></span></div>
+            <div class="tm-cats tm-cats-3">
+              <div class="tm-cat"><span class="tm-emoji">🍽️</span><b>Dining</b><strong>${swap('$484', '$388', 1.8)}</strong><small class="is-good tut-in" ${at(2.4)}>↓ $96 after cooking Sundays 🎉</small></div>
+              <div class="tm-cat"><span class="tm-emoji">🛒</span><b>Groceries</b><strong>${swap('$540', '$612', 1.8)}</strong><small class="tut-in" ${at(2.6)}>↑ $72, expected trade-off</small></div>
+              <div class="tm-cat"><span class="tm-emoji">🎬</span><b>Subscriptions</b><strong>${swap('$86', '$71', 1.8)}</strong><small class="is-good tut-in" ${at(2.8)}>↓ $15, one cancelled</small></div>
+            </div>${cursor('oct', 0.3)}` },
+        { id: 'why', title: 'Categories or transactions?', caption: 'Categories answer where your money goes: patterns and totals. Transactions answer what exactly happened: line by line. Start in Categories to spot a pattern, then jump to Transactions to find the exact charge.',
+          render: () => `${chip(5, 'Categories or transactions?')}
+            ${compare([PAGES.categories, PAGES.transactions])}
+            <span class="tm-both tut-pop" ${at(2.6)}>🔁 Spot it in Categories → find it in Transactions</span>` },
+        { id: 'done', title: 'You are ready', caption: 'You are ready. Review anything uncategorized, fix a label once and let your rules do the sorting from now on.',
+          render: () => outro("You're ready", 'Review · fix once · let rules sort', 'Open my categories') }
+      ]
+    },
+    {
+      id: 'transactions', title: 'Transactions', blurb: 'Import statements, search any charge and edit categories, fixed bills and income in place.', emoji: '🧾',
+      cta: { label: 'Open my transactions', view: 'transactions' },
+      scenes: [
+        { id: 'intro', title: 'Welcome', caption: 'Transactions is your complete history, every charge and deposit, one search away.',
+          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Your transactions', 'Every detail, one search away.', ['📥', '🔍', '🧾', '✅']) },
+        { id: 'import', title: 'Bring in a statement', caption: 'Import a CSV or PDF statement from any bank. New rows wait in Import review first, so you can check them before they join your history. No bank login needed.',
+          render: () => `${chip(1, 'Bring in a statement')}
+            <div class="tm-dialog tm-dialog-center tut-pop" ${at(0.3)}>
+              <b>Import statements</b><small>CSV or PDF from any bank</small>
+              <div class="tm-drop"><span class="tut-off" ${at(1.6)}>Drop a file here</span><span class="tut-on tm-file" ${at(1.6)}>📊 checking-october.csv <small>38 KB</small></span></div>
+              <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import to review</span>
+            </div>${cursor('import', 2.4)}${toast('84 transactions ready in Import review', 3.8)}` },
+        { id: 'table', title: 'Read the table', caption: 'Each row shows the date, description, category, a Fixed or Income tick, how it is paid and the amount. Money in is green; money out is red.',
+          render: () => `${chip(2, 'Read the table')}
+            <div class="tm-table">${txHead()}
+              ${txRow({ date: 'Oct 16', desc: 'ACME PAYROLL', cat: 'Income', tick: `${check({ on: true })}<em class="tm-tick-label">Income</em>`, amt: '$2,100.00', credit: true, delay: 0.3 })}
+              ${txRow({ date: 'Oct 15', desc: 'CITY WATER', cat: 'Utilities', tick: `${check({ on: true })}<em class="tm-tick-label">Fixed</em>`, pay: 'Manual', amt: '$64.00', delay: 0.6 })}
+              ${txRow({ date: 'Oct 14', desc: 'NETFLIX.COM', cat: 'Subscriptions', tick: `${check({ on: true })}<em class="tm-tick-label">Fixed</em>`, pay: 'Auto', amt: '$15.49', delay: 0.9 })}
+              ${txRow({ date: 'Oct 11', desc: 'BLUE BOTTLE COFFEE', cat: 'Dining', tick: check(), amt: '$6.75', delay: 1.2 })}
+            </div>
+            <div class="tm-callouts tm-callouts-row">
+              <p class="tut-in" ${at(2)}><span>1</span><b>Category</b>What it was for.</p>
+              <p class="tut-in" ${at(2.8)}><span>2</span><b>Fixed / Income</b>Repeats on schedule, or is your pay.</p>
+              <p class="tut-in" ${at(3.6)}><span>3</span><b>Pays by</b>Auto-pay or needs you.</p>
+            </div>` },
+        { id: 'search', title: 'Search and filter', caption: 'Type a merchant, a word or even an amount like 42.50. Narrow by category, time period, pays by or fixed bills only. The money in and money out totals update to match.',
+          render: () => `${chip(3, 'Search and filter')}
+            <div class="tm-filters tut-in" ${at(0.2)}>
+              <span class="tm-search" data-id="search">🔍 <span class="tm-type" ${at(0.9)}>netflix</span></span>
+              <span class="tm-select">All categories</span><span class="tm-select">Last 6 months</span><span class="tm-select">Pays by: Auto</span>
+              <span class="tm-check-label">${check({ onAt: 2.6, id: 'fixedonly' })} Fixed bills only</span>
+            </div>
+            <div class="tm-metrics tut-in" ${at(1.8)}><div><small>Money out</small><b>${swap('$4,812', '$92.94', 2)}</b></div><div><small>Matching</small><b>${swap('212', '6', 2)}</b></div><div><small>Average</small><b>$15.49</b></div></div>
+            <ul class="tm-list">${['Oct 14', 'Sep 14', 'Aug 14'].map((d, i) => `<li class="tut-in" ${at(2.2 + i * 0.25)}><span>${d}</span><b><mark>NETFLIX</mark>.COM</b><i class="tm-badge tm-badge-auto">Auto</i><strong>$15.49</strong></li>`).join('')}</ul>
+            ${cursor('search', 0.2)}${cursor('fixedonly', 2.2, 'search')}` },
+        { id: 'edit', title: 'Edit right in the row', caption: 'Change a category, tick Fixed or Income, or set Auto-pay or Manual right in the row. Each change can be applied to similar transactions, so your whole history stays consistent.',
+          render: () => `${chip(4, 'Edit right in the row')}
+            <div class="tm-table">${txHead()}
+              ${txRow({ date: 'Oct 15', desc: 'CITY WATER', cat: swap('Uncategorized', 'Utilities', 1), tick: check({ onAt: 2.4, id: 'efix' }), payHtml: `<span data-id="epay">${swap('<i class="tm-unset">—</i>', '<i class="tm-badge tm-badge-manual">Manual</i>', 3.8)}</span>`, amt: '$64.00', cls: 'tm-hl-row', id: 'ecat' })}
+              ${txRow({ date: 'Oct 14', desc: 'NETFLIX.COM', cat: 'Subscriptions', tick: check({ on: true }), pay: 'Auto', amt: '$15.49' })}
+            </div>
+            <div class="tm-steps">
+              <span class="tut-in" ${at(1.1)}>① Category <b>Utilities</b></span>
+              <span class="tut-in" ${at(2.5)}>② <b>Fixed</b> bill</span>
+              <span class="tut-in" ${at(3.9)}>③ Pays by <b>Manual</b></span>
+            </div>
+            ${cursor('ecat', 0.2)}${cursor('efix', 1.6, 'ecat')}${cursor('epay', 3, 'efix')}
+            ${toast('Applied to 5 similar City Water payments', 5)}` },
+        { id: 'why', title: 'Which page when?', caption: 'Use Transactions for detail: find a charge, check a refund, fix a row. Use Categories for patterns: where money goes each month. Use Fixed bills and income for timing: when bills and paydays hit your calendar.',
+          render: () => `${chip(5, 'Which page when?')}
+            ${compare([PAGES.transactions, PAGES.categories, PAGES.fixed], 0.3)}` },
+        { id: 'done', title: 'You are ready', caption: 'You are ready. Import a statement, search anything and fix rows in place. Your categories and forecast stay in sync.',
+          render: () => outro("You're ready", 'Import · search · edit in place', 'Open my transactions') }
+      ]
     }
   ];
-  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null] };
+  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null], 'fixed-bills': ['fixed', null], income: ['fixed', 'income'], categorization: ['categories', null], 'which-page': ['transactions', 'why'] };
 
   const sceneDuration = scene => scene.duration || Math.max(6500, scene.caption.split(/\s+/).length * 330 + 1800);
 
