@@ -126,6 +126,33 @@ advertise these capabilities.
 - `ALERT_WEBHOOK_URL` receives throttled alerts for server errors and lockouts.
 - Audit rows, used/expired reset tokens and expired sessions are purged after
   `AUDIT_RETENTION_DAYS` at startup and daily.
+- Every log line is one JSON object with `time`, `level` (`info`/`warn`/`error`),
+  `module` or `event`, `message`, and the `requestId`/`route` of the request
+  being handled. `log('MODULE', msg)` infers the level from the wording
+  ("error", "failed" → error; "unavailable", "could not" → warn); pass a third
+  argument to override it. A 5xx response always logs a `route.error` line with
+  the real (redacted) reason, even when the client only sees the generic message.
+  Lines also go to `logs/app-YYYY-MM-DD.log` (`LOG_DIR` to move,
+  `LOG_TO_FILE=false` to disable). Test runs do not write log files.
+
+## Release gate (run before every deploy)
+
+1. `npm run release:check` runs all tests, then `scripts/release-smoke.js`. The
+   smoke check boots the app on an in-memory PostgreSQL that starts from the
+   oldest production schema with legacy MM/DD/YYYY and unreadable dates, runs
+   the migration twice (as a restart would), loads the demo data, imports bank
+   CSVs and calls every dashboard, analytics, plan and goals endpoint as the
+   owner and the demo user. **Any 5xx response or error-level log line blocks
+   the release** and is listed with its cause and request ID.
+2. `.github/workflows/release-check.yml` runs the same check on every push and
+   pull request. In Railway, enable **Settings → Deploy → Wait for CI** so a
+   failing check stops the deploy.
+3. After deploying, scan production logs and roll back on any error:
+   `railway logs | npm run logs:scan -- --since 30m` (exit code 1 when errors
+   are found; add `--fail-on warn` to include warnings). It also reads files:
+   `npm run logs:scan -- logs/app-2026-10-18.log`.
+4. When a customer reports "The request could not be completed", search the
+   logs for the `requestId` they were shown.
 
 ## Admin console
 

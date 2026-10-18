@@ -397,15 +397,38 @@ router.post('/upcoming-payments', async (req, res) => {
   }
 });
 
+// Import freshness is a nice-to-have: any failure degrades to "unknown" instead of breaking the dashboard.
+async function importStats(userId) {
+  try {
+    const row = await db.get('SELECT COUNT(*) AS total, MAX(created_at) AS last_import FROM transactions WHERE user_id = $1', [userId]);
+    const dates = await db.all('SELECT DISTINCT date FROM transactions WHERE user_id = $1', [userId]);
+    const latestDate = dates.map(r => parseTxDate(r.date)?.iso).filter(Boolean).sort().pop() || null;
+    const at = row?.last_import ? new Date(row.last_import) : null;
+    return { total: Number(row?.total) || 0, lastImportAt: at && !Number.isNaN(at.getTime()) ? at.toISOString() : null, latestDate };
+  } catch (error) {
+    log('DASHBOARD', `Import freshness unavailable: ${error.message}`, 'warn');
+    const row = await db.get('SELECT COUNT(*) AS total FROM transactions WHERE user_id = $1', [userId]);
+    return { total: Number(row?.total) || 0, lastImportAt: null, latestDate: null };
+  }
+}
+
 router.get('/insights', async (req, res) => {
   try {
     const today = new Date();
+    const userId = currentUserId();
     const [{ items, plan, pro, streams }, latest, count] = await Promise.all([
       loadUpcoming(req, today),
-      db.all('SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1', [currentUserId()]),
-      db.get("SELECT COUNT(*) AS total, MAX(created_at) AS last_import, to_char(MAX(date::date), 'YYYY-MM-DD') AS latest_date FROM transactions WHERE user_id = $1", [currentUserId()])
+      // Text dates are parsed in JS so one malformed row cannot fail the whole dashboard.
+      db.all('SELECT date, balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL ORDER BY id DESC', [userId])
+        .catch(error => { log('DASHBOARD', `Latest balance unavailable: ${error.message}`, 'warn'); return []; }),
+      importStats(userId)
     ]);
-    const balance = latest.length && Number.isFinite(Number(latest[0].balance)) ? Number(latest[0].balance) : null;
+    const todayIso = today.toISOString().slice(0, 10);
+    const newest = latest
+      .map(row => ({ iso: parseTxDate(row.date)?.iso, balance: Number(row.balance) }))
+      .filter(row => row.iso && row.iso <= todayIso && Number.isFinite(row.balance))
+      .reduce((best, row) => (!best || row.iso > best.iso ? row : best), null);
+    const balance = newest ? newest.balance : null;
     let analytics = null;
     if (pro) {
       try {
@@ -419,8 +442,10 @@ router.get('/insights', async (req, res) => {
         log('DASHBOARD', `Insight analytics unavailable: ${error.message}`);
       }
     }
-    const lastImport = count?.last_import ? { at: new Date(count.last_import).toISOString(), latestDate: count.latest_date || null } : null;
-    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: Number(count?.total) > 0, incomeStreams: streams, lastImport }));
+    // Rows imported before created_at existed have no import time; the newest transaction date is the best proxy.
+    const importedAt = count.lastImportAt || (count.latestDate ? `${count.latestDate}T12:00:00.000Z` : null);
+    const lastImport = importedAt ? { at: importedAt, latestDate: count.latestDate } : null;
+    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: count.total > 0, incomeStreams: streams, lastImport }));
   } catch (error) {
     log('DASHBOARD', `Error building insights: ${error.message}`);
     res.status(500).json({ error: error.message });

@@ -8,6 +8,7 @@ import auth, { requireUser, requireAdmin, enforceSameOrigin } from './routes/aut
 import admin from './routes/admin.js';
 import supportAccess from './routes/supportAccess.js';
 import { recordAudit, structuredLog } from './utils/audit.js';
+import { requestContext } from './utils/logger.js';
 import dashboard from './routes/dashboard.js';
 import transactions from './routes/transactions.js';
 import debts from './routes/debts.js';
@@ -71,7 +72,7 @@ app.use((req, res, next) => {
       recordAudit(req, 'server.error', 'error', { status: res.statusCode, detail: { source: 'route' } });
     }
   });
-  next();
+  requestContext.run({ requestId: req.id, route: `${req.method} ${req.originalUrl.split('?')[0]}` }, next);
 });
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use('/api', (req, res, next) => {
@@ -81,6 +82,9 @@ app.use('/api', (req, res, next) => {
   res.json = body => {
     if (res.statusCode >= 500 && !res.locals.errorAudited) {
       res.locals.errorAudited = true;
+      // The client only sees a generic message; the real reason goes to the log, tied to the request ID.
+      structuredLog('error', { event: 'route.error', requestId: req.id, method: req.method, path: req.originalUrl.split('?')[0],
+        status: res.statusCode, message: safeErrorMessage(typeof body?.error === 'string' ? body.error : 'unknown') });
       recordAudit(req, 'server.error', 'error', {
         status: res.statusCode,
         detail: { source: 'route', ...(typeof body?.error === 'string' ? { message: safeErrorMessage(body.error) } : {}) }

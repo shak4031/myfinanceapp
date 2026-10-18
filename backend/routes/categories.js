@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     );
     res.status(201).json({ success: true, category: result.rows[0] });
   } catch (err) {
-    log('CATEGORIES', `❌ Error creating category: ${err.message}`);
+    log('CATEGORIES', `❌ Error creating category: ${err.message}`, err.code === '23505' || err.status < 500 ? 'warn' : 'error');
     res.status(err.status || (err.code === '23505' ? 409 : 500)).json({
       error: err.code === '23505' ? 'A category with that name already exists' : err.message
     });

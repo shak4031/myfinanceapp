@@ -15,7 +15,12 @@ async function purge() {
   }
 }
 
-process.on('unhandledRejection', error => structuredLog('error', { event: 'process.unhandled_rejection', name: error?.name, stack: error?.stack }));
+process.on('unhandledRejection', error => structuredLog('error', { event: 'process.unhandled_rejection', name: error?.name, message: error?.message, stack: error?.stack }));
+process.on('uncaughtException', error => {
+  structuredLog('error', { event: 'process.uncaught_exception', name: error?.name, message: error?.message, stack: error?.stack });
+  process.exitCode = 1;
+  setTimeout(() => process.exit(1), 250).unref();
+});
 
 try {
   await db.init();

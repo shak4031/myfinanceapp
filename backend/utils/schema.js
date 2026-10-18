@@ -74,6 +74,9 @@ export async function migratePrivateSchema(client) {
       amount NUMERIC(14,2), direction TEXT, balance NUMERIC(14,2), source TEXT,
       user_id INTEGER REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    -- Tables created before created_at existed: old rows stay NULL so they are not mistaken for a fresh import.
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+    ALTER TABLE transactions ALTER COLUMN created_at SET DEFAULT NOW();
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_fixed BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS label_id INTEGER REFERENCES transaction_labels(id);
@@ -213,6 +216,7 @@ export async function migratePrivateSchema(client) {
     REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses
       FROM PUBLIC, finance_app_runtime;
   `);
+  await normalizeStoredDates(client);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
       ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
@@ -225,6 +229,32 @@ export async function migratePrivateSchema(client) {
       GRANT USAGE, SELECT ON SEQUENCE ${table}_id_seq TO finance_app_runtime;
     `);
   }
+}
+
+// Transaction dates are TEXT and older CSV imports stored MM/DD/YYYY. One unreadable value (e.g. '') makes every
+// `date::date` query fail and mixed formats sort wrongly, so stored dates are rewritten to ISO YYYY-MM-DD and values
+// PostgreSQL cannot read become NULL. Runs inside the migration transaction; FORCE RLS is restored right after.
+export async function normalizeStoredDates(client) {
+  await client.query(`
+    ALTER TABLE transactions NO FORCE ROW LEVEL SECURITY;
+    ALTER TABLE staging_transactions NO FORCE ROW LEVEL SECURITY;
+    DO $$
+    DECLARE r RECORD; t TEXT; d DATE;
+    BEGIN
+      PERFORM set_config('datestyle', 'ISO, MDY', true);
+      FOREACH t IN ARRAY ARRAY['transactions', 'staging_transactions'] LOOP
+        FOR r IN EXECUTE format('SELECT DISTINCT date FROM %I WHERE date IS NOT NULL AND date !~ ''^[0-9]{4}-[0-9]{2}-[0-9]{2}$''', t) LOOP
+          BEGIN
+            d := btrim(r.date)::date;
+            EXECUTE format('UPDATE %I SET date = $1 WHERE date = $2', t) USING to_char(d, 'YYYY-MM-DD'), r.date;
+          EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Clearing unreadable transaction date %', r.date;
+            EXECUTE format('UPDATE %I SET date = NULL WHERE date = $1', t) USING r.date;
+          END;
+        END LOOP;
+      END LOOP;
+    END $$;
+  `);
 }
 
 export async function seedUserCategories(client, userId) {

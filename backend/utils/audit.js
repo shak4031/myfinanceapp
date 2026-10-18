@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { administrativeTransaction } from '../db.js';
-import { log } from './logger.js';
+import { log, writeEntry } from './logger.js';
 
 const SECRET_KEYS = /pass|token|secret|cookie|authorization|amount|balance|description/i;
 const alertTimes = new Map();
@@ -25,9 +25,7 @@ export function sanitizeDetail(detail = {}) {
 }
 
 export function structuredLog(level, payload) {
-  if (process.env.NODE_TEST_CONTEXT && !process.env.SHOW_TEST_LOGS) return;
-  const line = JSON.stringify({ time: new Date().toISOString(), level, ...payload });
-  if (level === 'error') console.error(line); else console.log(line);
+  writeEntry({ ...payload, level });
 }
 
 async function sendAlert(event) {

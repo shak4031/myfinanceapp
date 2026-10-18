@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"backend/utils/*.test.js\" \"frontend/*.test.mjs\"",
+    "release:check": "npm test && node scripts/release-smoke.js",
+    "smoke": "node scripts/release-smoke.js",
+    "logs:scan": "node scripts/scan-logs.js",
     "dev": "node backend/server.js",
     "build": "echo 'Build frontend with Vite'",
     "start": "node backend/server.js"
