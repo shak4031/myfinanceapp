@@ -21,8 +21,20 @@ export const PRO_FEATURES = Object.freeze([
 
 const DAY_MS = 86400000;
 
+export const PLAN_IDS = Object.freeze(['pro', 'pro_plus']);
+
 // Pure so it can be tested without a database.
 export function entitlementFromRow(userId, row, now = new Date(), email = row?.email) {
+  const entitlement = baseEntitlement(userId, row, now, email);
+  const requested = row?.requested_plan;
+  const owned = entitlement.source === 'license' && entitlement.tier === requested;
+  if (PLAN_IDS.includes(requested) && !owned && !['owner', 'demo'].includes(entitlement.source)) {
+    entitlement.request = { plan: requested, requestedAt: new Date(row.requested_at || now).toISOString() };
+  }
+  return entitlement;
+}
+
+function baseEntitlement(userId, row, now, email) {
   const base = { plan: PLAN, plusPlan: PLUS_PLAN, features: PRO_FEATURES, plusFeatures: PLUS_FEATURES, plusActive: false };
   if (Number(userId) === OWNER_USER_ID) return { ...base, tier: 'pro', source: 'owner', active: true, plusActive: true, trialAvailable: false };
   if (isDemoEmail(email)) return { ...base, tier: 'pro', source: 'demo', active: true, plusActive: true, trialAvailable: false };
@@ -73,13 +85,36 @@ export async function setLicense(client, userId, action, actorId, plan = 'pro') 
   const row = action === 'grant'
     ? (await client.query(`
         INSERT INTO user_licenses (user_id, plan, granted_at, granted_by, revoked_at, updated_at) VALUES ($1,$3,NOW(),$2,NULL,NOW())
-        ON CONFLICT (user_id) DO UPDATE SET plan=$3, granted_at=NOW(), granted_by=$2, revoked_at=NULL, updated_at=NOW()
+        ON CONFLICT (user_id) DO UPDATE SET plan=$3, granted_at=NOW(), granted_by=$2, revoked_at=NULL,
+          requested_plan=NULL, requested_at=NULL, updated_at=NOW()
         RETURNING *`, [userId, actorId, plan])).rows[0]
     : (await client.query(`
         INSERT INTO user_licenses (user_id, revoked_at, updated_at) VALUES ($1,NOW(),NOW())
         ON CONFLICT (user_id) DO UPDATE SET granted_at=NULL, granted_by=NULL, revoked_at=NOW(), updated_at=NOW()
         RETURNING *`, [userId])).rows[0];
   return entitlementFromRow(userId, row);
+}
+
+// Records which paid plan the customer chose; an administrator approves it by granting that plan.
+export async function requestPlan(userId, plan, now = new Date()) {
+  return administrativeTransaction(async client => {
+    const row = await loadRow(client, userId);
+    const current = entitlementFromRow(userId, row, now);
+    if (['owner', 'demo'].includes(current.source)) return { ok: false, status: 409, error: 'This account already includes MyFinance Pro Plus', entitlement: current };
+    if (current.source === 'license' && current.tier === plan) return { ok: false, status: 409, error: `${plan === 'pro_plus' ? 'Pro Plus' : 'Pro'} is already active on this account`, entitlement: current };
+    const saved = (await client.query(`
+      INSERT INTO user_licenses (user_id, requested_plan, requested_at, updated_at) VALUES ($1,$2,$3,NOW())
+      ON CONFLICT (user_id) DO UPDATE SET requested_plan=$2, requested_at=$3, updated_at=NOW()
+      RETURNING *`, [userId, plan, now.toISOString()])).rows[0];
+    return { ok: true, entitlement: entitlementFromRow(userId, { ...saved, email: row?.email }, now) };
+  });
+}
+
+export async function cancelPlanRequest(userId) {
+  return administrativeTransaction(async client => {
+    await client.query('UPDATE user_licenses SET requested_plan=NULL, requested_at=NULL, updated_at=NOW() WHERE user_id=$1', [userId]);
+    return entitlementFromRow(userId, await loadRow(client, userId));
+  });
 }
 
 export function requirePro(req, res, next) {

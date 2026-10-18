@@ -575,11 +575,11 @@ test('browser error reports are same-origin, redacted, and deduplicated', () => 
   assert.equal(report.line, 9);
   assert.doesNotMatch(JSON.stringify(report), /private123|123\.45|ashak@example\.com|private stack|session=secret/);
 });
-test('brand mark is a scalable green SVG used on sign-in and in navigation', () => {
+test('brand mark is a scalable green SVG used on the marketing nav, sign-in and in navigation', () => {
   const html = source('index.html');
-  assert.equal((html.match(/class="brand-mark(?: small)?"/g) || []).length, 2);
-  assert.equal((html.match(/class="brand-mark-bg"/g) || []).length, 2);
-  assert.equal((html.match(/class="brand-mark-line"/g) || []).length, 2);
+  assert.equal((html.match(/class="brand-mark(?: small)?"/g) || []).length, 3);
+  assert.equal((html.match(/class="brand-mark-bg"/g) || []).length, 3);
+  assert.equal((html.match(/class="brand-mark-line"/g) || []).length, 3);
   assert.match(html, /aria-label="MyFinance mark"/);
   assert.match(source('refresh.css'), /\.brand-mark-bg\s*\{\s*fill:\s*#226452/);
 });
@@ -918,6 +918,89 @@ test('marketing start opens registration only when registration is enabled', asy
     assert.equal(f.node('auth-title').textContent, registrationEnabled ? 'Make room for your next chapter.' : 'Welcome back.');
     assert.equal(f.node('auth-switch').hidden, !registrationEnabled);
   }
+});
+test('pricing cards let visitors choose a plan that is requested after sign-in', async () => {
+  const html = source('index.html');
+  for (const plan of ['free', 'pro', 'pro_plus']) assert.match(html, new RegExp(`data-choose-plan="${plan}" aria-pressed="false"`));
+  assert.doesNotMatch(html, /Find my next step|>Explore Pro<|Start with Free/);
+  assert.match(html, /<a class="marketing-brand"[^>]*><svg class="brand-mark"/, 'the nav uses the same logo as the app');
+  assert.match(html, /id="auth-plan"/);
+  const storage = new Map();
+  const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  const visit = signedIn => {
+    const calls = [];
+    const f = fixture(async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith('/me')) return signedIn ? response(200, { user: { id: 3, name: 'Sam' } }) : response(401, {});
+      if (url === '/api/license/request') return response(200, { tier: 'free', request: { plan: 'pro_plus' } });
+      return response(200, { setupRequired: false, registrationEnabled: true });
+    });
+    f.context.localStorage = localStorage;
+    const buttons = ['free', 'pro', 'pro_plus'].map(plan => Object.assign(f.node(`choose-${plan}`), { dataset: { choosePlan: plan }, attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } }));
+    const all = f.context.document.querySelectorAll;
+    f.context.document.querySelectorAll = selector => selector === '[data-choose-plan]' ? buttons : all(selector);
+    f.run('session.js');
+    return { f, calls, buttons };
+  };
+  const out = visit(false);
+  await out.f.context.FinanceSession.start();
+  assert.equal(out.f.node('auth-plan').hidden, true, 'no banner until a plan is chosen');
+  out.buttons[2].listeners.click();
+  assert.equal(storage.get('myfinance.chosenPlan'), 'pro_plus');
+  assert.equal(out.buttons[2].attrs['aria-pressed'], 'true');
+  assert.equal(out.buttons[1].attrs['aria-pressed'], 'false');
+  assert.match(out.buttons[2].textContent, /Pro Plus selected/);
+  assert.equal(out.buttons[1].textContent, 'Choose Pro');
+  assert.equal(out.f.node('auth-plan').hidden, false);
+  assert.equal(out.f.node('auth-plan-name').textContent, 'Pro Plus');
+  assert.match(out.f.node('auth-plan-note').textContent, /administrator to approve\. Nothing is charged here/);
+  assert.equal(out.f.node('auth-title').textContent, 'Make room for your next chapter.', 'choosing a plan opens account creation');
+  assert.equal(out.calls.some(call => call.url === '/api/license/request'), false, 'nothing is requested while signed out');
+
+  const notes = [];
+  const back = visit(true);
+  back.f.context.notify = message => notes.push(message);
+  await back.f.context.FinanceSession.start();
+  const sent = back.calls.find(call => call.url === '/api/license/request');
+  assert.equal(sent.options.method, 'POST');
+  assert.deepEqual(JSON.parse(sent.options.body), { plan: 'pro_plus' });
+  assert.match(notes[0], /Pro Plus request was sent to your MyFinance administrator/);
+  assert.equal(storage.has('myfinance.chosenPlan'), false, 'the choice is only sent once');
+});
+test('the upgrade dialog is a plan picker that requests and cancels plans', async () => {
+  const calls = [];
+  const f = loadPro(async (url, options = {}) => {
+    calls.push({ url, method: options.method });
+    if (url === '/api/license/request' && options.method === 'POST') return response(200, { tier: 'free', active: false, request: { plan: JSON.parse(options.body).plan, requestedAt: '2026-10-18T12:00:00Z' }, features: [] });
+    if (url === '/api/license/request') return response(200, { tier: 'free', active: false, features: [] });
+    return response(200, {});
+  });
+  const pro = f.context.FinancePro;
+  const dialog = f.node('pro-dialog');
+  dialog.tagName = 'DIALOG';
+  pro.setEntitlement({ tier: 'free', active: false, trialAvailable: false, features: [] });
+  pro.requireProPlus('Savings goals');
+  assert.match(dialog.innerHTML, /role="radiogroup"/);
+  assert.match(dialog.innerHTML, /value="pro_plus" checked/, 'the plan the page needs is preselected');
+  assert.match(dialog.innerHTML, /Request Pro Plus/);
+  assert.doesNotMatch(dialog.innerHTML, /Start 7-day free trial/, 'the trial is only offered while available');
+  pro.openUpgrade('', 'pro', 'pro');
+  assert.match(dialog.innerHTML, /value="pro" checked/);
+  assert.match(dialog.innerHTML, /Request Pro</);
+  await dialog.querySelector('[data-pro-request]').listeners.click({ target: {} });
+  assert.deepEqual(calls.at(-1), { url: '/api/license/request', method: 'POST' });
+  assert.equal(pro.entitlement().request.plan, 'pro');
+  assert.match(pro.planLabel().detail, /Pro requested/);
+  assert.match(dialog.innerHTML, /Pro requested \u2713/);
+  assert.match(dialog.innerHTML, /Cancel request/);
+  await dialog.querySelector('[data-pro-cancel]').listeners.click({ target: {} });
+  assert.deepEqual(calls.at(-1), { url: '/api/license/request', method: 'DELETE' });
+  assert.equal(pro.entitlement().request, undefined);
+  pro.setEntitlement({ tier: 'pro', active: true, plusActive: false, features: [] });
+  pro.openUpgrade();
+  assert.match(dialog.innerHTML, /value="pro"[^>]*disabled/, 'the current plan cannot be requested again');
+  assert.match(dialog.innerHTML, /Your plan/);
+  assert.match(dialog.innerHTML, /value="pro_plus" checked/);
 });
 test('Pro does not unlock Pro Plus; trials and full-access accounts do', () => {
   const f = loadPro();

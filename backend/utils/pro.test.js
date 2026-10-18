@@ -116,7 +116,23 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402);
     assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 409);
 
-    // Only admins grant licenses; the owner cannot be changed.
+    // Customers choose a paid plan; nothing unlocks until an administrator approves it.
+    assert.equal((await call('/api/license/request', { body: { plan: 'gold' }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/license/request', { body: { plan: 'pro_plus' }, cookie: ownerCookie })).status, 409);
+    const chosen = await call('/api/license/request', { body: { plan: 'pro_plus' }, cookie: customerCookie });
+    assert.equal(chosen.status, 200);
+    assert.equal(chosen.body.tier, 'free');
+    assert.equal(chosen.body.request.plan, 'pro_plus');
+    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402);
+    assert.equal((await call('/api/license', { cookie: customerCookie })).body.request.plan, 'pro_plus');
+    assert.equal((await call('/api/admin/overview', { cookie: ownerCookie })).body.stats.pending_plan_requests, 1);
+    const requestedUsers = (await call('/api/admin/users', { cookie: ownerCookie })).body;
+    assert.equal(requestedUsers[0].id, customerId, 'pending requests are listed first');
+    assert.equal(requestedUsers[0].license.request.plan, 'pro_plus');
+    const cancelled = await call('/api/license/request', { method: 'DELETE', cookie: customerCookie });
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.request, undefined);
+    assert.equal((await call('/api/license/request', { body: { plan: 'pro' }, cookie: customerCookie })).body.request.plan, 'pro');
     await assertPlanningLocked(customerCookie);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant' }, cookie: customerCookie })).status, 403);
     assert.equal((await call('/api/admin/users/1/license', { body: { action: 'revoke' }, cookie: ownerCookie })).status, 400);
@@ -126,6 +142,8 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(granted.status, 200);
     assert.equal(granted.body.license.tier, 'pro');
     assert.equal(granted.body.license.plusActive, false);
+    assert.equal((await call('/api/license', { cookie: customerCookie })).body.request, undefined, 'granting the chosen plan clears the request');
+    assert.equal((await call('/api/license/request', { body: { plan: 'pro' }, cookie: customerCookie })).status, 409);
     await assertPlanningLocked(customerCookie);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'invalid' }, cookie: ownerCookie })).status, 400);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: customerCookie })).status, 403);

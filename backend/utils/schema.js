@@ -154,6 +154,9 @@ export async function migratePrivateSchema(client) {
       granted_at TIMESTAMPTZ, granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       revoked_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- A customer's pending plan choice, approved by an administrator (there is no online checkout).
+    ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_plan TEXT;
+    ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS category_budgets (
       id SERIAL PRIMARY KEY, category TEXT NOT NULL,
       monthly_amount NUMERIC(14,2) NOT NULL CHECK (monthly_amount > 0),

@@ -69,8 +69,52 @@ window.FinanceSession = (() => {
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
     el('auth-switch').hidden = recovery ? false : !registrationEnabled || mode === 'setup';
     el('auth-switch').textContent = recovery ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
-    if (mode === 'register') el('auth-description').textContent = 'Start with Free. Explore your money, then choose whether to try Pro Plus for 7 days. No card needed.';
+    if (mode === 'register') el('auth-description').textContent = 'Every account starts on Free. Pick Pro or Pro Plus below and we will send that request to your MyFinance administrator. Nothing is charged here.';
     el('auth-forgot').hidden = mode !== 'login';
+    renderPlanChoice();
+  }
+
+  // Plan picked on the public pricing cards; survives the post-sign-in reload until it is submitted.
+  const PLAN_KEY = 'myfinance.chosenPlan';
+  const PLANS = {
+    free: { name: 'Free', price: '$0 / month', note: 'Free to keep using. You can request Pro or Pro Plus any time from inside the app.' },
+    pro: { name: 'Pro', price: '$4.99 / month', note: 'After you sign in, we send this request to your MyFinance administrator to approve. Nothing is charged here.' },
+    pro_plus: { name: 'Pro Plus', price: '$9.98 / month total', note: 'Includes Debt Free and Savings Goals. After you sign in, we send this request to your MyFinance administrator to approve. Nothing is charged here.' }
+  };
+  const store = {
+    get() { try { const plan = globalThis.localStorage?.getItem(PLAN_KEY); return PLANS[plan] ? plan : ''; } catch { return ''; } },
+    set(plan) { try { plan ? globalThis.localStorage?.setItem(PLAN_KEY, plan) : globalThis.localStorage?.removeItem(PLAN_KEY); } catch { /* private mode */ } }
+  };
+  function renderPlanChoice() {
+    const chosen = store.get();
+    document.querySelectorAll('[data-choose-plan]').forEach(button => {
+      const selected = button.dataset.choosePlan === chosen;
+      button.setAttribute('aria-pressed', String(selected));
+      button.textContent = selected ? `\u2713 ${PLANS[chosen].name} selected` : `Choose ${PLANS[button.dataset.choosePlan]?.name || ''}`;
+      button.closest?.('.marketing-plan')?.classList.toggle('is-selected', selected);
+    });
+    const banner = el('auth-plan');
+    if (!banner) return;
+    banner.hidden = !chosen || mode === 'forgot' || mode === 'reset';
+    if (!chosen) return;
+    el('auth-plan-name').textContent = PLANS[chosen].name;
+    el('auth-plan-price').textContent = PLANS[chosen].price;
+    el('auth-plan-note').textContent = PLANS[chosen].note;
+  }
+  async function submitPlanChoice() {
+    const plan = store.get();
+    if (!plan || support) return;
+    store.set('');
+    if (plan === 'free') return;
+    try {
+      const response = await fetch('/api/license/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
+      const entitlement = await response.json();
+      globalThis.FinancePro?.setEntitlement?.(entitlement);
+      globalThis.notify?.(`Your ${PLANS[plan].name} request was sent to your MyFinance administrator. Nothing is charged here.`);
+    } catch (error) {
+      // 409 means the account already has this plan (or is the owner/demo account); nothing to request.
+      if (error.status !== 409) globalThis.notify?.(`We could not send your ${PLANS[plan].name} request: ${error.message}`);
+    }
   }
   function showSupportBanner(support) {
     const banner = document.createElement('div');
@@ -96,6 +140,12 @@ window.FinanceSession = (() => {
     };
     el('marketing-start')?.addEventListener('click', focusAccess);
     document.querySelectorAll('[data-marketing-start]').forEach(button => button.addEventListener('click', focusAccess));
+    document.querySelectorAll('[data-choose-plan]').forEach(button => button.addEventListener('click', () => {
+      store.set(button.dataset.choosePlan);
+      renderPlanChoice();
+      focusAccess();
+    }));
+    el('auth-plan-clear')?.addEventListener('click', () => { store.set(''); renderPlanChoice(); });
     el('auth-switch').onclick = () => {
       mode = mode === 'login' ? 'register' : 'login';
       if (location.hash.startsWith('#reset-token=')) history.replaceState(null, '', location.pathname);
@@ -151,6 +201,7 @@ window.FinanceSession = (() => {
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
         showView(['categories','category-admin','transactions','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
+        await submitPlanChoice();
         return;
       }
       if (response.status !== 401) throw new Error('Unable to check your session.');

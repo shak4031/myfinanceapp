@@ -274,12 +274,39 @@ Prices are USD per month:
   including all strategies and what-if tools.
 
 The optional, one-time seven-day trial includes **Pro Plus**, ends automatically
-and never charges. Owner and demo accounts retain full Pro Plus access. Existing
-Pro grants remain Pro-only; there is no automatic upgrade. Paid access is
-administrator-managed, not a payment subscription integration or online checkout.
-In the admin users page, choose Grant Pro, Grant Pro Plus, Change to Pro, or
-Revoke paid access. The license API accepts `action: "grant"` with
-`plan: "pro"` (default) or `"pro_plus"`; revocation uses `action: "revoke"`.
+and never charges. It is never started for you: account holders start it
+themselves from the in-app plan dialog. Owner and demo accounts retain full Pro
+Plus access. Existing Pro grants remain Pro-only; there is no automatic upgrade.
+Paid access is administrator-managed, not a payment subscription integration or
+online checkout.
+
+#### Choosing a plan
+
+Each pricing card has a **Choose Free / Choose Pro / Choose Pro Plus** button.
+The selected card is highlighted, the choice is remembered in the browser
+(`localStorage` key `myfinance.chosenPlan`), and the sign-in card shows a
+"Your plan" summary with options to change or clear it. After the visitor signs
+in or creates an account, a Pro or Pro Plus choice is sent once as a plan
+request; Free just clears the choice. The account stays on its current plan
+until an administrator approves the request.
+
+Signed-in users pick Pro or Pro Plus in the plan dialog (sidebar plan chip or any
+locked feature), then select **Request Pro** / **Request Pro Plus**. A pending
+request is shown on the chip and in the dialog, where it can be cancelled.
+Support sessions cannot request plans.
+
+- `POST /api/license/request` with `{ "plan": "pro" | "pro_plus" }` saves the
+  request (409 if the account already has that plan or is the owner/demo account).
+- `DELETE /api/license/request` cancels it.
+- Both return the entitlement; a pending request appears as
+  `request: { plan, requestedAt }`.
+
+Admins see a "Plan requests to review" count on the overview, and requesting
+users are listed first on the users page with a "Wants Pro Plus" tag and an
+**Approve … request** button. Granting any plan clears the request. The users
+page also offers Grant Pro, Grant Pro Plus, Change to Pro and Revoke paid access.
+The license API accepts `action: "grant"` with `plan: "pro"` (default) or
+`"pro_plus"`; revocation uses `action: "revoke"`.
 
 The entitlement response uses `active` for Pro access and `plusActive` for
 planning access. All debt, goal and plan API operations enforce Pro Plus on the

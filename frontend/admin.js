@@ -55,6 +55,7 @@
         ${stat('Server errors (24h)', s.server_errors_24h, s.server_errors_24h > 0)}
         ${stat('Browser errors (24h)', s.browser_errors_24h, s.browser_errors_24h > 0)}
         ${stat('Active support grants', s.active_support_grants)}
+        ${stat('Plan requests to review', s.pending_plan_requests ?? 0, s.pending_plan_requests > 0)}
       </div>
       <div class="card" style="margin-top:16px"><table><tbody>
         <tr><th>Environment</th><td>${esc(data.environment)}</td></tr><tr><th>Node</th><td>${esc(data.node)}</td></tr>
@@ -63,11 +64,13 @@
         <tr><th>Audit retention</th><td>${esc(data.auditRetentionDays)} days</td></tr>
       </tbody></table>
       <div class="actions" style="margin-top:12px">
+        ${s.pending_plan_requests > 0 ? '<button class="btn btn-primary" data-users-jump>Review plan requests</button>' : ''}
         <button class="btn btn-secondary" data-error-jump>View error logs</button>
         <button class="btn btn-secondary" data-jump="auth.login">View failed logins</button>
       </div></div>`;
   }
   $('overview').addEventListener('click', event => {
+    if (event.target.dataset.usersJump !== undefined) return openTab('users');
     if (event.target.dataset.errorJump !== undefined) {
       $('errors-range').value = '24h';
       $('errors-request').value = '';
@@ -80,17 +83,21 @@
     openTab('audit');
   });
 
+  const planName = plan => plan === 'pro_plus' ? 'Pro Plus' : 'Pro';
   function planCell(user) {
     const license = user.license || { tier: 'free' };
     const detail = license.tier === 'trial' ? `Pro Plus trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro Plus · owner' : license.source === 'demo' ? 'Pro Plus · demo' : license.tier === 'pro_plus' ? 'Pro Plus' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
-    return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>`;
+    const request = license.request ? `<br><span class="plan-pill is-requested" title="Requested ${esc(when(license.request.requestedAt))}">Wants ${esc(planName(license.request.plan))}</span>` : '';
+    return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>${request}`;
   }
   function planButton(user) {
     const license = user.license || { tier: 'free' };
     if (license.source === 'owner' || license.source === 'demo') return '';
     const attrs = `data-id="${esc(user.id)}" data-email="${esc(user.email)}"`;
-    return `${license.tier !== 'pro' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="pro" ${attrs}>${license.tier === 'pro_plus' ? 'Change to Pro' : 'Grant Pro'}</button>` : ''}
-      ${license.tier !== 'pro_plus' ? `<button class="btn btn-primary" data-action="license-grant" data-plan="pro_plus" ${attrs}>Grant Pro Plus</button>` : ''}
+    const wanted = license.request?.plan;
+    const approve = wanted ? `<button class="btn btn-primary" data-action="license-grant" data-plan="${esc(wanted)}" ${attrs}>Approve ${esc(planName(wanted))} request</button>` : '';
+    return `${approve}${license.tier !== 'pro' && wanted !== 'pro' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="pro" ${attrs}>${license.tier === 'pro_plus' ? 'Change to Pro' : 'Grant Pro'}</button>` : ''}
+      ${license.tier !== 'pro_plus' && wanted !== 'pro_plus' ? `<button class="btn ${wanted ? 'btn-secondary' : 'btn-primary'}" data-action="license-grant" data-plan="pro_plus" ${attrs}>Grant Pro Plus</button>` : ''}
       ${license.tier === 'pro' || license.tier === 'pro_plus' || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
   }
   async function loadUsers() {

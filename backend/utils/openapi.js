@@ -51,8 +51,12 @@ export function openApiSpec() {
       '/api/goals/funding-analysis': { get: op('Pro Plus', 'Goal funding plan and coaching') },
       '/api/plan': { get: op('Pro Plus', 'Debt and savings plan; all plan operations require Pro Plus') },
       '/api/categories': { get: op('Finance', 'List categories') },
-      '/api/license': { get: op('Pro', 'Current plan, trial status, active (Pro), plusActive (Pro Plus), pricing and feature lists') },
+      '/api/license': { get: op('Pro', 'Current plan, trial status, active (Pro), plusActive (Pro Plus), any pending plan request, pricing and feature lists') },
       '/api/license/trial': { post: op('Pro', 'Start the one-time 7-day MyFinance Pro Plus trial; no automatic charge', body({})) },
+      '/api/license/request': {
+        post: op('Pro', 'Choose a paid plan (pro or pro_plus). Saves a pending request for an administrator to approve; nothing is charged', body({ plan: 'pro_plus' })),
+        delete: op('Pro', 'Cancel the pending plan request')
+      },
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
       '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, subscriptions and merchants') },
       '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics', query('type', 'from', 'to')) }

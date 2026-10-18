@@ -70,8 +70,9 @@
     if (!entitlement) return { tone: 'free', title: 'Free plan', detail: 'Unlock Pro' };
     if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro Plus trial', detail: `${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left` };
     if (entitlement.plusActive) return { tone: 'pro', title: 'MyFinance Pro Plus', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
-    if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
-    return { tone: 'free', title: 'Free plan', detail: entitlement.trialAvailable ? 'Try Pro Plus free for 7 days' : 'Compare plans' };
+    const requested = entitlement.request?.plan ? `${entitlement.request.plan === 'pro_plus' ? 'Pro Plus' : 'Pro'} requested` : '';
+    if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : requested || 'Active' };
+    return { tone: 'free', title: 'Free plan', detail: requested || (entitlement.trialAvailable ? 'Try Pro Plus free for 7 days' : 'Choose a plan') };
   }
 
   function renderPlanChrome() {
@@ -115,38 +116,84 @@
     return dialog;
   }
 
-  function openUpgrade(reason = '', requiredPlan = 'pro') {
+  function openUpgrade(reason = '', requiredPlan = 'pro', picked = '') {
     const entitlement = state.entitlement || {};
     const dialog = dialogShell('pro-dialog', 'pro-dialog', 'pro-dialog-title');
     const plusRequired = requiredPlan === 'pro_plus';
     const plan = entitlement.plan || { name: 'MyFinance Pro', price: 4.99 };
     const plusPlan = entitlement.plusPlan || { price: 9.98, additionalPrice: 4.99 };
     const supportSession = !!globalThis.FinanceSession?.currentSupport?.();
-    let status = '', action = '';
-    if (entitlement.active && entitlement.tier !== 'trial') {
-      status = `<p class="pro-status is-pro">${ICONS.check}<span>${isPlusActive() ? 'Pro Plus is active. Insights, Debt Free and Savings Goals are unlocked.' : 'Pro is active: analytics, budgets and exports are unlocked. Debt Free and Savings Goals need Pro Plus. Ask your MyFinance administrator to add Pro Plus for $4.99 more per month ($9.98 total).'}</span></p>`;
-      action = '<button type="button" class="btn btn-primary" data-pro-close>Explore analytics</button>';
+    const paid = entitlement.active && entitlement.tier !== 'trial';
+    const current = paid ? (entitlement.plusActive ? 'pro_plus' : 'pro') : '';
+    const pending = entitlement.request?.plan || '';
+    const preferred = [picked, pending].find(id => (id === 'pro' || id === 'pro_plus') && id !== current);
+    const choice = current === 'pro_plus' ? 'pro_plus' : preferred || (current === 'pro' || plusRequired ? 'pro_plus' : 'pro');
+    const names = { pro: 'Pro', pro_plus: 'Pro Plus' };
+    const canRequest = !supportSession && current !== 'pro_plus';
+    const requestedOn = entitlement.request?.requestedAt ? ` on ${new Date(entitlement.request.requestedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : '';
+    let status = '';
+    if (current === 'pro_plus') {
+      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro Plus is active. Insights, Debt Free and Savings Goals are unlocked.</span></p>`;
+    } else if (pending && choice === pending) {
+      status = `<p class="pro-status is-trial">${ICONS.spark}<span>You requested <strong>${names[pending]}</strong>${esc(requestedOn)}. Ask your MyFinance administrator if you need it sooner. Nothing is charged here. <button type="button" class="pro-request-link" data-pro-cancel>Cancel request</button></span></p>`;
+    } else if (current === 'pro') {
+      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro is active: analytics, budgets and exports are unlocked. Debt Free and Savings Goals need Pro Plus ($4.99 more per month, $9.98 total). Ask your MyFinance administrator, or send a request below.</span></p>`;
     } else if (entitlement.tier === 'trial') {
-      status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your Pro Plus trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. Includes Debt Free and Savings Goals. Ask your MyFinance administrator to keep your chosen plan after it ends.</span></p>`;
-      action = '<button type="button" class="btn btn-primary" data-pro-close>Keep exploring</button>';
-    } else if (entitlement.trialAvailable && !supportSession) {
-      status = '<p class="pro-status">Try all Pro Plus features for 7 days. No card needed. The trial ends on its own &mdash; nothing is charged. Paid access is arranged with your MyFinance administrator; there is no checkout here.</p>';
-      action = '<button type="button" class="btn btn-primary" data-pro-trial>Start 7-day free trial</button>';
+      status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your Pro Plus trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. To keep a plan after it ends, choose one and send the request. Your MyFinance administrator approves it; nothing is charged here.</span></p>`;
+    } else if (supportSession) {
+      status = `<p class="pro-status is-locked">${ICONS.lock}<span>Plan requests are made by the account holder. Ask your MyFinance administrator for Pro or Pro Plus.</span></p>`;
     } else {
       const ended = entitlement.trialEndsAt ? ` on ${new Date(entitlement.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : '';
-      status = `<p class="pro-status is-locked">${ICONS.lock}<span>${entitlement.source === 'trial-expired' ? `Your free trial ended${esc(ended)}.` : 'A paid plan is not active on this account.'} Ask your MyFinance administrator for Pro or Pro Plus. No online checkout is available.</span></p>`;
-      action = '<button type="button" class="btn btn-primary" data-pro-close>Got it</button>';
+      status = `<p class="pro-status">${entitlement.source === 'trial-expired' ? `Your free trial ended${esc(ended)}. ` : ''}Pick a plan, then send the request. Your MyFinance administrator turns it on. Ask your MyFinance administrator if you have questions. There is no checkout and nothing is charged here.</p>`;
     }
+    const trial = entitlement.trialAvailable && !supportSession && !paid
+      ? '<button type="button" class="btn btn-secondary" data-pro-trial title="One-time, ends on its own, no charge">Start 7-day free trial</button>' : '';
+    const sent = pending && pending === choice;
+    const action = !canRequest ? `<button type="button" class="btn btn-primary" data-pro-close>${current === 'pro_plus' ? 'Explore analytics' : 'Got it'}</button>`
+      : `<button type="button" class="btn btn-primary" data-pro-request${sent ? ' disabled' : ''}>${sent ? `${names[choice]} requested \u2713` : `Request ${names[choice]}`}</button>`;
+    const option = (id, title, price, per, text, note) => {
+      const isCurrent = current === id || (id === 'pro' && current === 'pro_plus');
+      const tag = isCurrent ? '<span class="upgrade-tag">Your plan</span>' : pending === id ? '<span class="upgrade-tag is-requested">Requested</span>' : '';
+      return `<label class="upgrade-option${id === 'pro_plus' ? ' upgrade-plus' : ''}${isCurrent ? ' is-current' : ''}">
+        <input type="radio" name="pro-plan-choice" value="${id}"${choice === id ? ' checked' : ''}${isCurrent || !canRequest ? ' disabled' : ''}>
+        <span class="upgrade-option-head"><span class="upgrade-radio" aria-hidden="true"></span><strong>${title}</strong>${tag}</span>
+        <span class="pro-price"><strong>$${Number(price).toFixed(2)}</strong><span>${per}</span></span>
+        <p>${text}</p><small>${note}</small></label>`;
+    };
     const features = (entitlement.features?.length ? entitlement.features : []).map(feature =>
       `<li><span class="pro-feature-icon">${ICONS[feature.id] || ICONS.spark}</span><span><strong>${esc(feature.title)}</strong><small>${esc(feature.text)}</small></span></li>`).join('');
-    dialog.innerHTML = `<div class="pro-hero"><span class="pro-hero-mark">${ICONS.spark}</span><p class="eyebrow">MYFINANCE / CHOOSE YOUR NEXT STEP</p>
+    dialog.innerHTML = `<div class="pro-hero"><span class="pro-hero-mark">${ICONS.spark}</span><p class="eyebrow">MYFINANCE / CHOOSE YOUR PLAN</p>
       <h2 id="pro-dialog-title">${plusRequired ? 'A plan for less debt. More life.' : 'Turn money insights into better habits.'}</h2>
       ${reason ? `<p class="pro-reason">${esc(reason)}</p>` : ''}
-      <div class="upgrade-plans"><article><h3>Pro</h3><div class="pro-price"><strong>$${Number(plan.price).toFixed(2)}</strong><span>/ month</span></div><p>Understand your patterns: budgets, spending insights, forecasts, subscription radar and CSV exports.</p><small>Does not unlock Debt Free or Savings Goals.</small></article>
-      <article class="upgrade-plus"><h3>Pro Plus</h3><div class="pro-price"><strong>$${Number(plusPlan.price).toFixed(2)}</strong><span>/ month total</span></div><p>Everything in Pro, plus Debt Free and Savings Goals: payoff strategies, monthly targets and what-if planning.</p><small>Pro + $${Number(plusPlan.additionalPrice).toFixed(2)}/month. Not a second $9.98 charge.</small></article></div></div>
+      <div class="upgrade-plans" role="radiogroup" aria-label="Choose a plan">
+      ${option('pro', 'Pro', plan.price, '/ month', 'Understand your patterns: budgets, spending insights, forecasts, subscription radar and CSV exports.', 'Does not unlock Debt Free or Savings Goals.')}
+      ${option('pro_plus', 'Pro Plus', plusPlan.price, '/ month total', 'Everything in Pro, plus Debt Free and Savings Goals: payoff strategies, monthly targets and what-if planning.', `Pro + $${Number(plusPlan.additionalPrice).toFixed(2)}/month. Not a second $9.98 charge.`)}</div></div>
       <ul class="pro-feature-grid">${features}</ul>
-      <div class="pro-dialog-foot">${status}<div class="pro-actions"><button type="button" class="btn btn-secondary" data-pro-close>Not now</button>${action}</div></div>`;
+      <div class="pro-dialog-foot">${status}<div class="pro-actions"><button type="button" class="btn btn-secondary" data-pro-close>Not now</button>${trial}${action}</div></div>`;
     dialog.querySelectorAll('[data-pro-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+    dialog.querySelectorAll('input[name="pro-plan-choice"]').forEach(input => input.addEventListener('change', () => openUpgrade(reason, requiredPlan, input.value)));
+    dialog.querySelector('[data-pro-request]')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try {
+        setEntitlement(await request('/api/license/request', { method: 'POST', body: JSON.stringify({ plan: choice }) }));
+        globalThis.notify?.(`Your ${names[choice]} request was sent to your MyFinance administrator. Nothing is charged here.`);
+      } catch (error) {
+        globalThis.notify?.(error.message);
+        await ensureEntitlement(true).catch(() => {});
+      }
+      openUpgrade(reason, requiredPlan, choice);
+    });
+    dialog.querySelector('[data-pro-cancel]')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try {
+        setEntitlement(await request('/api/license/request', { method: 'DELETE' }));
+        globalThis.notify?.('Your plan request was cancelled.');
+      } catch (error) {
+        globalThis.notify?.(error.message);
+        await ensureEntitlement(true).catch(() => {});
+      }
+      openUpgrade(reason, requiredPlan);
+    });
     dialog.querySelector('[data-pro-trial]')?.addEventListener('click', async event => {
       event.target.disabled = true;
       try {
@@ -159,7 +206,7 @@
         event.target.disabled = false;
         globalThis.notify?.(error.message);
         await ensureEntitlement(true);
-        openUpgrade(reason);
+        openUpgrade(reason, requiredPlan);
       }
     });
     if (!dialog.open) dialog.showModal();
