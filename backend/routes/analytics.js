@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Database from '../db.js';
 import { requirePro } from '../utils/license.js';
 import { buildAnalytics, toCsv } from '../utils/analytics.js';
+import { buildMoneyFlowSignals, normalizeProfile, REGIONS, HOUSING, MAX_HOUSEHOLD } from '../utils/benchmarks.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 import { cashBalance } from '../utils/transfers.js';
@@ -21,9 +22,10 @@ async function loadInputs() {
     // Starting cash is checking accounts only, matching the dashboard.
     const balances = (await client.query('SELECT id, date, balance, account_id FROM transactions WHERE balance IS NOT NULL')).rows;
     const accounts = (await client.query('SELECT id, kind FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
+    const household = (await client.query('SELECT household_size AS size, region, housing FROM household_profiles LIMIT 1')).rows[0] || null;
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { transactions, budgets, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
+    return { transactions, budgets, household, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
   });
 }
 
@@ -31,7 +33,27 @@ router.get('/', async (req, res, next) => {
   try {
     const now = new Date();
     const [inputs, planInputs] = await Promise.all([loadInputs(), loadPlanInputs(db, now)]);
-    res.json(buildAnalytics({ ...inputs, typical: typicalSurplus(planInputs, now) }));
+    res.json({
+      ...buildAnalytics({ ...inputs, typical: typicalSurplus(planInputs, now) }),
+      moneyFlow: buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now })
+    });
+  } catch (error) { next(error); }
+});
+
+// Household details choose which public benchmark applies. Every field is optional; null clears it.
+router.put('/household', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const fields = { size: body.size ?? null, region: body.region ?? null, housing: body.housing ?? null };
+    const profile = normalizeProfile(fields);
+    if ((fields.size !== null && profile.size === null) || (fields.region !== null && profile.region === null)
+      || (fields.housing !== null && profile.housing === null)) {
+      return res.status(400).json({ error: `size must be 1-${MAX_HOUSEHOLD}, region one of ${REGIONS.join('/')}, housing one of ${HOUSING.join('/')} (or null)` });
+    }
+    await db.run(`INSERT INTO household_profiles (household_size, region, housing, updated_at) VALUES ($1,$2,$3,NOW())
+      ON CONFLICT (user_id) DO UPDATE SET household_size=EXCLUDED.household_size, region=EXCLUDED.region, housing=EXCLUDED.housing, updated_at=NOW()`,
+    [profile.size, profile.region, profile.housing]);
+    res.json({ household: profile });
   } catch (error) { next(error); }
 });
 

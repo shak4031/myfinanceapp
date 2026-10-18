@@ -34,7 +34,8 @@ export function buildDemoData(now = new Date()) {
   const between = (low, high) => low + rand() * (high - low);
   const pick = list => list[Math.floor(rand() * list.length)];
   const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const start = end - 364 * DAY_MS;
+  // About 16 months, so year-over-year comparisons (which cancel out seasons) have a full year to look back on.
+  const start = end - 485 * DAY_MS;
   const rows = [];
   const add = (time, description, amount, category, { credit = false, fixed = false, payMode = null, account = 'checking' } = {}) => {
     if (time < start || time > end) return;
@@ -58,7 +59,8 @@ export function buildDemoData(now = new Date()) {
     add(day(10), 'SPOTIFY USA', 11.99, 'Subscriptions', { payMode: 'auto' });
     bill(12, 'TOYOTA FINANCIAL AUTOPAY', 412.66, 'Car Loans', 'auto');
     add(day(14), 'APPLE.COM/BILL', 2.99, 'Subscriptions', { payMode: 'auto' });
-    bill(15, 'BILL PAY PSEG ELECTRIC & GAS', 128 + (winter ? 115 : 0) + (summer ? 88 : 0) + between(0, 34), 'Utilities', 'manual');
+    // A rate increase four months ago lifts the energy bill, so Money flow signals has a rising cost to find.
+    bill(15, 'BILL PAY PSEG ELECTRIC & GAS', (128 + (winter ? 115 : 0) + (summer ? 88 : 0) + between(0, 34)) * (ago <= 3 ? 1.22 : 1), 'Utilities', 'manual');
     bill(17, 'PLANET FITNESS', 24.99, 'Healthcare', 'auto');
     bill(18, 'ONLINE PMT COMCAST XFINITY', ago <= 4 ? 99.99 : 89.99, 'Internet', 'manual');
     bill(22, 'VERIZON WIRELESS AUTOPAY', 142.18, 'Utilities', 'auto');
@@ -116,7 +118,11 @@ export function buildDemoData(now = new Date()) {
   add(end - 9 * DAY_MS, 'ONLINE TRANSFER TO CHK ...7702', 250, 'Other');
 
   rows.sort((a, b) => a.time - b.time || (a.direction === b.direction ? 0 : a.direction === 'CREDIT' ? -1 : 1));
-  const balances = { checking: 6850, savings: 9200 };
+  // Balances are anchored to today, so the history length does not change what the demo shows as current cash.
+  const ending = { checking: 9500, savings: 16600 };
+  const balances = { ...ending };
+  for (const row of rows) balances[row.account] -= row.direction === 'CREDIT' ? row.amount : -row.amount;
+  for (const key of Object.keys(balances)) balances[key] = cents(balances[key]);
   const transactions = rows.map(({ time, ...row }) => {
     balances[row.account] = cents(balances[row.account] + (row.direction === 'CREDIT' ? row.amount : -row.amount));
     return { ...row, balance: balances[row.account] };
@@ -130,6 +136,7 @@ export function buildDemoData(now = new Date()) {
       { key: 'savings', name: 'High-yield savings', kind: 'savings', institution: 'Demo Bank', last4: '4821' },
       { key: 'card', name: 'Chase Sapphire', kind: 'credit_card', institution: 'Chase', last4: '3391' }
     ],
+    household: { size: 2, region: 'northeast', housing: 'own' },
     budgets: [['Groceries', 750], ['Dining', 400], ['Shopping', 450], ['Gas', 220], ['Entertainment', 150], ['Subscriptions', 60], ['Transportation', 120]],
     goals: [
       { name: 'Emergency fund', target_amount: 20000, current_amount: 11800, target_date: ahead(10), priority: 1, icon: '🛡️', color: '#369c85', notes: 'Six months of essential expenses.' },
@@ -165,7 +172,7 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['money_plans', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
+  for (const table of ['household_profiles', 'money_plans', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
@@ -197,6 +204,8 @@ export async function resetDemoAccount(client, now = new Date()) {
   }
   // Minimums ($717.66) plus $400 extra a month, so the debt-free program and its calendar card have something to show.
   await client.query("INSERT INTO money_plans (debt_strategy,debt_budget,goal_strategy) VALUES ('avalanche',$1,'priority')", [data.debtBudget]);
+  await client.query('INSERT INTO household_profiles (household_size,region,housing) VALUES ($1,$2,$3)',
+    [data.household.size, data.household.region, data.household.housing]);
   await reconcileTransfers(client, userId);
   await client.query('RESET ROLE');
   return { userId: Number(userId), transactions: data.transactions.length };

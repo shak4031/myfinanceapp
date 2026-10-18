@@ -183,6 +183,26 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-list.is-wrap small { white-space: normal; }
 .pro-list.is-scroll { max-height: 236px; overflow-y: auto; margin-right: -10px; padding-right: 10px; scrollbar-width: thin; }
 .pro-list.is-scroll.is-tall { max-height: 400px; }
+/* Money flow signals */
+.pro-signal.is-inline { background: #eef2f7; color: #475569; }
+.pro-mf-household { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
+.pro-mf-chip { padding: 3px 10px; border-radius: 999px; background: var(--pro-soft); color: var(--pro); font-weight: 700; font-size: 12px; }
+.pro-mf-chip.is-empty { background: #fffbeb; color: #92400e; }
+.pro-mf-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0 0 14px; padding: 12px; border-radius: 12px; background: #f8fafc; }
+.pro-mf-form[hidden] { display: none; }
+.pro-mf-form label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.pro-mf-form select { min-width: 130px; }
+.pro-mf-form-actions { display: flex; gap: 8px; margin-left: auto; }
+.pro-mf-total { display: grid; gap: 2px; margin: 12px 0; }
+.pro-mf-total span, .pro-mf-total small { font-size: 12px; color: var(--text-secondary); }
+.pro-mf-total strong { font-size: 22px; color: var(--good); }
+.pro-mf-opps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; counter-reset: mf; }
+.pro-mf-opps li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border, #e2e8f0); }
+.pro-mf-opps li p { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }
+.pro-mf-opps .num { text-align: right; white-space: nowrap; } .pro-mf-opps .num small { display: block; font-size: 11px; color: var(--text-secondary); }
+.pro-mf-table th small, .pro-mf-table td small { display: block; font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.pro-mf-table th[scope="row"] small { max-width: 240px; white-space: normal; }
+
 @media (max-width: 1100px) { .pro-list.is-scroll, .pro-list.is-scroll.is-tall { max-height: none; } }
 .pro-merchant { display: grid; gap: 6px; } .pro-merchant .pro-share { width: 100%; margin: 0; }
 .pro-rank { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--pro-soft); color: var(--pro); font-size: 12px; font-weight: 800; flex-shrink: 0; }

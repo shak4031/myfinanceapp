@@ -1,4 +1,4 @@
-// MyFinance Pro analytics page: KPIs, forecast, cash flow, trends, category signals, recurring charges and more.
+// MyFinance Pro analytics page: KPIs, forecast, cash flow, trends, category signals, money flow signals, recurring charges and more.
 (() => {
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null;
@@ -188,11 +188,69 @@
     return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div><ul class="pro-weekday-table">${stats}</ul>`);
   }
 
+  const REGION_NAMES = { northeast: 'Northeast', midwest: 'Midwest', south: 'South', west: 'West' };
+  const MF_STATUS = { high: ['High', 'is-above'], above: ['Above', 'is-above'], typical: ['Typical', 'is-inline'], below: ['Below', 'is-below'] };
+  const MF_HOW = 'Typical spending comes from the U.S. Bureau of Labor Statistics Consumer Expenditure Survey (2024), adjusted for your household size, region and whether you rent or own. No other MyFinance user\'s data is used. Each category is then read like a price chart, using completed months only: the 3-month average against the 12-month average (a crossover means the trend has turned), momentum against the same three months last year (which cancels out seasons), a volatility band of 2 standard deviations around your normal month, and how many of the last 6 months went up. Large one-off purchases (at least $250 and 5 times your usual charge in that category) are set aside so they do not look like a habit. Savings targets are levels you have already reached: your cheaper months, the typical household, or for seasonal bills the same months last year.';
+
+  function householdForm(mf) {
+    const p = mf.profile || {};
+    const sizes = Array.from({ length: 8 }, (_, i) => i + 1).map(n => `<option value="${n}"${p.size === n ? ' selected' : ''}>${n}${n === 8 ? '+' : ''} ${n === 1 ? 'person' : 'people'}</option>`).join('');
+    const regions = Object.entries(REGION_NAMES).map(([value, label]) => `<option value="${value}"${p.region === value ? ' selected' : ''}>${label}</option>`).join('');
+    return `<form class="pro-mf-form" id="pro-mf-household" hidden>
+      <label>Household size<select name="size"><option value="">Not set</option>${sizes}</select></label>
+      <label>Region<select name="region"><option value="">Not set</option>${regions}</select></label>
+      <label>Home<select name="housing"><option value="">Not set</option><option value="own"${p.housing === 'own' ? ' selected' : ''}>Own</option><option value="rent"${p.housing === 'rent' ? ' selected' : ''}>Rent</option></select></label>
+      <div class="pro-mf-form-actions"><button type="button" class="btn btn-secondary btn-compact" data-analytics-action="household-cancel">Cancel</button><button type="button" class="btn btn-primary btn-compact" data-analytics-action="household-save">Save household</button></div>
+    </form>`;
+  }
+
+  function moneyFlowCard(a) {
+    const { money, esc } = pro().format;
+    const mf = a.moneyFlow;
+    if (!mf) return '';
+    const title = `Money flow signals${how(MF_HOW)}`;
+    const subtitle = `Your standard categories against ${esc(mf.comparedWith)}, read the way a trader reads a chart`;
+    const p = mf.profile || {};
+    const chips = mf.profileSet
+      ? [p.size ? `${p.size}${p.size >= 8 ? '+' : ''} ${p.size === 1 ? 'person' : 'people'}` : null, p.region ? REGION_NAMES[p.region] : null, p.housing ? (p.housing === 'own' ? 'Own home' : 'Rent') : null].filter(Boolean).map(t => `<span class="pro-mf-chip">${esc(t)}</span>`).join('')
+      : '<span class="pro-mf-chip is-empty">Household not set</span>';
+    const household = `<div class="pro-mf-household"><span>Compared with</span>${chips}<button type="button" class="link-button" data-analytics-action="household-edit">${mf.profileSet ? 'Edit' : 'Set your household'}</button></div>${householdForm(mf)}
+      ${mf.profileSet ? '' : '<p class="pro-banner">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}`;
+    if (mf.status !== 'ok' || !mf.categories.length) {
+      return card(title, subtitle, `${household}<p class="pro-empty">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see signals.</p>`, 'span-3');
+    }
+    const opps = mf.opportunities.map(o => `<li><div><strong>${esc(o.label)}</strong><p>${esc(o.message)}</p></div><div class="num"><strong class="is-good">${money(o.monthly, true)}</strong><small>a month</small></div></li>`).join('');
+    const summary = mf.opportunities.length
+      ? `<div class="pro-mf-total"><span>Realistic savings found</span><strong>${money(mf.potentialMonthly, true)} a month</strong><small>${money(mf.potentialAnnual, true)} a year, using levels you have already reached</small></div><ol class="pro-mf-opps">${opps}</ol>`
+      : `<p class="pro-empty is-good">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
+    const momentum = c => c.momentum
+      ? `${arrow(c.momentum.change)}<small>${c.momentum.basis === 'year-over-year' ? 'vs same months last year' : 'per month, 6 months'}${c.momentum.confirmed === false && c.momentum.change > 0.1 ? ' &middot; not confirmed by recent trend' : ''}</small>`
+      : `<span class="pro-move is-flat">&mdash;</span><small>${c.seasonal ? 'seasonal: needs 15 months' : 'needs 6 months'}</small>`;
+    const cross = c => !c.crossover ? '&mdash;'
+      : `${money(c.crossover.fast, true)} / ${money(c.crossover.slow, true)}<small>${c.crossover.crossed === 'up' ? '<span class="pro-move is-bad">crossed above</span>' : c.crossover.crossed === 'down' ? '<span class="pro-move is-good">crossed below</span>' : c.crossover.state === 'above' ? 'fast above slow' : c.crossover.state === 'below' ? 'fast below slow' : 'flat'}${c.crossover.seasonal ? ' &middot; seasonal' : ''}</small>`;
+    const band = c => !c.band ? '&mdash;'
+      : `<span class="pro-signal ${c.band.position === 'above' ? 'is-above' : c.band.position === 'below' ? 'is-below' : 'is-inline'}">${c.band.position === 'inside' ? 'Normal' : c.band.position === 'above' ? 'Breakout' : 'Unusually low'}</span><small>${esc(c.band.month)}: ${money(c.band.latest, true)} (${money(c.band.lower, true)}&ndash;${money(c.band.upper, true)})</small>`;
+    const rows = mf.categories.map(c => {
+      const [label, cls] = MF_STATUS[c.benchmarkStatus] || ['&mdash;', 'is-inline'];
+      return `<tr><th scope="row"><span>${esc(c.label)}</span><small>${esc(c.covers)}</small></th>
+        <td class="num"><strong>${money(c.average3, true)}</strong><small>3-month average</small></td>
+        <td class="num">${money(c.expected, true)}<small>${c.vsTypical == null ? '' : `${c.vsTypical >= 0 ? '+' : ''}${Math.round(c.vsTypical * 100)}%`}</small></td>
+        <td class="num"><span class="pro-signal ${cls}">${label}</span></td>
+        <td class="num">${momentum(c)}</td><td class="num">${cross(c)}</td><td class="num">${band(c)}</td>
+        <td class="num">${c.upMonths} of ${c.upWindow}<small>months up</small></td></tr>`;
+    }).join('');
+    const table = `<div class="table-scroll"><table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const oneOffs = mf.categories.flatMap(c => c.oneOffs.map(o => ({ ...o, label: c.label })));
+    const oneOffNote = oneOffs.length ? `<p class="pro-footnote">Set aside as one-off purchases: ${oneOffs.slice(0, 5).map(o => `${esc(o.description)} ${money(o.amount, true)} (${dateShort(o.date)}, ${esc(o.label)})`).join('; ')}${oneOffs.length > 5 ? ` and ${oneOffs.length - 5} more` : ''}.</p>` : '';
+    const source = `<p class="pro-footnote">Typical spending: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, adjusted for your household. Survey figures are ${mf.source.year} dollars and are a guide, not a rule. Mortgage, rent, loans, insurance and internet are left out because they are contracted bills.</p>`;
+    return card(title, subtitle, `${household}${summary}${table}${oneOffNote}${source}`, 'span-3');
+  }
+
   function render(a) {
     const { esc } = pro().format;
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
-    $('analytics-content').innerHTML = `${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    $('analytics-content').innerHTML = `${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${moneyFlowCard(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
   }
 
   globalThis.loadAnalyticsPage = async function(force = false) {
@@ -213,6 +271,21 @@
       content.innerHTML = `<div class="pro-empty panel">Could not load analytics: ${pro().format.esc(error.message)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="retry">Try again</button></div>`;
     }
   };
+
+  async function saveHousehold(button) {
+    const form = $('pro-mf-household');
+    if (!form) return;
+    const value = name => form.querySelector(`[name="${name}"]`)?.value || null;
+    button.disabled = true;
+    try {
+      await pro().request('/api/analytics/household', { method: 'PUT', body: JSON.stringify({ size: value('size') ? Number(value('size')) : null, region: value('region'), housing: value('housing') }) });
+      pro().invalidateAnalytics();
+      await globalThis.loadAnalyticsPage(true);
+    } catch (error) {
+      button.disabled = false;
+      globalThis.alert?.(`Could not save your household: ${error.message}`);
+    }
+  }
 
   async function markFixed(button) {
     button.disabled = true;
@@ -246,6 +319,12 @@
     if (action === 'upgrade') return pro().openUpgrade();
     if (action === 'budgets') return pro().openBudgets();
     if (action === 'mark-fixed') return markFixed(target);
+    if (action === 'household-edit' || action === 'household-cancel') {
+      const form = $('pro-mf-household');
+      if (form) form.hidden = action === 'household-cancel';
+      return;
+    }
+    if (action === 'household-save') return saveHousehold(target);
     if (!pro().requirePro('CSV export is part of MyFinance Pro.')) return;
     if (action === 'export-transactions') location.href = '/api/analytics/export.csv?type=transactions';
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';

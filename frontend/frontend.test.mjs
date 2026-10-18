@@ -1084,6 +1084,30 @@ test('analytics page shows a locked preview without Pro', async () => {
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });
 
+test('analytics page renders money flow signals from real demo analytics', async () => {
+  const { buildDemoData } = await import('../backend/utils/demo.js');
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
+  const now = new Date();
+  const demo = buildDemoData(now);
+  const payload = JSON.parse(JSON.stringify({
+    ...buildAnalytics({ transactions: demo.transactions, budgets: [], latestBalance: 9500, today: now }),
+    moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, profile: demo.household, today: now })
+  }));
+  const f = loadPro(async url => url === '/api/license'
+    ? response(200, { tier: 'pro', source: 'owner', active: true, features: [] })
+    : response(200, payload));
+  await f.context.loadAnalyticsPage(true);
+  const html = f.node('analytics-content').innerHTML;
+  assert.match(html, /Money flow signals/);
+  assert.match(html, /a typical 2-person household in the Northeast that owns its home/);
+  assert.match(html, /Realistic savings found/);
+  assert.match(html, /Dining averages/);
+  assert.match(html, /data-analytics-action="household-save"/);
+  assert.match(html, /Consumer Expenditure Survey/);
+  assert.doesNotMatch(html, /undefined|NaN/);
+});
+
 const browserBits = (f, { reduced = true } = {}) => {
   const store = new Map();
   const base = f.context.document.getElementById;

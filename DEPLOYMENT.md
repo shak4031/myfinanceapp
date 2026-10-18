@@ -262,6 +262,34 @@ and classifies existing rows once. Older imports have no account; the Accounts
 page lists them by import source so the user can assign each one, after which
 transfers are re-matched.
 
+## Money flow signals (Pro, Analytics page)
+
+Compares seven standard categories (groceries, dining, utilities and energy, gas and
+charging, shopping, entertainment and subscriptions, out-of-pocket healthcare) with a
+typical household, then reads each one like a price chart to suggest realistic savings.
+Mortgage, rent, loans, insurance and internet are left out because they are contracted bills.
+
+- **Benchmark source:** U.S. Bureau of Labor Statistics Consumer Expenditure Survey,
+  2024 annual means (table in `backend/utils/benchmarks.js`, pulled from the BLS public
+  API). The survey publishes one characteristic at a time, so the household-size value is
+  scaled by the region and rent/own ratios. Figures are 2024 dollars. To refresh, update
+  `CE_2024` and `BENCHMARK_SOURCES` when BLS publishes a new year (usually each September).
+- **Household:** size (1 to 12; the survey groups 5 or more), region and rent/own, stored in
+  `household_profiles` (row-level isolated like other private tables) and set from the
+  card or `PUT /api/analytics/household`. Income is not asked for.
+- **Indicators (completed months only):** 3-month vs 12-month average crossover;
+  momentum against the same three months last year once 15 months exist (otherwise a
+  Theil-Sen 6-month trend, skipped for seasonal bills); a 2-standard-deviation band; months up
+  out of the last 6. For everyday categories a year-over-year rise only counts when the recent
+  trend agrees.
+- **One-offs:** a non-fixed charge of at least $250 and 5 times the category's usual charge is
+  listed but left out of the series.
+- **Targets:** never below a level the user already reached (25th percentile of the last 12
+  months) and never above their median or the typical household; seasonal bills use the same
+  months last year.
+- **No other users' data is used.** A pooled MyFinance comparison is a later option and should
+  be opt-in, anonymised and shown only for groups of at least 50 households.
+
 ## Verify on staging
 
 - An unauthenticated financial API request returns 401.

@@ -7,21 +7,26 @@ import { buildDemoData, resetDemoAccount, msUntilNextReset, DEMO_EMAIL, DEMO_PAS
 import { entitlementFromRow } from './license.js';
 import application from '../app.js';
 
-test('demo data covers a full year with a consistent running balance and realistic patterns', () => {
+test('demo data covers about 16 months with a consistent running balance and realistic patterns', () => {
   const now = new Date('2026-10-17T15:00:00Z');
   const data = buildDemoData(now);
   const dates = data.transactions.map(row => row.date);
-  assert.equal(dates[0] >= '2025-10-18', true);
+  assert.equal(dates[0] >= '2025-06-01', true);
   assert.equal(dates.at(-1) <= '2026-10-17', true);
-  assert.equal(new Set(dates.map(date => date.slice(0, 7))).size, 13);
+  assert.ok(new Set(dates.map(date => date.slice(0, 7))).size >= 16, 'enough history for year-over-year signals');
   assert.ok(data.transactions.length > 600);
   assert.deepEqual(buildDemoData(now), data, 'deterministic for the same day');
-  const balances = { checking: 6850, savings: 9200 };
+  const balances = {};
+  for (const account of ['checking', 'savings']) {
+    const first = data.transactions.find(row => row.account === account);
+    balances[account] = Math.round((first.balance - (first.direction === 'CREDIT' ? first.amount : -first.amount)) * 100) / 100;
+  }
   for (const row of data.transactions) {
     balances[row.account] = Math.round((balances[row.account] + (row.direction === 'CREDIT' ? row.amount : -row.amount)) * 100) / 100;
     assert.equal(row.balance, balances[row.account]);
   }
-  assert.ok(balances.checking > 0, 'the account never ends overdrawn');
+  assert.deepEqual({ checking: balances.checking, savings: balances.savings }, { checking: 9500, savings: 16600 }, 'balances end at the anchored values');
+  assert.ok(data.transactions.filter(row => row.account === 'checking').every(row => row.balance > 0), 'checking is never overdrawn');
   assert.deepEqual(data.accounts.map(account => account.kind), ['checking', 'savings', 'credit_card']);
   const toSavings = data.transactions.filter(row => row.description.includes('TRANSFER TO SAV'));
   const fromChecking = data.transactions.filter(row => row.description.includes('TRANSFER FROM CHK'));

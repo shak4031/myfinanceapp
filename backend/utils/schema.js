@@ -1,6 +1,6 @@
 import { reconcileTransfers } from './transfers.js';
 
-export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans'];
+export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -216,6 +216,12 @@ export async function migratePrivateSchema(client) {
       goal_strategy TEXT NOT NULL DEFAULT 'priority', goal_budget NUMERIC(14,2),
       flex JSONB NOT NULL DEFAULT '{}'::jsonb, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- One row per user: household details used only to pick public spending benchmarks (never shared).
+    CREATE TABLE IF NOT EXISTS household_profiles (
+      id SERIAL PRIMARY KEY, household_size INTEGER CHECK (household_size BETWEEN 1 AND 12),
+      region TEXT CHECK (region IN ('northeast','midwest','south','west')),
+      housing TEXT CHECK (housing IN ('own','rent')), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -232,6 +238,7 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS category_budgets_user_category_key ON category_budgets (user_id, category);
     CREATE UNIQUE INDEX IF NOT EXISTS money_plans_user_key ON money_plans (user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS household_profiles_user_key ON household_profiles (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
     CREATE INDEX IF NOT EXISTS transactions_user_account_idx ON transactions (user_id, account_id);

@@ -170,6 +170,16 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(groceries.mtd, 120);
     assert.equal(groceries.budget, 600);
     assert.equal(analytics.body.categories.some(category => category.name === 'Travel'), false);
+    assert.equal(analytics.body.moneyFlow.status, 'needs-history');
+    assert.equal(analytics.body.moneyFlow.profileSet, false);
+    assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { size: 0 }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { region: 'mars' }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { housing: 'boat' }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { size: 5, region: 'south', housing: 'rent' }, cookie: customerCookie })).status, 200);
+    const withHousehold = (await call('/api/analytics', { cookie: customerCookie })).body.moneyFlow;
+    assert.deepEqual(withHousehold.profile, { size: 5, region: 'south', housing: 'rent' });
+    assert.match(withHousehold.comparedWith, /5-person household in the South that rents/);
+    assert.equal((await call('/api/analytics', { cookie: ownerCookie })).body.moneyFlow.profileSet, false);
     const csv = await call('/api/analytics/export.csv?type=transactions', { cookie: customerCookie });
     assert.equal(csv.status, 200);
     assert.match(csv.headers.get('content-type'), /text\/csv/);
