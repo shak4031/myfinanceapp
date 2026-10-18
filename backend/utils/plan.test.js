@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectIncomeStreams, projectIncome, isIncomeTransaction, incomeSources } from './income.js';
+import { detectIncomeStreams, projectIncome, isIncomeTransaction, incomeSources, threePaycheckMonths } from './income.js';
 import { buildDebtPlan, simulatePayoff, normalizeDebt } from './payoff.js';
 import { buildGoalPlan } from './goalPlan.js';
 import { buildPlanPayments, computePlan } from './moneyPlan.js';
@@ -26,6 +26,11 @@ test('income detection finds biweekly Thursday pay and projects only the paychec
   assert.deepEqual([stream.cadence, stream.weekday, stream.label, stream.amount], ['biweekly', 4, 'Every other Thursday', 2400]);
   const { items } = projectIncome(rows, today);
   assert.deepEqual(items.map(item => [item.dayOfMonth, item.status, item.isIncome]), [[1, 'processed', true], [15, 'processed', true], [29, 'projected', true]]);
+  const bonus = threePaycheckMonths([stream], today);
+  assert.deepEqual(bonus.map(month => month.month), ['2026-10', '2027-04', '2027-09']);
+  assert.deepEqual(bonus[0].dates, ['2026-10-01', '2026-10-15', '2026-10-29']);
+  assert.equal(bonus[0].extra, 2400);
+  assert.deepEqual(threePaycheckMonths([{ ...stream, cadence: 'semimonthly' }], today), []);
 });
 
 test('income detection recognizes weekly, semimonthly and monthly pay and ignores transfers and refunds', () => {

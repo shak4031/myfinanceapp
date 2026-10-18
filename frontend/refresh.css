@@ -663,3 +663,11 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 @media (max-width: 480px) {
   #txn-summary .metric-card:last-child { grid-column: 1/-1; }
 }
+
+/* "How is this calculated?" popovers */
+.how-calc { position: relative; display: inline-block; vertical-align: middle; margin-left: 4px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.how-calc > summary { list-style: none; cursor: pointer; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-secondary); font-size: 10px; font-weight: 700; line-height: 1; }
+.how-calc > summary::-webkit-details-marker { display: none; }
+.how-calc > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.how-calc[open] > summary { color: var(--primary); border-color: var(--primary); }
+.how-calc > p { position: absolute; z-index: 40; top: calc(100% + 6px); left: -8px; width: min(280px, 70vw); margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); box-shadow: var(--shadow); font-size: 12px; line-height: 1.45; white-space: normal; text-align: left; }

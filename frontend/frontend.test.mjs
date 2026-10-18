@@ -743,9 +743,35 @@ test('financial loads are blocked until a verified session', async () => {
   assert.equal(requests.length, 0);
   await f.context.FinanceSession.start();
   assert.deepEqual(requests, ['/api/auth/me','/api/auth/status']);
+  assert.equal(f.node('auth-token-label').hidden, true, 'the owner token stays hidden until first-run setup is chosen');
+  assert.equal(f.node('auth-submit').textContent, 'Sign in');
+  assert.equal(f.node('auth-setup').hidden, false);
+  f.node('auth-setup').onclick();
   assert.equal(f.node('auth-token-label').hidden, false);
-  assert.equal(f.node('auth-switch').hidden, true);
+  assert.equal(f.node('auth-token').required, true);
+  assert.equal(f.node('auth-setup').hidden, true);
+  assert.equal(f.node('auth-switch').hidden, false);
+  assert.equal(f.node('auth-switch').textContent, 'Back to sign in');
+  f.node('auth-switch').onclick();
+  assert.equal(f.node('auth-token-label').hidden, true);
   assert.equal(f.context.lastView, undefined);
+});
+test('owner setup is never offered once the owner exists, and the admin link stays hidden for regular users', async () => {
+  const f = fixture(async url => url.endsWith('/me') ? response(401, {}) : response(200, { setupRequired: false, registrationEnabled: false }));
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  assert.equal(f.node('auth-token-label').hidden, true);
+  assert.equal(f.node('auth-setup').hidden, true);
+  const user = fixture(async url => url.endsWith('/me') ? response(200, { user: { id: 7, name: 'Demo', role: 'user' } }) : response(200, {}));
+  user.node('nav-admin-item').hidden = true;
+  user.run('session.js');
+  await user.context.FinanceSession.start();
+  assert.equal(user.node('nav-admin-item').hidden, true);
+  const admin = fixture(async url => url.endsWith('/me') ? response(200, { user: { id: 1, name: 'Owner', role: 'admin' } }) : response(200, {}));
+  admin.run('session.js');
+  await admin.context.FinanceSession.start();
+  assert.equal(admin.node('nav-admin-item').hidden, false);
+  assert.match(source('index.html'), /id="nav-admin-item" hidden/);
 });
 test('registration disabled stays hidden and valid user opens only requested view', async () => {
   const f = fixture(async url => url.endsWith('/me') ? response(200,{ user:{ id:1,name:'<owner>' } }) : response(200,{}));
@@ -1080,7 +1106,8 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   const insights = { asOf: '2026-10-15', insights: [
     { id: 'runway', tone: 'danger', icon: 'alert', title: 'Balance dips <below> zero on the 28th', detail: 'Move a payment.', action: { label: 'See upcoming', act: 'upcoming' } },
     { id: 'budget', tone: 'warning', icon: 'gauge', title: 'Dining is over budget', detail: 'x', action: null }
-  ], pulse: { balance: 1520.5, lowPoint: { day: 28, amount: -40 }, billsLeft: { count: 3, total: 900 }, nextIncome: { amount: 2450, day: 23, daysAway: 1 }, debtFreeDate: '2028-09' } };
+  ], pulse: { balance: 1520.5, lowPoint: { day: 28, amount: -40 }, billsLeft: { count: 3, total: 900 }, nextIncome: { amount: 2450, day: 23, daysAway: 1 }, debtFreeDate: '2028-09',
+    safeToSpend: { amount: 1240.5, committed: 280, count: 2, untilDay: 23 }, lastImport: { daysAgo: 9, latestDate: '2026-10-06' } } };
   const f = fixture(async url => url === '/api/dashboard/insights' ? response(200, insights) : response(200, {}));
   const store = browserBits(f);
   f.run('welcome.js');
@@ -1091,6 +1118,8 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.doesNotMatch(html, /<below>/);
   assert.match(html, /Next payday[\s\S]*Tomorrow/);
   assert.match(html, /Lowest point ahead[\s\S]*−\$40/);
+  assert.match(html, /Safe to spend[\s\S]*\$1,241[\s\S]*Until payday · the 23rd/);
+  assert.match(html, /Last import[\s\S]*9 days ago[\s\S]*Newest transaction Oct 6/);
   assert.match(html, /Take a one-minute tour/);
   assert.match(html, /1 \/ 3/);
   assert.match(html, /<mark class="welcome-hl">28th<\/mark>/);

@@ -1,10 +1,16 @@
 // Welcome-screen insights: short, actionable messages ranked by urgency.
+import { threePaycheckMonths } from './income.js';
+
 const cents = value => Math.round(value * 100) / 100;
 const money = value => `$${Math.abs(Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const signedMoney = value => `${value < 0 ? '−' : ''}${money(value)}`;
 const pct = value => `${Math.round(Math.abs(value) * 100)}%`;
 const RANK = { danger: 0, warning: 1, info: 2, success: 2, pro: 3 };
 const MAX_INSIGHTS = 8;
+const DAY_MS = 86400000;
+const STALE_IMPORT_DAYS = 7;
+const sumAmounts = items => cents(items.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+const shortDate = iso => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 const dateFor = (today, day) => new Date(today.getFullYear(), today.getMonth(), day);
 const dayLabel = (today, day) => {
@@ -43,7 +49,18 @@ export function projectRunway(balance, upcoming, today) {
   return { ahead, low, shortfall, end: running };
 }
 
-export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true } = {}) {
+// Balance minus every bill and planned payment due before the next paycheck (or month end if none is expected).
+export function safeToSpend(balance, runway, today) {
+  if (balance == null || !Number.isFinite(Number(balance))) return null;
+  const nextPayday = runway.ahead.find(item => item.isIncome && item.dayOfMonth > today.getDate()) || null;
+  const committed = runway.ahead.filter(item => !item.isIncome && (!nextPayday || item.dayOfMonth < nextPayday.dayOfMonth));
+  return {
+    amount: cents(Number(balance) - sumAmounts(committed)), committed: sumAmounts(committed), count: committed.length,
+    untilDay: nextPayday ? nextPayday.dayOfMonth : null
+  };
+}
+
+export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true, incomeStreams = [], lastImport = null } = {}) {
   const insights = [];
   const add = (insight, weight = 0) => insights.push({ ...insight, weight });
   const todayDay = today.getDate();
@@ -52,6 +69,9 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
   const outflows = runway.ahead.filter(item => !item.isIncome);
   const bills = outflows.filter(item => !item.planned);
   const nextIncome = runway.ahead.find(item => item.isIncome) || null;
+  const safe = safeToSpend(balance, runway, today);
+  const midnight = date => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const importAge = lastImport?.at ? Math.max(0, Math.round((midnight(today) - midnight(new Date(lastImport.at))) / DAY_MS)) : null;
 
   if (!hasData) {
     add({ id: 'import', tone: 'info', icon: 'upload', title: 'Import a statement to get started',
@@ -74,6 +94,19 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
     add({ id: 'covered', tone: 'success', icon: 'shield', title: 'Your bills are covered this month',
       detail: `${bills.length} bill${bills.length === 1 ? '' : 's'} totaling ${money(bills.reduce((sum, item) => sum + Number(item.amount), 0))} still to go. Your lowest projected balance is ${money(runway.low.amount)}${runway.low.item ? ` on the ${ordinal(runway.low.day)}` : ''}.`,
       action: { label: 'See upcoming payments', act: 'upcoming' } });
+  }
+
+  if (safe && safe.amount <= 0 && !runway.shortfall) {
+    add({ id: 'safe-to-spend', tone: 'warning', icon: 'alert', title: 'Nothing is safe to spend before payday',
+      detail: `Bills and planned payments of ${money(safe.committed)} are due ${safe.untilDay ? `before the ${ordinal(safe.untilDay)}` : 'before month end'}, which uses your whole balance. Hold off on extras until then.`,
+      action: { label: 'Review the calendar', act: 'upcoming' } });
+  }
+
+  // Stale data quietly breaks every projection, so nudge a re-import after a week.
+  if (hasData && importAge != null && importAge >= STALE_IMPORT_DAYS) {
+    add({ id: 'import-stale', tone: importAge >= 14 ? 'warning' : 'info', icon: 'upload', title: `Your last import was ${importAge} days ago`,
+      detail: `${lastImport.latestDate ? `Your newest transaction is from ${shortDate(lastImport.latestDate)}. ` : ''}Import your latest statement so your balance, bills and plan stay accurate.`,
+      action: { label: 'Import statements', act: 'import' } }, -importAge);
   }
 
   // Bills due in the next three days, manual ones first.
@@ -110,6 +143,21 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
 
   // Debt-free program
   const debtPlan = plan?.debtPlan;
+
+  // Three-paycheck months: a biweekly paycheck the regular budget doesn't depend on.
+  const bonus = threePaycheckMonths(incomeStreams, today, 12)[0];
+  const monthsAway = bonus ? (Number(bonus.month.slice(0, 4)) - today.getFullYear()) * 12 + Number(bonus.month.slice(5, 7)) - 1 - today.getMonth() : null;
+  if (bonus && monthsAway <= 2) {
+    const priciest = (debtPlan?.debts || []).filter(debt => debt.included && debt.balance > 0).sort((a, b) => (b.apr || 0) - (a.apr || 0))[0];
+    const goal = (plan?.goalPlan?.goals || []).find(item => item.included && item.status !== 'funded');
+    const where = priciest ? `Sending it to ${priciest.name}${priciest.apr ? ` (${priciest.apr}% APR)` : ''} cuts interest the most.`
+      : goal ? `Adding it to ${goal.name} moves that goal forward without touching your budget.`
+        : 'Put it toward high-interest debt or an emergency fund before it blends into everyday spending.';
+    const days = bonus.dates.map(date => Number(date.slice(8, 10)));
+    add({ id: 'three-paychecks', tone: 'success', icon: 'cash', title: `${monthsAway === 0 ? 'This month' : monthLabel(bonus.month)} has three paychecks`,
+      detail: `${bonus.name} pays on the ${days.slice(0, -1).map(ordinal).join(', ')} and ${ordinal(days.at(-1))}, about ${money(bonus.extra)} more than a usual month. ${where}`,
+      action: priciest ? { label: 'Open debt-free plan', view: 'payoff' } : goal ? { label: 'Open goals', view: 'goals' } : { label: 'See upcoming payments', act: 'upcoming' } });
+  }
   if (debtPlan?.debts?.some(debt => debt.included && debt.balance > 0)) {
     const result = debtPlan.plan;
     const strategy = debtPlan.strategies?.find(item => item.id === debtPlan.strategy)?.name || 'Your';
@@ -196,6 +244,8 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
       balance: balance == null ? null : cents(Number(balance)),
       lowPoint: runway.low && outflows.length ? { amount: runway.low.amount, day: runway.low.day } : null,
       billsLeft: { count: bills.length, total: cents(bills.reduce((sum, item) => sum + Number(item.amount || 0), 0)) },
+      safeToSpend: safe,
+      lastImport: importAge == null ? null : { daysAgo: importAge, latestDate: lastImport.latestDate || null },
       nextIncome: nextIncome ? { amount: cents(Number(nextIncome.amount)), day: nextIncome.dayOfMonth, daysAway: nextIncome.dayOfMonth - todayDay, description: nextIncome.description || '' } : null,
       debtFreeDate: debtPlan?.plan?.debtFree ? debtPlan.plan.debtFreeDate : null
     }

@@ -344,6 +344,44 @@ router.post('/password-reset/confirm', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// Signed-in password change: confirm the current password, keep this device signed in, sign out everywhere else.
+router.post('/password', requireUser, async (req, res, next) => {
+  try {
+    if (req.support) return res.status(403).json({ error: 'Support sessions cannot change the customer\'s password' });
+    if (isDemoEmail(req.user.email)) return res.status(403).json({ error: 'The demo account password cannot be changed' });
+    const { currentPassword, newPassword } = req.body || {};
+    if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'Choose a new password of 12 to 128 characters' });
+    }
+    if (typeof currentPassword !== 'string' || !currentPassword) return res.status(400).json({ error: 'Enter your current password' });
+    if (currentPassword === newPassword) return res.status(400).json({ error: 'Choose a password different from your current one' });
+    const email = normalizeEmail(req.user.email);
+    if (!await rateLimit(req, email, 'password')) {
+      await recordAudit(req, 'auth.locked', 'denied', { email, status: 429, detail: { action: 'password_change' } });
+      return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+    }
+    const row = await administrativeTransaction(async client =>
+      (await client.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id])).rows[0]);
+    if (!await verifyPassword(currentPassword, row?.password_hash)) {
+      await recordAudit(req, 'auth.password_changed', 'failure', { actorUserId: req.user.id, subjectUserId: req.user.id, status: 401, detail: { reason: 'wrong_password' } });
+      return res.status(401).json({ error: 'Your current password is not correct' });
+    }
+    const encoded = await hashPassword(newPassword);
+    const current = tokenHash(cookieToken(req));
+    await administrativeTransaction(async client => {
+      await client.query('UPDATE users SET password_hash=$1, password_changed_at=NOW() WHERE id=$2', [encoded, req.user.id]);
+      await client.query('DELETE FROM sessions WHERE (user_id=$1 OR actor_user_id=$1) AND token_hash <> $2', [req.user.id, current]);
+      await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id=$1 AND used_at IS NULL', [req.user.id]);
+      await client.query('DELETE FROM auth_attempts WHERE key = $1', [tokenHash(`password:email:${email}`)]);
+    });
+    await recordAudit(req, 'auth.password_changed', 'success', { actorUserId: req.user.id, subjectUserId: req.user.id, status: 200 });
+    sendSecurityNotice(req.user, 'Your MyFinanceApp password was changed',
+      `Hi ${req.user.name},\n\nYour password was just changed from a signed-in device, and every other device was signed out. If this was not you, reset your password and contact support immediately.`)
+      .catch(() => log('MAIL', 'Password change notice could not be sent'));
+    res.json({ success: true, message: 'Password changed. Other devices have been signed out.' });
+  } catch (error) { next(error); }
+});
+
 router.post('/end-support', async (req, res, next) => {
   try {
     const supportToken = readCookie(req, supportCookieName);

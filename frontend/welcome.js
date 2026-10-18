@@ -93,13 +93,22 @@
       const away = pulse.nextIncome.daysAway;
       rows.push(['💰', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · the ${ordinal(pulse.nextIncome.day)}`, 'good']);
     }
+    const safe = pulse.safeToSpend;
+    if (safe) {
+      const until = safe.untilDay ? `before payday on the ${ordinal(safe.untilDay)}` : 'before month end';
+      const how = globalThis.FinanceUI?.howCalc?.(`Your latest balance (${money(pulse.balance, 2)}) minus ${safe.count} bill${safe.count === 1 ? '' : 's'} and planned payment${safe.count === 1 ? '' : 's'} totaling ${money(safe.committed, 2)} due ${until}. Paychecks are not counted until they arrive.`, 'How safe to spend is calculated') || '';
+      rows.push(['🛟', 'Safe to spend', money(safe.amount), safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Until month end', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
+    }
     rows.push(['🧾', 'Bills left this month', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'} to go` : 'Nothing else due', 'sky']);
     if (pulse.lowPoint) rows.push(['📉', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
     if (pulse.debtFreeDate) {
       const [year, month] = pulse.debtFreeDate.split('-').map(Number);
       rows.push(['🏁', 'Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'grape']);
     }
-    return rows.map(([emoji, label, value, note, tone], i) => `<div class="welcome-pulse-row is-${tone}" style="--i:${i}"><dt><span class="welcome-pulse-emoji" aria-hidden="true">${emoji}</span>${esc(label)}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
+    if (pulse.lastImport && pulse.lastImport.daysAgo >= 7) {
+      rows.push(['📥', 'Last import', `${pulse.lastImport.daysAgo} days ago`, pulse.lastImport.latestDate ? `Newest transaction ${new Date(`${pulse.lastImport.latestDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Import to stay current', pulse.lastImport.daysAgo >= 14 ? 'warn' : 'sky']);
+    }
+    return rows.map(([emoji, label, value, note, tone, how = ''], i) => `<div class="welcome-pulse-row is-${tone}" style="--i:${i}"><dt><span class="welcome-pulse-emoji" aria-hidden="true">${emoji}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
   }
 
   function slide(item, index, total) {

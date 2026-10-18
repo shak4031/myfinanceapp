@@ -24,11 +24,44 @@
     <div class="panel plan-card"><div><p class="eyebrow">LEARN MYFINANCE</p><h2>Watch the tutorials</h2>
       <p class="muted">One-minute narrated tours of the dashboard, the debt-free plan and savings goals.</p></div>
       <div><a class="btn btn-secondary" href="#tutorials">Open tutorials</a></div></div>
-    <div class="panel plan-card"><div><p class="eyebrow">PASSWORD</p><h2>Forgot or want to change your password?</h2>
-      <p class="muted">Sign out and choose “Forgot your password?”. We will email a single-use link that expires in 30 minutes and signs out all devices once used.</p></div></div>`;
+    <div class="panel plan-card" id="password-card"><div><p class="eyebrow">PASSWORD</p><h2>Change your password</h2>
+      <p class="muted">Use at least 12 characters. You stay signed in here; every other device is signed out. Forgot your current password? Sign out and choose “Forgot your password?”.</p></div>
+      <form id="password-form" class="toolbar">
+        <label>Current password<input id="password-current" type="password" autocomplete="current-password" required></label>
+        <label>New password<input id="password-new" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+        <label>Confirm new password<input id="password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+        <button class="btn btn-primary">Change password</button>
+      </form>
+      <p id="password-status" role="status"></p></div>`;
   document.querySelector('.main-content').appendChild(view);
 
+  function renderPasswordCard() {
+    const user = FinanceSession.currentUser?.() || {};
+    const blocked = FinanceSession.currentSupport() ? 'Password changes are not available during a support session.'
+      : String(user.email || '').toLowerCase() === 'demo@myfinance.app' ? 'The demo account password cannot be changed.' : '';
+    $('password-form').hidden = !!blocked;
+    $('password-status').textContent = blocked;
+  }
+
+  async function changePassword() {
+    const status = $('password-status');
+    if ($('password-new').value !== $('password-confirm').value) { status.textContent = 'The new passwords do not match.'; return; }
+    const button = $('password-form').querySelector('button');
+    button.disabled = true;
+    status.textContent = '';
+    try {
+      const response = await fetch('/api/auth/password', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: $('password-current').value, newPassword: $('password-new').value }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to change your password.');
+      ['password-current', 'password-new', 'password-confirm'].forEach(id => { $(id).value = ''; });
+      status.textContent = data.message;
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  }
+
   async function loadSettings() {
+    renderPasswordCard();
     const status = $('support-status');
     if (FinanceSession.currentSupport()) {
       $('support-grant-form').hidden = true;
@@ -51,6 +84,7 @@
   }
 
   view.addEventListener('submit', async event => {
+    if (event.target.id === 'password-form') { event.preventDefault(); await changePassword(); return; }
     if (event.target.id !== 'support-grant-form') return;
     event.preventDefault();
     const level = $('support-level').value;

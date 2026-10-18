@@ -173,6 +173,31 @@ export function nextPayDates(stream, until) {
   return dates.sort((a, b) => a - b);
 }
 
+// Calendar months (this one onward) in which a biweekly stream pays three times instead of the usual two.
+export function threePaycheckMonths(streams = [], today = new Date(), monthsAhead = 12) {
+  const from = Date.UTC(today.getFullYear(), today.getMonth(), 1);
+  const until = Date.UTC(today.getFullYear(), today.getMonth() + monthsAhead, 0);
+  const months = [];
+  for (const stream of streams) {
+    if (stream.cadence !== 'biweekly' || !stream.lastDate) continue;
+    const last = Date.parse(`${stream.lastDate}T00:00:00Z`);
+    const dates = [];
+    // Walk back to the start of this month so paychecks already received still count toward it.
+    for (let time = last; time >= from; time -= stream.intervalDays * DAY_MS) dates.push(time);
+    dates.push(...nextPayDates(stream, until));
+    const byMonth = new Map();
+    for (const time of dates) {
+      if (time < from || time > until) continue;
+      const key = new Date(time).toISOString().slice(0, 7);
+      byMonth.set(key, [...(byMonth.get(key) || []), new Date(time).toISOString().slice(0, 10)]);
+    }
+    for (const [month, days] of byMonth) {
+      if (days.length >= 3) months.push({ month, key: stream.key, name: stream.name, amount: stream.amount, dates: days.sort(), extra: cents(stream.amount * (days.length - 2)) });
+    }
+  }
+  return months.sort((a, b) => a.month.localeCompare(b.month) || b.extra - a.extra);
+}
+
 // Paychecks already received this month plus those still expected (today onward).
 export function projectIncome(transactions, today = new Date()) {
   const streams = detectIncomeStreams(transactions, today);

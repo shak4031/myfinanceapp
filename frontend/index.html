@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
-  <script src="session.js?v=20261018c"></script>
+  <script src="session.js?v=20261019a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
@@ -434,7 +434,7 @@
     }
 
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261017r">
+  <link rel="stylesheet" href="refresh.css?v=20261019a">
   <link rel="stylesheet" href="analytics.css?v=20261017r">
   <link rel="stylesheet" href="plan.css?v=20261017r">
   <link rel="stylesheet" href="welcome.css?v=20261017r">
@@ -494,19 +494,20 @@
         <button class="btn btn-primary" id="auth-submit" type="submit">Sign in</button>
         <button class="btn btn-secondary" id="auth-switch" type="button" hidden>Create an account</button>
         <button class="link-button" id="auth-forgot" type="button" hidden>Forgot your password?</button>
+        <button class="link-button" id="auth-setup" type="button" hidden>First-time setup: create the owner account</button>
       </form>
     </div><p class="auth-footnote">Private by design. Your financial data stays on this server.<br>MyFinance never moves your money.</p>
     <div class="marketing-first-step"><span aria-hidden="true">&#8627;</span><p><strong>Just one small start.</strong><br>Import a statement. Get a clearer picture.<br>Choose your next step when you are ready.</p></div></div>
     </div>
     <section class="marketing-benefits" id="marketing-benefits" aria-labelledby="marketing-benefits-title"><div><p class="marketing-kicker">LESS OVERWHELM. MORE &ldquo;I CAN DO THIS.&rdquo;</p><h2 id="marketing-benefits-title">A clearer today.<br>A more intentional tomorrow.</h2></div>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">FREE</p><h3>Find your money story.</h3><p>Import CSV or PDF statements. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">FREE</p><h3>Find your money story.</h3><p>Import CSV or OFX/QFX files from any bank or credit card, or PDF statements from TD Bank. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
       <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Notice. Adjust. Repeat.</h3><p>Category budgets, spending trends and forecasts help you spot patterns. Subscription radar and unusual-charge alerts show what deserves a closer look.</p></article>
       <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO PLUS</p><h3>Make room for what matters.</h3><p>Compare debt payoff plans and set monthly savings targets for an emergency fund, a home, college or a well-earned adventure.</p></article>
     </section>
     <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
       <p class="marketing-kicker">YOUR PACE. YOUR PLAN.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Choose the plan that fits today. Start Free, or pick Pro or Pro Plus and we will send the request for you.</p>
       <div class="marketing-plan-grid">
-        <article class="marketing-plan"><p class="marketing-tier">FREE</p><h3>Get your bearings.</h3><p class="marketing-price">$0<span>/ month</span></p><p>For getting to know your money.</p><ul><li>CSV &amp; PDF statement imports</li><li>Transactions &amp; category review</li><li>Your everyday dashboard</li><li>Free to keep using</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-choose-plan="free" aria-pressed="false">Choose Free</button></article>
+        <article class="marketing-plan"><p class="marketing-tier">FREE</p><h3>Get your bearings.</h3><p class="marketing-price">$0<span>/ month</span></p><p>For getting to know your money.</p><ul><li>CSV &amp; OFX imports from any bank or card, PDF from TD Bank</li><li>Transactions &amp; category review</li><li>Your everyday dashboard</li><li>Free to keep using</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-choose-plan="free" aria-pressed="false">Choose Free</button></article>
         <article class="marketing-plan"><p class="marketing-tier">PRO</p><h3>Build better habits.</h3><p class="marketing-price">$4.99<span>/ month</span></p><p>From &ldquo;where did it go?&rdquo; to &ldquo;now I see.&rdquo;</p><ul><li>Everything in Free</li><li>Category budgets &amp; spending insights</li><li>Charts &amp; cash-flow forecasts</li><li>Subscription radar &amp; unusual charges</li><li>CSV analytics &amp; transaction exports</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
         <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO PLUS</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$9.98<span>/ month total</span></p><p><strong>Pro + $4.99/month.</strong> One combined plan.</p><ul><li>Everything in Pro</li><li><strong>Debt Free page unlocked</strong></li><li>Payoff strategies &amp; estimated finish dates</li><li><strong>Savings Goals page unlocked</strong></li><li>Monthly targets &amp; progress tracking</li><li>Extra-payment &amp; savings what-ifs</li></ul>        <p class="marketing-plan-limit">Want to look around first? An optional 7-day trial is available inside your account.</p><button class="btn btn-primary" type="button" data-choose-plan="pro_plus" aria-pressed="false">Choose Pro Plus</button></article>
       </div>
@@ -544,7 +545,7 @@
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
         <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
-        <li class="admin-only"><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
+        <li class="admin-only" id="nav-admin-item" hidden><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
       </ul>
       </nav>
       <div class="sidebar-bottom"><p id="account-name"></p><small>Small steps. Real progress.</small><button class="btn btn-secondary" onclick="FinanceSession.logout()">Sign out</button></div>
@@ -767,16 +768,16 @@
         <!-- CSV Import Panel -->
         <div id="import-csv-panel">
           <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
-            Upload your bank's CSV export file. Supports any bank format with automatic column detection.
+            Upload the CSV or OFX/QFX (Quicken) download from any bank or credit card website. Columns, date formats and +/- signs are detected automatically. Pick the account type so card payments are not counted as income.
           </p>
-          <input type="file" id="csv-input" accept=".csv" style="display: none;" onchange="onCsvSelected(event)">
+          <input type="file" id="csv-input" accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo" style="display: none;" onchange="onCsvSelected(event)">
           <div id="csv-dropzone" onclick="document.getElementById('csv-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
                ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
                ondragleave="this.style.borderColor='var(--border)';"
                ondrop="handleCsvDrop(event)">
             <div style="font-size: 32px; margin-bottom: 12px;">📊</div>
-            <div style="font-weight: 600;">Click or drag a CSV file here</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Any bank format supported</div>
+            <div style="font-weight: 600;">Click or drag a CSV, OFX or QFX file here</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Chase, Bank of America, Discover, Amex, Capital One, Citi, Wells Fargo and more</div>
           </div>
           <div id="csv-file-list" style="margin-top: 16px;"></div>
           <div style="margin-top: 16px; display: flex; gap: 12px; align-items: center;">
@@ -909,6 +910,10 @@
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     }
+    function usd(value) {
+      const number = Number(value) || 0;
+      return (number < 0 ? '-' : '') + '$' + Math.abs(number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
     // TIMEZONE-SAFE DATE PARSING
     // 'new Date("2026-06-01")' parses as UTC midnight, which shifts to previous day
     // in timezones west of UTC. Parse string components as local time instead.
@@ -998,7 +1003,7 @@
         const hasData = m.income > 0 || m.expenses > 0;
 
         chartHtml += `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative;" title="${m.monthName} ${yearNum}: Income $${m.income.toFixed(2)} | Expenses $${m.expenses.toFixed(2)} | Net $${m.net.toFixed(2)}">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative;" title="${m.monthName} ${yearNum}: Income ${usd(m.income)} | Expenses ${usd(m.expenses)} | Net ${usd(m.net)}">
             <!-- Bars Group -->
             <div style="display: flex; gap: 4px; align-items: flex-end; width: 100%; justify-content: center; height: 170px;">
               <!-- Income Bar -->
@@ -1047,11 +1052,13 @@
         return;
       }
       
+      const how = text => window.FinanceUI?.howCalc(text) || '';
+      const basis = data.monthsAveraged ? `the last ${data.monthsAveraged} full month${data.monthsAveraged === 1 ? '' : 's'}` : 'the last 3 full months';
       document.getElementById('dashboard-metrics').innerHTML = `
-        <div class="metric-card income"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
-        <div class="metric-card expense"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
-        <div class="metric-card net"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
-        <div class="metric-card balance"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
+        <div class="metric-card income"><div class="metric-label">Typical income <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Average money in per month over ${basis}. Transfers between your own accounts are excluded.`)}</div><div class="metric-value" style="color: var(--success)">${usd(data.income)}</div></div>
+        <div class="metric-card expense"><div class="metric-label">Typical spending <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Average money out per month over ${basis}, transfers excluded. Minimum payments for debts you added but have not imported yet are included.`)}</div><div class="metric-value" style="color: var(--danger)">${usd(Math.abs(data.expenses))}</div></div>
+        <div class="metric-card net"><div class="metric-label">Typical surplus <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Typical income minus typical spending over ${basis}. This is the same surplus your Debt, Goals and Coach pages plan with.`)}</div><div class="metric-value">${usd(data.netCashflow)}</div></div>
+        <div class="metric-card balance"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? usd(data.balance) : 'Unavailable'}</div></div>
       `;
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
@@ -1100,13 +1107,13 @@
         } else if (minProjectedBalance < 0) {
           safetyBadge.innerHTML = `
             <div style="background: rgba(235, 87, 87, 0.15); border: 1px solid var(--danger); color: var(--danger); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <span>🚨 DEFICIT ALERT:</span> ${deficitDay === null ? 'Recorded balance is already negative.' : 'First shortfall: Day ' + deficitDay + ' (' + deficitBill + ').'} Minimum projected balance: -$${Math.abs(minProjectedBalance).toFixed(2)}
+              <span>🚨 DEFICIT ALERT:</span> ${deficitDay === null ? 'Recorded balance is already negative.' : 'First shortfall: Day ' + deficitDay + ' (' + deficitBill + ').'} Minimum projected balance: -${usd(Math.abs(minProjectedBalance))}
             </div>
           `;
         } else {
           safetyBadge.innerHTML = `
             <div style="background: rgba(81, 207, 102, 0.15); border: 1px solid var(--success); color: var(--success); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-              <span>🛡️ All Bills Fully Funded</span> (Min Projected: $${minProjectedBalance.toFixed(2)})
+              <span>🛡️ All Bills Fully Funded</span> (Min Projected: ${usd(minProjectedBalance)})
             </div>
           `;
         }
@@ -1344,7 +1351,7 @@
         <div class="list-item" data-category="${escapeHtml(cat)}" data-month="${escapeHtml(m.month)}" onclick="loadMonthTransactions(this.dataset.category, this.dataset.month)">
           <div style="display: flex; justify-content: space-between;">
             <div style="font-weight: 600;">${localDate(m.month).toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</div>
-            <div style="color: var(--primary); font-weight: 700;">$${m.spending.toFixed(2)}</div>
+            <div style="color: var(--primary); font-weight: 700;">${usd(m.spending)}</div>
           </div>
           <div style="font-size: 11px; color: var(--text-secondary);">${m.transactions} transactions</div>
         </div>
@@ -1364,7 +1371,7 @@
         <div class="list-item" style="font-size: 12px;">
           <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
           <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(t.description)}">${escapeHtml(t.description)}</div>
-          <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
+          <div style="color: var(--danger); font-weight: 700; text-align: right;">${usd(t.amount)}</div>
         </div>
       `).join('');
     }
@@ -1405,7 +1412,7 @@
             <td style="padding: 12px; font-size: 12px;">${t.date}</td>
             <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${escapeHtml(t.status)}</span></td>
             <td style="padding: 12px; font-size: 13px;">${escapeHtml(t.description)}</td>
-            <td style="padding: 12px; font-weight: 700;">$${Math.abs(t.amount).toFixed(2)}</td>
+            <td style="padding: 12px; font-weight: 700;">${usd(Math.abs(t.amount))}</td>
             <td style="padding: 12px; text-align: center; display: flex; gap: 8px; justify-content: center;">
               <button data-id="${escapeHtml(t.id)}" onclick="forcePushStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
               <button data-id="${escapeHtml(t.id)}" onclick="dismissStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
@@ -1461,7 +1468,7 @@
     function onCsvSelected(e) {
       if (e.target.files.length > 0) {
         pendingCsvFile = e.target.files[0];
-        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${pendingCsvFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
       }
     }
@@ -1469,9 +1476,9 @@
       e.preventDefault();
       e.currentTarget.style.borderColor = 'var(--border)';
       const files = e.dataTransfer.files;
-      if (files.length > 0 && (files[0].name.endsWith('.csv') || files[0].type === 'text/csv')) {
+      if (files.length > 0 && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(files[0].name) || files[0].type === 'text/csv')) {
         pendingCsvFile = files[0];
-        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${pendingCsvFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
       }
     }
@@ -1496,7 +1503,7 @@
 
         const res = await fetch('/api/import/import-csv', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvData, source: document.getElementById('csv-source-select').value })
+          body: JSON.stringify({ csvData, source: document.getElementById('csv-source-select').value, accountType: document.getElementById('csv-source-select').value })
         });
         const data = await res.json();
         if (data.success) {
@@ -1506,6 +1513,7 @@
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
             </div>
+            ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
           `;
           pendingCsvFile = null;
           document.getElementById('csv-file-list').innerHTML = '';
@@ -1638,19 +1646,19 @@
     });
 
   </script>
-  <script src="ui.js?v=20261017r"></script>
+  <script src="ui.js?v=20261019a"></script>
   <script src="refresh.js?v=20261018"></script>
-  <script src="account.js?v=20261017r"></script>
+  <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261018c"></script>
   <script src="pro-dashboard.js?v=20261017r"></script>
   <script src="pro-categories.js?v=20261017r"></script>
-  <script src="analytics.js?v=20261017r"></script>
+  <script src="analytics.js?v=20261019a"></script>
   <script src="plan.js?v=20261017r"></script>
-  <script src="welcome.js?v=20261017r"></script>
+  <script src="welcome.js?v=20261019a"></script>
   <script src="income-review.js?v=20261017r"></script>
-  <script src="tutorial.js?v=20261018b"></script>
-  <script src="marketing.js?v=20261018"></script>
+  <script src="tutorial.js?v=20261019b"></script>
+  <script src="marketing.js?v=20261019b"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

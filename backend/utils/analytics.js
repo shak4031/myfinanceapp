@@ -173,11 +173,26 @@ const CADENCES = [
   { id: 'annual', min: 350, max: 380, perYear: 1, maxCv: 0.35 }
 ];
 
+// Recurring bills, debt payments and everyday shopping repeat too, but they are not subscriptions you can cancel.
+const NON_SUBSCRIPTION_CATEGORY = /mortgage|\brent\b|loan|credit\s*card|debt|insurance|utilit|internet|phone|wireless|cable|\btax|grocer|\bgas\b|fuel|dining|restaurant|shopping|salary|income|payroll/i;
+const NON_SUBSCRIPTION_DESCRIPTION = /MORTGAGE|\bLOANS?\b|STUDENT|NELNET|NAVIENT|SALLIE|FINANCIAL\s+AUTOPAY|AUTO\s+FINANCE|CARD\s+(?:ONLINE\s+)?(?:PAYMENT|PMT)|CREDIT\s*CARD|CRD\s+EPAY|INSURANCE|GEICO|PROGRESSIVE|ALLSTATE|STATE\s*FARM|ELECTRIC|\bWATER\b|\bPSEG\b|COMCAST|XFINITY|VERIZON|T-MOBILE|AT&T|SPECTRUM|E-?ZPASS|REPLENISH|\bRENT\b|\bIRS\b|COSTCO\s+WHOLESALE/i;
+
+export function isSubscriptionCandidate(tx) {
+  return !NON_SUBSCRIPTION_CATEGORY.test(tx.category || '') && !NON_SUBSCRIPTION_DESCRIPTION.test(tx.description || '');
+}
+
+// A subscription charges the same price again and again (allowing occasional price steps); habits vary every time.
+function steadyPrice(amounts) {
+  if (amounts.length < 2) return true;
+  const repeats = amounts.slice(1).filter((amount, index) => Math.abs(amount - amounts[index]) <= Math.max(0.01, amounts[index] * 0.01)).length;
+  return repeats / (amounts.length - 1) >= 0.6;
+}
+
 function buildSubscriptions(rows, context) {
   const since = context.end.getTime() - 400 * DAY_MS;
   const groups = new Map();
   for (const tx of rows) {
-    if (!tx.debit || tx.transfer || !tx.merchant || tx.date.getTime() < since) continue;
+    if (!tx.debit || tx.transfer || !tx.merchant || tx.date.getTime() < since || !isSubscriptionCandidate(tx)) continue;
     if (!groups.has(tx.merchant)) groups.set(tx.merchant, []);
     groups.get(tx.merchant).push(tx);
   }
@@ -190,7 +205,7 @@ function buildSubscriptions(rows, context) {
     if (!cadence || list.length < (cadence.id === 'annual' ? 2 : 3)) continue;
     const amounts = list.map(tx => tx.amount);
     const typical = median(amounts);
-    if (stdev(amounts) / mean(amounts) > cadence.maxCv) continue;
+    if (stdev(amounts) / mean(amounts) > cadence.maxCv || !steadyPrice(amounts)) continue;
     // Most gaps must follow the cadence, otherwise it is a habit (e.g. groceries), not a subscription.
     const regular = intervals.filter(gap => gap >= cadence.min * 0.8 && gap <= cadence.max * 1.2).length;
     if (regular / intervals.length < 0.6) continue;
@@ -235,7 +250,7 @@ function buildMerchants(rows, context) {
   })).sort((a, b) => b.total - a.total).slice(0, 10);
 }
 
-export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date() } = {}) {
+export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date(), typical = null } = {}) {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const rows = normalize(transactions, end);
   const currentIndex = end.getFullYear() * 12 + end.getMonth();
@@ -275,9 +290,12 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
 
   const monthlyFixedPlan = fixed[HISTORY_MONTHS - 2] || avgFixed || 0;
   const monthlyIncome = avgIncome || 0, monthlyVariable = avgVariable || 0;
+  // Use the shared typical surplus so Analytics, the dashboard and the planner agree on one number.
+  const surplus = typical?.monthlySurplus;
+  const monthlyNet = Number.isFinite(surplus) ? surplus : monthlyIncome - monthlyFixedPlan - monthlyVariable;
   let balance = latestBalance == null ? null : Number(latestBalance);
   const cashflow = Array.from({ length: 6 }, (_, index) => {
-    const net = monthlyIncome - monthlyFixedPlan - monthlyVariable;
+    const net = monthlyNet;
     if (balance != null) balance += net;
     return {
       month: monthKey(currentIndex + 1 + index), income: round(monthlyIncome), fixed: round(monthlyFixedPlan),
@@ -304,7 +322,8 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
       projected: round(projectedTotal), lastMonth: round(spend[HISTORY_MONTHS - 2]), average: round(avgSpend),
       day, daysInMonth, paceCurrent: cumulative(pace.current).slice(0, day), paceLast: cumulative(pace.last)
     },
-    cashflow: { startBalance: latestBalance == null ? null : round(Number(latestBalance)), months: cashflow },
+    cashflow: { startBalance: latestBalance == null ? null : round(Number(latestBalance)), months: cashflow,
+      basis: Number.isFinite(surplus) ? 'typical-surplus' : 'recent-averages', monthsUsed: typical?.monthsUsed ?? null },
     anomalies: buildAnomalies(rows, categories, context),
     subscriptions: buildSubscriptions(rows, context),
     merchants: buildMerchants(rows, context),

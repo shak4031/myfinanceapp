@@ -6,6 +6,7 @@ window.FinanceSession = (() => {
   let generation = 0;
   let mode = 'login';
   let registrationEnabled = false;
+  let setupRequired = false;
   let cleanAppMarkup = '';
   const el = id => document.getElementById(id);
   function lock() {
@@ -67,10 +68,13 @@ window.FinanceSession = (() => {
     el('auth-password').minLength = mode === 'login' ? 1 : 12;
     el('auth-submit').textContent = mode === 'setup' ? 'Create owner account' : mode === 'register' ? 'Create account'
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
-    el('auth-switch').hidden = recovery ? false : !registrationEnabled || mode === 'setup';
-    el('auth-switch').textContent = recovery ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
+    el('auth-switch').hidden = recovery || mode === 'setup' ? false : !registrationEnabled;
+    el('auth-switch').textContent = recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
     if (mode === 'register') el('auth-description').textContent = 'Every account starts on Free. Pick Pro or Pro Plus below and we will send that request to your MyFinance administrator. Nothing is charged here.';
     el('auth-forgot').hidden = mode !== 'login';
+    // The owner token is only for the very first run, and only once someone asks for it.
+    const setupLink = el('auth-setup');
+    if (setupLink) setupLink.hidden = !setupRequired || mode !== 'login';
     renderPlanChoice();
   }
 
@@ -153,6 +157,8 @@ window.FinanceSession = (() => {
       renderMode();
     };
     el('auth-forgot').onclick = () => { mode = 'forgot'; el('auth-error').textContent = ''; renderMode(); };
+    const setupLink = el('auth-setup');
+    if (setupLink) setupLink.onclick = () => { mode = 'setup'; el('auth-error').textContent = ''; renderMode(); el('auth-name')?.focus?.(); };
     el('auth-form').onsubmit = async event => {
       event.preventDefault();
       el('auth-submit').disabled = true;
@@ -197,7 +203,10 @@ window.FinanceSession = (() => {
         support = data.support || null;
         el('account-name').textContent = user.name || user.email;
         if (support) showSupportBanner(support);
-        document.body.classList.toggle('is-admin', user.role === 'admin' && !support);
+        const admin = user.role === 'admin' && !support;
+        document.body.classList.toggle('is-admin', admin);
+        const adminLink = el('nav-admin-item');
+        if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
         showView(['categories','category-admin','transactions','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
@@ -208,7 +217,8 @@ window.FinanceSession = (() => {
       const statusResponse = await fetch('/api/auth/status');
       if (!statusResponse.ok) throw new Error('Account service unavailable. Please reload to retry.');
       const status = await statusResponse.json();
-      mode = status.setupRequired ? 'setup' : 'login';
+      setupRequired = !!status.setupRequired;
+      mode = setupRequired && location.hash === '#owner-setup' ? 'setup' : 'login';
       registrationEnabled = !!status.registrationEnabled;
       renderMode();
     } catch (error) { el('auth-description').textContent = error.message; }

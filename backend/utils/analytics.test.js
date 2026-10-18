@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildAnalytics, merchantKey, trendSlope, toCsv } from './analytics.js';
 import { entitlementFromRow } from './license.js';
+import { getCanonicalMerchant } from './normalize.js';
 
 const iso = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 const today = new Date(2026, 5, 15); // 15 Jun 2026
@@ -94,6 +95,36 @@ test('buildAnalytics finds subscriptions, price increases, anomalies and top mer
   assert.equal(coffee.typical, 6);
   assert.ok(result.merchants.length > 0);
   assert.ok(!result.merchants.some(m => /TRANSFER|SAVINGS/.test(m.merchant)));
+});
+
+test('the subscription radar skips bills, debt payments, stores and one-off purchases', () => {
+  const rows = [];
+  for (let offset = -6; offset <= 0; offset++) {
+    rows.push(tx(offset, 1, 2184.37, 'Mortgage', 'ROCKET MORTGAGE AUTOPAY', { is_fixed: true }));
+    rows.push(tx(offset, 25, 350, 'Credit Card Payment', 'CHASE CREDIT CRD AUTOPAY'));
+    rows.push(tx(offset, 12, 412.5, 'Auto Loan', 'TOYOTA FINANCIAL PMT'));
+    rows.push(tx(offset, 8, 148, 'Insurance', 'GEICO AUTO INS'));
+    rows.push(tx(offset, 14, 89.99, 'Utilities', 'COMCAST CABLE COMM'));
+    rows.push(tx(offset, 18, 180 + (offset % 2) * 40, 'Shopping', 'COSTCO WHSE 0123'));
+    rows.push(tx(offset, 22, [18, 31.5, 22, 47.25, 26, 39, 33][offset + 6], 'Entertainment', 'AMC THEATRES 0456'));
+    rows.push(tx(offset, 9, 15.49, 'Subscriptions', 'NETFLIX.COM'));
+  }
+  const result = buildAnalytics({ transactions: rows, today });
+  const active = result.subscriptions.filter(s => s.active).map(s => s.merchant);
+  assert.deepEqual(active, ['NETFLIX']);
+});
+
+test('the cash-flow surplus uses the shared typical surplus when it is supplied', () => {
+  const typical = { monthlySurplus: 1234.56, monthsUsed: 3 };
+  const shared = buildAnalytics({ transactions: sampleTransactions(), today, latestBalance: 5000, typical });
+  assert.equal(shared.cashflow.basis, 'typical-surplus');
+  assert.equal(shared.cashflow.monthsUsed, 3);
+  assert.equal(buildAnalytics({ transactions: sampleTransactions(), today, latestBalance: 5000 }).cashflow.basis, 'recent-averages');
+});
+
+test('Rocket payments keep the Rocket Money label', () => {
+  assert.equal(getCanonicalMerchant('ROCKET MORTGAGE AUTOPAY 1234'), 'ROCKET MONEY');
+  assert.equal(getCanonicalMerchant('ROCKET MONEY PREMIUM'), 'ROCKET MONEY');
 });
 
 test('buildAnalytics handles an empty account', () => {

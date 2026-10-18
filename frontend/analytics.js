@@ -12,6 +12,15 @@
     return `<span class="pro-move ${up === upIsBad ? 'is-bad' : 'is-good'}">${up ? '▲' : '▼'} ${text}%</span>`;
   };
   const card = (title, subtitle, body, extra = '') => `<article class="pro-card panel ${extra}"><header><div><h2>${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ''}</div></header><div class="pro-card-body">${body}</div></article>`;
+  const how = text => globalThis.FinanceUI?.howCalc?.(text) || '';
+  const KPI_NOTES = [
+    'Everything spent since the 1st of this month, transfers between your own accounts excluded, compared with the same day last month.',
+    'Spent so far, plus bills still due this month, plus your average flexible spending for the days left.',
+    'Average monthly spending over the last 3 full months, transfers excluded.',
+    'Average income minus average spending, as a share of income, over the last 3 full months.',
+    'Share of your average monthly spending that goes to bills marked as fixed.',
+    'Spent this month divided by the days so far this month.'
+  ];
 
   function renderActions() {
     const actions = $('analytics-actions');
@@ -56,7 +65,7 @@
       ['Fixed vs flexible', pct(k.fixedRatio), 'of spend is fixed bills', sparkline(s.fixed)],
       ['Daily burn', money(k.dailyBurn, true), `${k.daysLeft} day${k.daysLeft === 1 ? '' : 's'} left this month`, sparkline(s.variable)]
     ];
-    return `<div class="pro-kpis">${tiles.map(([label, value, note, spark]) => `<div class="pro-kpi"><span>${label}</span><strong>${value}</strong><small>${note}</small>${spark}</div>`).join('')}</div>`;
+    return `<div class="pro-kpis">${tiles.map(([label, value, note, spark], index) => `<div class="pro-kpi"><span>${label}${how(KPI_NOTES[index])}</span><strong>${value}</strong><small>${note}</small>${spark}</div>`).join('')}</div>`;
   }
 
   function forecastCard(a) {
@@ -83,9 +92,13 @@
     const ticks = [{ x: 0, label: 'Now' }, ...c.months.map((m, i) => ({ x: i + 1, label: charts().monthShort(m.month) }))];
     const low = Math.min(...points.map(p => p.v)), end = points[points.length - 1].v;
     const net = c.months[0]?.net || 0;
+    const basis = c.monthsUsed ? `the last ${c.monthsUsed} full month${c.monthsUsed === 1 ? '' : 's'}` : 'recent months';
+    const netNote = c.basis === 'typical-surplus'
+      ? how(`Your typical monthly surplus: average income minus average spending over ${basis}, transfers excluded. It is the same number your dashboard, Debt and Goals pages use.`)
+      : how('Average income minus last month\'s bills and your average flexible spending.');
     const body = `${plot({ series: [{ points, className: end >= c.startBalance ? 'primary' : 'danger', area: true, dot: true }], xMax: c.months.length, xTicks: ticks, width: 380, height: 220, label: 'Projected balance' })}
-      <div class="pro-mini-stats"><div><span>Balance today</span><strong>${money(c.startBalance, true)}</strong></div><div><span>In 6 months</span><strong class="${end < 0 ? 'is-bad' : ''}">${money(end, true)}</strong></div><div><span>Net / month</span><strong class="${net < 0 ? 'is-bad' : 'is-good'}">${net >= 0 ? '+' : ''}${money(net, true)}</strong></div><div><span>Lowest point</span><strong class="${low < 0 ? 'is-bad' : ''}">${money(low, true)}</strong></div></div>`;
-    return card('6-month cash flow', 'Projected balance if your recent income and spending continue', body);
+      <div class="pro-mini-stats"><div><span>Balance today</span><strong>${money(c.startBalance, true)}</strong></div><div><span>In 6 months</span><strong class="${end < 0 ? 'is-bad' : ''}">${money(end, true)}</strong></div><div><span>${c.basis === 'typical-surplus' ? 'Typical surplus' : 'Net / month'}${netNote}</span><strong class="${net < 0 ? 'is-bad' : 'is-good'}">${net >= 0 ? '+' : ''}${money(net, true)}</strong></div><div><span>Lowest point</span><strong class="${low < 0 ? 'is-bad' : ''}">${money(low, true)}</strong></div></div>`;
+    return card('6-month cash flow', 'Projected balance if your typical surplus continues each month', body);
   }
 
   function trendCard(a) {
@@ -131,7 +144,7 @@
     const increases = active.filter(s => s.priceChangePct > 0.02);
     const list = a.subscriptions.slice(0, 12).map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; next ${s.active ? dateShort(s.nextDate) : 'stopped'}</small></div>
       <div class="num"><strong>${money(s.amount)}</strong>${s.priceChangePct > 0.02 ? `<small class="pro-move is-bad">▲ ${Math.round(s.priceChangePct * 100)}% price increase</small>` : `<small>${money(s.annualCost, true)} / yr</small>`}</div></li>`).join('');
-    const body = `<div class="pro-mini-stats"><div><span>Active</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
+    const body = `<div class="pro-mini-stats"><div><span>Active${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly). Mortgage, rent, loan and card payments, insurance, utilities, phone and internet bills, and everyday shopping are left out because they are bills or habits, not subscriptions you can cancel. Those appear on your bill calendar.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
       ${list ? `<ul class="pro-list is-scroll">${list}</ul>` : '<p class="pro-empty">No recurring charges detected yet.</p>'}`;
     return card('Subscription radar', 'Recurring charges detected automatically, with price-increase alerts', body);
   }

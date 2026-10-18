@@ -36,6 +36,44 @@ test('bills due soon call out manual payments and payday is announced', () => {
   assert.equal(result.pulse.billsLeft.count, 2);
 });
 
+test('safe to spend subtracts everything due before the next paycheck, and only that', () => {
+  const result = buildInsights({ today, balance: 1000, upcoming: [bill('Power', 80, 15), bill('Visa extra', 200, 20, { planned: true, flexible: true }), pay(2100, 22), bill('Rent', 900, 28)] });
+  assert.deepEqual(result.pulse.safeToSpend, { amount: 720, committed: 280, count: 2, untilDay: 22 });
+  const noPay = buildInsights({ today, balance: 500, upcoming: [bill('Rent', 450, 28), bill('Gym', 60, 30)] });
+  assert.deepEqual(noPay.pulse.safeToSpend, { amount: -10, committed: 510, count: 2, untilDay: null });
+  assert.equal(buildInsights({ today, balance: null, upcoming: [] }).pulse.safeToSpend, null);
+  const tight = buildInsights({ today, balance: 300, upcoming: [bill('Rent', 300, 16), pay(2100, 22)] });
+  assert.equal(tight.insights.find(item => item.id === 'safe-to-spend').tone, 'warning');
+});
+
+test('a stale import is nudged after a week, and not before', () => {
+  const at = days => new Date(today.getFullYear(), today.getMonth(), today.getDate() - days, 9).toISOString();
+  const fresh = buildInsights({ today, balance: 1000, lastImport: { at: at(3), latestDate: '2026-10-10' } });
+  assert.equal(fresh.insights.some(item => item.id === 'import-stale'), false);
+  assert.equal(fresh.pulse.lastImport.daysAgo, 3);
+  const stale = buildInsights({ today, balance: 1000, lastImport: { at: at(9), latestDate: '2026-10-02' } });
+  const nudge = stale.insights.find(item => item.id === 'import-stale');
+  assert.equal(nudge.title, 'Your last import was 9 days ago');
+  assert.match(nudge.detail, /Oct 2/);
+  assert.equal(nudge.action.act, 'import');
+  assert.equal(buildInsights({ today, balance: 1000, lastImport: { at: at(20) } }).insights.find(item => item.id === 'import-stale').tone, 'warning');
+  assert.equal(buildInsights({ today, hasData: false, lastImport: null }).insights.some(item => item.id === 'import-stale'), false);
+});
+
+test('an upcoming three-paycheck month suggests where the extra paycheck should go', () => {
+  const stream = { key: 'ACME', name: 'Acme Corp Payroll', cadence: 'biweekly', intervalDays: 14, amount: 2400, lastDate: '2026-10-08' };
+  const plan = { debtPlan: { debts: [{ name: 'Visa', apr: 24.99, balance: 4000, included: true }, { name: 'Car', apr: 6, balance: 9000, included: true }] } };
+  const result = buildInsights({ today, balance: 5000, incomeStreams: [stream], plan });
+  const bonus = result.insights.find(item => item.id === 'three-paychecks');
+  assert.equal(bonus.title, 'December 2026 has three paychecks');
+  assert.match(bonus.detail, /3rd, 17th and 31st/);
+  assert.match(bonus.detail, /\$2,400 more/);
+  assert.match(bonus.detail, /Visa \(24\.99% APR\)/);
+  assert.equal(bonus.action.view, 'payoff');
+  const far = { ...stream, lastDate: '2026-10-13' }; // next three-paycheck month is March 2027
+  assert.equal(buildInsights({ today, balance: 5000, incomeStreams: [far] }).insights.some(item => item.id === 'three-paychecks'), false);
+});
+
 test('free users get a Pro teaser; Pro users get budget and trend signals', () => {
   const free = buildInsights({ today, balance: 1000, upcoming: [] });
   assert.equal(free.insights.at(-1).tone, 'pro');

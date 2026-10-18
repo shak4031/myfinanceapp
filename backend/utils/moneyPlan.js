@@ -37,6 +37,18 @@ export async function loadPlanInputs(db, now = new Date()) {
   });
 }
 
+// The one "typical monthly surplus" every page shows: last 3 full months, transfers excluded,
+// plus minimum payments for debts not yet visible in the imported history.
+export function typicalSurplus({ debts = [], history = [] }, now = new Date()) {
+  const active = debts.filter(debt => Number(debt.balance) > 0);
+  const financial = buildFinancialPlan(history, [], now, active);
+  return {
+    avgMonthlyIncome: financial.avgMonthlyIncome, avgMonthlyExpenses: financial.avgMonthlyExpenses,
+    monthlySurplus: financial.monthlySurplus, monthsUsed: financial.monthlyHistory.length,
+    months: financial.monthlyHistory.map(row => row.month)
+  };
+}
+
 export function computePlan({ debts, goals, settings, history, recent }, { pro = false, now = new Date(), whatIf = null } = {}) {
   const active = debts.filter(debt => Number(debt.balance) > 0);
   const financial = buildFinancialPlan(history, goals, now, active);

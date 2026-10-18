@@ -40,8 +40,17 @@ window.FinanceUI = (() => {
       dialog.close();
     }
   });
+  // "How is this calculated?" popover: a native <details>, so it works with keyboard and screen readers.
+  function howCalc(text, label = 'How is this calculated?') {
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    return `<details class="how-calc"><summary aria-label="${esc(label)}" title="${esc(label)}">?</summary><p>${esc(text)}</p></details>`;
+  }
+  document.addEventListener('click', event => {
+    document.querySelectorAll('details.how-calc[open]').forEach(details => { if (!details.contains(event.target)) details.open = false; });
+  });
   return {
     confirm: (message, options) => ask(message, options),
-    amount: message => ask(message, { title: 'Record savings', action: 'Record savings', amount: true })
+    amount: message => ask(message, { title: 'Record savings', action: 'Record savings', amount: true }),
+    howCalc
   };
 })();

@@ -71,8 +71,11 @@ npm test
 npm start
 ```
 
-Open the app and complete **Owner setup** using your name, email, a password of
-12 to 128 characters, and the setup token. This assigns credentials to account 1
+Open the app, choose **First-time setup: create the owner account** under the
+sign-in form (or open `/#owner-setup`), and enter your name, email, a password of
+12 to 128 characters, and the setup token. The link and token field only appear
+until the owner account exists; everyone else sees the normal sign-in form. This
+assigns credentials to account 1
 without copying its financial data to anyone else. Setup is single-use and
 serialized with registration. Remove `OWNER_SETUP_TOKEN` after setup and restart.
 

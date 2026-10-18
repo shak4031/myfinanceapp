@@ -198,6 +198,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(proTimeline.some(item => item.planned), false);
     const proPulse = (await call('/api/dashboard/insights', { cookie: customerCookie })).body;
     assert.equal(proPulse.pulse.debtFreeDate, null);
+    assert.ok('safeToSpend' in proPulse.pulse && 'lastImport' in proPulse.pulse);
     await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: ownerCookie });
     assert.equal((await call('/api/goals', { cookie: customerCookie })).body[0].name, 'Emergency fund');
     assert.equal((await call('/api/debts', { cookie: customerCookie })).body[0].name, 'My card');

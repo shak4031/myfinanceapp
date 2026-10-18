@@ -4,7 +4,7 @@ import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { buildUpcomingPayments } from '../utils/fixedPayments.js';
 import { currentUserId } from '../utils/tenant.js';
-import { buildPlanPayments, computePlan, loadPlanInputs } from '../utils/moneyPlan.js';
+import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 import { getEntitlement } from '../utils/license.js';
 import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
@@ -21,88 +21,6 @@ function isInternalTransfer(description) {
   if (!description) return false;
   const desc = description.toLowerCase();
   return INTERNAL_TRANSFER_KEYWORDS.some(keyword => desc.includes(keyword));
-}
-
-// Helper: Calculate 90-day rolling monthly averages (excluding internal transfers & incomplete months)
-async function get90DayAverages() {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Anchor to the end of the current month
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const ninetyDaysAgo = new Date(monthEnd);
-    ninetyDaysAgo.setDate(monthEnd.getDate() - 90);
-    const startDate = ninetyDaysAgo.toISOString().split('T')[0];
-    const endDate = monthEnd.toISOString().split('T')[0];
-    const currentMonth = today.toISOString().slice(0, 7); // YYYY-MM
-
-    log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}, excluding current month ${currentMonth}`);
-
-    const rows = await db.all(
-      `SELECT
-        date::date as txn_date,
-        amount,
-        direction,
-        description
-      FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3
-      ORDER BY date::date`,
-      [currentUserId(), startDate, endDate]
-    );
-
-    if (rows.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0 };
-    }
-
-    const monthGroups = new Map();
-
-    for (const tx of rows) {
-      const desc = (tx.description || '').toLowerCase();
-      const isInternal = INTERNAL_TRANSFER_KEYWORDS.some(kw => desc.includes(kw));
-      if (isInternal) continue;
-      if (/\b(x5261|x5237)\b/.test(desc)) continue;
-
-      // date::date returns a Date object from pg driver... convert to string
-      const dateStr = tx.txn_date instanceof Date ? tx.txn_date.toISOString().split('T')[0] : String(tx.txn_date).split('T')[0];
-      const monthKey = dateStr.substring(0, 7); // YYYY-MM
-
-      // Exclude the current incomplete month from averages
-      // It would distort the average since partial-month income is always lower
-      if (monthKey === currentMonth) continue;
-
-      if (!monthGroups.has(monthKey)) {
-        monthGroups.set(monthKey, { income: 0, expenses: 0 });
-      }
-      const bucket = monthGroups.get(monthKey);
-      const amt = parseFloat(tx.amount) || 0;
-      const dir = (tx.direction || '').toUpperCase();
-      if (dir === 'CREDIT') bucket.income += amt;
-      else if (dir === 'DEBIT') bucket.expenses += amt;
-    }
-
-    const months = Array.from(monthGroups.entries()).map(([month, vals]) => ({
-      month,
-      monthly_income: vals.income,
-      monthly_expenses: vals.expenses
-    })).sort((a, b) => b.month.localeCompare(a.month));
-
-    if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0 };
-    }
-
-    const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
-    const totalExpenses = months.reduce((s, m) => s + m.monthly_expenses, 0);
-
-    return {
-      avgIncome: totalIncome / months.length,
-      avgExpenses: totalExpenses / months.length,
-      monthsUsed: months.length
-    };
-  } catch (error) {
-    log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
-    return { avgIncome: 0, avgExpenses: 0 };
-  }
 }
 
 // Helper: Get date range based on filter
@@ -320,19 +238,19 @@ router.post('/summary', async (req, res) => {
     const periodIncome = parseFloat(result.total_income || 0);
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
-    // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, monthsUsed } = await get90DayAverages();
+    // 3. The same typical monthly surplus the Goals, Debt and Coach pages use.
+    const typical = typicalSurplus(await loadPlanInputs(db, new Date()), new Date());
 
     res.json({
-      income: avgIncome,
-      expenses: avgExpenses,
-      netCashflow: avgIncome - avgExpenses,
+      income: typical.avgMonthlyIncome ?? 0,
+      expenses: typical.avgMonthlyExpenses ?? 0,
+      netCashflow: typical.monthlySurplus ?? 0,
       balance: balance,
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
-      monthsAveraged: monthsUsed,
-      historicalNotice: "Income & Expenses are 90-day monthly averages excluding the current incomplete month."
+      monthsAveraged: typical.monthsUsed,
+      historicalNotice: 'Income, spending and surplus are monthly averages of the last 3 full months, transfers excluded.'
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
@@ -454,18 +372,19 @@ async function loadUpcoming(req, today = new Date()) {
   );
   const bills = buildUpcomingPayments(transactions, today);
   // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
-  let extras = [], plan = null, pro = false;
+  let extras = [], plan = null, pro = false, streams = [];
   try {
     const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
     pro = !!entitlement.active;
     const computed = computePlan(inputs, { pro: !!entitlement.plusActive, now: today });
     plan = entitlement.plusActive ? computed : null;
+    streams = computed.income?.streams || [];
     extras = [...computed.incomeItems, ...(plan ? buildPlanPayments(plan, today) : [])];
   } catch (error) {
     log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
   }
   const items = [...bills, ...extras].sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome));
-  return { items, plan, pro };
+  return { items, plan, pro, streams };
 }
 
 router.post('/upcoming-payments', async (req, res) => {
@@ -481,10 +400,10 @@ router.post('/upcoming-payments', async (req, res) => {
 router.get('/insights', async (req, res) => {
   try {
     const today = new Date();
-    const [{ items, plan, pro }, latest, count] = await Promise.all([
+    const [{ items, plan, pro, streams }, latest, count] = await Promise.all([
       loadUpcoming(req, today),
       db.all('SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1', [currentUserId()]),
-      db.get('SELECT COUNT(*) AS total FROM transactions WHERE user_id = $1', [currentUserId()])
+      db.get("SELECT COUNT(*) AS total, MAX(created_at) AS last_import, to_char(MAX(date::date), 'YYYY-MM-DD') AS latest_date FROM transactions WHERE user_id = $1", [currentUserId()])
     ]);
     const balance = latest.length && Number.isFinite(Number(latest[0].balance)) ? Number(latest[0].balance) : null;
     let analytics = null;
@@ -500,7 +419,8 @@ router.get('/insights', async (req, res) => {
         log('DASHBOARD', `Insight analytics unavailable: ${error.message}`);
       }
     }
-    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: Number(count?.total) > 0 }));
+    const lastImport = count?.last_import ? { at: new Date(count.last_import).toISOString(), latestDate: count.latest_date || null } : null;
+    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: Number(count?.total) > 0, incomeStreams: streams, lastImport }));
   } catch (error) {
     log('DASHBOARD', `Error building insights: ${error.message}`);
     res.status(500).json({ error: error.message });

@@ -396,10 +396,10 @@
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Transactions is your complete history, every charge and deposit, one search away.',
           render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Your transactions', 'Every detail, one search away.', ['📥', '🔍', '🧾', '✅']) },
-        { id: 'import', title: 'Bring in a statement', caption: 'Import a CSV or PDF statement from any bank. New rows wait in Import review first, so you can check them before they join your history. No bank login needed.',
+        { id: 'import', title: 'Bring in a statement', caption: 'Import a CSV or OFX/QFX file from any bank or credit card, or a PDF statement from TD Bank. New rows wait in Import review first, so you can check them before they join your history. No bank login needed.',
           render: () => `${chip(1, 'Bring in a statement')}
             <div class="tm-dialog tm-dialog-center tut-pop" ${at(0.3)}>
-              <b>Import statements</b><small>CSV or PDF from any bank</small>
+              <b>Import statements</b><small>CSV or OFX from any bank or card &middot; PDF from TD Bank</small>
               <div class="tm-drop"><span class="tut-off" ${at(1.6)}>Drop a file here</span><span class="tut-on tm-file" ${at(1.6)}>📊 checking-october.csv <small>38 KB</small></span></div>
               <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import to review</span>
             </div>${cursor('import', 2.4)}${toast('84 transactions ready in Import review', 3.8)}` },

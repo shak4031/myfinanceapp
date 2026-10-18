@@ -3,6 +3,7 @@ import Database from '../db.js';
 import { requirePro } from '../utils/license.js';
 import { buildAnalytics, toCsv } from '../utils/analytics.js';
 import { parseTxDate } from '../utils/normalize.js';
+import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 
 const router = Router();
 const db = new Database();
@@ -23,7 +24,11 @@ async function loadInputs() {
 }
 
 router.get('/', async (req, res, next) => {
-  try { res.json(buildAnalytics(await loadInputs())); } catch (error) { next(error); }
+  try {
+    const now = new Date();
+    const [inputs, planInputs] = await Promise.all([loadInputs(), loadPlanInputs(db, now)]);
+    res.json(buildAnalytics({ ...inputs, typical: typicalSurplus(planInputs, now) }));
+  } catch (error) { next(error); }
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
