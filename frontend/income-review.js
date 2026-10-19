@@ -48,7 +48,7 @@
   const deposit = tx => `<li class="${tx.counted ? 'is-counted' : ''}">
       <label><input type="checkbox" data-ir-tx="${esc(tx.id)}" ${tx.counted ? 'checked' : ''} aria-label="Count ${esc(tx.description)} on ${esc(day(tx.date))} as income">
       <span class="ir-dep-date">${esc(day(tx.date))}</span>
-      <span class="ir-dep-desc">${esc(tx.description)}<small>${esc(tx.category || 'Uncategorized')}${tx.by === 'you' ? ' &middot; your choice' : ''}</small></span>
+      <span class="ir-dep-desc">${window.transactionLink(tx.id, tx.description)}<small>${esc(tx.category || 'Uncategorized')}${tx.by === 'you' ? ' &middot; your choice' : ''}</small></span>
       <span class="ir-dep-amt">+${money(tx.amount)}</span></label>
     </li>`;
   const card = source => {

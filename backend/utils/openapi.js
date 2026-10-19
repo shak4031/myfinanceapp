@@ -74,7 +74,7 @@ export function openApiSpec() {
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
       '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, recurring charges, merchants, plus Spending Compass data (moneyFlow: categories with percentile ranges and purchase drivers, opportunities, money-flow Sankey totals, small-purchase totals, insight cards, a category-by-month heatmap and everyday merchant bubbles) against BLS household benchmarks') },
       '/api/analytics/household': { put: op('Pro', 'Set the household the Spending Compass compares with; each field may be null', body({ size: 4, region: 'northeast', housing: 'own' })) },
-      '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics', query('type', 'from', 'to')) }
+      '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics; transactionId optionally restricts transaction exports to one owned record', query('type', 'from', 'to', 'transactionId')) }
     }
   };
 }

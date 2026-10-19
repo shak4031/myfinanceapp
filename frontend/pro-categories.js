@@ -142,6 +142,8 @@
     if (!pro.requirePro('CSV export is part of MyFinance Pro.')) return;
     const months = (globalThis.currentTransactionPeriod?.()?.months || []).slice().sort();
     const params = new URLSearchParams({ type: 'transactions' });
+    const transactionId = globalThis.currentTransactionId?.();
+    if (transactionId) params.set('transactionId', transactionId);
     if (months.length) {
       const [y, m] = months[months.length - 1].split('-').map(Number);
       params.set('from', `${months[0]}-01`);

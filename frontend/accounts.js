@@ -19,7 +19,7 @@
     investment: 'Brokerage, IRA or 401(k). Money moved here counts as saved.',
     crypto: 'Crypto exchange. Money moved here counts as saved.',
     other: 'Another account of yours. Transfers to it are not counted.',
-    external: 'Not mine (for example a family member). Transfers to it count as spending.',
+    external: 'Not yours (for example a family member). Money sent counts as spending; money received counts as other income, not regular pay.',
     unknown: 'Not set yet. Transfers to it are left out of totals until you choose.'
   };
   let state = null;
@@ -108,7 +108,7 @@
   function resultNote(data) {
     const parts = [];
     if (data.account) parts.push(`Saved to <strong>${escape(describe(data.account))}</strong>.`);
-    if (data.accountsDiscovered) parts.push(`Found ${data.accountsDiscovered} other account${data.accountsDiscovered === 1 ? '' : 's'} in your transfers. <a href="#accounts" data-view="accounts">Tell us what ${data.accountsDiscovered === 1 ? 'it is' : 'they are'}</a> so transfers stay out of your totals.`);
+    if (data.accountsDiscovered) parts.push(`Found ${data.accountsDiscovered} account reference${data.accountsDiscovered === 1 ? '' : 's'} in your transfers. <a href="#accounts" data-view="accounts">Review account ownership</a> so we can distinguish your own transfers from payments to other people.`);
     return parts.length ? `<div style="font-size: 12px; margin-top: 6px; color: var(--text-secondary);">${parts.join(' ')}</div>` : '';
   }
   async function afterImport(data) {
@@ -122,7 +122,7 @@
   function accountRow(account) {
     const review = account.status === 'needs_review';
     const range = account.firstDate ? `${account.firstDate} → ${account.lastDate}` : 'No statements imported';
-    return `<article class="acct-card${review ? ' acct-review' : ''}" data-account="${account.id}">
+    return `<article class="acct-card${review ? ' acct-review' : ''}" data-account="${account.id}" data-review="${review}">
       <div class="acct-head">
         <div>
           <h3>${escape(account.name)}${review ? ' <span class="acct-badge warn">Needs review</span>' : ''}</h3>
@@ -130,20 +130,21 @@
         </div>
         ${account.balance != null && account.transactions ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">as of ${escape(account.balanceAsOf || '')}</span></div>` : ''}
       </div>
-      ${review ? `<p class="acct-found">We saw this account number in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}${account.discovered_from ? `, e.g. “${escape(account.discovered_from)}”` : ''}. Those transfers are left out of your totals until you choose what this account is.${account.suggested_kind ? ` It looks like <strong>${escape(kindLabel(account.suggested_kind))}</strong>.` : ''}</p>` : ''}
+      ${review ? `<div class="acct-found"><strong>Is this one of your accounts?</strong><p>This reference appeared in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}. These transfers are excluded from spending and income until you review it.</p>${account.discovered_from ? `<blockquote>${escape(account.discovered_from)}</blockquote>` : ''}<p>If it is yours, choose its type and confirm below.${account.suggested_kind ? ` Suggested type: <strong>${escape(kindLabel(account.suggested_kind))}</strong> (please check).` : ''}</p></div>` : ''}
       <p class="muted acct-stats">${account.transactions} transaction${account.transactions === 1 ? '' : 's'} · ${escape(range)}${account.transfersTo && !review ? ` · ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'} in from other accounts` : ''}</p>
       <div class="acct-form">
         <label>Name<input name="name" maxlength="80" value="${escape(account.name)}"></label>
-        <label>Type<select name="kind">${kindOptions(review && account.kind === 'unknown' && account.suggested_kind ? account.suggested_kind : account.kind)}</select></label>
+        <label>Account type<select name="kind">${review ? '<option value="">Choose your account type…</option>' : ''}${kindOptions(review && account.kind === 'unknown' && account.suggested_kind ? account.suggested_kind : account.kind, review ? IMPORTABLE : kinds.map(item => item.value))}</select></label>
         <label>Last 4<input name="last4" inputmode="numeric" maxlength="4" pattern="\\d{4}" value="${escape(account.last4 || '')}"></label>
         <label>Bank<input name="institution" maxlength="80" value="${escape(account.institution || '')}"></label>
       </div>
       <p class="muted acct-kind-help">${escape(KIND_HELP[review && account.suggested_kind ? account.suggested_kind : account.kind] || '')}</p>
       <div class="acct-actions">
-        <button class="btn btn-primary" data-act="save">${review ? 'Confirm' : 'Save'}</button>
-        ${review ? '<button class="btn" data-act="external">Not my account</button>' : ''}
+        <button class="btn btn-primary" data-act="save">${review ? 'Yes, confirm my account' : 'Save changes'}</button>
+        ${review ? '<button class="btn btn-secondary" data-act="external">No, it is not mine</button>' : ''}
         ${account.transactions ? '' : '<button class="btn btn-ghost" data-act="delete">Delete</button>'}
       </div>
+      ${review ? '<p class="acct-choice-note">Not yours? Use this for a recipient such as a friend or family member. Money sent will count as spending; money received will count as other income, not regular pay. This saves a recipient reference, not a bank connection. You can change the type later.</p>' : ''}
     </article>`;
   }
   function render() {
@@ -156,12 +157,14 @@
     root.innerHTML = `
       <div class="acct-summary">
         <div class="panel"><p class="eyebrow">SAVED THIS MONTH</p><strong>${money(state.savedThisMonth?.amount)}</strong><p class="muted">Moved to savings or investments. Not counted as spending.</p></div>
-        <div class="panel"><p class="eyebrow">TRANSFERS NOT COUNTED YET</p><strong>${unknown.count}</strong><p class="muted">${unknown.count ? `${money(unknown.total)} waiting for you to say which account it went to.` : 'Every transfer is matched to an account.'}</p></div>
-        <div class="panel"><p class="eyebrow">ACCOUNTS</p><strong>${state.accounts.filter(account => account.kind !== 'external').length}</strong><p class="muted">${review.length ? `${review.length} need${review.length === 1 ? 's' : ''} your review.` : 'All reviewed.'}</p></div>
+        <div class="panel"><p class="eyebrow">TRANSFERS AWAITING REVIEW</p><strong>${unknown.count}</strong><p class="muted">${unknown.count ? `${money(unknown.total)} excluded from spending and income until reviewed.` : 'No transfers awaiting review.'}</p>${unknown.count ? '<a href="#accounts-review" class="acct-review-link">Review transfer accounts &rarr;</a>' : ''}</div>
+        <div class="panel"><p class="eyebrow">YOUR CONFIRMED ACCOUNTS</p><strong>${others.filter(account => IMPORTABLE.includes(account.kind)).length}</strong><p class="muted">${review.length ? `${review.length} detected reference${review.length === 1 ? '' : 's'} still to review.` : 'No account references awaiting review.'}</p></div>
       </div>
-      ${review.length ? `<h2 class="acct-section">Found in your transfers</h2><div class="acct-list">${review.map(accountRow).join('')}</div>` : ''}
+      <section id="accounts-review" class="acct-review-intro" tabindex="-1"><p class="eyebrow">A CLEARER PICTURE OF YOUR MONEY</p><h2>Why review detected accounts?</h2><p>Statement descriptions sometimes mention another account. We create a reference to help you identify it, not because we know it belongs to you. Confirming ownership helps prevent counting your own transfers as spending. Marking a recipient as not yours makes sure actual payments are counted. No bank is connected and no money is moved.</p></section>
+      ${review.length ? `<h2 class="acct-section">Needs your review <span class="acct-badge warn">${review.length}</span></h2><div class="acct-list">${review.map(accountRow).join('')}</div>` : ''}
       <h2 class="acct-section">Your accounts</h2>
-      <div class="acct-list">${others.length ? others.map(accountRow).join('') : '<p class="muted">No accounts yet. Import a statement and choose “New account”, or add one below.</p>'}</div>
+      <div class="acct-list">${others.filter(account => account.kind !== 'external').map(accountRow).join('') || '<p class="muted">No confirmed accounts yet. Review a detected account, import a statement, or add one below.</p>'}</div>
+      ${others.some(account => account.kind === 'external') ? `<h2 class="acct-section">Other people &amp; external recipients</h2><p class="muted">Not your accounts. Payments to these recipients count as spending; money received counts as other income. Change the account type if you made a mistake.</p><div class="acct-list">${others.filter(account => account.kind === 'external').map(accountRow).join('')}</div>` : ''}
       ${state.unassigned?.length ? `<h2 class="acct-section">Imports without an account</h2>
         <p class="muted">These were imported before accounts existed. Assign each file to its account so transfers between your accounts can be matched.</p>
         <div class="acct-list">${state.unassigned.map(group => `<article class="acct-card" data-source="${escape(group.source)}">
@@ -171,7 +174,7 @@
       ${unknown.recent?.length ? `<h2 class="acct-section">Transfers waiting for an account</h2>
         <p class="muted">These look like transfers but we can't tell where the money went. Set the account type above, or change a row's category on the Transactions page (Transfer, Savings, or a spending category).</p>
         <div class="table-container"><table class="acct-table"><thead><tr><th>Date</th><th>Description</th><th>From</th><th style="text-align:right">Amount</th></tr></thead><tbody>
-        ${unknown.recent.map(row => `<tr><td>${escape(row.date || '')}</td><td>${escape(row.description)}</td><td>${escape(row.account || 'Not set')}</td><td style="text-align:right">${row.direction === 'CREDIT' ? '+' : '−'}${money(Math.abs(row.amount))}</td></tr>`).join('')}
+        ${unknown.recent.map(row => `<tr><td>${escape(row.date || '')}</td><td>${window.transactionLink(row.id, row.description)}</td><td>${escape(row.account || 'Not set')}</td><td style="text-align:right">${row.direction === 'CREDIT' ? '+' : '−'}${money(Math.abs(row.amount))}</td></tr>`).join('')}
         </tbody></table></div>` : ''}
       <h2 class="acct-section">Add an account</h2>
       <form class="acct-card" id="acct-add-form">
@@ -209,6 +212,12 @@
   const formValues = container => Object.fromEntries([...container.querySelectorAll('input[name], select[name]')].map(field => [field.name, field.value.trim()]));
 
   document.addEventListener('click', async event => {
+    if (event.target.closest?.('.acct-review-link')) {
+      event.preventDefault();
+      $('accounts-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('accounts-review')?.focus({ preventScroll: true });
+      return;
+    }
     const button = event.target.closest?.('#accounts-root button[data-act]');
     if (!button) return;
     event.preventDefault();
@@ -217,11 +226,16 @@
     try {
       if (button.dataset.act === 'save') {
         const values = formValues(card.querySelector('.acct-form'));
+        if (card.dataset.review === 'true' && !IMPORTABLE.includes(values.kind)) {
+          toast('Choose your account type, or use "No, it is not mine" for another person.');
+          card.querySelector('select[name="kind"]').focus();
+          return;
+        }
         await json(`/api/accounts/${card.dataset.account}`, 'PATCH', { ...values, last4: values.last4 || null, institution: values.institution || null });
         await refreshAll('Account saved. Transfers were re-checked.');
       } else if (button.dataset.act === 'external') {
         await json(`/api/accounts/${card.dataset.account}`, 'PATCH', { kind: 'external' });
-        await refreshAll('Marked as not your account. Transfers to it now count.');
+        await refreshAll('Recipient saved. Money sent counts as spending; money received counts as other income. Change the account type any time to undo this choice.');
       } else if (button.dataset.act === 'delete') {
         const ok = window.FinanceUI ? await FinanceUI.confirm('Delete this account? Transfers that pointed to it will be re-checked.') : true;
         if (!ok) return;

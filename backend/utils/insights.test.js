@@ -83,7 +83,7 @@ test('free users get a Pro teaser; Pro users get budget and trend signals', () =
       { name: 'Groceries', mtd: 380, budget: 500, projected: 640, budgetProjected: 1.28, budgetStatus: 'risk', deltaPct: 0.3, deltaMtd: 90 },
       { name: 'Transfers', transfer: true, mtd: 5000, budgetStatus: 'over', budgetUsed: 9 }
     ],
-    anomalies: [{ type: 'charge', merchant: 'BEST BUY', amount: 899, ratio: 6.2, date: '2026-10-09' }],
+    anomalies: [{ type: 'charge', id: 42, merchant: 'BEST BUY', amount: 899, ratio: 6.2, date: '2026-10-09' }],
     recurring: [{ merchant: 'Netflix', active: true, amount: 22.99, priceChange: 3, priceChangePct: 0.15, annualCost: 275.88 }],
     forecast: { projected: 4200 }, kpis: { avgMonthlySpend: 3000 }
   };
@@ -94,6 +94,7 @@ test('free users get a Pro teaser; Pro users get budget and trend signals', () =
   assert.ok(ids.includes('risk:Groceries'));
   assert.ok(ids.includes('mover:Groceries'));
   assert.ok(ids.includes('anomaly') && ids.includes('price-hike') && ids.includes('forecast'));
+  assert.deepEqual(result.insights.find(item => item.id === 'anomaly').action, { label: 'Review transaction', view: 'transactions/42' });
   assert.ok(!ids.includes('pro'));
   assert.match(result.insights.find(item => item.id === 'price-hike').detail, /\$36 a year/);
 });

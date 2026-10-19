@@ -92,10 +92,10 @@ test('a year-over-year jump that the recent trend does not confirm is not called
 });
 
 test('one-off purchases and transfers are left out of the series', () => {
-  const tx = [...history('Shopping', Array(6).fill(120)), { date: '2026-08-15', description: 'BEST BUY TV', amount: 1249.99, direction: 'DEBIT', category: 'Shopping' },
+  const tx = [...history('Shopping', Array(6).fill(120)), { id: 42, date: '2026-08-15', description: 'BEST BUY TV', amount: 1249.99, direction: 'DEBIT', category: 'Shopping' },
     { date: '2026-08-16', description: 'Transfer to savings', amount: 900, direction: 'DEBIT', category: 'Transfer' }];
   const shopping = buildMoneyFlowSignals({ transactions: tx, today: TODAY }).categories.find(c => c.id === 'shopping');
-  assert.deepEqual(shopping.oneOffs, [{ date: '2026-08-15', description: 'BEST BUY TV', amount: 1249.99 }]);
+  assert.deepEqual(shopping.oneOffs, [{ id: 42, date: '2026-08-15', description: 'BEST BUY TV', amount: 1249.99 }]);
   assert.deepEqual(shopping.series.slice(-6), Array(6).fill(120));
 });
 

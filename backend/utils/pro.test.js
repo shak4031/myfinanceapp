@@ -185,6 +185,16 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.match(csv.headers.get('content-type'), /text\/csv/);
     assert.match(csv.body, /SHOPRITE 12/);
     assert.doesNotMatch(csv.body, /OWNER SECRET/);
+    const exportIds = (await database.query("SELECT id, user_id FROM transactions WHERE description IN ('SHOPRITE 12', 'OWNER SECRET')")).rows;
+    const customerTransaction = exportIds.find(row => row.user_id === customerId);
+    const ownerTransaction = exportIds.find(row => row.user_id === 1);
+    const exactCsv = await call(`/api/analytics/export.csv?transactionId=${customerTransaction.id}`, { cookie: customerCookie });
+    assert.equal(exactCsv.status, 200);
+    assert.match(exactCsv.body, /SHOPRITE 12/);
+    const privateCsv = await call(`/api/analytics/export.csv?transactionId=${ownerTransaction.id}`, { cookie: customerCookie });
+    assert.equal(privateCsv.status, 200);
+    assert.doesNotMatch(privateCsv.body, /OWNER SECRET|SHOPRITE 12/);
+    assert.equal((await call('/api/analytics/export.csv?transactionId=bad', { cookie: customerCookie })).status, 400);
 
     const plusGrant = await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: ownerCookie });
     assert.equal(plusGrant.body.license.tier, 'pro_plus');

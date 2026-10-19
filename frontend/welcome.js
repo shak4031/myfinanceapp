@@ -111,8 +111,15 @@
     return rows.map(([emoji, label, value, note, tone, how = ''], i) => `<div class="welcome-pulse-row is-${tone}" style="--i:${i}"><dt><span class="welcome-pulse-emoji" aria-hidden="true">${emoji}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
   }
 
+  function actionLink(item, index) {
+    if (!item.action) return '';
+    const content = `${esc(item.action.label)}${icon('arrow', 16)}`;
+    return item.action.view
+      ? `<a class="welcome-action" href="#${esc(item.action.view)}" data-view="${esc(item.action.view)}"${item.id === 'tour' ? ' data-welcome-tour' : ''}>${content}</a>`
+      : `<button type="button" class="welcome-action" data-welcome-action="${index}">${content}</button>`;
+  }
   function slide(item, index, total) {
-    const action = item.action ? `<button type="button" class="welcome-action" data-welcome-action="${index}">${esc(item.action.label)}${icon('arrow', 16)}</button>` : '';
+    const action = actionLink(item, index);
     const burst = item.tone === 'success' || item.tone === 'pro' || item.tone === 'learn'
       ? `<span class="welcome-burst" aria-hidden="true">${'<i></i>'.repeat(8)}</span>` : '';
     return `<article class="welcome-slide tone-${esc(item.tone)} fx-${EFFECTS[index % EFFECTS.length]}${index === state.index ? ' is-active' : ''}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}" aria-hidden="${index !== state.index}" data-index="${index}">
@@ -133,6 +140,7 @@
     const name = firstName();
     const today = new Date();
     const [moodTone, moodEmoji, moodLabel] = mood(insights);
+    const attention = insights.map((item, index) => ({ item, index })).filter(({ item }) => item.tone === 'danger' || item.tone === 'warning');
     state.index = Math.min(state.index, insights.length - 1);
     root.setAttribute('data-tone', insights[state.index]?.tone || 'info');
     root.innerHTML = `
@@ -141,13 +149,14 @@
         <div class="welcome-greeting">
           <p class="welcome-date"><span aria-hidden="true">☀️</span>${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
           <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
-          <p class="welcome-sub"><span class="welcome-mood mood-${moodTone}"><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)}</span>${esc(headline(insights))}</p>
+          <p class="welcome-sub">${attention.length ? `<a class="welcome-mood mood-${moodTone}" href="#welcome-attention" data-welcome-attention><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)} ${icon('arrow', 14)}</a>` : `<span class="welcome-mood mood-${moodTone}"><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)}</span>`}${esc(headline(insights))}</p>
         </div>
         <div class="welcome-top-actions">
           <a class="welcome-ghost" href="#tutorials/dashboard">${icon('play', 15)}Tour</a>
           <button type="button" class="welcome-ghost" onclick="openImportModal()">${icon('upload', 15)}Import</button>
         </div>
       </div>
+      ${attention.length ? `<section id="welcome-attention" class="welcome-attention" aria-label="Items needing your attention" tabindex="-1"><ul>${attention.map(({ item, index }) => `<li><div><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></div>${actionLink(item, index)}</li>`).join('')}</ul></section>` : ''}
       <section class="welcome-carousel" aria-roledescription="carousel" aria-label="Your insights">
         <div class="welcome-slides" id="welcome-slides" aria-live="off">${insights.map((item, index) => slide(item, index, insights.length)).join('')}</div>
         <div class="welcome-controls">
@@ -280,8 +289,15 @@
   document.addEventListener('click', event => {
     const root = $('welcome-hero');
     if (!root || !root.contains(event.target)) return;
-    const target = event.target.closest('[data-welcome-action],[data-welcome-go],[data-welcome-step],[data-welcome-pause],[data-welcome-retry]');
+    if (event.target.closest('[data-welcome-tour]')) storage.set(TOUR_SEEN_KEY, '1');
+    const target = event.target.closest('[data-welcome-action],[data-welcome-go],[data-welcome-step],[data-welcome-pause],[data-welcome-retry],[data-welcome-attention]');
     if (!target) return;
+    if (target.hasAttribute('data-welcome-attention')) {
+      event.preventDefault();
+      $('welcome-attention')?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+      $('welcome-attention')?.focus({ preventScroll: true });
+      return;
+    }
     if (target.hasAttribute('data-welcome-retry')) return load();
     if (target.dataset.welcomeAction != null) return runAction(state.data?.insightsView[Number(target.dataset.welcomeAction)]);
     if (target.dataset.welcomeGo != null) return show(Number(target.dataset.welcomeGo), { announce: true });

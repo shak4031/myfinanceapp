@@ -25,7 +25,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'accounts', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
   const nav = ['dashboard', 'categories', 'transactions', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
@@ -33,7 +33,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
   });
   node('txn-filter-category').options.push({ value: '' });
   const context = {
-    console, URL, Date, Number, String, Object, Math, Promise, Set, Map,
+    console, URL, URLSearchParams, Date, Number, String, Object, Math, Promise, Set, Map,
     fetch: fetchImpl, setTimeout, clearTimeout, addEventListener: (name, listener) => listeners.set(name, listener),
     location: { href: 'http://local.test/', origin: 'http://local.test', hash: '', reload() { context.reloaded = true; } },
     history: { pushState(state, unused, hash) { context.location.hash = hash; } },
@@ -53,7 +53,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -68,7 +68,7 @@ test('only one navigation implementation switches to exactly one active view', (
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'
     ? response(200, { transactions: [
-      { category: 'Groceries', date: '2026-10-03', description: 'Market', amount: 42.5, direction: 'DEBIT' },
+      { id: 42, category: 'Groceries', date: '2026-10-03', description: 'Market', amount: 42.5, direction: 'DEBIT' },
       { category: 'Dining', date: '2026-10-04', description: 'Cafe', amount: 15, direction: 'DEBIT' },
       { category: 'Groceries', date: '2026-09-30', description: 'Earlier market', amount: 20, direction: 'DEBIT' }
     ] })
@@ -81,6 +81,7 @@ test('dashboard category drill-down opens a dialog with only matching category a
   assert.equal(f.node('mtd-dialog-total').textContent, '$42.50');
   assert.equal(f.node('mtd-dialog-count').textContent, '1');
   assert.match(f.node('mtd-dialog-content').innerHTML, /Market/);
+  assert.match(f.node('mtd-dialog-content').innerHTML, /href="#transactions\/42">Market/);
   assert.doesNotMatch(f.node('mtd-dialog-content').innerHTML, /Cafe|Earlier market/);
   assert.notEqual(f.context.location.hash, 'transactions');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), []);
@@ -96,6 +97,122 @@ test('transaction category/month filter excludes other categories and months', (
     f.context.filterTransactionsByCategoryAndMonth(transactions, 'Groceries', '2026-10'),
     [transactions[0]]
   );
+});
+test('transaction deep links clear conflicting filters, isolate an ID and survive route replay', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.node('txn-filter-category').value = 'Dining';
+  f.node('txn-filter-search').value = 'salary';
+  f.node('txn-filter-period').value = 'month:2026-09';
+  f.node('txn-filter-fixed').checked = true;
+  f.node('txn-filter-paymode').value = 'manual';
+  f.context.showView('transactions/1');
+  await f.context.loadAllTransactions();
+  assert.equal(f.context.location.hash, '#transactions/1');
+  assert.equal(f.context.currentTransactionId(), '1');
+  assert.equal(f.node('txn-filter-category').value, '');
+  assert.equal(f.node('txn-filter-search').value, '');
+  assert.equal(f.node('txn-filter-period').value, '');
+  assert.equal(f.node('txn-filter-fixed').checked, false);
+  assert.equal(f.node('txn-filter-paymode').value, '');
+  const html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /October market/);
+  assert.doesNotMatch(html, /October cafe|September market|October salary/);
+  assert.match(f.node('txn-filter-status').textContent, /Transaction #1 .*1 matching transactions/);
+  assert.match(f.node('txn-summary').innerHTML, /\$42\.50/);
+  assert.doesNotMatch(f.node('txn-summary').innerHTML, /\$1,000/);
+  await f.context.resetTransactionFilters();
+  assert.equal(f.context.location.hash, '#transactions');
+  assert.match(f.node('full-txn-table').innerHTML, /September market/);
+  f.context.showView('transactions/1'); // Back/Forward and initial navigation share this route parser.
+  await f.context.loadAllTransactions();
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October cafe/);
+  f.context.showView('transactions');
+  await f.context.loadAllTransactions();
+  assert.match(f.node('full-txn-table').innerHTML, /October cafe/);
+});
+test('missing transaction links stay exact and transaction labels are safely escaped', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  f.context.showView('transactions/999');
+  await f.context.loadAllTransactions();
+  assert.match(f.node('full-txn-table').innerHTML, /transaction is unavailable/);
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October market/);
+  assert.equal(f.context.transactionHref('1" onclick="bad'), '');
+  assert.equal(f.context.transactionLink(2, '<img>'), '<a class="transaction-link" href="#transactions/2">&lt;img&gt;</a>');
+  assert.match(f.context.transferBadge({ transfer_kind: 'unknown' }), /href="#accounts".*Review/);
+});
+test('transaction links close the containing dialog and open the exact transaction', () => {
+  const f = fixture();
+  const clicks = [];
+  f.context.document.addEventListener = (type, listener) => { if (type === 'click') clicks.push(listener); };
+  f.run('refresh.js');
+  const dialog = f.node('example-dialog'); dialog.open = true;
+  const link = { getAttribute: () => '#transactions/42', closest: () => dialog };
+  let prevented = false;
+  clicks[0]({
+    target: { closest: selector => selector === 'a.transaction-link' ? link : null },
+    button: 0, preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  assert.equal(dialog.open, false);
+  assert.equal(f.context.location.hash, '#transactions/42');
+  dialog.open = true;
+  const reviewLink = { dataset: { view: 'accounts' }, closest: () => dialog };
+  clicks[0]({
+    target: { closest: selector => selector === 'a[data-view]' ? reviewLink : null },
+    button: 0, preventDefault() {}
+  });
+  assert.equal(dialog.open, false);
+  assert.equal(f.context.location.hash, '#accounts');
+});
+test('Accounts explains inferred ownership, separates recipients and links transfer rows', async () => {
+  const accounts = [
+    { id: 1, name: 'Checking', kind: 'checking', status: 'confirmed', transactions: 2 },
+    { id: 2, name: 'Detected <4821>', kind: 'unknown', status: 'needs_review', transfersTo: 1, unknownTotal: 20, transactions: 0 },
+    { id: 3, name: 'Family recipient', kind: 'external', status: 'confirmed', transactions: 0 }
+  ];
+  const f = fixture(async () => response(200, { accounts, kinds: [
+    { value: 'checking', label: 'Checking' }, { value: 'external', label: 'Not mine' }, { value: 'unknown', label: 'Unknown' }
+  ], unknownTransfers: { count: 1, total: 20, recent: [{ id: 42, description: 'Transfer <4821>', amount: 20 }] } }));
+  f.run('refresh.js'); f.run('accounts.js');
+  await f.context.FinanceAccounts.loadPage();
+  const html = f.node('accounts-root').innerHTML;
+  assert.match(html, /Why review detected accounts/);
+  assert.match(html, /No bank is connected and no money is moved/);
+  assert.match(html, /Yes, confirm my account/);
+  assert.match(html, /No, it is not mine/);
+  assert.match(html, /Money sent will count as spending/);
+  assert.match(html, /Other people &amp; external recipients[\s\S]*Family recipient/);
+  assert.match(html, /href="#transactions\/42">Transfer &lt;4821&gt;/);
+  assert.match(html, /YOUR CONFIRMED ACCOUNTS<\/p><strong>1/);
+  assert.doesNotMatch(html, /<4821>/);
+  assert.match(f.context.FinanceAccounts.resultNote({ accountsDiscovered: 1 }), /Review account ownership/);
+});
+test('account review requires an owned type and the not-mine action saves an external recipient', async () => {
+  let account = { id: 2, name: 'Detected 4821', kind: 'unknown', status: 'needs_review', transactions: 0 };
+  const changes = [], messages = [];
+  const f = fixture(async (url, options = {}) => {
+    if (options.method === 'PATCH') {
+      const update = JSON.parse(options.body); changes.push(update);
+      account = { ...account, ...update, status: 'confirmed' };
+    }
+    return response(200, { accounts: [account], kinds: [{ value: 'external', label: 'Not yours' }] });
+  });
+  f.context.notify = message => messages.push(message);
+  f.run('refresh.js'); f.run('accounts.js');
+  await f.context.FinanceAccounts.loadPage();
+  const fields = [{ name: 'kind', value: '' }];
+  const card = { dataset: { account: '2', review: 'true' }, querySelector: selector => selector === '.acct-form'
+    ? { querySelectorAll: () => fields } : { focus() {} } };
+  const button = { dataset: { act: 'save' }, closest: () => card };
+  const event = { target: { closest: selector => selector === '#accounts-root button[data-act]' ? button : null }, preventDefault() {} };
+  await f.listeners.get('document:click')(event);
+  assert.equal(changes.length, 0);
+  assert.match(messages.at(-1), /Choose your account type/);
+  button.dataset.act = 'external';
+  await f.listeners.get('document:click')(event);
+  assert.deepEqual(changes, [{ kind: 'external' }]);
+  assert.match(f.node('accounts-root').innerHTML, /Other people &amp; external recipients/);
+  assert.match(messages.at(-1), /Money sent counts as spending; money received counts as other income/);
 });
 const activity = [
   { id: 1, category: 'Groceries', date: '2026-10-01T00:00:00.000Z', description: 'October market', amount: 42.5, direction: 'DEBIT', is_fixed: true },
@@ -398,7 +515,7 @@ test('income review lists sources safely and switches a whole sender off', async
     if (url === '/api/transactions/income-sources') return response(200, { sources });
     return response(200, { success: true, updated: 3 });
   });
-  f.run('income-review.js');
+  f.run('refresh.js'); f.run('income-review.js');
   const dialog = f.node('body').options.find(child => child.id === 'income-review');
   await f.context.FinanceIncome.open();
   assert.equal(dialog.open, true);
@@ -407,6 +524,7 @@ test('income review lists sources safely and switches a whole sender off', async
   assert.doesNotMatch(body, /<b>Jane/);
   assert.match(body, /Counted as income[\s\S]*Every other Fri[\s\S]*Not counted[\s\S]*Reset to automatic/);
   assert.match(body, /data-ir-role="income" aria-pressed="true"/);
+  assert.match(body, /href="#transactions\/1">ZELLE FROM JANE/);
   assert.match(f.node('income-review-summary').innerHTML, /1<\/strong> counted as pay[\s\S]*\/mo expected[\s\S]*set by you/);
   const button = { dataset: { irRole: 'other' }, closest: () => ({ dataset: { irKey: 'zelle jane doe' } }) };
   dialog.listeners.click({ target: { closest: selector => selector === '[data-ir-role]' ? button : null } });
@@ -756,6 +874,15 @@ test('financial loads are blocked until a verified session', async () => {
   assert.equal(f.node('auth-token-label').hidden, true);
   assert.equal(f.context.lastView, undefined);
 });
+test('authenticated startup preserves account and exact transaction deep links', async () => {
+  for (const route of ['accounts', 'transactions/42']) {
+    const f = fixture(async () => response(200, { user: { id: 1, name: 'Test', email: 'test@example.test', role: 'user' } }));
+    f.context.location.hash = `#${route}`;
+    f.run('session.js');
+    await f.context.FinanceSession.start();
+    assert.equal(f.context.lastView, route);
+  }
+});
 test('owner setup is never offered once the owner exists, and the admin link stays hidden for regular users', async () => {
   const f = fixture(async url => url.endsWith('/me') ? response(401, {}) : response(200, { setupRequired: false, registrationEnabled: false }));
   f.run('session.js');
@@ -822,6 +949,16 @@ test('Pro scripts load without a browser and expose their APIs', () => {
   assert.equal(typeof f.context.FinancePro.openUpgrade, 'function');
   assert.equal(typeof f.context.loadAnalyticsPage, 'function');
   assert.equal(typeof f.context.ProCharts.donut, 'function');
+});
+test('transaction CSV exports preserve the exact-ID filter and drop it after reset', async () => {
+  const f = loadPro(async url => response(200, url === '/api/categories' ? categoryData : { transactions: activity }));
+  f.context.FinancePro.requirePro = () => true;
+  f.context.showView('transactions/1');
+  f.context.FinanceProCategories.exportTransactions();
+  assert.match(f.context.location.href, /type=transactions&transactionId=1$/);
+  await f.context.resetTransactionFilters();
+  f.context.FinanceProCategories.exportTransactions();
+  assert.equal(f.context.location.href, '/api/analytics/export.csv?type=transactions');
 });
 test('Pro chart helpers produce scalable SVG', () => {
   const { ProCharts } = loadPro().context;
@@ -1208,6 +1345,8 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.match(html, /<mark class="welcome-hl">28th<\/mark>/);
   assert.match(html, /fx-rise[\s\S]*fx-pop[\s\S]*fx-swipe/);
   assert.match(html, /welcome-mood mood-danger/);
+  assert.match(html, /href="#welcome-attention" data-welcome-attention/);
+  assert.match(html, /id="welcome-attention"[\s\S]*Balance dips &lt;below&gt; zero[\s\S]*data-welcome-action="0"/);
   assert.match(html, /⚠️[\s\S]*🔥/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');

@@ -19,9 +19,18 @@
     const badge = TRANSFER_BADGE[t?.transfer_kind];
     if (!badge) return '';
     const where = t.transfer_account_name ? ` (${t.transfer_account_name})` : '';
-    return `<span class="tx-transfer-badge ${badge[0]}" title="${escape(badge[2] + where)}">${badge[1]}</span>`;
+    return t.transfer_kind === 'unknown'
+      ? `<a href="#accounts" data-view="accounts" class="tx-transfer-badge ${badge[0]}" title="${escape(badge[2] + where)}">${badge[1]} · Review</a>`
+      : `<span class="tx-transfer-badge ${badge[0]}" title="${escape(badge[2] + where)}">${badge[1]}</span>`;
   };
   window.transferBadge = transferBadge;
+  const validTransactionId = id => /^[1-9]\d*$/.test(String(id)) && Number.isSafeInteger(Number(id));
+  window.transactionHref = id => validTransactionId(id) ? `#transactions/${id}` : '';
+  window.transactionLink = (id, label) => {
+    const href = window.transactionHref(id);
+    return href ? `<a class="transaction-link" href="${href}">${escape(label || 'Transaction')}</a>` : escape(label || 'Transaction');
+  };
+  let transactionId = '';
   // '' = all; 'unset' = debits with no method yet; 'auto'/'manual' match debits only.
   window.matchesPayModeFilter = (t, filter) => {
     if (!filter) return true;
@@ -179,6 +188,7 @@
   const categoryPeriod = periodControl('category-filter', () => window.loadCategories());
   const transactionPeriod = periodControl('txn-filter', () => transactionCache ? renderTransactions() : window.loadAllTransactions());
   window.currentTransactionPeriod = () => transactionPeriod.current();
+  window.currentTransactionId = () => transactionId;
   let detailCategory = '';
   const mtdDialog = $('mtd-transactions-dialog');
   const closeMtdDialog = () => mtdDialog.open && mtdDialog.close();
@@ -193,7 +203,7 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); };
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
     const alert = document.querySelector('dialog[open] [role="alert"]');
@@ -244,7 +254,11 @@
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
-    else if (view !== 'tutorials') sub = '';
+    else if (view === 'transactions') {
+      if (sub && !validTransactionId(sub)) { notify('Invalid transaction link. Showing all transactions.'); sub = ''; }
+      if (sub || transactionId) clearTransactionFilters();
+      transactionId = sub;
+    } else if (view !== 'tutorials') sub = '';
     const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : titles[view];
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
@@ -265,9 +279,17 @@
   };
   window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });
   document.addEventListener('click', event => {
+    const transaction = event.target.closest?.('a.transaction-link');
+    if (transaction && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      transaction.closest('dialog[open]')?.close();
+      window.showView(transaction.getAttribute('href').slice(1));
+      return;
+    }
     const link = event.target.closest?.('a[data-view]');
     if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
+    link.closest('dialog[open]')?.close();
     window.showView(link.dataset.view);
   });
   document.addEventListener('keydown', event => {
@@ -390,7 +412,7 @@
       $('mtd-dialog-content').innerHTML = transactions.length ? `<div class="mtd-transaction-list">${transactions.map(transaction => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<article class="mtd-transaction-row">
-          <div><div class="mtd-transaction-description">${escape(transaction.description || 'Transaction')}${transferBadge(transaction)}</div>
+          <div><div class="mtd-transaction-description">${window.transactionLink(transaction.id, transaction.display_name || transaction.description)}${transferBadge(transaction)}</div>
             <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div></div>
           <div class="mtd-transaction-amount ${debit ? 'debit' : 'credit'}">${debit ? '−' : '+'}${money(Math.abs(Number(transaction.amount) || 0))}</div>
         </article>`;
@@ -498,7 +520,7 @@
       suggestions = data.suggestions || [];
       const warnings = data.invalidRules || [];
       $('review-status').textContent = `${suggestions.length} suggestions found · ${data.unchanged || 0} already look good or were left unchanged.${warnings.length ? ` ${warnings.length} older rule${warnings.length === 1 ? '' : 's'} need attention; valid suggestions are still available below.` : ''}`;
-      $('category-preview').innerHTML = `${warnings.length ? `<div class="coach-note warning" role="status"><strong>Some older rules need repair</strong><p>These rules were skipped so they cannot block other suggestions. Edit or disable them under Saved merchant rules.</p><ul>${warnings.map(rule => `<li>${escape(rule.message)}</li>`).join('')}</ul></div>` : ''}${suggestions.length ? `<table class="review-table"><thead><tr><th><input id="select-suggestions" type="checkbox" aria-label="Select all suggestions"></th><th>Transaction</th><th>Current</th><th>Suggested category</th><th>Match</th></tr></thead><tbody>${suggestions.map((item, index) => `<tr><td><input type="checkbox" data-suggestion="${index}" aria-label="Select ${escape(item.description)}"></td><td><strong>${escape(item.description)}</strong><div class="muted">${escape(item.date || '')}${item.amount == null ? '' : ` · ${money(item.amount)}`}</div></td><td>${escape(item.currentCategory || 'Uncategorized')}</td><td><select data-suggestion-category="${index}" aria-label="Category for ${escape(item.description)}">${categoryOptions(item.suggestedCategory)}</select></td><td><span title="${escape(item.reason)}">${escape(item.reason)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes suggested. Your existing categories are untouched.</p>'}`;
+      $('category-preview').innerHTML = `${warnings.length ? `<div class="coach-note warning" role="status"><strong>Some older rules need repair</strong><p>These rules were skipped so they cannot block other suggestions. Edit or disable them under Saved merchant rules.</p><ul>${warnings.map(rule => `<li>${escape(rule.message)}</li>`).join('')}</ul></div>` : ''}${suggestions.length ? `<table class="review-table"><thead><tr><th><input id="select-suggestions" type="checkbox" aria-label="Select all suggestions"></th><th>Transaction</th><th>Current</th><th>Suggested category</th><th>Match</th></tr></thead><tbody>${suggestions.map((item, index) => `<tr><td><input type="checkbox" data-suggestion="${index}" aria-label="Select ${escape(item.description)}"></td><td><strong>${window.transactionLink(item.id, item.description)}</strong><div class="muted">${escape(item.date || '')}${item.amount == null ? '' : ` · ${money(item.amount)}`}</div></td><td>${escape(item.currentCategory || 'Uncategorized')}</td><td><select data-suggestion-category="${index}" aria-label="Category for ${escape(item.description)}">${categoryOptions(item.suggestedCategory)}</select></td><td><span title="${escape(item.reason)}">${escape(item.reason)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes suggested. Your existing categories are untouched.</p>'}`;
       $('approve-all-button').disabled = !suggestions.length;
     } catch (error) { $('review-status').textContent = error.message; }
     finally { $('preview-button').disabled = false; }
@@ -587,7 +609,7 @@
       const to = byIncome ? incomeLabel(change.income) : byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
       return `<label class="similar-row${sameAmount || preselect ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || preselect ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
-        <span class="similar-desc">${escape(transaction.display_name || transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-desc">${window.transactionLink(transaction.id, transaction.display_name || transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
         <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
     }).join('');
     $('similar-error').textContent = '';
@@ -746,6 +768,7 @@
       const query = String($('txn-filter-search').value || '').trim();
       $('txn-filter-category').innerHTML = '<option value="">All categories</option>' + allCategories.map(c => `<option value="${escape(c.name)}" ${selected === c.name ? 'selected' : ''}>${escape(c.name)}</option>`).join('');
       const rows = window.filterTransactionsByCategoryAndMonth(transactions, selected, period.months)
+        .filter(t => !transactionId || String(t.id) === transactionId)
         .filter(t => !$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))
         .filter(t => window.matchesPayModeFilter(t, $('txn-filter-paymode').value))
         .filter(t => window.matchesTransactionSearch(t, query))
@@ -753,14 +776,14 @@
       const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction && !isTransfer(t)).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
       const transfers = rows.filter(isTransfer).length;
       const income = total('CREDIT'), expenses = total('DEBIT');
-      $('txn-filter-status').textContent = `${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions`;
+      $('txn-filter-status').textContent = `${transactionId ? `Transaction #${transactionId} · ` : ''}${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions${transactionId ? ' · Reset filters to see all activity.' : ''}`;
       $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
         `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}${transfers ? ` · ${transfers} transfer${transfers === 1 ? '' : 's'} not counted` : ''}</span></div>`).join('');
       table.innerHTML = rows.length ? rows.map((transaction, index) => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${index}">
           <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
-          <td><div class="tx-desc-cell"><div class="tx-desc-text">${describe(transaction, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
+          <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
@@ -772,7 +795,7 @@
           </select>` : '<span class="paymode-na" title="Money in does not need paying">—</span>'}</td>
           <td class="${debit ? 'amount-debit' : 'amount-credit'}" style="text-align:right">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="6" class="empty-state">No transactions match these filters.</td></tr>';
+      }).join('') : `<tr><td colspan="6" class="empty-state">${transactionId ? 'This transaction is unavailable or no longer matches these filters. Reset filters to return to all activity.' : 'No transactions match these filters.'}</td></tr>`;
       table.onclick = event => {
         const button = event.target.closest('[data-rename]');
         const row = button?.closest('[data-transaction]');
@@ -821,12 +844,18 @@
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => transactionCache ? renderTransactions() : window.loadAllTransactions(), 120);
   };
-  window.resetTransactionFilters = () => {
+  function clearTransactionFilters() {
+    clearTimeout(searchTimer);
+    transactionId = '';
     $('txn-filter-category').value = '';
     $('txn-filter-search').value = '';
     transactionPeriod.reset();
     $('txn-filter-fixed').checked = false;
     $('txn-filter-paymode').value = '';
+  }
+  window.resetTransactionFilters = () => {
+    clearTransactionFilters();
+    if (location.hash.startsWith('#transactions/')) history.pushState(null, '', '#transactions');
     return window.loadAllTransactions();
   };
 

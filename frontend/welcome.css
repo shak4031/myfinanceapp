@@ -195,3 +195,19 @@
   .welcome-hl { background-size: 100% 100%; }
   .welcome-dot.is-active span { width: 100%; }
 }
+/* Keep urgent items available independently of the rotating insight. */
+.welcome-attention { --tone: var(--mood-ink); position: relative; z-index: 1; grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-secondary); padding: 4px 18px; }
+.welcome-attention ul { list-style: none; padding: 0; margin: 0; }
+.welcome-attention li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; }
+.welcome-attention li + li { border-top: 1px solid var(--border); }
+.welcome-attention li > div { min-width: 0; overflow-wrap: anywhere; }
+.welcome-attention strong { font-size: 14px; }
+.welcome-attention p { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }
+.welcome-attention .welcome-action { flex-shrink: 0; margin-top: 0; }
+a.welcome-mood, a.welcome-action { text-decoration: none; }
+a.welcome-mood:hover { text-decoration: underline; }
+.welcome-attention:focus-visible, a.welcome-mood:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+@media (max-width: 640px) {
+  .welcome-attention li { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .welcome-attention .welcome-action { max-width: 100%; white-space: normal; }
+}

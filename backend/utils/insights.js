@@ -227,7 +227,7 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
     const anomaly = (analytics.anomalies || []).find(item => item.type === 'charge');
     if (anomaly) add({ id: 'anomaly', tone: 'warning', icon: 'search', title: 'An unusual charge stood out',
       detail: `${anomaly.merchant || anomaly.description || anomaly.category || 'A charge'} for ${money(anomaly.amount)}${anomaly.date ? ` on ${new Date(`${anomaly.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}${anomaly.ratio ? `, about ${anomaly.ratio}× what you usually pay there` : ''}. Worth a second look.`,
-      action: { label: 'Open analytics', view: 'analytics' } });
+      action: anomaly.id != null ? { label: 'Review transaction', view: `transactions/${anomaly.id}` } : { label: 'Open analytics', view: 'analytics' } });
     const hike = (analytics.recurring || []).find(item => item.active && !item.likelyBill && item.priceChange > 0);
     if (hike) add({ id: 'price-hike', tone: 'info', icon: 'repeat', title: `${hike.merchant} raised its price`,
       detail: `Now ${money(hike.amount)}, up ${money(hike.priceChange)} (${pct(hike.priceChangePct)}). That adds about ${money(hike.amount ? hike.priceChange * hike.annualCost / hike.amount : 0)} a year.`,

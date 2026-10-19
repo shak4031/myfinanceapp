@@ -88,6 +88,25 @@ data tables scroll within their panels rather than widening the whole page.
 Run `node --test frontend/frontend.test.mjs` for focused navigation, dialog,
 calendar-filter, filtered-summary, and request-order regressions.
 
+### Actionable alerts and account review
+
+The welcome area's **Action needed** / **Heads up** badge links to a persistent
+list of the flagged items, with an action for each; these remain available while
+the insight carousel rotates. Unknown-transfer badges link to Accounts for review.
+Transaction descriptions in account transfers, category details, income review,
+category suggestions, and unusual-charge alerts link to `#transactions/<id>`.
+Opening one clears conflicting filters and shows only that transaction, including
+its filtered totals and exact-ID CSV export. The link works on reload and with browser Back/Forward.
+**Reset filters** removes the exact-transaction filter and restores all activity.
+
+Accounts separates confirmed accounts from external recipients and explains
+references inferred from statement descriptions. Review does not connect a bank
+or move money. **Yes, confirm my account** requires an account type.
+**No, it is not mine** saves an external recipient: outgoing transfers count as
+spending and incoming transfers as other income, not regular pay. Change the
+type later to correct the choice. Unreviewed transfers remain excluded from
+spending and income; account-type-specific savings and loan rules are unchanged.
+
 ## 📚 Available Documentation
 
 ### For Users

@@ -65,6 +65,10 @@ router.get('/export.csv', async (req, res, next) => {
     const type = req.query.type === 'categories' ? 'categories' : 'transactions';
     const from = ISO_DATE.test(req.query.from || '') ? req.query.from : null;
     const to = ISO_DATE.test(req.query.to || '') ? req.query.to : null;
+    const transactionId = req.query.transactionId;
+    if (transactionId !== undefined && (typeof transactionId !== 'string' || !/^[1-9]\d*$/.test(transactionId) || !Number.isSafeInteger(Number(transactionId)))) {
+      return res.status(400).json({ error: 'Transaction ID must be a positive whole number.' });
+    }
     const inputs = await loadInputs();
     let csv;
     if (type === 'categories') {
@@ -86,6 +90,7 @@ router.get('/export.csv', async (req, res, next) => {
     } else {
       const rows = inputs.transactions.map(tx => ({ ...tx, iso: parseTxDate(tx.date)?.iso || String(tx.date) }))
         .filter(tx => (!from || tx.iso >= from) && (!to || tx.iso <= to))
+        .filter(tx => !transactionId || String(tx.id) === transactionId)
         .sort((a, b) => b.iso.localeCompare(a.iso));
       csv = toCsv(rows, [
         { label: 'Date', value: tx => tx.iso },

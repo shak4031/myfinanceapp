@@ -150,7 +150,7 @@ function monthlySeries(transactions, today) {
     const series = Array(HISTORY).fill(0), visits = Array(HISTORY).fill(0), skipped = [];
     for (const entry of list) {
       if (!isFixed(entry.tx) && entry.amount >= Math.max(ONE_OFF_MIN, typical * ONE_OFF_MULTIPLE)) {
-        skipped.push({ date: entry.iso, description: entry.tx.description || '', amount: round(entry.amount) });
+        skipped.push({ id: entry.tx.id, date: entry.iso, description: entry.tx.description || '', amount: round(entry.amount) });
       } else { series[entry.slot] += entry.amount; visits[entry.slot] += 1; }
     }
     byCategory.set(id, series);

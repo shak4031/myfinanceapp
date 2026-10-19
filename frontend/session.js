@@ -209,7 +209,7 @@ window.FinanceSession = (() => {
         if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        showView(['categories','category-admin','transactions','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
+        showView(['categories','category-admin','transactions','accounts','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
         await submitPlanChoice();
         return;
       }

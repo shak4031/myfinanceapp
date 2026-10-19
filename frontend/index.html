@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
-  <script src="session.js?v=20261019a"></script>
+  <script src="session.js?v=20261020b"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
@@ -441,28 +441,57 @@
     .import-new-account label, .acct-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
     .import-new-account input, .import-new-account select, .acct-form input, .acct-form select, .acct-actions select {
       padding: 8px 10px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
-    .acct-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 8px; }
-    .acct-summary strong { display: block; font-size: 26px; margin: 4px 0; }
+    #accounts-root, #accounts-root * { box-sizing: border-box; }
+    #accounts-root { min-width: 0; overflow-wrap: anywhere; }
+    .acct-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-bottom: 24px; }
+    .acct-summary .panel { min-width: 0; padding: 22px; border-top: 3px solid var(--primary); }
+    .acct-summary .panel:nth-child(2) { border-top-color: var(--warning); }
+    .acct-summary .panel:first-child { border-top-color: var(--success); }
+    .acct-summary strong { display: block; font-size: clamp(24px, 3vw, 32px); margin: 10px 0; letter-spacing: -1px; }
+    .acct-summary p { margin: 0; line-height: 1.6; }
+    .acct-review-link { display: inline-block; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--primary); }
+    .acct-review-intro { padding: 22px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 16px; }
+    .acct-review-intro h2 { margin: 6px 0 10px; font-size: 20px; }
+    .acct-review-intro > p:last-child { margin-bottom: 0; max-width: 85ch; font-size: 14px; line-height: 1.7; color: var(--text-secondary); }
     .acct-section { font-size: 17px; margin: 28px 0 12px; }
-    .acct-list { display: grid; gap: 14px; }
-    .acct-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
-    .acct-card.acct-review { border-color: var(--warning); }
+    .acct-list { display: grid; gap: 16px; }
+    .acct-card { min-width: 0; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 18px; padding: clamp(16px, 2.5vw, 24px); box-shadow: 0 4px 18px -14px rgba(18,33,56,.3); }
+    .acct-card.acct-review { border-left: 4px solid var(--warning); }
+    .acct-card .acct-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+    .acct-form label, .acct-head > div { min-width: 0; }
+    .acct-form input, .acct-form select, .acct-actions select { width: 100%; min-width: 0; max-width: 100%; }
+    .acct-actions select { flex: 1 1 200px; }
     .acct-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-    .acct-head h3 { font-size: 16px; margin: 0 0 2px; }
+    .acct-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 6px; }
+    .acct-head p { margin: 0; line-height: 1.6; }
     .acct-balance { text-align: right; display: flex; flex-direction: column; }
     .acct-balance strong { font-size: 18px; }
-    .acct-found { margin: 10px 0 0; font-size: 13px; }
+    .acct-found { margin: 18px 0 0; padding: 16px; background: var(--bg-tertiary); border-radius: 12px; font-size: 13px; line-height: 1.7; }
+    .acct-found p { margin: 6px 0 0; }
+    .acct-found blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid var(--warning); color: var(--text-secondary); }
+    .acct-choice-note { margin: 14px 0 0; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
     .acct-stats, .acct-kind-help { font-size: 12px; margin: 8px 0 0; }
     .acct-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
     .acct-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
     .acct-badge.warn { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
-    .acct-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .acct-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
     .acct-table th, .acct-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
     .acct-rules { margin-top: 28px; }
     .acct-rules summary { cursor: pointer; font-weight: 600; }
     .acct-rules li { margin: 8px 0; font-size: 13px; }
     .acct-nav-badge { margin-left: auto; min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--warning); color: #1b1b1b; font-size: 11px; font-weight: 700; text-align: center; }
     .acct-nav-badge[hidden] { display: none; }
+    .transaction-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    .transaction-link:hover { color: var(--primary); }
+    .transaction-link:focus-visible, .acct-review-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 3px; }
+    @media (max-width: 640px) {
+      .acct-card .acct-form { grid-template-columns: minmax(0, 1fr); }
+      .acct-head { flex-direction: column; }
+      .acct-balance { text-align: left; }
+      .acct-actions { align-items: stretch; }
+      .acct-actions .btn { width: 100%; white-space: normal; }
+      .acct-table th, .acct-table td { padding: 8px 4px; font-size: 12px; }
+    }
     .tx-transfer-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--bg-tertiary); color: var(--text-secondary); white-space: nowrap; }
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
@@ -470,7 +499,7 @@
   <link rel="stylesheet" href="refresh.css?v=20261024a">
   <link rel="stylesheet" href="analytics.css?v=20261024b">
   <link rel="stylesheet" href="plan.css?v=20261017r">
-  <link rel="stylesheet" href="welcome.css?v=20261017r">
+  <link rel="stylesheet" href="welcome.css?v=20261020b">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="marketing.css?v=20261018c">
@@ -777,7 +806,7 @@
       <!-- ACCOUNTS -->
       <section id="accounts-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">YOUR ACCOUNTS</p><h1>Accounts</h1><p class="muted">Checking, savings, cards and loans you import. Moving money between your own accounts is shown for information and never counted as spending or income.</p></div>
+          <div><p class="eyebrow">KNOW WHERE YOUR MONEY GOES</p><h1>Accounts</h1><p class="muted">Organize your imported accounts and review transfer recipients, so your spending, income and savings tell the right story.</p></div>
           <button class="btn btn-primary" onclick="openImportModal()">Import a statement</button>
         </header>
         <div id="accounts-root"></div>
@@ -1193,7 +1222,7 @@
         byDay.get(day).push({ item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance });
       });
       const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : 'Paid';
-      const flexAttrs = item => item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"`
+      const flexAttrs = item => item.status === 'processed' ? '' : item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"`
         : item.isIncome && item.incomeKey ? ` data-income-key="${escapeHtml(item.incomeKey)}" role="button" tabindex="0" aria-label="Review income from ${escapeHtml(item.description)}"` : '';
       const statusOf = entry => entry.item.isIncome ? (entry.isPaid ? ['is-paid', 'Received'] : ['is-upcoming', 'Expected']) : entry.isPaid ? ['is-paid', doneLabel(entry.item)] : entry.isDeficit ? ['is-deficit', 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
       const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1224,7 +1253,7 @@
             const sign = item.isIncome ? '+' : '&minus;';
             return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}"${flexAttrs(item)} title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)}${item.isIncome ? ' &middot; Not your pay? Select to review income' : ''} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
               ${stopButton(entry, 'pay-card-stop')}
-              <span class="pay-card-cat">${escapeHtml(item.label || item.category || 'Uncategorized')}</span>
+              <span class="pay-card-cat">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.label || item.category || 'Uncategorized')}</span>
               <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
               <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? doneLabel(item) : `<small>Bal</small> ${balance}`}</span>
               ${modeChip(entry, false)}
@@ -1250,7 +1279,7 @@
         const date = new Date(calYear, calMonth, day);
         listHtml += `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}"${flexAttrs(item)}>
           <span class="pay-row-date"><small>${weekdays[date.getDay()]}</small><strong>${day}</strong></span>
-          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${escapeHtml(item.description)}</span></span>
+          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.description)}</span></span>
           <span class="pay-row-tags"><span class="pay-row-status">${label}</span>${modeChip(entry, true)}</span>
           <span class="pay-row-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
           <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? `<small>Status</small>${doneLabel(item)}` : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
@@ -1420,7 +1449,7 @@
       document.getElementById('txn-list').innerHTML = data.map(t => `
         <div class="list-item" style="font-size: 12px;">
           <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
-          <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(t.description)}">${escapeHtml(t.description)}</div>
+          <div style="font-weight: 500;" title="${escapeHtml(t.description)}">${window.transactionLink(t.id, t.description)}</div>
           <div style="color: var(--danger); font-weight: 700; text-align: right;">${usd(t.amount)}</div>
         </div>
       `).join('');
@@ -1705,17 +1734,17 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261024a"></script>
-  <script src="accounts.js?v=20261020a"></script>
+  <script src="refresh.js?v=20261024c"></script>
+  <script src="accounts.js?v=20261020b"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
   <script src="pro-dashboard.js?v=20261017r"></script>
-  <script src="pro-categories.js?v=20261017r"></script>
-  <script src="analytics.js?v=20261024b"></script>
+  <script src="pro-categories.js?v=20261020b"></script>
+  <script src="analytics.js?v=20261024c"></script>
   <script src="plan.js?v=20261017r"></script>
-  <script src="welcome.js?v=20261019a"></script>
-  <script src="income-review.js?v=20261017r"></script>
+  <script src="welcome.js?v=20261020b"></script>
+  <script src="income-review.js?v=20261020b"></script>
   <script src="tutorial.js?v=20261022e"></script>
   <script src="marketing.js?v=20261020c"></script>
   <script>FinanceSession.start();</script>
