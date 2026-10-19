@@ -234,3 +234,15 @@ test('merchant bubbles compare the last three months with the three before and s
   assert.equal(cafe.change, null);
   assert.equal(vendors.items[0].name.startsWith('SHAKE SHACK'), true, 'biggest monthly spend first');
 });
+
+test('renamed transactions group and display under the name the user chose', () => {
+  const day = (back, d) => { const x = new Date(2026, 9 - back, d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
+  const transactions = [3, 2, 1].flatMap(back => [
+    { date: day(back, 3), description: `SENT ${back}X7Q Zelle CRISTIANE DE LIMA`, amount: 100, direction: 'DEBIT', category: 'Other', display_name: 'Cristiane De Lima' },
+    { date: day(back, 4), description: 'VENMO PAYMENT CRISTIANE', amount: 20, direction: 'DEBIT', category: 'Other', display_name: 'Cristiane De Lima' },
+    { date: day(back, 5), description: 'ZELLE TO SAM PATEL', amount: 40, direction: 'DEBIT', category: 'Other' }
+  ]);
+  const { vendors } = buildMoneyFlowSignals({ transactions, today: TODAY });
+  const cristiane = vendors.items.filter(v => /CRISTIANE/i.test(v.name));
+  assert.deepEqual(cristiane.map(v => [v.name, v.monthly, v.visits]), [['Cristiane De Lima', 120, 2]]);
+});

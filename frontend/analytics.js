@@ -306,13 +306,15 @@
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
     const svgEl = `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}">${svg}${labels}</svg>`;
     return card(`Where your money flows${how(`Monthly average of the last ${f.months} full month${f.months === 1 ? '' : 's'}. Transfers between your own accounts are left out, so "left over" is the same typical monthly surplus your dashboard shows. Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
-      `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-2');
+      `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }
 
   // Three-set Venn diagram: the categories where several independent signals agree are the ones worth acting on.
+  const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual last month' };
   function signalVenn(mf) {
     const { esc } = pro().format;
-    const regions = { a: [100, 100], b: [320, 100], c: [210, 262], ab: [210, 74], ac: [146, 192], bc: [274, 192], abc: [210, 148] };
+    const regions = { a: [128, 140], b: [432, 140], c: [280, 372], ab: [280, 96], ac: [192, 262], bc: [368, 262], abc: [280, 200] };
+    const MAX_NAMES = { a: 5, b: 5, c: 4, ab: 2, ac: 3, bc: 3, abc: 3 };
     const placed = {}, clear = [];
     for (const c of mf.categories) {
       const key = `${isAbove(c) ? 'a' : ''}${c.rising ? 'b' : ''}${isUnusual(c) ? 'c' : ''}`;
@@ -320,16 +322,22 @@
     }
     const names = Object.entries(placed).map(([key, list]) => {
       const [x, y0] = regions[key];
-      const start = y0 - (list.length - 1) * 8;
-      return list.map((c, i) => `<text x="${x}" y="${start + i * 16}" class="pro-venn-name${key.length >= 2 ? ' is-act' : ''}" text-anchor="middle">${esc(shortLabel(c.label))}</text>`).join('');
+      const shown = list.slice(0, MAX_NAMES[key]), more = list.length - shown.length;
+      const lines = shown.map(c => shortLabel(c.label)).concat(more ? [`+${more} more`] : []);
+      const start = y0 - (lines.length - 1) * 10 + (key === 'abc' ? 12 : 0);
+      return lines.map((label, i) => `<text x="${x}" y="${start + i * 20}" class="pro-venn-name${key.length >= 2 ? ' is-act' : ''}${more && i === lines.length - 1 ? ' is-more' : ''}" text-anchor="middle">${esc(label)}</text>`).join('');
     }).join('');
-    const svg = `<svg class="pro-venn" viewBox="0 0 420 322" role="img" aria-label="Signals overlap: ${Object.entries(placed).map(([k, l]) => `${l.map(c => shortLabel(c.label)).join(', ')} in ${k.length} signal${k.length === 1 ? '' : 's'}`).join('; ') || 'no category flagged'}">
-      <circle cx="150" cy="118" r="100" class="pro-venn-a"/><circle cx="270" cy="118" r="100" class="pro-venn-b"/><circle cx="210" cy="205" r="100" class="pro-venn-c"/>
-      <text x="58" y="14" class="pro-venn-set">Above similar homes</text><text x="362" y="14" class="pro-venn-set" text-anchor="end">Trending up</text><text x="210" y="320" class="pro-venn-set" text-anchor="middle">Unusual last month</text>
-      ${placed.abc ? '<text x="210" y="128" class="pro-venn-tag" text-anchor="middle">ACT NOW</text>' : ''}${names}</svg>`;
-    const foot = clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : '';
+    const svg = `<svg class="pro-venn" viewBox="0 0 560 446" role="img" aria-label="Signals overlap: ${Object.entries(placed).map(([k, l]) => `${l.map(c => shortLabel(c.label)).join(', ')} in ${k.length} signal${k.length === 1 ? '' : 's'}`).join('; ') || 'no category flagged'}">
+      <circle cx="200" cy="165" r="140" class="pro-venn-a"/><circle cx="360" cy="165" r="140" class="pro-venn-b"/><circle cx="280" cy="285" r="140" class="pro-venn-c"/>
+      <text x="64" y="16" class="pro-venn-set">${SIGNAL_NAMES.a}</text><text x="496" y="16" class="pro-venn-set" text-anchor="end">${SIGNAL_NAMES.b}</text><text x="280" y="442" class="pro-venn-set" text-anchor="middle">${SIGNAL_NAMES.c}</text>
+      ${placed.abc ? '<text x="280" y="178" class="pro-venn-tag" text-anchor="middle">ACT NOW</text>' : ''}${names}</svg>`;
+    // The same overlap in words, strongest first, so nothing depends on reading small text inside the circles.
+    const groups = [3, 2, 1].map(count => ({ count, items: Object.entries(placed).filter(([key]) => key.length === count).flatMap(([key, list]) => list.map(c => ({ c, key }))) })).filter(g => g.items.length);
+    const heading = { 3: ['All three signals', 'Act now', 'act'], 2: ['Two signals agree', 'Worth changing', 'act'], 1: ['One signal', 'Keep an eye on it', 'watch'] };
+    const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
+      ${clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
     return card(`Where the signals overlap${how('Above similar homes: your 3-month average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trending up: up more than 10% on the same months last year (confirmed by the recent trend), or the 3-month average clearly above the 12-month average. Unusual last month: last month was above the 95th percentile of the months before it, or above its 2-standard-deviation band. One signal is worth watching; where two or three overlap, the habit is real and worth changing.')}`,
-      'One signal is worth watching. Where circles overlap, act.', `${svg}${foot}`);
+      'One signal is worth watching. Where circles overlap, act.', `<div class="pro-venn-layout">${svg}${side}</div>`, 'span-3');
   }
 
   // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.

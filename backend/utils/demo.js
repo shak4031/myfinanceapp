@@ -172,7 +172,7 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['household_profiles', 'money_plans', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
+  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);

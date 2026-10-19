@@ -221,15 +221,28 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-insight h3 { margin: 8px 0 4px; font-size: 14.5px; } .pro-insight p { margin: 0; font-size: 13px; color: var(--text-secondary); }
 .pro-card > header p b { color: var(--text-primary); } .pro-card > header p b.tone-good { color: var(--good); } .pro-card > header p b.tone-bad { color: var(--bad); }
 .pro-sankey, .pro-venn { display: block; width: 100%; height: auto; overflow: visible; }
+.pro-sankey { max-width: 1040px; margin: 0 auto; }
+.pro-venn-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, 1fr); gap: 28px; align-items: center; }
+.pro-venn-layout .pro-venn { max-width: 640px; margin: 0 auto; }
+.pro-venn-read h4 { margin: 0 0 12px; font-size: 15px; color: #122138; }
+.pro-venn-group { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; background: #f8fafc; border-left: 4px solid #94a3b8; }
+.pro-venn-group.tone-act { background: #fff1f2; border-left-color: #e11d48; }
+.pro-venn-group.tone-watch { background: #fffbeb; border-left-color: #f59e0b; }
+.pro-venn-group-head { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 13px; }
+.pro-venn-group-head span { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #52637a; }
+.pro-venn-group.tone-act .pro-venn-group-head span { color: #be123c; }
+.pro-venn-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pro-venn-group li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.pro-venn-group li span { color: #52637a; font-size: 12.5px; text-align: right; }
 .pro-sankey path { transition: fill-opacity .15s; } .pro-sankey path:hover { fill-opacity: .55; }
 .pro-sk-label { font-size: 12.5px; font-weight: 700; fill: #122138; } .pro-sk-label.is-bad { fill: #be123c; }
 .pro-sk-value { font-weight: 500; fill: #52637a; }
 .pro-sk-halo { paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
 .pro-venn circle { stroke-width: 1.5; }
 .pro-venn-a { fill: rgba(225,29,72,.12); stroke: #e11d48; } .pro-venn-b { fill: rgba(245,158,11,.13); stroke: #f59e0b; } .pro-venn-c { fill: rgba(124,58,237,.11); stroke: #7c3aed; }
-.pro-venn-set { font-size: 14px; font-weight: 800; fill: #52637a; }
-.pro-venn-name { font-size: 16px; font-weight: 700; fill: #122138; } .pro-venn-name.is-act { fill: #be123c; }
-.pro-venn-tag { font-size: 11px; font-weight: 800; letter-spacing: .1em; fill: #be123c; }
+.pro-venn-set { font-size: 15px; font-weight: 800; fill: #52637a; }
+.pro-venn-name { font-size: 17px; font-weight: 700; fill: #122138; } .pro-venn-name.is-act { fill: #be123c; } .pro-venn-name.is-more { font-size: 13px; font-weight: 600; fill: #52637a; }
+.pro-venn-tag { font-size: 12px; font-weight: 800; letter-spacing: .1em; fill: #be123c; }
 .pro-venn-clear { margin: 6px 0 0; font-size: 13px; color: var(--good); }
 .pro-venn-clear svg, .pro-hero-clear svg { width: 15px; height: 15px; vertical-align: -2px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .pro-range-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); }
@@ -295,7 +308,7 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-bubble-legend i { width: 12px; height: 12px; border-radius: 50%; background: rgba(var(--rgb), .55); box-shadow: 0 0 0 2px rgba(var(--rgb), .9); }
 .pro-bubble-note { font-style: italic; }
 @media (prefers-reduced-motion: reduce) { .pro-bubble { transition: none; animation: none; } }
-@media (max-width: 900px) { .pro-compass-hero { grid-template-columns: 1fr; padding: 20px; } .pro-hero-figure { font-size: 32px; } .pro-range-row { grid-template-columns: 1fr; gap: 6px; } .pro-bubbles { height: 360px; } }
+@media (max-width: 900px) { .pro-compass-hero { grid-template-columns: 1fr; padding: 20px; } .pro-hero-figure { font-size: 32px; } .pro-range-row { grid-template-columns: 1fr; gap: 6px; } .pro-bubbles { height: 360px; } .pro-venn-layout { grid-template-columns: 1fr; } }
 .pro-mf-table th small, .pro-mf-table td small { display: block; font-size: 11px; font-weight: 400; color: var(--text-secondary); }
 .pro-mf-table th[scope="row"] small { max-width: 240px; white-space: normal; }
 

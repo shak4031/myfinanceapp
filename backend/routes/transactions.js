@@ -4,6 +4,7 @@ import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
 import { isPayMode } from '../utils/payMode.js';
 import { isIncomeRole, incomeSources } from '../utils/income.js';
+import { applyNameRules, compileNameRules, currentNameRule, listNameRules, loadNameRules, previewNameRule, resolveName, suggestNamePattern, validateNameRule } from '../utils/naming.js';
 
 const router = Router();
 const db = new Database();
@@ -159,6 +160,49 @@ router.post('/update-income-role', route(async (req, res) => {
 router.post('/bulk-update-category', (req, res) => res.status(409).json({ error: 'Use categorization-preview and categorization-apply with explicit transaction IDs.' }));
 router.post('/sync-labels', (req, res) => res.status(409).json({ error: 'Automatic label creation is disabled. Save explicit categorization-rules instead.' }));
 
+// Rename rules: "transactions containing these words show as <name>", applied to past rows now and future imports.
+const ruleId = value => {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'A valid rule id is required');
+  return id;
+};
+router.get('/name-rules', route(async (req, res) => {
+  res.json({ rules: await db.transaction(listNameRules) });
+}));
+// Body: { pattern } to test words, or { description } to get a suggested pattern and any rule already naming it.
+router.post('/name-rules/preview', route(async (req, res) => {
+  const description = typeof req.body?.description === 'string' ? req.body.description : null;
+  const pattern = typeof req.body?.pattern === 'string' ? req.body.pattern : description ? suggestNamePattern(description) : '';
+  res.json(await db.transaction(async client => ({
+    ...(description ? { suggested: suggestNamePattern(description), current: await currentNameRule(client, description) } : {}),
+    ...await previewNameRule(client, { pattern })
+  })));
+}));
+router.post('/name-rules', route(async (req, res) => {
+  const { pattern, name } = validateNameRule(req.body);
+  const id = req.body?.id == null ? null : ruleId(req.body.id);
+  const result = await db.transaction(async client => {
+    const saved = id == null
+      ? await client.query(`INSERT INTO name_rules (pattern,name) VALUES ($1,$2)
+          ON CONFLICT (user_id,pattern) DO UPDATE SET name=EXCLUDED.name RETURNING id,pattern,name`, [pattern, name])
+      : await client.query(`UPDATE name_rules SET pattern=$1,name=$2 WHERE id=$3 AND ${TENANT} RETURNING id,pattern,name`, [pattern, name, id]);
+    if (!saved.rows[0]) throw failure(404, 'Rename rule not found');
+    const changed = await applyNameRules(client);
+    const rule = (await listNameRules(client)).find(row => row.id === saved.rows[0].id);
+    return { rule, changed };
+  });
+  res.json({ success: true, ...result });
+}));
+router.delete('/name-rules/:id', route(async (req, res) => {
+  const id = ruleId(req.params.id);
+  const changed = await db.transaction(async client => {
+    const removed = await client.query(`DELETE FROM name_rules WHERE id=$1 AND ${TENANT}`, [id]);
+    if (!removed.rowCount) throw failure(404, 'Rename rule not found');
+    return applyNameRules(client);
+  });
+  res.json({ success: true, changed });
+}));
+
 router.post('/delete-by-id', route(async (req, res) => {
   if (!req.body?.id) throw failure(400, 'id is required');
   const result = await db.run(`DELETE FROM transactions WHERE id=$1 AND ${TENANT}`, [req.body.id]);
@@ -176,8 +220,11 @@ router.post('/insert-manual', route(async (req, res) => {
   if (!date || !description || !Number.isFinite(Number(amount)) || !['DEBIT','CREDIT'].includes(direction)) throw failure(400, 'Valid date, description, amount and direction are required');
   const cat = await db.get(`SELECT id FROM categories WHERE name=$1 AND ${TENANT}`, [category]);
   if (!cat) throw failure(400, 'Unknown category');
-  await db.run(`INSERT INTO transactions (date,description,category,amount,direction,balance,source,user_id,category_corrected)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)`, [date,description,category,amount,direction,balance,source,currentUserId()]);
+  await db.transaction(async client => {
+    const displayName = resolveName(description, compileNameRules(await loadNameRules(client)))?.name ?? null;
+    await client.query(`INSERT INTO transactions (date,description,category,amount,direction,balance,source,user_id,category_corrected,display_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)`, [date,description,category,amount,direction,balance,source,currentUserId(),displayName]);
+  });
   res.json({ success: true });
 }));
 router.post('/dedup', route(async (req, res) => {

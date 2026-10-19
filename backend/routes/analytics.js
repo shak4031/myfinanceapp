@@ -16,7 +16,7 @@ router.use(requirePro);
 async function loadInputs() {
   return db.transaction(async client => {
     const transactions = (await client.query(
-      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind FROM transactions ORDER BY date, id')).rows;
+      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name FROM transactions ORDER BY date, id')).rows;
     const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
     // Starting cash is checking accounts only, matching the dashboard.

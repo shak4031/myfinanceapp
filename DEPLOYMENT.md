@@ -292,9 +292,11 @@ Mortgage, rent, loans, insurance and internet are left out because they are cont
   more visits vs pricier visits, purchases under $20, days of work, a recent win). Then a Sankey of the
   last 3 full months (`moneyFlow.flow`: income → fixed bills / everyday / debt minimums not yet imported
   / left over). Its "left over" uses the same transfer rule and window as the typical monthly surplus, so
-  it matches the dashboard. A three-set Venn follows (above similar homes, trending up, unusual last
-  month), then "Who gets your money": draggable merchant bubbles (`moneyFlow.vendors`: everyday merchants
-  over the last 3 full months, grouped with the same `merchantKey` as the Overview, fixed bills,
+  it matches the dashboard. A full-width three-set Venn follows (above similar homes, trending up,
+  unusual last month) with a "Reading the overlap" list beside it naming each flagged category and its
+  signals, strongest first (stacks below the diagram under 900px). Then "Who gets your money": draggable merchant bubbles (`moneyFlow.vendors`: everyday merchants
+  over the last 3 full months, grouped with the same `merchantKey` as the Overview, or by the user's
+  name when the payee has been renamed; fixed bills,
   transfers and one-offs over max($250, 5× the median purchase) excluded). Size switches between monthly
   spend and visits; colour between change vs the 3 months before (deeper = bigger change) and category
   (deeper = more visits). The layout is a small client-side physics simulation that stops when settled
@@ -312,6 +314,27 @@ Mortgage, rent, loans, insurance and internet are left out because they are cont
   same 3 months last year once 15 months exist.
 - **No other users' data is used.** A pooled MyFinance comparison is a later option and should
   be opt-in, anonymised and shown only for groups of at least 50 households.
+
+## Renamed payees (Transactions > Rename)
+
+- Messy bank text such as `SENT 626800I0ARPL Zelle CRISTIANE DE LIMA` can be shown as
+  `Cristiane De Lima`. Each **Rename** button on the Transactions page opens a dialog with:
+  - the friendly name;
+  - the words to match, suggested from the description with leading noise such as SENT/POS/DEBIT dropped;
+  - a live count of matching transactions, with samples.
+- A rename is a rule (`name_rules`: `pattern`, `name`, private per user with RLS). It matches whole words
+  in any description and ignores every token containing a digit, so changing reference codes still
+  match. "CRISTIANE DE LIMAS BAKERY" does not match "CRISTIANE DE LIMA". The longest pattern wins, then
+  the newest.
+- Saving or removing a rule recomputes `transactions.display_name` for all of the user's rows. Imports
+  and manual entries set it on insert, so future statements get the name automatically.
+- `description` is never changed: category rules, transfer and income detection still read the bank
+  text. Lists, upcoming bills, recurring charges, merchants and the Compass bubbles show and group by
+  `display_name` when it is set. The Transactions row shows the bank description underneath, and
+  search matches either.
+- **Renamed payees** on the Transactions filter bar lists every rule with its match count and a Remove
+  button. API: `GET/POST /api/transactions/name-rules`, `POST /api/transactions/name-rules/preview`
+  (`{pattern}` or `{description}`) and `DELETE /api/transactions/name-rules/{id}`.
 
 ## Verify on staging
 

@@ -6,8 +6,8 @@
 // calendar year, mean annual spending per consumer unit (downloaded from the BLS public API, series CXU<item>LB<group>M).
 // No other MyFinance user's data is used. A pooled source (opt-in, anonymized, minimum cohort size) can be added later
 // as another entry in BENCHMARK_SOURCES without changing the signals.
-import { getCanonicalMerchant, parseTxDate } from './normalize.js';
-import { merchantKey } from './analytics.js';
+import { parseTxDate } from './normalize.js';
+import { merchantGroup, merchantLabel } from './analytics.js';
 import { isTransferRow } from './transfers.js';
 
 export const BENCHMARK_SOURCES = Object.freeze({
@@ -406,7 +406,7 @@ function vendorBubbles(transactions, today) {
   const groups = new Map();
   let setAsideCount = 0, setAsideTotal = 0;
   for (const entry of everyday) {
-    const key = merchantKey(entry.tx.description);
+    const key = merchantGroup(entry.tx);
     if (!key) continue;
     if (entry.amount >= limit) {
       if (entry.offset <= 3) { setAsideCount += 1; setAsideTotal += entry.amount; }
@@ -427,7 +427,7 @@ function vendorBubbles(transactions, today) {
   const items = active.map(group => {
     const monthly = group.recent / rm;
     return {
-      name: getCanonicalMerchant(group.latest.tx.description) || merchantKey(group.latest.tx.description),
+      name: merchantLabel(group.latest.tx),
       category: [...group.categories.entries()].sort((a, b) => b[1] - a[1])[0][0],
       monthly: round(monthly), visits: round(group.visits / rm, 1), ticket: round(group.recent / group.visits),
       share: round(group.recent / total, 4), regular: group.months.size === rm && rm >= 2,

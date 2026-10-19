@@ -18,7 +18,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
         toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
       },
       appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {},
-      close() { this.open = false; this.listeners?.close?.(); }, focus() {},
+      close() { this.open = false; this.listeners?.close?.(); }, focus() {}, select() {},
       addEventListener(name, listener) { (this.listeners ||= {})[name] = listener; },
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
       getAttribute: () => '', setAttribute() {}, removeAttribute() {}, reset() {}, showModal() { this.open = true; }
@@ -1127,6 +1127,13 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Of every \$100 you bring home: .*left over/);
   assert.match(html, /<svg class="pro-venn"/);
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual last month/);
+  // The Venn takes the full row with its overlap spelled out beside it, strongest signals first.
+  assert.match(html, /<div class="pro-venn-layout"><svg class="pro-venn" viewBox="0 0 560 446"/);
+  const flagged = mf.categories.filter(c => c.benchmarkStatus === 'high' || c.benchmarkStatus === 'above' || c.rising || c.spike || c.band?.position === 'above');
+  const readStart = html.indexOf('<div class="pro-venn-read">');
+  const reading = html.slice(readStart, html.indexOf('class="pro-card', readStart));
+  assert.equal((reading.match(/<li><strong>/g) || []).length, flagged.length);
+  assert.match(html, /Reading the overlap/);
   assert.equal((html.match(/class="pro-range-row"/g) || []).length, mf.categories.length);
   assert.match(html, /5th&ndash;95th percentile/);
   // Merchant bubbles (positioned client-side) and the category heatmap.
@@ -1333,4 +1340,48 @@ test('strategy cards explain the dates, the first target and identical orders', 
   assert.match(html, /Extra goes to <b>&lt;Visa&gt;<\/b> first/);
   assert.match(html, /Avalanche and Snowball<\/b> attack your debts in the same order/);
   assert.match(html, /href="#tutorials\/debt-strategies"/);
+});
+test('renamed payees show the friendly name, stay searchable and can be renamed from any row', async () => {
+  const calls = [];
+  const rows = [
+    { id: 1, date: '2026-10-03', description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA', display_name: 'Tutor <Cristiane>', amount: 100, direction: 'DEBIT', category: 'Other' },
+    { id: 2, date: '2026-09-03', description: 'SENT 51XQ Zelle CRISTIANE DE LIMA', display_name: 'Tutor <Cristiane>', amount: 100, direction: 'DEBIT', category: 'Gifts' },
+    { id: 3, date: '2026-10-05', description: 'SENT 77ZZ Zelle SAM PATEL', amount: 40, direction: 'DEBIT', category: 'Other' }
+  ];
+  const f = fixture(async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : undefined;
+    calls.push([url, options.method || 'GET', body]);
+    if (url === '/api/categories') return response(200, categoryData);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions: rows });
+    if (url === '/api/transactions/name-rules/preview') return response(200, body.description
+      ? { suggested: 'ZELLE SAM PATEL', current: null, pattern: 'ZELLE SAM PATEL', count: 4, samples: ['SENT 77ZZ Zelle SAM PATEL'] }
+      : { pattern: body.pattern.toUpperCase(), count: 4, samples: ['SENT 77ZZ Zelle SAM PATEL'] });
+    if (url === '/api/transactions/name-rules') return response(200, { success: true, rule: { id: 9, pattern: 'ZELLE SAM PATEL', name: 'Sam Patel', matches: 4 }, changed: 4 });
+    return response(200, {});
+  });
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /<strong class="tx-name">Tutor &lt;Cristiane&gt;<\/strong><div class="tx-original" title="Bank description">SENT 626800I0ARPL Zelle CRISTIANE DE LIMA/);
+  assert.equal((html.match(/data-rename /g) || []).length, 3, 'every row offers Rename');
+  assert.equal(f.context.matchesTransactionSearch(rows[0], 'tutor'), true, 'search finds the friendly name');
+  assert.equal(f.context.matchesTransactionSearch(rows[2], 'tutor'), false);
+  // Similar-transaction prompts group a renamed payee by its name, not by the leading "SENT".
+  assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], 'Gifts').map(item => item.transaction.id), []);
+  assert.deepEqual(f.context.findSimilarTransactions(rows, rows[1], 'Travel').map(item => item.transaction.id), [1]);
+  assert.equal(f.context.suggestDisplayName('ZELLE CRISTIANE DE LIMA'), 'Cristiane De Lima');
+  assert.equal(f.context.suggestDisplayName('ZELLE TO SAM PATEL'), 'Sam Patel');
+  assert.equal(f.context.suggestDisplayName("O'BRIEN & SONS"), "O'Brien & Sons");
+
+  // Rename the newest row (Sam Patel): the dialog suggests words and a name, previews matches, then saves a rule.
+  const row = { dataset: { transaction: '0' } };
+  f.node('full-txn-table').onclick({ target: { closest: selector => selector === '[data-rename]' ? { closest: () => row } : null } });
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('rename-original').textContent, 'SENT 77ZZ Zelle SAM PATEL');
+  assert.equal(f.node('rename-pattern').value, 'ZELLE SAM PATEL');
+  assert.equal(f.node('rename-name').value, 'Sam Patel');
+  assert.equal(f.node('rename-remove').hidden, true);
+  assert.match(f.node('rename-preview').innerHTML, /Matches 4 transactions<\/strong> now, plus future imports/);
+  await f.node('rename-form').onsubmit({ preventDefault() {} });
+  assert.deepEqual(calls.find(([url, method]) => url === '/api/transactions/name-rules' && method === 'POST')[2], { pattern: 'ZELLE SAM PATEL', name: 'Sam Patel' });
 });

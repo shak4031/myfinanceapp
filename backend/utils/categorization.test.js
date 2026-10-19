@@ -9,6 +9,7 @@ import categorizationsRouter from '../routes/categorizations.js';
 import { importTransactions } from '../routes/import.js';
 import { canonicalMerchant, compileRules, classify, preview, saveRule, loadCategorization, applyUpdates } from './categorization.js';
 import { withUser } from './tenant.js';
+import { compileNameRules, matchesName, nameKey, resolveName, suggestNamePattern, validateNameRule } from './naming.js';
 
 const names = new Set(['Other', 'Shopping', 'Groceries', 'Dining', 'Subscriptions', 'Salary']);
 const merchant = (id, pattern, category, priority = 100, extra = {}) =>
@@ -84,7 +85,9 @@ async function fixture() {
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
-      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT);
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT, display_name TEXT);
+    CREATE TABLE name_rules (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
+      pattern TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(user_id,pattern));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
     INSERT INTO categories (user_id,name) VALUES (2,'Foreign');
     INSERT INTO transactions (description,category,is_fixed) VALUES ('MY STORE','Other',TRUE),('MY STORE','Dining',FALSE);
@@ -215,6 +218,79 @@ test('import keeps the user income decision for new deposits from the same sende
     const roles = (await client.query("SELECT income_role FROM transactions WHERE date='2026-02-06' ORDER BY id")).rows.map(row => row.income_role);
     assert.deepEqual(roles, ['other', 'income', null, null]);
   } finally { await pg.close(); }
+});
+
+test('rename words ignore reference numbers and case; the most specific rule wins', () => {
+  const zelle = 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA';
+  assert.equal(nameKey(zelle), 'SENT ZELLE CRISTIANE DE LIMA');
+  assert.equal(suggestNamePattern(zelle), 'ZELLE CRISTIANE DE LIMA');
+  assert.equal(suggestNamePattern('VISA DDA PUR AP 420429 TRADER JOE S #552'), 'TRADER JOE S');
+  const rules = compileNameRules([{ id: 1, pattern: 'zelle', name: 'Zelle' }, { id: 2, pattern: 'Zelle  Cristiane de Lima', name: 'Cristiane De Lima' }, { id: 3, pattern: '1234', name: 'Numbers only' }]);
+  assert.equal(rules.length, 2, 'a pattern of only numbers matches nothing and is skipped');
+  assert.equal(resolveName('SENT 77XQ12 ZELLE CRISTIANE DE LIMA', rules).name, 'Cristiane De Lima');
+  assert.equal(resolveName('RECEIVED 9 Zelle CRISTIANE DE LIMA', rules).name, 'Cristiane De Lima');
+  assert.equal(resolveName('ZELLE TO SAM PATEL', rules).name, 'Zelle');
+  assert.equal(resolveName('CRISTIANE DE LIMAS BAKERY', rules), null, 'whole words only');
+  assert.equal(matchesName('ZELLE CRISTIANE DE LIMA', ''), false);
+  assert.throws(() => validateNameRule({ pattern: '123', name: 'X' }), { status: 400 });
+  assert.throws(() => validateNameRule({ pattern: 'ABC', name: ' ' }), { status: 400 });
+  assert.throws(() => validateNameRule({ pattern: 'ABC', name: 'x'.repeat(81) }), { status: 400 });
+  assert.deepEqual(validateNameRule({ pattern: ' zelle  cristiane ', name: '  Cristiane   De Lima ' }), { pattern: 'ZELLE CRISTIANE', name: 'Cristiane De Lima' });
+});
+
+test('rename rules apply to past rows, new imports and manual rows, and can be removed', async () => {
+  const { pg, client, db } = await fixture();
+  const original = Database.prototype.transaction;
+  Database.prototype.transaction = db.transaction;
+  const app = express();
+  app.use(express.json());
+  app.use((req, res, next) => withUser(1, next));
+  app.use('/api/transactions', transactionsRouter);
+  const server = await new Promise(resolve => { const listener = app.listen(0, '127.0.0.1', () => resolve(listener)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const request = async (path, body, method = 'POST') => {
+    const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category) VALUES
+      ('2026-01-03','SENT 626800I0ARPL Zelle CRISTIANE DE LIMA',200,'DEBIT','Other'),
+      ('2026-02-03','SENT 7Q11ZZ90 Zelle CRISTIANE DE LIMA',200,'DEBIT','Other'),
+      ('2026-02-04','ZELLE TO SAM PATEL',50,'DEBIT','Other')`);
+    await client.query("INSERT INTO transactions (user_id,date,description,amount,direction) VALUES (2,'2026-02-03','SENT 1 Zelle CRISTIANE DE LIMA',5,'DEBIT')");
+    const preview = await request('/api/transactions/name-rules/preview', { description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA' });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.body.suggested, 'ZELLE CRISTIANE DE LIMA');
+    assert.equal(preview.body.count, 2, 'other users are invisible');
+    assert.equal(preview.body.current, null);
+    assert.equal((await request('/api/transactions/name-rules', { pattern: '9999', name: 'Nope' })).status, 400);
+    const saved = await request('/api/transactions/name-rules', { pattern: preview.body.suggested, name: 'Cristiane De Lima' });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.changed, 2);
+    assert.equal(saved.body.rule.matches, 2);
+    const names = async () => (await client.query('SELECT description,display_name FROM transactions ORDER BY id')).rows.map(row => row.display_name);
+    assert.deepEqual(await names(), [null, null, null, 'Cristiane De Lima', 'Cristiane De Lima', null, null]);
+    const config = await loadCategorization(client);
+    await importTransactions(client, [{ date: '2026-03-03', description: 'SENT AB12 Zelle CRISTIANE DE LIMA', amount: 200, direction: 'DEBIT' }], config, 'test');
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-03-03'")).rows[0].display_name, 'Cristiane De Lima', 'future imports are renamed');
+    assert.equal((await request('/api/transactions/insert-manual', { date: '2026-03-04', description: 'Zelle Cristiane de Lima', amount: 10, direction: 'DEBIT', category: 'Other' })).status, 200);
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-03-04'")).rows[0].display_name, 'Cristiane De Lima');
+    const again = await request('/api/transactions/name-rules/preview', { description: 'SENT 1 Zelle CRISTIANE DE LIMA' });
+    assert.deepEqual(again.body.current, { id: saved.body.rule.id, pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane De Lima' });
+    const listed = await request('/api/transactions/name-rules', undefined, 'GET');
+    assert.deepEqual(listed.body.rules.map(rule => [rule.name, rule.matches]), [['Cristiane De Lima', 4]]);
+    const edited = await request('/api/transactions/name-rules', { id: saved.body.rule.id, pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane (cleaning)' });
+    assert.equal(edited.body.changed, 4);
+    assert.equal((await request('/api/transactions/name-rules', { id: 999, pattern: 'X', name: 'Y' })).status, 404);
+    assert.equal((await request(`/api/transactions/name-rules/${saved.body.rule.id}`, undefined, 'DELETE')).body.changed, 4);
+    assert.equal((await client.query('SELECT COUNT(*)::int AS n FROM transactions WHERE display_name IS NOT NULL')).rows[0].n, 0);
+    assert.equal((await request('/api/transactions/name-rules/abc', undefined, 'DELETE')).status, 400);
+    assert.equal((await request(`/api/transactions/name-rules/${saved.body.rule.id}`, undefined, 'DELETE')).status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    Database.prototype.transaction = original;
+    await pg.close();
+  }
 });
 
 test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learning saves without rewriting', async () => {

@@ -54,6 +54,12 @@ export function openApiSpec() {
       '/api/transactions/update-pay-mode': { post: op('Finance', "Mark outgoing payments as auto-pay or manual (pay_mode 'auto', 'manual' or null)", body({ ids: [1], pay_mode: 'auto' })) },
       '/api/transactions/income-sources': { get: op('Finance', 'Deposits grouped by sender with whether each counts as income and why') },
       '/api/transactions/update-income-role': { post: op('Finance', "Override income detection for deposits (income_role 'income', 'other' or null to auto-detect)", body({ ids: [1], income_role: 'other' })) },
+      '/api/transactions/name-rules': {
+        get: op('Finance', 'Renamed payees: each rule with how many transactions it names'),
+        post: op('Finance', 'Create or edit a rename rule (send id to edit); shown for all matching past and future transactions', body({ pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane De Lima' }))
+      },
+      '/api/transactions/name-rules/preview': { post: op('Finance', 'Count and sample the transactions a pattern would rename; send description instead to get a suggested pattern and any rule already naming it', body({ description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA' })) },
+      '/api/transactions/name-rules/{id}': { delete: op('Finance', 'Remove a rename rule; matching transactions show the bank description again', pathId) },
       '/api/debts': { get: op('Pro Plus', 'List debts; all debt operations require Pro Plus (402 PRO_PLUS_REQUIRED otherwise)') },
       '/api/goals': { get: op('Pro Plus', 'List savings goals; all goal operations require Pro Plus') },
       '/api/goals/funding-analysis': { get: op('Pro Plus', 'Goal funding plan and coaching') },

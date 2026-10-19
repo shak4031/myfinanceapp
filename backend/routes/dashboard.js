@@ -197,7 +197,8 @@ async function loadUpcoming(req, today = new Date()) {
       direction,
       label_id,
       is_fixed,
-      pay_mode
+      pay_mode,
+      display_name
     FROM transactions
     WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
     [currentUserId(), dateString(previousMonth), dateString(today)]
@@ -295,7 +296,7 @@ router.get('/insights', async (req, res) => {
     if (pro) {
       try {
         analytics = await db.transaction(async client => {
-          const transactions = (await client.query('SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind FROM transactions ORDER BY date, id')).rows;
+          const transactions = (await client.query('SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name FROM transactions ORDER BY date, id')).rows;
           const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
             .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
           return buildAnalytics({ transactions, budgets, latestBalance: balance, today });
@@ -389,7 +390,7 @@ router.post('/category-transactions', async (req, res) => {
     const result = await db.all(
       `SELECT 
         date,
-        description,
+        COALESCE(display_name, description) AS description,
         amount
       FROM transactions
       WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4
@@ -486,7 +487,7 @@ router.post('/category-transactions-for-month', async (req, res) => {
       `SELECT 
         id,
         date,
-        description,
+        COALESCE(display_name, description) AS description,
         amount,
         category as currentCategory
       FROM transactions
@@ -519,6 +520,7 @@ router.get('/all-transactions', async (req, res) => {
         t.id,
         t.date,
         t.description,
+        t.display_name,
         t.amount,
         t.direction,
         t.category,

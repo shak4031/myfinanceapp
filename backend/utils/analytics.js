@@ -31,6 +31,11 @@ export function merchantKey(description) {
   return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
 }
 
+// A user's rename (transactions.display_name, see utils/naming.js) decides both grouping and the label shown.
+const renamed = tx => String(tx?.display_name ?? '').replace(/\s+/g, ' ').trim();
+export const merchantGroup = tx => renamed(tx) ? `NAME:${renamed(tx).toUpperCase()}` : merchantKey(tx?.description);
+export const merchantLabel = tx => renamed(tx) || getCanonicalMerchant(tx?.description) || merchantKey(tx?.description);
+
 // Least-squares slope relative to the mean: +0.05 means spending rises ~5% per month.
 export function trendSlope(values) {
   if (values.length < 3) return null;
@@ -58,7 +63,7 @@ function normalize(transactions, today) {
       monthIndex: parsed.year * 12 + parsed.month, day: parsed.day,
       debit: String(tx.direction).toUpperCase() === 'DEBIT',
       fixed: tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true',
-      transfer, merchant: merchantKey(tx.description), raw: tx
+      transfer, merchant: merchantGroup(tx), raw: tx
     };
   }).filter(Boolean);
 }
@@ -148,7 +153,7 @@ function buildAnomalies(rows, categories, context) {
       const typical = median(list.slice(0, index).map(prior => prior.amount));
       if (index >= 3 && typical > 0 && tx.amount >= typical * 3) {
         anomalies.push({
-          type: 'charge', id: tx.id, date: tx.iso, merchant: getCanonicalMerchant(tx.description), description: tx.description,
+          type: 'charge', id: tx.id, date: tx.iso, merchant: merchantLabel(tx.raw), description: tx.description,
           category: tx.category, amount: round(tx.amount), typical: round(typical), ratio: round(tx.amount / typical, 1)
         });
       }
@@ -225,7 +230,7 @@ function buildRecurring(rows, context) {
     const change = previous ? latest.amount - previous : 0;
     const daysSince = Math.round((context.end - latest.date) / DAY_MS);
     recurring.push({
-      id: latest.id, merchant: getCanonicalMerchant(latest.description), category: latest.category,
+      id: latest.id, merchant: merchantLabel(latest.raw), category: latest.category,
       fixed: list.some(tx => tx.fixed), likelyBill: list.some(looksLikeBill),
       cadence: cadence.id, charges: list.length, amount: round(latest.amount), typical: round(typical),
       annualCost: round(latest.amount * cadence.perYear), monthlyCost: round(latest.amount * cadence.perYear / 12),
@@ -255,7 +260,7 @@ function buildMerchants(rows, context) {
   }
   const total = sum([...groups.values()].map(group => group.recent));
   return [...groups.values()].filter(group => group.count).map(group => ({
-    merchant: getCanonicalMerchant(group.latest.description), category: group.latest.category,
+    merchant: merchantLabel(group.latest.raw), category: group.latest.category,
     total: round(group.recent), count: group.count, average: round(group.recent / group.count),
     share: total ? round(group.recent / total, 4) : null, lastDate: group.latest.iso,
     change: group.prior ? round((group.recent - group.prior) / group.prior, 4) : null

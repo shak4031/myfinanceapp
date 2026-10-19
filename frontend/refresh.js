@@ -131,7 +131,7 @@
     const tokens = String(query || '').toLowerCase().replace(/[$,]/g, '').split(/\s+/).filter(Boolean);
     if (!tokens.length) return true;
     const amount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
-    const haystack = `${transaction.description || ''} ${transaction.category || 'uncategorized'} ${amount}`.toLowerCase();
+    const haystack = `${transaction.display_name || ''} ${transaction.description || ''} ${transaction.category || 'uncategorized'} ${amount}`.toLowerCase();
     return tokens.every(token => haystack.includes(token));
   };
   const highlight = (text, query) => {
@@ -150,10 +150,12 @@
     if (!tokens.length) return '';
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
+  // A renamed payee groups by the name the user chose; everything else by the merchant words.
+  const similarKey = t => t?.display_name ? `NAME:${String(t.display_name).trim().toUpperCase()}` : window.merchantKey(t?.description);
   // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
   // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for counting deposits as pay; rows already in that state are skipped.
   window.findSimilarTransactions = (transactions, source, change) => {
-    const key = window.merchantKey(source?.description);
+    const key = similarKey(source);
     const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
     const byPay = change && typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
     const byIncome = change && typeof change === 'object' && typeof change.income === 'boolean';
@@ -164,7 +166,7 @@
       : t => t.category !== change;
     const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
     return transactions
-      .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && window.merchantKey(t.description) === key)
+      .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && similarKey(t) === key)
       .map(transaction => ({ transaction, sameAmount: Math.abs(Math.abs(Number(transaction.amount) || 0) - amount) <= Math.max(1, amount * 0.1) }))
       .sort((a, b) => (b.sameAmount - a.sameAmount) || (transactionDate(b.transaction.date) - transactionDate(a.transaction.date)));
   };
@@ -578,14 +580,14 @@
     const hint = byIncome ? 'All deposits from this sender are preselected so your payday forecast stays consistent. '
       : byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
       : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
-    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(window.merchantKey(source.description))}</strong>. ${hint}Choose which should ${action}.`;
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${hint}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
       const from = byIncome ? incomeLabel(!!transaction.counts_as_income) : byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
       const to = byIncome ? incomeLabel(change.income) : byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
       return `<label class="similar-row${sameAmount || preselect ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || preselect ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
-        <span class="similar-desc">${escape(transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
+        <span class="similar-desc">${escape(transaction.display_name || transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
         <span class="similar-amt ${debit ? 'amount-debit' : 'amount-credit'}">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</span></label>`;
     }).join('');
     $('similar-error').textContent = '';
@@ -620,6 +622,121 @@
       $('similar-apply').disabled = false;
     }
   };
+  // Rename rules: a friendly name shown for every past and future transaction containing the chosen words.
+  // The bank's own description is kept (and shown underneath) because transfer and income detection rely on it.
+  const RAIL_WORDS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH', 'APP', 'SQUARE', 'SQ', 'TO', 'FROM', 'SENT', 'RECEIVED', 'PAYMENT']);
+  window.suggestDisplayName = pattern => {
+    const words = String(pattern || '').split(/\s+/).filter(Boolean);
+    while (words.length > 1 && RAIL_WORDS.has(words[0].toUpperCase())) words.shift();
+    return words.join(' ').toLowerCase().replace(/(^|[\s'&-])([a-z])/g, (_, lead, char) => lead + char.toUpperCase()).slice(0, 80);
+  };
+  const renameDialog = document.createElement('dialog');
+  renameDialog.id = 'rename-dialog'; renameDialog.className = 'editor rename-dialog';
+  renameDialog.setAttribute('aria-labelledby', 'rename-title');
+  renameDialog.innerHTML = `<form id="rename-form"><p class="eyebrow">CLEAN UP A NAME</p><h2 id="rename-title">Rename this payee</h2>
+    <p class="rename-original"><span class="muted">Bank description</span><code id="rename-original"></code></p>
+    <label for="rename-name">Show as<input id="rename-name" maxlength="80" required autocomplete="off" placeholder="e.g. Cristiane De Lima"></label>
+    <label for="rename-pattern">Match transactions containing these words<input id="rename-pattern" maxlength="256" required autocomplete="off" spellcheck="false">
+      <small class="muted">These words, in this order, anywhere in the bank description. Numbers such as reference codes are ignored, so every payment to the same payee matches.</small></label>
+    <div id="rename-preview" class="rename-preview" aria-live="polite"></div><p id="rename-error" role="alert"></p>
+    <div class="toolbar"><button type="button" class="btn btn-secondary rename-remove" id="rename-remove" hidden>Remove rename</button><span class="toolbar-spacer"></span><button type="button" class="btn btn-secondary" id="rename-cancel">Cancel</button><button class="btn btn-primary" id="rename-save">Rename</button></div></form>`;
+  document.body.appendChild(renameDialog);
+  const rulesDialog = document.createElement('dialog');
+  rulesDialog.id = 'name-rules-dialog'; rulesDialog.className = 'editor rename-dialog';
+  rulesDialog.setAttribute('aria-labelledby', 'name-rules-title');
+  rulesDialog.innerHTML = `<div><p class="eyebrow">YOUR NAMES</p><h2 id="name-rules-title">Renamed payees</h2>
+    <p class="muted">Each rename applies to every matching transaction, including future imports. To add one, press <strong>Rename</strong> next to any transaction.</p>
+    <div id="name-rules-list" class="name-rules-list"></div><p id="name-rules-error" role="alert"></p>
+    <div class="toolbar"><span class="toolbar-spacer"></span><button type="button" class="btn btn-primary" id="name-rules-close">Done</button></div></div>`;
+  document.body.appendChild(rulesDialog);
+  let renameState = null, renameTimer = null, renameRequest = 0;
+  const plural = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+  async function previewRename() {
+    const request = ++renameRequest, pattern = $('rename-pattern').value;
+    try {
+      const result = await json('/api/transactions/name-rules/preview', 'POST', { pattern });
+      if (request !== renameRequest) return;
+      $('rename-preview').innerHTML = !result.pattern
+        ? '<p class="rename-none">Add at least one word (numbers on their own are ignored).</p>'
+        : `<p><strong>Matches ${plural(result.count, 'transaction')}</strong> now, plus future imports containing <code>${escape(result.pattern)}</code>.</p>${result.samples.length ? `<ul>${result.samples.map(sample => `<li>${escape(sample)}</li>`).join('')}</ul>` : ''}`;
+      $('rename-save').disabled = !result.pattern;
+    } catch (error) { if (request === renameRequest) $('rename-preview').textContent = error.message; }
+  }
+  window.openRenameDialog = async transaction => {
+    renameState = { id: null };
+    $('rename-original').textContent = transaction.description || '';
+    $('rename-error').textContent = ''; $('rename-preview').textContent = 'Checking matching transactions…';
+    $('rename-name').value = transaction.display_name || ''; $('rename-pattern').value = '';
+    $('rename-remove').hidden = true; $('rename-title').textContent = 'Rename this payee';
+    $('rename-save').disabled = true; $('rename-save').textContent = 'Rename';
+    renameDialog.showModal();
+    try {
+      const result = await json('/api/transactions/name-rules/preview', 'POST', { description: transaction.description || '' });
+      if (!renameState) return;
+      const current = result.current;
+      renameState.id = current?.id ?? null;
+      $('rename-pattern').value = current?.pattern || result.suggested || '';
+      $('rename-name').value = current?.name || transaction.display_name || window.suggestDisplayName(result.suggested);
+      $('rename-remove').hidden = !current;
+      $('rename-title').textContent = current ? 'Edit this name' : 'Rename this payee';
+      $('rename-save').textContent = current ? 'Save name' : 'Rename';
+      $('rename-name').focus(); $('rename-name').select();
+      await previewRename();
+    } catch (error) { $('rename-error').textContent = error.message; }
+  };
+  renameDialog.addEventListener('close', () => { renameState = null; renameRequest++; clearTimeout(renameTimer); });
+  $('rename-pattern').oninput = () => { clearTimeout(renameTimer); renameTimer = setTimeout(previewRename, 250); };
+  $('rename-cancel').onclick = () => renameDialog.close();
+  const afterRename = async message => {
+    window.FinancePlan?.invalidate?.();
+    window.emitFinanceEvent?.('finance:names-changed', {});
+    notify(message);
+    if (FinanceSession.isAuthenticated()) await loadAllTransactions();
+  };
+  $('rename-form').onsubmit = async event => {
+    event.preventDefault();
+    if (!renameState) return;
+    $('rename-save').disabled = true; $('rename-error').textContent = '';
+    try {
+      const result = await json('/api/transactions/name-rules', 'POST', { pattern: $('rename-pattern').value, name: $('rename-name').value, ...(renameState.id ? { id: renameState.id } : {}) });
+      renameDialog.close();
+      await afterRename(`Now showing “${result.rule.name}” for ${plural(result.rule.matches, 'transaction')}. Future imports with these words get the same name.`);
+    } catch (error) { $('rename-error').textContent = error.message; $('rename-save').disabled = false; }
+  };
+  $('rename-remove').onclick = async () => {
+    if (!renameState?.id) return;
+    try {
+      const result = await json(`/api/transactions/name-rules/${renameState.id}`, 'DELETE');
+      renameDialog.close();
+      await afterRename(`Rename removed. ${plural(result.changed, 'transaction')} show the bank description again.`);
+    } catch (error) { $('rename-error').textContent = error.message; }
+  };
+  async function renderNameRules() {
+    const list = $('name-rules-list');
+    list.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+      const { rules } = await json('/api/transactions/name-rules');
+      list.innerHTML = rules.length ? rules.map(rule => `<div class="name-rule-row"><div><strong>${escape(rule.name)}</strong><small>Words: <code>${escape(rule.pattern)}</code> · ${plural(rule.matches, 'transaction')}</small></div>
+        <button type="button" class="btn btn-secondary" data-remove-rule="${escape(rule.id)}" aria-label="Remove rename ${escape(rule.name)}">Remove</button></div>`).join('')
+        : '<p class="empty-state">No renames yet. Messy names like “SENT 626800I0ARPL Zelle CRISTIANE DE LIMA” can be shown as “Cristiane De Lima”.</p>';
+    } catch (error) { list.innerHTML = ''; $('name-rules-error').textContent = error.message; }
+  }
+  window.openNameRules = () => { $('name-rules-error').textContent = ''; rulesDialog.showModal(); return renderNameRules(); };
+  $('name-rules-close').onclick = () => rulesDialog.close();
+  $('name-rules-list').onclick = async event => {
+    const button = event.target.closest('[data-remove-rule]');
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const result = await json(`/api/transactions/name-rules/${button.dataset.removeRule}`, 'DELETE');
+      await renderNameRules();
+      await afterRename(`Rename removed. ${plural(result.changed, 'transaction')} show the bank description again.`);
+    } catch (error) { $('name-rules-error').textContent = error.message; button.disabled = false; }
+  };
+  document.addEventListener('click', event => { if (event.target.closest?.('[data-name-rules]')) window.openNameRules(); });
+  const describe = (transaction, query) => transaction.display_name
+    ? `<strong class="tx-name">${highlight(transaction.display_name, query)}</strong><div class="tx-original" title="Bank description">${highlight(transaction.description, query)}</div>`
+    : highlight(transaction.description, query);
   function renderTransactions() {
     const table = $('full-txn-table');
     const { allCategories, transactions } = transactionCache;
@@ -643,7 +760,7 @@
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${index}">
           <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
-          <td>${highlight(transaction.description, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</td>
+          <td><div class="tx-desc-cell"><div class="tx-desc-text">${describe(transaction, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
@@ -656,6 +773,11 @@
           <td class="${debit ? 'amount-debit' : 'amount-credit'}" style="text-align:right">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</td>
         </tr>`;
       }).join('') : '<tr><td colspan="6" class="empty-state">No transactions match these filters.</td></tr>';
+      table.onclick = event => {
+        const button = event.target.closest('[data-rename]');
+        const row = button?.closest('[data-transaction]');
+        if (row) window.openRenameDialog(rows[Number(row.dataset.transaction)]);
+      };
       table.onchange = async event => {
         const row = event.target.closest('[data-transaction]');
         if (!row) return;

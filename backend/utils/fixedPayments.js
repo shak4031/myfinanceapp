@@ -28,6 +28,8 @@ export function isFixedPayment(tx) {
 }
 
 function merchantKey(tx) {
+  // A user's rename groups every payment it names, whatever the bank wrote.
+  if (String(tx.display_name ?? '').trim()) return `NAME:${normalizeDescription(String(tx.display_name).toUpperCase())}`;
   const lender = (tx.description || '').match(/\b(?:ollo|capital\s+one|credit\s+one|chase|discover|amex|american\s+express|citicards)\b/i);
   if (lender) return normalizeDescription(lender[0]);
   return normalizeDescription(getCanonicalMerchant(tx.description));
@@ -80,14 +82,14 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
         if (paidIds.has(tx.id)) continue;
         paidIds.add(tx.id);
         timeline.push({
-          id: tx.id, description: tx.description, category: template.category || 'Other',
+          id: tx.id, description: tx.display_name || tx.description, category: template.category || 'Other',
           amount: tx.amount, dayOfMonth: tx.parsed.day, isIncome: false, status: 'processed', payMode: payModeOf(tx, template)
         });
       }
     } else {
       timeline.push({
         sourceTransactionId: template.id,
-        description: getCanonicalMerchant(template.description), category: template.category || 'Other',
+        description: template.display_name || getCanonicalMerchant(template.description), category: template.category || 'Other',
         amount: template.amount, dayOfMonth: Math.min(template.parsed.day, monthEnd),
         isIncome: false, status: 'projected', payMode: payModeOf(template, template)
       });

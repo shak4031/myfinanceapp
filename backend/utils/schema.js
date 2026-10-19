@@ -1,6 +1,6 @@
 import { reconcileTransfers } from './transfers.js';
 
-export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles'];
+export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -222,6 +222,12 @@ export async function migratePrivateSchema(client) {
       region TEXT CHECK (region IN ('northeast','midwest','south','west')),
       housing TEXT CHECK (housing IN ('own','rent')), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- Rename rules: transactions whose description contains the pattern words show as name (see utils/naming.js).
+    CREATE TABLE IF NOT EXISTS name_rules (
+      id SERIAL PRIMARY KEY, pattern TEXT NOT NULL CHECK (length(pattern) BETWEEN 1 AND 256),
+      name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS display_name TEXT;
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -240,6 +246,7 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS money_plans_user_key ON money_plans (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS household_profiles_user_key ON household_profiles (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
+    CREATE UNIQUE INDEX IF NOT EXISTS name_rules_user_pattern_key ON name_rules (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
     CREATE INDEX IF NOT EXISTS transactions_user_account_idx ON transactions (user_id, account_id);
     DO $$ BEGIN

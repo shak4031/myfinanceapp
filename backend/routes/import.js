@@ -6,6 +6,7 @@ import { normalizeDescription } from '../utils/normalize.js';
 import { TENANT, classify, loadCategorization, failure } from '../utils/categorization.js';
 import { inheritPayMode } from '../utils/payMode.js';
 import { incomeKey } from '../utils/income.js';
+import { compileNameRules, loadNameRules, resolveName } from '../utils/naming.js';
 import { currentUserId } from '../utils/tenant.js';
 import { reconcileTransfers } from '../utils/transfers.js';
 import { resolveImportAccount } from './accounts.js';
@@ -46,6 +47,7 @@ export async function importTransactions(client, transactions, config, source, a
   const incomeHistory = (await client.query(`SELECT description,income_role FROM transactions
     WHERE ${TENANT} AND income_role IS NOT NULL AND UPPER(direction)='CREDIT' ORDER BY date DESC, id DESC LIMIT 2000`)).rows
     .map(row => ({ key: incomeKey(row.description), role: row.income_role }));
+  const nameRules = compileNameRules(await loadNameRules(client));
   for (const transaction of transactions) {
     const direction = String(transaction.direction).toUpperCase();
     if (!['DEBIT', 'CREDIT'].includes(direction)) throw failure(400, 'Invalid transaction direction');
@@ -63,10 +65,11 @@ export async function importTransactions(client, transactions, config, source, a
     const payMode = inheritPayMode({ ...transaction, direction, label_id: suggestion.label?.id ?? null }, payHistory);
     const incomeRole = direction === 'CREDIT' ? incomeHistory.find(row => row.key === incomeKey(transaction.description))?.role ?? null : null;
     await client.query(`INSERT INTO transactions
-      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role,account_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role,account_id,display_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
     [transaction.date, transaction.description, transaction.amount, direction, transaction.balance,
-      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole, accountId]);
+      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole, accountId,
+      resolveName(transaction.description, nameRules)?.name ?? null]);
     imported++;
   }
   return { imported, duplicates, excluded: 0 };
