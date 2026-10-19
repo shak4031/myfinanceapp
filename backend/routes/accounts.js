@@ -14,7 +14,7 @@ const route = handler => async (req, res, next) => {
   }
 };
 const cents = value => Math.round(value * 100) / 100;
-const COLUMNS = 'id, name, kind, institution, last4, status, suggested_kind, discovered_from, created_at, updated_at';
+const COLUMNS = 'id, name, kind, institution, last4, status, suggested_kind, discovered_from, statement, created_at, updated_at';
 
 // Validates account fields. `partial` allows PATCH bodies that change only some fields.
 export function accountInput(body, { partial = false } = {}) {
@@ -45,7 +45,7 @@ export async function resolveImportAccount(client, body) {
   const userId = currentUserId();
   if (body?.accountId != null && body.accountId !== '') {
     const id = Number(body.accountId);
-    const account = Number.isSafeInteger(id) ? (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0] : null;
+    const account = Number.isSafeInteger(id) ? (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE`, [id, userId])).rows[0] : null;
     if (!account) throw failure(400, 'That account was not found. Choose one of your accounts.');
     if (account.kind === 'external') throw failure(400, 'That account is marked "not my account". Change its type before importing its statement.');
     return account;
@@ -76,7 +76,7 @@ router.get('/', route(async (req, res) => {
   });
   const { accounts, rows } = result;
   const byId = new Map(accounts.map(account => [account.id, account]));
-  const balances = accountBalances(rows);
+  const balances = accountBalances(rows, accounts);
   const stats = new Map(accounts.map(account => [account.id, { transactions: 0, firstDate: null, lastDate: null, transfersTo: 0, unknown: 0, unknownTotal: 0 }]));
   const unassigned = new Map();
   const today = new Date();

@@ -197,6 +197,79 @@ test('account review requires an owned type and the not-mine action saves an ext
     }
     return response(200, { accounts: [account], kinds: [{ value: 'external', label: 'Not yours' }] });
   });
+  test('Accounts shows statement balance and purchase APR even without activity rows', async () => {
+    const f = fixture(async () => response(200, { accounts: [{
+      id: 1, name: 'Example card', kind: 'credit_card', transactions: 0, balance: 110, balanceAsOf: '2026-10-03',
+      statement: { type: 'credit-card', closingDate: '2026-10-03', purchaseApr: 24.99, minimumPayment: 25, paymentDueDate: '2026-10-28', creditLimit: 500 }
+    }], kinds: [{ value: 'credit_card', label: 'Credit card' }] }));
+    f.run('refresh.js'); f.run('accounts.js');
+    await f.context.FinanceAccounts.loadPage();
+    const html = f.node('accounts-root').innerHTML;
+    assert.match(html, /Statement balance.*2026-10-03/);
+    assert.match(html, /Purchase APR: 24.99%/);
+    assert.match(html, /Minimum payment: \$25\.00.*Due: 2026-10-28.*Credit limit: \$500\.00/);
+    assert.match(html, /separately entered debt-plan/);
+  });
+  function pdfUploadFixture(status, data) {
+    const requests = [], notices = [];
+    const f = fixture(async (url, options) => { requests.push([url, JSON.parse(options.body)]); return response(status, data); });
+    f.run('refresh.js');
+    Object.assign(f.context, {
+      pendingPdfFile: { name: 'statement.pdf', size: 1024 },
+      pdfImportInProgress: false,
+      FinanceAccounts: { choice: () => ({ accountId: 1 }), afterImport: async () => {}, resultNote: () => '' },
+      FileReader: class { readAsDataURL() { this.result = 'data:application/pdf;base64,JVBERg=='; setTimeout(() => this.onload(), 0); } },
+      escapeHtml: f.context.FinanceTools.escape, usd: value => `$${Number(value).toFixed(2)}`,
+      notify: message => notices.push(message)
+    });
+    const html = source('index.html');
+    const start = html.indexOf('    async function importPDF()');
+    const end = html.indexOf('    // ===========================================', start);
+    vm.runInContext(html.slice(start, end), f.context);
+    return { ...f, requests, notices };
+  }
+  test('PDF upload prevents double submits and displays detected statement/reconciliation facts', async () => {
+    const f = pdfUploadFixture(200, {
+      success: true, imported: 6, duplicates: 0, totalInFile: 6,
+      statement: { type: 'credit-card', closingDate: '2026-10-03', balance: 110, purchaseApr: 24.99 },
+      reconciliation: { status: 'balanced' }, warnings: ['Check <promotional> rate']
+    });
+    await Promise.all([f.context.importPDF(), f.context.importPDF()]);
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0][0], '/api/import/import-pdf');
+    assert.deepEqual(f.requests[0][1], { pdfBase64: 'JVBERg==', source: 'statement.pdf', accountId: 1 });
+    assert.match(f.node('import-result').innerHTML, /Detected credit card.*2026-10-03/);
+    assert.match(f.node('import-result').innerHTML, /Purchase APR: 24.99%/);
+    assert.match(f.node('import-result').innerHTML, /Transactions reconcile/);
+    assert.match(f.node('import-result').innerHTML, /Check &lt;promotional&gt; rate/);
+    assert.equal(f.context.pendingPdfFile, null);
+    assert.equal(f.node('pdf-import-btn').disabled, true);
+  });
+  test('PDF upload failures keep the file for retry and oversized files never reach the API', async () => {
+    const f = pdfUploadFixture(422, { success: false, error: 'Transactions do not reconcile. Nothing was imported.' });
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /Nothing was imported/);
+    assert.notEqual(f.context.pendingPdfFile, null);
+    assert.equal(f.node('pdf-import-btn').disabled, false);
+    assert.doesNotMatch(f.node('import-result').innerHTML, /PDF Import Complete/);
+    f.context.pendingPdfFile.size = 13 * 1024 * 1024;
+    await f.context.importPDF();
+    assert.equal(f.requests.length, 1);
+    assert.match(f.notices.at(-1), /12 MB/);
+  });
+  test('choosing another PDF during upload cannot resubmit or discard the new selection', async () => {
+    const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1, warnings: [] });
+    const first = f.context.importPDF();
+    const next = { name: 'next-statement.pdf', size: 1024 };
+    f.context.pendingPdfFile = next;
+    f.node('pdf-import-btn').disabled = false; // Selecting a file enables the existing picker.
+    await f.context.importPDF();
+    await first;
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0][1].source, 'statement.pdf');
+    assert.equal(f.context.pendingPdfFile, next);
+    assert.equal(f.node('pdf-import-btn').disabled, false);
+  });
   f.context.notify = message => messages.push(message);
   f.run('refresh.js'); f.run('accounts.js');
   await f.context.FinanceAccounts.loadPage();

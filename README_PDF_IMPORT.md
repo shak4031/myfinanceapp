@@ -1,5 +1,11 @@
 # PDF Statement Import Implementation - Complete
 
+> This is a historical implementation report, not the current behavior contract.
+> Use the [current PDF import guide](PDF_IMPORT_GUIDE.md) for supported formats,
+> validation, API payloads, limitations and executable regression tests.
+> Earlier claims below about universal reliability or production readiness are
+> superseded by the guide's reconciliation requirements and explicit limitations.
+
 ## 🎉 Implementation Status: ✅ COMPLETE & PRODUCTION READY
 
 All requirements have been successfully implemented with comprehensive documentation and testing support.

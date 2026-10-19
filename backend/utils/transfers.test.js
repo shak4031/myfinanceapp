@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
-import { extractLast4, classifyTransfer, pairTransfers, savedAmount, cashBalance, kindHint, isTransferRow } from './transfers.js';
+import { extractLast4, classifyTransfer, pairTransfers, savedAmount, cashBalance, accountBalances, kindHint, isTransferRow } from './transfers.js';
 import application from '../app.js';
 
 const debit = (description, amount = 100, extra = {}) => ({ description, amount, direction: 'DEBIT', ...extra });
@@ -36,6 +36,8 @@ test('classification separates own-account moves from real spending', () => {
   assert.equal(classifyTransfer(debit('CHASE CARD ONLINE PAYMENT'), { ...own, counterpart: card, hasRows: () => false }), null);
   assert.equal(classifyTransfer(debit('CHASE CARD ONLINE PAYMENT'), { ...own, counterpart: card, hasRows: () => true }), 'internal');
   assert.equal(classifyTransfer(credit('PAYMENT THANK YOU'), { ownAccount: card }), 'internal');
+  assert.equal(classifyTransfer(credit('PAYMENT - MOBILE APP'), { ownAccount: card }), 'internal');
+  assert.equal(classifyTransfer(credit('PAYMENT - AUTOPAY'), { ownAccount: card }), 'internal');
   assert.equal(classifyTransfer(debit('CHASE CARD ONLINE PAYMENT'), own), null, 'unknown card payment counts as a bill');
   assert.equal(classifyTransfer(debit('WHOLE FOODS MARKET'), own), null);
   assert.equal(classifyTransfer(debit('ONLINE TRANSFER TO SAVINGS'), own), 'savings', 'savings wording without a number');
@@ -69,6 +71,21 @@ test('saved amounts, cash balance and the shared transfer predicate', () => {
     { account_id: null, date: '2026-10-07', balance: 77, id: 5 }
   ], accounts, '2026-10-10');
   assert.equal(balance.balance ?? balance, 1000, 'checking accounts only; savings is not spendable cash');
+});
+
+test('statement balance evidence respects account kind, effective date and newer running balances', () => {
+  const accounts = [
+    { id: 1, kind: 'checking', statement: { type: 'bank', balance: 250, closingDate: '2026-09-30' } },
+    { id: 2, kind: 'credit_card', statement: { type: 'credit-card', balance: 1000, closingDate: '2026-10-03' } },
+    { id: 3, kind: 'savings', statement: { type: 'bank', balance: 5000, closingDate: '2026-09-30' } },
+    { id: 4, kind: 'checking', statement: { type: 'bank', balance: 500, closingDate: '2026-11-30' } }
+  ];
+  const byId = new Map(accounts.map(account => [account.id, account]));
+  assert.equal(cashBalance([], byId, '2026-10-19'), 250);
+  const rows = [{ account_id: 1, date: '2026-10-05', balance: 300, id: 1 }];
+  assert.equal(cashBalance(rows, byId, '2026-10-19'), 300);
+  assert.equal(accountBalances(rows, accounts).get(1).balance, 300);
+  assert.equal(accountBalances(rows, accounts).get(2).balance, 1000);
 });
 
 test('imports require an account and transfers between own accounts never count as spending or income', async t => {

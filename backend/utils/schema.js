@@ -115,6 +115,7 @@ export async function migratePrivateSchema(client) {
       suggested_kind TEXT, discovered_from TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS statement JSONB;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_id INTEGER;
     -- NULL = counts as spending/income; 'internal' | 'savings' | 'unknown' = money moved between your own accounts.
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_kind TEXT CHECK (transfer_kind IN ('internal','savings','unknown'));

@@ -128,8 +128,9 @@
           <h3>${escape(account.name)}${review ? ' <span class="acct-badge warn">Needs review</span>' : ''}</h3>
           <p class="muted">${escape(kindLabel(account.kind))}${account.institution ? ` · ${escape(account.institution)}` : ''}${account.last4 ? ` · ••${escape(account.last4)}` : ''}</p>
         </div>
-        ${account.balance != null && account.transactions ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">as of ${escape(account.balanceAsOf || '')}</span></div>` : ''}
+        ${account.balance != null ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">${account.kind === 'credit_card' ? 'Statement balance' : 'Recorded balance'} · ${escape(account.balanceAsOf || '')}</span></div>` : ''}
       </div>
+      ${account.statement?.type === 'credit-card' ? `<div class="acct-statement"><strong>Latest statement · ${escape(account.statement.closingDate)}</strong><p>Purchase APR: ${account.statement.purchaseApr == null ? 'Not available (check statement)' : `${escape(account.statement.purchaseApr)}%`}${account.statement.minimumPayment == null ? '' : ` · Minimum payment: ${money(account.statement.minimumPayment)}`}${account.statement.paymentDueDate ? ` · Due: ${escape(account.statement.paymentDueDate)}` : ''}${account.statement.creditLimit == null ? '' : ` · Credit limit: ${money(account.statement.creditLimit)}`}</p><p class="muted">Statement facts only. Review any separately entered debt-plan balance or APR before using a payoff forecast.</p></div>` : ''}
       ${review ? `<div class="acct-found"><strong>Is this one of your accounts?</strong><p>This reference appeared in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}. These transfers are excluded from spending and income until you review it.</p>${account.discovered_from ? `<blockquote>${escape(account.discovered_from)}</blockquote>` : ''}<p>If it is yours, choose its type and confirm below.${account.suggested_kind ? ` Suggested type: <strong>${escape(kindLabel(account.suggested_kind))}</strong> (please check).` : ''}</p></div>` : ''}
       <p class="muted acct-stats">${account.transactions} transaction${account.transactions === 1 ? '' : 's'} · ${escape(range)}${account.transfersTo && !review ? ` · ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'} in from other accounts` : ''}</p>
       <div class="acct-form">
@@ -277,10 +278,5 @@
       return result;
     };
   }
-  // The PDF reader needs the statement layout; the chosen account's type decides it.
-  function pdfStatementType(selected) {
-    const kind = selected?.newAccount?.kind || state?.accounts.find(account => account.id === selected?.accountId)?.kind;
-    return kind === 'credit_card' || kind === 'loan' ? 'credit-card' : kind === 'savings' ? 'td-savings' : 'td-checking';
-  }
-  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, pdfStatementType, reset: () => { state = null; } };
+  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, reset: () => { state = null; } };
 })();

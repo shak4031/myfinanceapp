@@ -470,6 +470,8 @@
     .acct-found p { margin: 6px 0 0; }
     .acct-found blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid var(--warning); color: var(--text-secondary); }
     .acct-choice-note { margin: 14px 0 0; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+    .acct-statement { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-tertiary); font-size: 13px; line-height: 1.7; }
+    .acct-statement p { margin: 6px 0 0; }
     .acct-stats, .acct-kind-help { font-size: 12px; margin: 8px 0 0; }
     .acct-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
     .acct-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
@@ -872,7 +874,7 @@
         <!-- PDF Import Panel -->
         <div id="import-pdf-panel" style="display: none;">
           <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
-            Upload a PDF bank statement. Supports TD Bank checking, savings, and credit card statements.
+            Upload one original, text-based bank or credit card statement (up to 12 MB, 100 pages). We detect the statement type, read its balance and transactions, and check that the totals reconcile before saving. Credit card statements also capture purchase APR when readable. Scanned/image-only or password-protected PDFs need an unlocked, text-based PDF or CSV/OFX export.
           </p>
           <input type="file" id="pdf-input" accept=".pdf" style="display: none;" onchange="onPdfSelected(event)">
           <div id="pdf-dropzone" onclick="document.getElementById('pdf-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
@@ -1613,6 +1615,7 @@
     }
 
     let pendingPdfFile = null;
+    let pdfImportInProgress = false;
     function onPdfSelected(e) {
       if (e.target.files.length > 0) {
         pendingPdfFile = e.target.files[0];
@@ -1632,9 +1635,16 @@
     }
 
     async function importPDF() {
+      if (pdfImportInProgress) return;
       if (!pendingPdfFile) { notify('Select a PDF first'); return; }
+      if (pendingPdfFile.size > 12 * 1024 * 1024) { notify('Choose a PDF no larger than 12 MB.'); return; }
       const account = FinanceAccounts.choice();
       if (!account) return;
+      const button = document.getElementById('pdf-import-btn');
+      if (button.disabled) return;
+      const file = pendingPdfFile;
+      pdfImportInProgress = true;
+      button.disabled = true;
 
       const resultDiv = document.getElementById('import-result');
       resultDiv.style.display = 'block';
@@ -1645,31 +1655,36 @@
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(pendingPdfFile);
+          reader.onerror = () => reject(new Error('The selected PDF could not be read. Choose the file again.'));
+          reader.readAsDataURL(file);
         });
 
-        resultDiv.innerHTML = '<div style="color: var(--primary)">Parsing transactions...</div>';
+        resultDiv.innerHTML = '<div style="color: var(--primary)" role="status">Detecting statement type, reading transactions and verifying balances...</div>';
 
         const res = await fetch('/api/import/import-pdf', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfBase64: base64, source: pendingPdfFile.name, statementType: FinanceAccounts.pdfStatementType(account), ...account })
+          body: JSON.stringify({ pdfBase64: base64, source: file.name, ...account })
         });
         const data = await res.json();
-        if (data.success) {
+        if (res.ok && data.success) {
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
             <div style="color: var(--success); font-weight: 700;">✅ PDF Import Complete</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.totalInFile} found in PDF
             </div>
+            ${data.statement ? `<div style="font-size:13px;margin-top:10px">Detected ${data.statement.type === 'credit-card' ? 'credit card' : 'bank'} statement · closing ${escapeHtml(data.statement.closingDate)}<br>Statement balance: ${usd(data.statement.balance)}${data.statement.purchaseApr == null ? '' : ` · Purchase APR: ${escapeHtml(data.statement.purchaseApr)}%`}<br>Transactions reconcile to the closing balance. ${data.totalInFile === 0 ? 'This is a verified no-activity statement; its balance was saved without creating transactions.' : ''}</div>` : ''}
+            ${(data.warnings || []).length ? `<ul role="status">${data.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : ''}
             ${FinanceAccounts.resultNote(data)}
           `;
-          FinanceAccounts.afterImport(data);
-          pendingPdfFile = null;
-          document.getElementById('pdf-file-list').innerHTML = '';
-          document.getElementById('pdf-import-btn').disabled = true;
-          loadDashboard();
+          FinanceAccounts.afterImport(data).catch(error => notify(`PDF imported, but account refresh failed: ${error.message}`));
+          if (pendingPdfFile === file) {
+            pendingPdfFile = null;
+            document.getElementById('pdf-file-list').innerHTML = '';
+          }
+          window.FinancePlan?.invalidate?.();
+          if (document.getElementById('transactions-view').classList.contains('active')) loadAllTransactions();
+          else if (document.getElementById('dashboard-view').classList.contains('active')) loadDashboard();
         } else {
           resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
           resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
@@ -1677,6 +1692,9 @@
       } catch (err) {
         resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
         resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
+      } finally {
+        pdfImportInProgress = false;
+        button.disabled = !pendingPdfFile;
       }
     }
 
@@ -1735,7 +1753,7 @@
   </script>
   <script src="ui.js?v=20261019a"></script>
   <script src="refresh.js?v=20261024c"></script>
-  <script src="accounts.js?v=20261020b"></script>
+  <script src="accounts.js?v=20261020c"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>

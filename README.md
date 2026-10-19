@@ -64,6 +64,11 @@ or revoke its license, and password-reset emails are never sent for it. Set
 
 ## Responsive workspace and activity filters
 
+PDF uploads detect card versus bank statements and reconcile transactions before
+committing. Card imports capture New Balance and purchase APR, with latest
+statement facts visible on Accounts. See the [PDF import guide](PDF_IMPORT_GUIDE.md)
+for validation, supported patterns, failure recovery, API examples and tests.
+
 The finance workspace uses a shared navy navigation rail, emerald actions,
 high-contrast typography, and white panels. Navigation remains available on every
 finance view; on phones, open the menu in the upper left. Browser Back/Forward

@@ -236,7 +236,7 @@ async function loadCash(userId) {
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const rows = await db.all('SELECT id, date, balance, account_id FROM transactions WHERE user_id = $1 AND balance IS NOT NULL', [userId]);
   let accounts = [];
-  try { accounts = await db.all('SELECT id, name, kind, last4, status FROM accounts WHERE user_id = $1', [userId]); }
+  try { accounts = await db.all('SELECT id, name, kind, last4, status, statement FROM accounts WHERE user_id = $1', [userId]); }
   catch (error) { log('DASHBOARD', `Accounts unavailable: ${error.message}`, 'warn'); }
   const byId = new Map(accounts.map(account => [account.id, account]));
   return { balance: cashBalance(rows, byId, todayIso), accounts, byId };

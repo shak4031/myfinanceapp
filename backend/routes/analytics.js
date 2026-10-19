@@ -21,7 +21,7 @@ async function loadInputs() {
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
     // Starting cash is checking accounts only, matching the dashboard.
     const balances = (await client.query('SELECT id, date, balance, account_id FROM transactions WHERE balance IS NOT NULL')).rows;
-    const accounts = (await client.query('SELECT id, kind FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
+    const accounts = (await client.query('SELECT id, kind, statement FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
     const household = (await client.query('SELECT household_size AS size, region, housing FROM household_profiles LIMIT 1')).rows[0] || null;
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

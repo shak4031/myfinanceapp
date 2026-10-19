@@ -26,7 +26,7 @@ const SAVINGS_CATEGORY_NAME = /^(?:savings|savings transfer)$/i;
 const P2P = /\b(?:zelle|venmo|cash\s*app|square\s*cash|paypal|apple\s*cash|google\s*pay)\b/i;
 const TRANSFER_TEXT = /\b(?:transfer|xfer|trnsfr|tfr|funds\s+trans|online\s+banking\s+trans|move\s+money|internet\s+trans)\w*|\b(?:to|from)\s+(?:sav|savings|chk|checking|share|mmkt)\b/i;
 const PAYMENT_TEXT = /\b(?:payment|pymt|pmt|autopay|auto\s*pay|e-?pay(?:ment)?|bill\s*pay|mobile\s+pmt)\b/i;
-const CARD_PAYMENT_RECEIVED = /\b(?:payment\s*(?:-\s*)?thank\s*you|thank\s*you\s*(?:for\s*your\s*)?payment|autopay\s+payment|payment\s+received|online\s+payment|mobile\s+payment|electronic\s+payment|ach\s+payment)\b/i;
+const CARD_PAYMENT_RECEIVED = /\b(?:payment\s*(?:-\s*)?(?:thank\s*you|autopay|mobile\s+app)|thank\s*you\s*(?:for\s*your\s*)?payment|autopay\s+payment|payment\s+received|online\s+payment|mobile\s+payment|electronic\s+payment|ach\s+payment)\b/i;
 const HINTS = [
   ['savings', /\b(?:sav|savings?|share|mmkt|money\s*market|high\s*yield)\b/i],
   ['investment', /\b(?:fidelity|vanguard|schwab|robinhood|e\*?trade|wealthfront|betterment|acorns|stash|merrill|ameritrade|webull|brokerage|ira|401\s*k|invest\w*)\b/i],
@@ -261,6 +261,14 @@ export function cashBalance(rows, accountsById = new Map(), todayIso = new Date(
     const current = newest.get(key);
     if (!current || iso > current.iso || (iso === current.iso && Number(row.id) > Number(current.id))) newest.set(key, { iso, id: row.id, balance });
   }
+  for (const account of accountsById.values()) {
+    const statement = account.statement;
+    const current = newest.get(`a${account.id}`);
+    if (account.kind === 'checking' && statement?.type === 'bank' && statement.balance != null && Number.isFinite(Number(statement.balance))
+      && statement.closingDate <= todayIso && (!current || statement.closingDate >= current.iso)) {
+      newest.set(`a${account.id}`, { iso: statement.closingDate, balance: Number(statement.balance) });
+    }
+  }
   if (!newest.size) return null;
   // Unassigned legacy rows only stand in for cash when no checking account has a balance yet.
   const assigned = [...newest].filter(([key]) => key !== 'unassigned');
@@ -269,7 +277,7 @@ export function cashBalance(rows, accountsById = new Map(), todayIso = new Date(
 }
 
 // Newest balance for every account, for the Accounts page.
-export function accountBalances(rows) {
+export function accountBalances(rows, accounts = []) {
   const newest = new Map();
   for (const row of rows) {
     if (row.account_id == null || row.balance == null) continue;
@@ -278,6 +286,11 @@ export function accountBalances(rows) {
     if (!iso || !Number.isFinite(balance)) continue;
     const current = newest.get(row.account_id);
     if (!current || iso > current.iso || (iso === current.iso && Number(row.id) > Number(current.id))) newest.set(row.account_id, { iso, id: row.id, balance });
+  }
+  for (const account of accounts) {
+    const statement = account.statement, current = newest.get(account.id);
+    if (statement?.closingDate && statement.balance != null && Number.isFinite(Number(statement.balance))
+      && (!current || statement.closingDate >= current.iso)) newest.set(account.id, { iso: statement.closingDate, balance: Number(statement.balance) });
   }
   return new Map([...newest].map(([id, entry]) => [id, { balance: cents(entry.balance), asOf: entry.iso }]));
 }
