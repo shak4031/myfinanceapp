@@ -191,3 +191,46 @@ test('insights lead with the biggest saving and never exceed four cards', () => 
   assert.ok(result.insights.some(i => i.id === 'spike'), 'the September grocery jump is called out');
   for (const insight of result.insights) for (const key of ['figure', 'title', 'detail', 'tone']) assert.ok(insight[key], `${insight.id}.${key}`);
 });
+test('the heatmap lists every spending category by month, biggest first, without transfers', () => {
+  const transactions = [
+    ...history('Mortgage', Array(14).fill(2000), { is_fixed: true }),
+    ...history('Shopping', [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 900, 100, 100, 100]),
+    ...history('Transfer', Array(14).fill(5000), { transfer_kind: 'savings' })
+  ];
+  const { heatmap } = buildMoneyFlowSignals({ transactions, today: TODAY });
+  assert.equal(heatmap.months.length, 12);
+  assert.equal(heatmap.months[11], 'Sep 2026');
+  assert.deepEqual(heatmap.rows.map(r => r.label), ['Mortgage', 'Shopping'], 'transfers are never spending');
+  assert.equal(heatmap.rows[0].fixed, true);
+  assert.equal(heatmap.rows[1].fixed, false);
+  assert.equal(heatmap.rows[1].values[8], 900, 'the June spike sits in its own month column');
+  assert.equal(heatmap.rows[1].total, 2000);
+});
+
+test('merchant bubbles compare the last three months with the three before and set one-offs aside', () => {
+  const day = (back, d) => { const x = new Date(2026, 9 - back, d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
+  const transactions = [6, 5, 4, 3, 2, 1].flatMap(back => [
+    { date: day(back, 3), description: `SHAKE SHACK ${back}`, amount: back <= 3 ? 60 : 30, direction: 'DEBIT', category: 'Dining' },
+    { date: day(back, 4), description: 'POS PURCHASE STARBUCKS #12', amount: 6, direction: 'DEBIT', category: 'Dining' },
+    { date: day(back, 5), description: 'STARBUCKS STORE 99', amount: 6, direction: 'DEBIT', category: 'Dining' },
+    { date: day(back, 6), description: 'ROCKET MORTGAGE', amount: 2000, direction: 'DEBIT', category: 'Mortgage', is_fixed: true },
+    { date: day(back, 7), description: 'TO SAVINGS', amount: 500, direction: 'DEBIT', category: 'Transfer', transfer_kind: 'savings' },
+    ...(back === 1 ? [{ date: day(1, 8), description: 'BEST BUY 0042', amount: 1250, direction: 'DEBIT', category: 'Shopping' },
+      { date: day(1, 9), description: 'NEW CAFE', amount: 12, direction: 'DEBIT', category: 'Dining' }] : [])
+  ]);
+  const { vendors } = buildMoneyFlowSignals({ transactions, today: TODAY });
+  assert.equal(vendors.months, 3);
+  assert.equal(vendors.compareMonths, 3);
+  const names = vendors.items.map(v => v.name);
+  assert.ok(!names.some(n => /ROCKET|SAVINGS|BEST BUY/.test(n)), `fixed bills, transfers and one-offs stay out: ${names}`);
+  assert.deepEqual(vendors.setAside, { count: 1, monthly: 416.67, over: 250 });
+  const shack = vendors.items.find(v => v.name.startsWith('SHAKE SHACK'));
+  assert.deepEqual({ monthly: shack.monthly, visits: shack.visits, change: shack.change, regular: shack.regular }, { monthly: 60, visits: 1, change: 1, regular: true });
+  const coffee = vendors.items.filter(v => v.name.startsWith('STARBUCKS'));
+  assert.equal(coffee.length, 1, 'different store numbers are one merchant');
+  assert.deepEqual({ visits: coffee[0].visits, ticket: coffee[0].ticket, change: coffee[0].change }, { visits: 2, ticket: 6, change: 0 });
+  const cafe = vendors.items.find(v => v.name === 'NEW CAFE');
+  assert.equal(cafe.isNew, true);
+  assert.equal(cafe.change, null);
+  assert.equal(vendors.items[0].name.startsWith('SHAKE SHACK'), true, 'biggest monthly spend first');
+});

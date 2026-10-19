@@ -1129,6 +1129,15 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual last month/);
   assert.equal((html.match(/class="pro-range-row"/g) || []).length, mf.categories.length);
   assert.match(html, /5th&ndash;95th percentile/);
+  // Merchant bubbles (positioned client-side) and the category heatmap.
+  assert.match(html, /Who gets your money/);
+  assert.equal((html.match(/class="pro-bubble" data-bubble="/g) || []).length, mf.vendors.items.length);
+  assert.match(html, /data-bubble-size="spend" aria-pressed="true"[\s\S]*data-bubble-color="change" aria-pressed="true"/);
+  assert.match(html, /Your top 5 merchants take <b>\d+%<\/b> of everyday spending/);
+  assert.match(html, /one-off purchase/, 'the demo TV is set aside');
+  assert.match(html, /Hot and cold months/);
+  assert.equal((html.match(/<tbody>[\s\S]*?<\/tbody>/g).find(b => b.includes('pro-heat-cell')).match(/<tr/g) || []).length, mf.heatmap.rows.length + 1);
+  assert.match(html, /<b>[A-Z][a-z]{2} \d{4}<\/b> was your hottest month/);
   assert.match(html, /<details class="pro-mf-details panel"><summary><span>Technical readings/);
   assert.match(html, /Purchases &times; size/);
   assert.match(html, /data-analytics-action="household-save"/);

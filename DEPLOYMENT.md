@@ -293,7 +293,16 @@ Mortgage, rent, loans, insurance and internet are left out because they are cont
   last 3 full months (`moneyFlow.flow`: income → fixed bills / everyday / debt minimums not yet imported
   / left over). Its "left over" uses the same transfer rule and window as the typical monthly surplus, so
   it matches the dashboard. A three-set Venn follows (above similar homes, trending up, unusual last
-  month), then a strip chart per category of the user's own 5th–95th percentile range over 12 months
+  month), then "Who gets your money": draggable merchant bubbles (`moneyFlow.vendors`: everyday merchants
+  over the last 3 full months, grouped with the same `merchantKey` as the Overview, fixed bills,
+  transfers and one-offs over max($250, 5× the median purchase) excluded). Size switches between monthly
+  spend and visits; colour between change vs the 3 months before (deeper = bigger change) and category
+  (deeper = more visits). The layout is a small client-side physics simulation that stops when settled
+  and is pre-settled for reduced motion. Next, "Hot and cold months" (`moneyFlow.heatmap`: the top 10
+  spending categories × the last 12 full months, fixed bills included, transfers excluded); each row is
+  coloured against its own median month, so steady bills stay neutral, and a lede names the hottest
+  month and the category that drove it. Then a strip chart per category of the user's own 5th–95th
+  percentile range over 12 months
   with last month and the typical household marked. The indicator table sits in a collapsed
   "Technical readings" section.
 - **Statistics are honest about their source:** percentiles and spikes (last month above the 95th

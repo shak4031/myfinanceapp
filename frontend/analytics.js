@@ -357,6 +357,226 @@
       'Where last month landed against your own history and against similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
   }
 
+  // Category x month heatmap. Each row is coloured against its own median month, so a steady bill stays neutral and
+  // only real swings light up: red runs hot, green runs cool.
+  const heatColor = (value, base) => {
+    const dev = base > 0 ? value / base - 1 : 0;
+    if (Math.abs(dev) < 0.08) return { bg: 'transparent', k: 0, dev };
+    const k = Math.min(1, Math.abs(dev) / 0.6);
+    return { bg: `rgba(${dev > 0 ? '225,29,72' : '16,185,129'},${(0.12 + 0.78 * k).toFixed(2)})`, k, dev };
+  };
+  const compact = value => value >= 9950 ? `$${(value / 1000).toFixed(0)}k` : value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
+  const middle = values => { const s = [...values].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+  function spendHeatmap(mf) {
+    const { money, esc } = pro().format;
+    const hm = mf.heatmap;
+    if (!hm?.rows?.length) return '';
+    const usual = values => { const m = middle(values); return m > 0 ? m : values.reduce((s, v) => s + v, 0) / values.length; };
+    const totals = hm.months.map((_, i) => hm.rows.reduce((s, row) => s + row.values[i], 0));
+    const cell = (label, month, value, base) => {
+      const c = heatColor(value, base);
+      const note = c.k ? `${Math.round(Math.abs(c.dev) * 100)}% ${c.dev > 0 ? 'above' : 'below'} your usual ${money(base, true)}` : 'about usual';
+      return `<td class="pro-heat-cell${c.k > 0.55 ? ' is-strong' : ''}" style="background:${c.bg}" title="${esc(label)}, ${esc(month)}: ${money(value, true)} (${note})">${value ? compact(value) : '&middot;'}</td>`;
+    };
+    const head = `<tr><th scope="col">Category</th>${hm.months.map(m => `<th scope="col">${esc(m.split(' ')[0])}<small>${esc(m.split(' ')[1].slice(2))}</small></th>`).join('')}<th scope="col" class="num">Usual</th></tr>`;
+    const body = hm.rows.map(row => {
+      const base = usual(row.values);
+      return `<tr><th scope="row">${esc(shortLabel(row.label))}${row.fixed ? '<small>fixed</small>' : ''}</th>${row.values.map((v, i) => cell(row.label, hm.months[i], v, base)).join('')}<td class="num">${money(base, true)}</td></tr>`;
+    }).join('');
+    const totalBase = usual(totals);
+    const foot = `<tr class="pro-heat-total"><th scope="row">All shown</th>${totals.map((v, i) => cell('All shown', hm.months[i], v, totalBase)).join('')}<td class="num">${money(totalBase, true)}</td></tr>`;
+    // The takeaway: the hottest month and the category that drove most of it.
+    const hot = totals.reduce((best, v, i) => v > totals[best] ? i : best, 0);
+    const driver = hm.rows.map(row => ({ row, extra: row.values[hot] - usual(row.values) })).sort((a, b) => b.extra - a.extra)[0];
+    const lede = totals[hot] > totalBase * 1.08 && driver?.extra > 0
+      ? `<p class="pro-heat-lede"><b>${esc(hm.months[hot])}</b> was your hottest month: ${money(totals[hot], true)}, ${money(totals[hot] - totalBase, true)} over your usual month. <b>${esc(shortLabel(driver.row.label))}</b> drove ${money(driver.extra, true)} of it.</p>`
+      : '<p class="pro-heat-lede">No month ran far above your usual. Look along each row for categories that keep running warm.</p>';
+    const legend = '<div class="pro-heat-legend"><span>Cooler than usual</span><i style="background:rgba(16,185,129,.9)"></i><i style="background:rgba(16,185,129,.4)"></i><i class="is-neutral"></i><i style="background:rgba(225,29,72,.4)"></i><i style="background:rgba(225,29,72,.9)"></i><span>Hotter than usual</span></div>';
+    return card(`Hot and cold months${how('Every spending category (transfers between your own accounts excluded), month by month. Each row is coloured against its own median month, so steady bills stay neutral and a category only lights up when it swings: within 8% of usual is blank, and colour deepens up to 60% above or below. "Usual" is that median month. Hover a cell for the exact figure.')}`,
+      'Each row against its own usual month. Red runs hot, green runs cool.',
+      `${lede}<div class="table-scroll"><table class="pro-heatmap"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>${legend}`, 'span-3');
+  }
+
+  // Merchant bubbles: size and colour switch between attributes; the field itself is a small physics simulation (mountBubbles).
+  let bubbleSize = 'spend', bubbleColor = 'change', field = null;
+  const CATEGORY_RGB = ['167,139,250', '56,189,248', '251,191,36', '52,211,153', '244,114,182', '251,146,60', '129,140,248', '45,212,191', '250,204,21', '248,113,113'];
+  const changeText = item => item.isNew ? 'New' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'Steady' : `${item.change > 0 ? '+' : '&minus;'}${Math.abs(item.change) > 2 ? '200%+' : `${Math.round(Math.abs(item.change) * 100)}%`}`;
+  const climb = item => item.change == null ? 0 : item.monthly - item.monthly / (1 + item.change);
+
+  function vendorField(mf) {
+    const { money, esc } = pro().format;
+    const v = mf.vendors;
+    if (!v?.items?.length) return '';
+    const top5 = v.items.slice(0, 5).reduce((s, i) => s + (i.share || 0), 0);
+    const climber = [...v.items].sort((a, b) => climb(b) - climb(a))[0];
+    const seg = (kind, value, label, active) => `<button type="button" data-bubble-${kind}="${value}" aria-pressed="${active}">${label}</button>`;
+    const controls = `<div class="pro-bubble-controls">
+      <div class="pro-seg" role="group" aria-label="Bubble size"><span>Size</span>${seg('size', 'spend', 'Monthly spend', bubbleSize === 'spend')}${seg('size', 'visits', 'Visits', bubbleSize === 'visits')}</div>
+      <div class="pro-seg" role="group" aria-label="Bubble colour"><span>Colour</span>${seg('color', 'change', 'Change', bubbleColor === 'change')}${seg('color', 'category', 'Category', bubbleColor === 'category')}</div></div>`;
+    const said = item => `${esc(item.name)}: ${money(item.monthly, true)} a month, ${item.visits} visit${item.visits === 1 ? '' : 's'} a month${item.isNew ? ', new' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? ', steady' : `, ${item.change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(item.change) * 100)}%`}`;
+    const bubbles = v.items.map((item, i) => `<button type="button" class="pro-bubble" data-bubble="${i}" aria-label="${said(item)}"><b>${esc(item.name)}</b><small></small></button>`).join('');
+    const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of everyday spending.${climber && climb(climber) >= 10 ? ` Biggest climber: <b>${esc(climber.name)}</b>, up ${money(climb(climber), true)} a month.` : ''} Tap a bubble for its story.`;
+    const aside = v.setAside ? `<p class="pro-footnote">${v.setAside.count} one-off purchase${v.setAside.count === 1 ? '' : 's'} over ${money(v.setAside.over, true)} set aside so a single big buy does not swamp the picture.</p>` : '';
+    return card(`Who gets your money${how(`Your ${v.items.length} biggest everyday merchants over the last ${v.months} full months (fixed bills and transfers between your own accounts excluded). Size is the monthly average spend or the number of visits a month. In Change colours, red is spending more than the ${v.compareMonths || 3} months before and green is spending less; the deeper the colour, the bigger the change. In Category colours, the deeper the colour, the more often you go. Drag bubbles to rearrange them.`)}`,
+      `Last ${v.months} months &middot; ${money(v.total, true)} a month across everyday merchants. Drag them around.`,
+      `${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
+       <p class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</p><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
+  }
+
+  function bubbleDetail(item) {
+    const { money, esc } = pro().format;
+    const change = item.isNew ? 'new in the last 3 months' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'about the same as the 3 months before'
+      : `${item.change > 0 ? 'up' : 'down'} ${money(Math.abs(climb(item)), true)} a month (${Math.abs(item.change) > 2 ? 'more than tripled' : `${Math.round(Math.abs(item.change) * 100)}%`}) on the 3 months before`;
+    return `<b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.monthly, true)}</b> a month (${money(item.monthly * 12, true)} a year) &middot; ${item.visits} visit${item.visits === 1 ? '' : 's'} a month at about ${money(item.ticket, true)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; every month' : ''}`;
+  }
+
+  function stopField() {
+    if (!field) return;
+    globalThis.cancelAnimationFrame?.(field.raf);
+    field.observer?.disconnect();
+    field = null;
+  }
+
+  function mountBubbles(v) {
+    const el = $('pro-bubbles');
+    if (!el?.isConnected || !v?.items?.length || typeof globalThis.requestAnimationFrame !== 'function') return stopField();
+    const kept = field?.el === el ? field.nodes : null, keptW = field?.w;
+    stopField();
+    const w = el.clientWidth, h = el.clientHeight;
+    if (!w || !h) return;
+    const values = v.items.map(item => Math.max(bubbleSize === 'visits' ? item.visits : item.monthly, 0.01));
+    const total = values.reduce((s, x) => s + x, 0);
+    const maxR = Math.min(w, h) * 0.2, minR = w < 500 ? 10 : 13;
+    const categories = [...new Set(v.items.map(item => item.category))];
+    const buttons = [...el.querySelectorAll('.pro-bubble')];
+    const nodes = buttons.map((b, i) => {
+      const item = v.items[i];
+      const r = Math.min(maxR, Math.max(minR, Math.sqrt(values[i] / total * w * h * 0.5 / Math.PI)));
+      let rgb = '148,163,184', k = 0.2;
+      if (bubbleColor === 'category') { rgb = CATEGORY_RGB[categories.indexOf(item.category) % CATEGORY_RGB.length]; k = Math.min(1, 0.2 + item.visits / 8); }
+      else if (item.isNew) { rgb = '56,189,248'; k = 0.6; }
+      else if (item.change != null && Math.abs(item.change) >= 0.05) { rgb = item.change > 0 ? '244,63,94' : '34,197,94'; k = Math.min(1, 0.25 + Math.abs(item.change) / 0.6); }
+      b.style.setProperty('--r', r.toFixed(1));
+      b.style.setProperty('--rgb', rgb);
+      b.style.setProperty('--k', k.toFixed(2));
+      b.style.setProperty('--i', i);
+      b.classList.toggle('is-tiny', r < 26);
+      // Shrink the font until the longest word fits the bubble's inner width (about 0.74em per bold uppercase character).
+      const longest = Math.max(...item.name.split(/\s+/).map(word => word.length));
+      b.style.setProperty('--fit', Math.max(0.5, Math.min(1, (r * 1.6) / (0.74 * longest * (r * 0.22 + 4)))).toFixed(2));
+      b.querySelector('small').innerHTML = bubbleColor === 'change' ? changeText(item) : bubbleSize === 'visits' ? `${item.visits}&times;/mo` : compact(item.monthly);
+      const old = kept?.[i], angle = i * 2.4, dist = 12 * Math.sqrt(i + 1) * (w / 400);
+      return { i, b, r, x: old ? old.x / (keptW || w) * w : w / 2 + Math.cos(angle) * dist, y: old ? old.y : h / 2 + Math.sin(angle) * dist * 0.6, vx: 0, vy: 0 };
+    });
+    const legend = $('pro-bubble-legend');
+    if (legend) legend.innerHTML = bubbleColor === 'category'
+      ? `${categories.map((c, i) => `<span><i style="--rgb:${CATEGORY_RGB[i % CATEGORY_RGB.length]}"></i>${pro().format.esc(c)}</span>`).join('')}<span class="pro-bubble-note">Deeper colour = more visits</span>`
+      : '<span><i style="--rgb:244,63,94"></i>Spending more</span><span><i style="--rgb:34,197,94"></i>Spending less</span><span><i style="--rgb:56,189,248"></i>New</span><span><i style="--rgb:148,163,184"></i>Steady</span><span class="pro-bubble-note">Deeper colour = bigger change</span>';
+    field = { el, w, h, nodes, raf: 0, drag: null, frames: 0, v };
+    const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || !kept) for (let t = 0; t < 300; t++) stepField(field);
+    drawField(field);
+    kickField();
+    if (typeof globalThis.ResizeObserver === 'function') {
+      field.observer = new ResizeObserver(() => { if (field?.el === el && Math.abs(el.clientWidth - field.w) > 8) mountBubbles(v); });
+      field.observer.observe(el);
+    }
+    if (!el.dataset.bound) bindField(el);
+  }
+
+  function stepField(f) {
+    const { nodes, w, h, drag } = f;
+    let moved = 0;
+    for (const n of nodes) {
+      if (drag?.node === n) continue;
+      n.vx = (n.vx + (w / 2 - n.x) * 0.0025) * 0.84;
+      n.vy = (n.vy + (h / 2 - n.y) * 0.006) * 0.84;
+      n.x += n.vx; n.y += n.vy;
+    }
+    for (let pass = 0; pass < 3; pass++) {
+      for (let a = 0; a < nodes.length; a++) for (let b = a + 1; b < nodes.length; b++) {
+        const p = nodes[a], q = nodes[b];
+        const dx = q.x - p.x, dy = q.y - p.y, min = p.r + q.r + 3, d = Math.hypot(dx, dy) || 0.01;
+        if (d >= min) continue;
+        const push = (min - d) / d, wp = drag?.node === p ? 0 : drag?.node === q ? 1 : 0.5, wq = 1 - wp;
+        p.x -= dx * push * wp; p.y -= dy * push * wp; q.x += dx * push * wq; q.y += dy * push * wq;
+      }
+      for (const n of nodes) {
+        const x = Math.min(w - n.r, Math.max(n.r, n.x)), y = Math.min(h - n.r, Math.max(n.r, n.y));
+        if (x !== n.x) n.vx *= -0.4;
+        if (y !== n.y) n.vy *= -0.4;
+        n.x = x; n.y = y;
+      }
+    }
+    for (const n of nodes) { moved += Math.abs(n.x - (n.px ?? n.x)) + Math.abs(n.y - (n.py ?? n.y)); n.px = n.x; n.py = n.y; }
+    return moved;
+  }
+
+  function drawField(f) {
+    for (const n of f.nodes) n.b.style.transform = `translate(${(n.x - n.r).toFixed(1)}px, ${(n.y - n.r).toFixed(1)}px)`;
+  }
+
+  function kickField() {
+    const f = field;
+    if (!f || f.raf) return;
+    const frame = () => {
+      f.raf = 0;
+      if (field !== f || !f.el.isConnected) return stopField();
+      const moved = stepField(f);
+      drawField(f);
+      if (f.drag || moved > 0.3) f.raf = globalThis.requestAnimationFrame(frame);
+    };
+    f.raf = globalThis.requestAnimationFrame(frame);
+  }
+
+  function selectBubble(i) {
+    const f = field;
+    if (!f) return;
+    f.nodes.forEach(n => n.b.classList.toggle('is-selected', n.i === i));
+    const detail = $('pro-bubble-detail');
+    if (detail) detail.innerHTML = bubbleDetail(f.v.items[i]);
+  }
+
+  function bindField(el) {
+    el.dataset.bound = '1';
+    el.addEventListener('pointerdown', event => {
+      const b = event.target.closest?.('.pro-bubble');
+      const node = b && field?.nodes.find(n => n.b === b);
+      if (!node || event.button > 0) return;
+      const rect = el.getBoundingClientRect();
+      field.drag = { node, ox: event.clientX - rect.left - node.x, oy: event.clientY - rect.top - node.y, sx: event.clientX, sy: event.clientY, moved: false };
+      b.setPointerCapture?.(event.pointerId);
+      b.classList.add('is-dragging');
+      kickField();
+    });
+    el.addEventListener('pointermove', event => {
+      const drag = field?.drag;
+      if (!drag) return;
+      const rect = el.getBoundingClientRect(), n = drag.node;
+      const x = event.clientX - rect.left - drag.ox, y = event.clientY - rect.top - drag.oy;
+      n.vx = x - n.x; n.vy = y - n.y; n.x = x; n.y = y;
+      if (Math.hypot(event.clientX - drag.sx, event.clientY - drag.sy) > 4) drag.moved = true;
+      kickField();
+    });
+    const release = () => {
+      const drag = field?.drag;
+      if (!drag) return;
+      drag.node.b.classList.remove('is-dragging');
+      field.drag = null;
+      field.dragged = drag.moved;
+      kickField();
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('click', event => {
+      const b = event.target.closest?.('.pro-bubble');
+      if (!b || !field) return;
+      if (field.dragged) { field.dragged = false; return; }
+      selectBubble(Number(b.dataset.bubble));
+    });
+  }
+
   function compassReadings(mf) {
     const { money, esc } = pro().format;
     const momentum = c => c.momentum
@@ -391,7 +611,7 @@
     const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
     if (mf.status !== 'ok' || !mf.categories.length) return `<div class="pro-compass">${compassHero(mf)}${source}</div>`;
     return `<div class="pro-compass">${compassHero(mf)}${compassInsights(mf)}
-      <div class="pro-grid pro-compass-grid">${flowSankey(mf)}${signalVenn(mf)}${rangeStrips(mf)}</div>
+      <div class="pro-grid pro-compass-grid">${flowSankey(mf)}${signalVenn(mf)}${vendorField(mf)}${spendHeatmap(mf)}${rangeStrips(mf)}</div>
       ${compassReadings(mf)}${source}</div>`;
   }
 
@@ -419,8 +639,10 @@
     const { esc } = pro().format;
     if (tab === 'compass') {
       $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
+      mountBubbles(a.moneyFlow?.vendors);
       return;
     }
+    stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
     $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
@@ -478,8 +700,14 @@
   }
 
   document.addEventListener('click', event => {
-    const target = event.target?.closest?.('#analytics-view [data-analytics-action], #analytics-view [data-sort], #analytics-view [data-open]');
+    const target = event.target?.closest?.('#analytics-view [data-analytics-action], #analytics-view [data-sort], #analytics-view [data-open], #analytics-view [data-bubble-size], #analytics-view [data-bubble-color]');
     if (!target || !pro()) return;
+    if (target.dataset.bubbleSize || target.dataset.bubbleColor) {
+      if (target.dataset.bubbleSize) bubbleSize = target.dataset.bubbleSize;
+      if (target.dataset.bubbleColor) bubbleColor = target.dataset.bubbleColor;
+      target.parentElement?.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === target)));
+      return mountBubbles(current?.moneyFlow?.vendors);
+    }
     if (target.dataset.sort) {
       sortDir = sortKey === target.dataset.sort ? -sortDir : target.dataset.sort === 'name' ? 1 : -1;
       sortKey = target.dataset.sort;

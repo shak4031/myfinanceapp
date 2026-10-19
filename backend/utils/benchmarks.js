@@ -6,7 +6,8 @@
 // calendar year, mean annual spending per consumer unit (downloaded from the BLS public API, series CXU<item>LB<group>M).
 // No other MyFinance user's data is used. A pooled source (opt-in, anonymized, minimum cohort size) can be added later
 // as another entry in BENCHMARK_SOURCES without changing the signals.
-import { parseTxDate } from './normalize.js';
+import { getCanonicalMerchant, parseTxDate } from './normalize.js';
+import { merchantKey } from './analytics.js';
 import { isTransferRow } from './transfers.js';
 
 export const BENCHMARK_SOURCES = Object.freeze({
@@ -355,6 +356,89 @@ function moneyFlow(transactions, today, typical) {
       topMerchant: topMerchant || null, topMerchantPerMonth: topCount ? round(topCount / m, 1) : null } : null
   };
 }
+// Category x month grid of every spending category (fixed bills included, transfers excluded) for the heatmap.
+// Raw monthly totals: the client colours each row against its own median so a steady bill stays neutral.
+const HEATMAP_MONTHS = 12, HEATMAP_ROWS = 10;
+function categoryHeatmap(transactions, today, available) {
+  const currentIndex = today.getFullYear() * 12 + today.getMonth();
+  const span = Math.min(HEATMAP_MONTHS, available);
+  if (span < 3) return null;
+  const rows = new Map();
+  for (const tx of transactions) {
+    const parsed = parseTxDate(tx.date);
+    const amount = Math.abs(Number(tx.amount));
+    if (!parsed || !Number.isFinite(amount) || !amount || String(tx.direction).toUpperCase() !== 'DEBIT' || isTransferRow(tx)) continue;
+    const offset = currentIndex - (parsed.year * 12 + parsed.month);
+    if (offset < 1 || offset > span) continue;
+    const label = tx.category || 'Uncategorized';
+    if (!rows.has(label)) rows.set(label, { label, values: Array(span).fill(0), fixed: 0, count: 0 });
+    const row = rows.get(label);
+    row.values[span - offset] += amount;
+    row.count += 1;
+    if (isFixed(tx)) row.fixed += 1;
+  }
+  return {
+    months: Array.from({ length: span }, (_, i) => monthLabel(currentIndex - span + i)),
+    rows: [...rows.values()].map(row => ({ label: row.label, id: benchmarkCategoryFor(row.label)?.id || null, fixed: row.fixed === row.count,
+      values: row.values.map(value => round(value)), total: round(sum(row.values)) }))
+      .sort((a, b) => b.total - a.total).slice(0, HEATMAP_ROWS)
+  };
+}
+
+// Everyday merchants (fixed bills and transfers excluded) over the last three full months against the three before.
+// One-off purchases are set aside, as in the category signals, so a single TV does not become the biggest bubble.
+const VENDOR_LIMIT = 36;
+function vendorBubbles(transactions, today) {
+  const currentIndex = today.getFullYear() * 12 + today.getMonth();
+  const recentMonths = new Set(), priorMonths = new Set(), everyday = [];
+  for (const tx of transactions) {
+    const parsed = parseTxDate(tx.date);
+    const amount = Math.abs(Number(tx.amount));
+    if (!parsed || !Number.isFinite(amount) || !amount) continue;
+    const offset = currentIndex - (parsed.year * 12 + parsed.month);
+    if (offset < 1 || offset > 6) continue;
+    (offset <= 3 ? recentMonths : priorMonths).add(offset);
+    if (String(tx.direction).toUpperCase() === 'DEBIT' && !isTransferRow(tx) && !isFixed(tx)) everyday.push({ tx, amount, offset, iso: parsed.iso });
+  }
+  const rm = recentMonths.size, pm = priorMonths.size;
+  if (!rm) return null;
+  const limit = Math.max(ONE_OFF_MIN, (median(everyday.map(entry => entry.amount)) || 0) * ONE_OFF_MULTIPLE);
+  const groups = new Map();
+  let setAsideCount = 0, setAsideTotal = 0;
+  for (const entry of everyday) {
+    const key = merchantKey(entry.tx.description);
+    if (!key) continue;
+    if (entry.amount >= limit) {
+      if (entry.offset <= 3) { setAsideCount += 1; setAsideTotal += entry.amount; }
+      continue;
+    }
+    if (!groups.has(key)) groups.set(key, { recent: 0, prior: 0, visits: 0, months: new Set(), categories: new Map(), latest: null });
+    const group = groups.get(key);
+    if (entry.offset > 3) { group.prior += entry.amount; continue; }
+    group.recent += entry.amount;
+    group.visits += 1;
+    group.months.add(entry.offset);
+    const category = entry.tx.category || 'Uncategorized';
+    group.categories.set(category, (group.categories.get(category) || 0) + entry.amount);
+    if (!group.latest || entry.iso >= group.latest.iso) group.latest = entry;
+  }
+  const active = [...groups.values()].filter(group => group.recent > 0);
+  const total = sum(active.map(group => group.recent));
+  const items = active.map(group => {
+    const monthly = group.recent / rm;
+    return {
+      name: getCanonicalMerchant(group.latest.tx.description) || merchantKey(group.latest.tx.description),
+      category: [...group.categories.entries()].sort((a, b) => b[1] - a[1])[0][0],
+      monthly: round(monthly), visits: round(group.visits / rm, 1), ticket: round(group.recent / group.visits),
+      share: round(group.recent / total, 4), regular: group.months.size === rm && rm >= 2,
+      change: pm && group.prior ? round(monthly / (group.prior / pm) - 1, 3) : null,
+      isNew: pm > 0 && !group.prior
+    };
+  }).sort((a, b) => b.monthly - a.monthly).slice(0, VENDOR_LIMIT);
+  return { months: rm, compareMonths: pm, total: round(total / rm), items,
+    setAside: setAsideCount ? { count: setAsideCount, monthly: round(setAsideTotal / rm), over: round(limit) } : null };
+}
+
 // Plain-language discoveries, each with one big figure. Ordered by how actionable they are; at most four are shown.
 function buildInsights({ categories, opportunities, flow, small }) {
   const money = value => `$${Math.round(value).toLocaleString('en-US')}`;
@@ -422,6 +506,7 @@ export function buildMoneyFlowSignals({ transactions = [], profile = null, today
   const { flow, small } = moneyFlow(transactions, today, typical);
   return {
     ...base, status: 'ok', categories, opportunities, flow, small,
+    heatmap: categoryHeatmap(transactions, today, available), vendors: vendorBubbles(transactions, today),
     insights: buildInsights({ categories, opportunities, flow, small }),
     potentialMonthly: round(sum(opportunities.map(item => item.monthly))),
     potentialAnnual: round(sum(opportunities.map(item => item.annual)))

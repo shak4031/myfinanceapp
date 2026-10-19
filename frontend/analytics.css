@@ -255,7 +255,47 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-mf-details > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 16px 22px; cursor: pointer; font-weight: 700; }
 .pro-mf-details > summary small { font-weight: 500; font-size: 12.5px; color: var(--text-secondary); }
 .pro-mf-details-body { display: grid; gap: 12px; padding: 0 22px 20px; }
-@media (max-width: 900px) { .pro-compass-hero { grid-template-columns: 1fr; padding: 20px; } .pro-hero-figure { font-size: 32px; } .pro-range-row { grid-template-columns: 1fr; gap: 6px; } }
+/* Hot and cold months heatmap */
+.pro-heat-lede, .pro-bubble-detail { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); }
+.pro-heat-lede b, .pro-bubble-detail b { color: var(--text-primary); }
+.pro-heatmap { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pro-heatmap th { font-weight: 600; color: var(--text-secondary); text-align: center; white-space: nowrap; }
+.pro-heatmap thead th small { display: block; font-size: 10px; font-weight: 500; opacity: .7; }
+.pro-heatmap tbody th { text-align: left; color: var(--text-primary); padding-right: 8px; }
+.pro-heatmap tbody th small { margin-left: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); }
+.pro-heatmap td.num { text-align: right; color: var(--text-secondary); padding-left: 8px; }
+.pro-heat-cell { min-width: 44px; height: 32px; padding: 0 4px; text-align: center; border-radius: 6px; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(148,163,184,.18); color: var(--text-primary); }
+.pro-heat-cell.is-strong { color: #fff; font-weight: 700; }
+.pro-heat-total th, .pro-heat-total td { border-top: 1px solid var(--border); font-weight: 700; }
+.pro-heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.pro-heat-legend span { margin: 0 6px; }
+.pro-heat-legend i { width: 22px; height: 12px; border-radius: 3px; }
+.pro-heat-legend i.is-neutral { box-shadow: inset 0 0 0 1px rgba(148,163,184,.4); }
+/* Who gets your money: draggable merchant bubbles */
+.pro-bubble-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 12px; }
+.pro-seg { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+.pro-seg > span { margin-right: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+.pro-seg button { border: 1px solid var(--border); background: transparent; color: var(--text-primary); padding: 5px 12px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; }
+.pro-seg button[aria-pressed="true"] { background: #0f172a; border-color: #0f172a; color: #fff; }
+.pro-bubbles { position: relative; height: 440px; margin-bottom: 12px; border-radius: 16px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #16213a 0%, #0b1220 70%); user-select: none; }
+.pro-bubble { --r: 20; --rgb: 148,163,184; --k: .3; position: absolute; left: 0; top: 0; width: calc(var(--r) * 2px); height: calc(var(--r) * 2px); padding: 0 calc(var(--r) * .18px); border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; overflow: hidden; touch-action: none; cursor: grab; color: #fff; font: inherit; text-align: center;
+  border: 2px solid rgba(var(--rgb), calc(.45 + .55 * var(--k)));
+  background: radial-gradient(circle at 50% 30%, rgba(var(--rgb), calc(.2 + .45 * var(--k))), rgba(var(--rgb), calc(.05 + .12 * var(--k))) 72%);
+  box-shadow: 0 0 calc(4px + 18px * var(--k)) rgba(var(--rgb), calc(.2 + .5 * var(--k))), inset 0 0 calc(6px + 12px * var(--k)) rgba(var(--rgb), .3);
+  transition: width .35s ease, height .35s ease, border-color .35s ease, box-shadow .35s ease; will-change: transform; animation: pro-bubble-in .5s cubic-bezier(.34,1.56,.64,1) both; animation-delay: calc(var(--i, 0) * 22ms); }
+@keyframes pro-bubble-in { from { scale: 0; opacity: 0; } }
+.pro-bubble b { max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: normal; line-height: 1.08; font-size: calc((var(--r) * .22px + 4px) * var(--fit, 1)); font-weight: 700; letter-spacing: .01em; }
+.pro-bubble small { font-size: calc(var(--r) * .16px + 5px); font-weight: 600; opacity: .9; }
+.pro-bubble.is-tiny b, .pro-bubble.is-tiny small { display: none; }
+.pro-bubble:hover, .pro-bubble:focus-visible, .pro-bubble.is-selected { border-color: #fff; outline: none; z-index: 2; }
+.pro-bubble.is-dragging { cursor: grabbing; z-index: 3; transition: none; }
+.pro-bubble-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); }
+.pro-bubble-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pro-bubble-legend i { width: 12px; height: 12px; border-radius: 50%; background: rgba(var(--rgb), .55); box-shadow: 0 0 0 2px rgba(var(--rgb), .9); }
+.pro-bubble-note { font-style: italic; }
+@media (prefers-reduced-motion: reduce) { .pro-bubble { transition: none; animation: none; } }
+@media (max-width: 900px) { .pro-compass-hero { grid-template-columns: 1fr; padding: 20px; } .pro-hero-figure { font-size: 32px; } .pro-range-row { grid-template-columns: 1fr; gap: 6px; } .pro-bubbles { height: 360px; } }
 .pro-mf-table th small, .pro-mf-table td small { display: block; font-size: 11px; font-weight: 400; color: var(--text-secondary); }
 .pro-mf-table th[scope="row"] small { max-width: 240px; white-space: normal; }
 

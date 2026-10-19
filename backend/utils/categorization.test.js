@@ -269,7 +269,10 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal((await request('/api/transactions/update-income-role', { ids: [1], income_role: 'other' })).status, 400, 'debits cannot be income');
     assert.equal((await request('/api/transactions/update-income-role', { ids: [2, 3], income_role: 'other' })).status, 404, 'other users are invisible');
     assert.deepEqual(await request('/api/transactions/update-income-role', { ids: [2], income_role: 'other' }), { status: 200, body: { success: true, updated: 1 } });
-    await client.query("UPDATE transactions SET date=to_char(CURRENT_DATE,'YYYY-MM-DD'),amount=150 WHERE id=2");
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // The route uses the server's local date; PGlite's CURRENT_DATE is UTC and can be a day ahead.
+    await client.query('UPDATE transactions SET date=$1,amount=150 WHERE id=2', [localToday]);
     const sources = (await request('/api/transactions/income-sources', undefined, 'GET')).body.sources;
     assert.deepEqual(sources.map(source => [source.name, source.status, source.by]), [['My Store', 'other', 'you']]);
     assert.equal((await request('/api/transactions/update-income-role', { ids: [2], income_role: null })).body.updated, 1);
