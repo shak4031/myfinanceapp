@@ -18,7 +18,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
         toggle(c, force) { const active = force === undefined ? !classes.has(c) : force; active ? classes.add(c) : classes.delete(c); return active; }
       },
       appendChild(child) { this.options.push(child); }, prepend() {}, before() {}, after() {}, remove() {},
-      close() { this.open = false; this.listeners?.close?.(); }, focus() {}, select() {},
+      close() { this.open = false; this.listeners?.close?.(); }, focus() {}, select() {}, scrollIntoView() {},
       addEventListener(name, listener) { (this.listeners ||= {})[name] = listener; },
       querySelector: selector => node(`${id} ${selector}`), querySelectorAll: () => [],
       getAttribute: () => '', setAttribute() {}, removeAttribute() {}, reset() {}, showModal() { this.open = true; }
@@ -217,12 +217,16 @@ test('account review requires an owned type and the not-mine action saves an ext
     Object.assign(f.context, {
       pendingPdfFile: { name: 'statement.pdf', size: 1024 },
       pdfImportInProgress: false,
+      AbortSignal,
       FinanceAccounts: { choice: () => ({ accountId: 1 }), afterImport: async () => {}, resultNote: () => '' },
       FileReader: class { readAsDataURL() { this.result = 'data:application/pdf;base64,JVBERg=='; setTimeout(() => this.onload(), 0); } },
       escapeHtml: f.context.FinanceTools.escape, usd: value => `$${Number(value).toFixed(2)}`,
       notify: message => notices.push(message)
     });
     const html = source('index.html');
+    const modalStart = html.indexOf('    function openImportModal()');
+    const modalEnd = html.indexOf('    function switchImportTab', modalStart);
+    vm.runInContext(html.slice(modalStart, modalEnd), f.context);
     const start = html.indexOf('    async function importPDF()');
     const end = html.indexOf('    // ===========================================', start);
     vm.runInContext(html.slice(start, end), f.context);
@@ -255,7 +259,7 @@ test('account review requires an owned type and the not-mine action saves an ext
     f.context.pendingPdfFile.size = 13 * 1024 * 1024;
     await f.context.importPDF();
     assert.equal(f.requests.length, 1);
-    assert.match(f.notices.at(-1), /12 MB/);
+    assert.match(f.node('import-result').innerHTML, /12 MB/);
   });
   test('choosing another PDF during upload cannot resubmit or discard the new selection', async () => {
     const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1, warnings: [] });
@@ -268,6 +272,52 @@ test('account review requires an owned type and the not-mine action saves an ext
     assert.equal(f.requests.length, 1);
     assert.equal(f.requests[0][1].source, 'statement.pdf');
     assert.equal(f.context.pendingPdfFile, next);
+    assert.equal(f.node('pdf-import-btn').disabled, false);
+  });
+  test('PDF progress is visible immediately and completion survives closing and reopening', async () => {
+    const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1 });
+    const running = f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /<progress[^]*Reading statement.pdf/);
+    assert.equal(f.node('pdf-import-btn').textContent, 'Importing PDF...');
+    f.context.closeImportModal();
+    assert.notEqual(f.context.pendingPdfFile, null, 'closing must not cancel an active import');
+    await running;
+    const result = f.node('import-result').innerHTML;
+    f.context.closeImportModal();
+    f.context.openImportModal();
+    assert.equal(f.node('import-result').style.display, 'block');
+    assert.equal(f.node('import-result').innerHTML, result);
+    assert.match(result, /PDF Import Complete/);
+    assert.equal(f.node('pdf-input').value, '');
+  });
+  test('closing a failed PDF import clears its file but retains the failure details', async () => {
+    const f = pdfUploadFixture(422, { error: 'Nothing was imported. Check the statement.' });
+    await f.context.importPDF();
+    f.context.closeImportModal();
+    assert.equal(f.context.pendingPdfFile, null);
+    assert.equal(f.node('pdf-import-btn').disabled, true);
+    assert.equal(f.node('pdf-file-list').textContent, '');
+    f.context.openImportModal();
+    assert.match(f.node('import-result').innerHTML, /Nothing was imported/);
+  });
+  test('missing account names show an in-dialog error without sending the PDF', async () => {
+    const f = pdfUploadFixture(200, {});
+    f.run('accounts.js');
+    f.node('import-account-select').value = 'new';
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /Give the new account a name/);
+    assert.equal(f.node('import-result').style.display, 'block');
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.notices.length, 0);
+  });
+  test('unreadable server responses and timeouts explain an unknown PDF outcome', async () => {
+    const f = pdfUploadFixture(200, {});
+    f.context.fetch = async () => ({ ok: false, status: 502, json: async () => { throw new Error('Unexpected HTML'); } });
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /unreadable response \(502\)[^]*outcome is unknown/);
+    f.context.fetch = async () => { const error = new Error('Timed out'); error.name = 'TimeoutError'; throw error; };
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /timed out[^]*may still be processing/);
     assert.equal(f.node('pdf-import-btn').disabled, false);
   });
   f.context.notify = message => messages.push(message);
@@ -1406,7 +1456,8 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   f.run('welcome.js');
   await f.context.FinanceWelcome.load();
   const html = f.node('welcome-hero').innerHTML;
-  assert.match(html, /One thing needs your attention today/);
+  assert.doesNotMatch(html, /welcome-attention|welcome-mood|One thing needs your attention today/);
+  assert.match(html, /<\/h1>\s*<\/div>[\s\S]*?<\/div>\s*<section class="welcome-carousel"/);
   assert.match(html, /Balance dips &lt;below&gt; zero/);
   assert.doesNotMatch(html, /<below>/);
   assert.match(html, /Next payday[\s\S]*Tomorrow/);
@@ -1417,9 +1468,10 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.match(html, /1 \/ 3/);
   assert.match(html, /<mark class="welcome-hl">28th<\/mark>/);
   assert.match(html, /fx-rise[\s\S]*fx-pop[\s\S]*fx-swipe/);
-  assert.match(html, /welcome-mood mood-danger/);
-  assert.match(html, /href="#welcome-attention" data-welcome-attention/);
-  assert.match(html, /id="welcome-attention"[\s\S]*Balance dips &lt;below&gt; zero[\s\S]*data-welcome-action="0"/);
+  const slides = [...html.matchAll(/<article class="welcome-slide[^]*?<\/article>/g)].map(match => match[0]);
+  assert.equal(slides.length, 3);
+  assert.match(slides[0], /tone-danger[^]*welcome-slide-tone">Action needed<\/span>[^]*Balance dips &lt;below&gt; zero[^]*Move a payment\.[^]*data-welcome-action="0">See upcoming/);
+  assert.match(slides[1], /tone-warning[^]*welcome-slide-tone">Heads up<\/span>[^]*Dining is over budget/);
   assert.match(html, /⚠️[\s\S]*🔥/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');

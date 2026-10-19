@@ -31,7 +31,7 @@
     left: '<path d="m14.5 6-6 6 6 6"/>', right: '<path d="m9.5 6 6 6-6 6"/>', arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>'
   };
   const icon = (name, size = 18) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ICONS.spark}</svg>`;
-  const TONE_LABEL = { danger: 'Needs attention', warning: 'Heads up', info: 'Good to know', success: 'Nice work', pro: 'MyFinance Pro', learn: 'Getting started' };
+  const TONE_LABEL = { danger: 'Action needed', warning: 'Heads up', info: 'Good to know', success: 'Nice work', pro: 'MyFinance Pro', learn: 'Getting started' };
 
   const state = { data: null, index: 0, timer: null, started: 0, remaining: ROTATE_MS, paused: false, hover: false, userPaused: false, request: 0 };
 
@@ -55,25 +55,10 @@
     return list;
   }
 
-  function headline(insights) {
-    const urgent = insights.filter(item => item.tone === 'danger').length;
-    const heads = insights.filter(item => item.tone === 'warning').length;
-    if (urgent) return `${urgent === 1 ? 'One thing needs' : `${urgent} things need`} your attention today.`;
-    if (heads) return `Mostly calm, with ${heads === 1 ? 'one heads-up' : `${heads} heads-ups`} worth a look.`;
-    return 'Everything looks on track. Here is what is coming up.';
-  }
-
   const MASCOT = { alert: '⚠️', calendar: '📅', hand: '✋', cash: '💸', flag: '🏁', target: '🎯', gauge: '🔥', trend: '📈', search: '🔍', repeat: '🔁', spark: '✨', shield: '🛡️', upload: '📤', play: '🎬' };
-  const MOOD = { danger: ['🚨', 'Action needed'], warning: ['👀', 'Heads up'], calm: ['🌤️', 'All clear'] };
   // Each slide enters with its own motion so the rotation never feels repetitive.
   const EFFECTS = ['rise', 'pop', 'swipe', 'flip', 'cascade', 'zoom'];
   const HIGHLIGHT = /([−-]?\$[\d,]+(?:\.\d+)?[kKmM]?|\d+(?:\.\d+)?%|\b\d{1,2}(?:st|nd|rd|th)\b|\b\d+ (?:days?|weeks?|months?)\b|\b(?:today|tomorrow)\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b)/i;
-
-  function mood(insights) {
-    if (insights.some(item => item.tone === 'danger')) return ['danger', ...MOOD.danger];
-    if (insights.some(item => item.tone === 'warning')) return ['warning', ...MOOD.warning];
-    return ['calm', ...MOOD.calm];
-  }
 
   // Splits a title into word spans (for staggered entrances) and marks money, percentages and dates.
   function titleArt(title) {
@@ -139,8 +124,6 @@
     const insights = state.data.insightsView;
     const name = firstName();
     const today = new Date();
-    const [moodTone, moodEmoji, moodLabel] = mood(insights);
-    const attention = insights.map((item, index) => ({ item, index })).filter(({ item }) => item.tone === 'danger' || item.tone === 'warning');
     state.index = Math.min(state.index, insights.length - 1);
     root.setAttribute('data-tone', insights[state.index]?.tone || 'info');
     root.innerHTML = `
@@ -149,14 +132,12 @@
         <div class="welcome-greeting">
           <p class="welcome-date"><span aria-hidden="true">☀️</span>${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
           <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
-          <p class="welcome-sub">${attention.length ? `<a class="welcome-mood mood-${moodTone}" href="#welcome-attention" data-welcome-attention><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)} ${icon('arrow', 14)}</a>` : `<span class="welcome-mood mood-${moodTone}"><span aria-hidden="true">${moodEmoji}</span>${esc(moodLabel)}</span>`}${esc(headline(insights))}</p>
         </div>
         <div class="welcome-top-actions">
           <a class="welcome-ghost" href="#tutorials/dashboard">${icon('play', 15)}Tour</a>
           <button type="button" class="welcome-ghost" onclick="openImportModal()">${icon('upload', 15)}Import</button>
         </div>
       </div>
-      ${attention.length ? `<section id="welcome-attention" class="welcome-attention" aria-label="Items needing your attention" tabindex="-1"><ul>${attention.map(({ item, index }) => `<li><div><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></div>${actionLink(item, index)}</li>`).join('')}</ul></section>` : ''}
       <section class="welcome-carousel" aria-roledescription="carousel" aria-label="Your insights">
         <div class="welcome-slides" id="welcome-slides" aria-live="off">${insights.map((item, index) => slide(item, index, insights.length)).join('')}</div>
         <div class="welcome-controls">
@@ -290,14 +271,8 @@
     const root = $('welcome-hero');
     if (!root || !root.contains(event.target)) return;
     if (event.target.closest('[data-welcome-tour]')) storage.set(TOUR_SEEN_KEY, '1');
-    const target = event.target.closest('[data-welcome-action],[data-welcome-go],[data-welcome-step],[data-welcome-pause],[data-welcome-retry],[data-welcome-attention]');
+    const target = event.target.closest('[data-welcome-action],[data-welcome-go],[data-welcome-step],[data-welcome-pause],[data-welcome-retry]');
     if (!target) return;
-    if (target.hasAttribute('data-welcome-attention')) {
-      event.preventDefault();
-      $('welcome-attention')?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
-      $('welcome-attention')?.focus({ preventScroll: true });
-      return;
-    }
     if (target.hasAttribute('data-welcome-retry')) return load();
     if (target.dataset.welcomeAction != null) return runAction(state.data?.insightsView[Number(target.dataset.welcomeAction)]);
     if (target.dataset.welcomeGo != null) return show(Number(target.dataset.welcomeGo), { announce: true });
@@ -341,5 +316,5 @@
     if (changed && $('dashboard-view')?.classList.contains('active')) load();
   });
 
-  window.FinanceWelcome = { load, render, show, buildHeadline: headline, markTourSeen: () => storage.set(TOUR_SEEN_KEY, '1'), state };
+  window.FinanceWelcome = { load, render, show, markTourSeen: () => storage.set(TOUR_SEEN_KEY, '1'), state };
 })();

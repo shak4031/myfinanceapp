@@ -95,9 +95,10 @@ calendar-filter, filtered-summary, and request-order regressions.
 
 ### Actionable alerts and account review
 
-The welcome area's **Action needed** / **Heads up** badge links to a persistent
-list of the flagged items, with an action for each; these remain available while
-the insight carousel rotates. Unknown-transfer badges link to Accounts for review.
+The welcome greeting is followed directly by the rotating insight carousel.
+**Action needed** and **Heads up** messages include the flagged item's details
+and action within their slides, without a separate badge or duplicate alert list.
+Unknown-transfer badges link to Accounts for review.
 Transaction descriptions in account transfers, category details, income review,
 category suggestions, and unusual-charge alerts link to `#transactions/<id>`.
 Opening one clears conflicting filters and shows only that transaction, including

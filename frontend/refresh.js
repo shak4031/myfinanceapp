@@ -232,6 +232,10 @@
   };
   function selectImportFile(kind, file) {
     if (!file) return;
+    if (kind === 'pdf' && pdfImportInProgress) {
+      window.setImportStatus('progress', 'A PDF import is already running. Wait for its result before choosing another file.');
+      return;
+    }
     if (kind === 'csv') pendingCsvFile = file;
     else pendingPdfFile = file;
     $(`${kind}-file-list`).textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;

@@ -501,7 +501,7 @@
   <link rel="stylesheet" href="refresh.css?v=20261024a">
   <link rel="stylesheet" href="analytics.css?v=20261024b">
   <link rel="stylesheet" href="plan.css?v=20261017r">
-  <link rel="stylesheet" href="welcome.css?v=20261020b">
+  <link rel="stylesheet" href="welcome.css?v=20261020c">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="marketing.css?v=20261018c">
@@ -883,7 +883,7 @@
                ondrop="handlePdfDrop(event)">
             <div style="font-size: 32px; margin-bottom: 12px;">📄</div>
             <div style="font-weight: 600;">Click or drag a PDF statement here</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Maximum 10MB per file</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Maximum 12 MB per file</div>
           </div>
           <div id="pdf-file-list" style="margin-top: 16px;"></div>
           <div style="margin-top: 16px;">
@@ -891,7 +891,7 @@
           </div>
         </div>
 
-        <div id="import-result" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
+        <div id="import-result" role="status" aria-live="polite" aria-atomic="true" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
       </div>
     </div>
   </dialog>
@@ -1530,10 +1530,28 @@
     // ===========================================
     function openImportModal() {
       document.getElementById('import-modal').showModal();
+      const result = document.getElementById('import-result');
+      if (result.style.display === 'block') result.scrollIntoView({ block: 'nearest' });
     }
     function closeImportModal() {
       document.getElementById('import-modal').close();
-      document.getElementById('import-result').style.display = 'none';
+    }
+    document.getElementById('import-modal').addEventListener('close', () => {
+      if (pdfImportInProgress) return;
+      pendingPdfFile = null;
+      document.getElementById('pdf-input').value = '';
+      document.getElementById('pdf-file-list').textContent = '';
+      document.getElementById('pdf-import-btn').disabled = true;
+    });
+
+    function setImportStatus(kind, message) {
+      const result = document.getElementById('import-result');
+      result.style.display = 'block';
+      result.style.background = kind === 'error' ? 'rgba(255, 107, 107, 0.15)' : 'rgba(74, 158, 255, 0.1)';
+      result.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      result.setAttribute('aria-busy', String(kind === 'progress'));
+      result.innerHTML = `${kind === 'progress' ? '<progress aria-label="PDF import in progress"></progress>' : ''}<div>${escapeHtml(message)}</div>`;
+      result.scrollIntoView({ block: 'nearest' });
     }
 
     function switchImportTab(tab) {
@@ -1636,8 +1654,8 @@
 
     async function importPDF() {
       if (pdfImportInProgress) return;
-      if (!pendingPdfFile) { notify('Select a PDF first'); return; }
-      if (pendingPdfFile.size > 12 * 1024 * 1024) { notify('Choose a PDF no larger than 12 MB.'); return; }
+      if (!pendingPdfFile) { setImportStatus('error', 'Select a PDF first.'); return; }
+      if (pendingPdfFile.size > 12 * 1024 * 1024) { setImportStatus('error', 'Choose a PDF no larger than 12 MB.'); return; }
       const account = FinanceAccounts.choice();
       if (!account) return;
       const button = document.getElementById('pdf-import-btn');
@@ -1645,28 +1663,31 @@
       const file = pendingPdfFile;
       pdfImportInProgress = true;
       button.disabled = true;
+      button.textContent = 'Importing PDF...';
+      button.setAttribute('aria-busy', 'true');
 
       const resultDiv = document.getElementById('import-result');
-      resultDiv.style.display = 'block';
-      resultDiv.innerHTML = '<div style="color: var(--primary)">Reading PDF...</div>';
-      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+      setImportStatus('progress', `Reading ${file.name}... You can close this dialog and reopen it to check the result.`);
 
       try {
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(',')[1]);
           reader.onerror = () => reject(new Error('The selected PDF could not be read. Choose the file again.'));
+          reader.onabort = () => reject(new Error('Reading the PDF was interrupted. Choose the file again.'));
           reader.readAsDataURL(file);
         });
 
-        resultDiv.innerHTML = '<div style="color: var(--primary)" role="status">Detecting statement type, reading transactions and verifying balances...</div>';
+        setImportStatus('progress', `Processing ${file.name}: uploading, detecting statement type, reading transactions and verifying balances. Please wait for the result.`);
 
         const res = await fetch('/api/import/import-pdf', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(120000),
           body: JSON.stringify({ pdfBase64: base64, source: file.name, ...account })
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => { throw new Error(`The server returned an unreadable response (${res.status}). The import outcome is unknown. Check Accounts and Transactions before retrying; repeat PDF imports skip matching transactions.`); });
         if (res.ok && data.success) {
+          resultDiv.setAttribute('role', 'status');
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
             <div style="color: var(--success); font-weight: 700;">✅ PDF Import Complete</div>
@@ -1681,20 +1702,25 @@
           if (pendingPdfFile === file) {
             pendingPdfFile = null;
             document.getElementById('pdf-file-list').innerHTML = '';
+            document.getElementById('pdf-input').value = '';
           }
           window.FinancePlan?.invalidate?.();
           if (document.getElementById('transactions-view').classList.contains('active')) loadAllTransactions();
           else if (document.getElementById('dashboard-view').classList.contains('active')) loadDashboard();
         } else {
-          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
+          setImportStatus('error', data.error || `PDF import failed (${res.status}). Review the account and file, then try again.`);
         }
       } catch (err) {
-        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
+        setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? 'The PDF request timed out. The server may still be processing it. Check Accounts and Transactions before retrying; repeat PDF imports skip matching transactions.'
+          : `${err.message} If the request reached the server, check Accounts and Transactions before retrying.`);
       } finally {
         pdfImportInProgress = false;
         button.disabled = !pendingPdfFile;
+        button.textContent = 'Import PDF';
+        button.setAttribute('aria-busy', 'false');
+        resultDiv.setAttribute('aria-busy', 'false');
+        resultDiv.scrollIntoView({ block: 'nearest' });
       }
     }
 
@@ -1752,8 +1778,8 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261024c"></script>
-  <script src="accounts.js?v=20261020c"></script>
+  <script src="refresh.js?v=20261024d"></script>
+  <script src="accounts.js?v=20261020d"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
@@ -1761,7 +1787,7 @@
   <script src="pro-categories.js?v=20261020b"></script>
   <script src="analytics.js?v=20261024c"></script>
   <script src="plan.js?v=20261017r"></script>
-  <script src="welcome.js?v=20261020b"></script>
+  <script src="welcome.js?v=20261020c"></script>
   <script src="income-review.js?v=20261020b"></script>
   <script src="tutorial.js?v=20261022e"></script>
   <script src="marketing.js?v=20261020c"></script>

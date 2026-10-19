@@ -70,19 +70,25 @@
       const select = $('import-account-select');
       if (select) select.innerHTML = '<option value="new" selected>+ New account…</option>';
       syncNewFields();
+      window.setImportStatus?.('error', `Accounts could not be loaded: ${error.message}. Reopen the dialog to retry, or enter a new account only if it is not already saved.`);
     }
   }
   function choice() {
     const select = $('import-account-select');
-    const error = message => { toast(message); select?.focus(); return null; };
+    const error = (message, field = select) => {
+      if (window.setImportStatus) window.setImportStatus('error', message);
+      else toast(message);
+      field?.focus({ preventScroll: true });
+      return null;
+    };
     if (!select || !select.value) return error('Choose which account this file is from.');
     if (select.value !== 'new') return { accountId: Number(select.value) };
     const name = $('import-new-name').value.trim();
     const kind = $('import-new-kind').value;
     const last4 = $('import-new-last4').value.trim();
     const institution = $('import-new-institution').value.trim();
-    if (!name) { $('import-new-name').focus(); return error('Give the new account a name, for example "Chase checking".'); }
-    if (last4 && !/^\d{4}$/.test(last4)) { $('import-new-last4').focus(); return error('Last four digits must be exactly 4 numbers.'); }
+    if (!name) return error('Give the new account a name, for example "Chase checking".', $('import-new-name'));
+    if (last4 && !/^\d{4}$/.test(last4)) return error('Last four digits must be exactly 4 numbers.', $('import-new-last4'));
     return { newAccount: { name, kind, last4: last4 || null, institution: institution || null } };
   }
   // Pre-select the account from the file name (e.g. Chase1180_Activity.csv) or the OFX/QFX account number.

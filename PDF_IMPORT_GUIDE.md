@@ -12,6 +12,15 @@
 4. Review the result: detected type, statement closing date, closing balance,
    purchase APR if available, imported count, duplicates, and warnings.
 
+Required-account validation errors appear inside the dialog. During import an
+animated, indeterminate progress bar shows reading and server-processing stages;
+it does not claim a percentage the server cannot measure. The final result stays
+available when the dialog is closed and reopened. Closing clears an idle PDF
+selection, but an active import continues and retains its status. Failed uploads
+keep the file selected for retry until the dialog is closed. Requests time out
+after two minutes; if connectivity fails or the outcome is unknown, check Accounts
+and Transactions before retrying (matching PDF transactions are deduplicated).
+
 The parser reads `New Balance` / `New Statement Balance` for credit cards,
 not available credit, a minimum payment, or an example repayment amount.
 It captures the **purchase** APR, not the cash advance or balance-transfer APR.
