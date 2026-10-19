@@ -256,55 +256,71 @@
     const f = mf.flow;
     if (!f || !(f.income > 0)) return card('Where your money flows', '', '<p class="pro-empty">Import a few months of income and spending to see where your money goes.</p>');
     const byId = new Map(mf.categories.map(c => [c.id, c]));
-    const W = 760, H = 340, NODE = 14, X1 = 250, X2 = 520, GAP = 12, CHILD_GAP = 6;
+    // Income and the four groups are labelled blocks; categories are thin bars with labels that never collide.
+    const W = 960, TOP = 30, BASE_H = 380, SRC_W = 132, MID_X = 340, MID_W = 168, DST_X = 720, DST_W = 10;
+    const GAP = 16, MIN_BLOCK = 30, SLOT = 22, CHILD_GAP = 6, GROUP_GAP = 16, INCOME = '#059669';
     const shortfall = Math.max(0, -f.left);
     const middle = [
-      { key: 'fixed', label: 'Fixed bills', value: f.fixed.total, color: '#64748b', children: f.fixed.items },
+      { key: 'fixed', label: 'Fixed bills', value: f.fixed.total, color: '#475569', children: f.fixed.items },
       { key: 'everyday', label: 'Everyday spending', value: f.everyday.total, color: '#7c3aed', children: f.everyday.items },
-      { key: 'debt', label: 'Debt minimums not yet imported', value: f.debt, color: '#475569', children: [] },
+      { key: 'debt', label: 'Debt minimums', title: 'Debt minimums not yet imported', value: f.debt, color: '#334155', children: [] },
       { key: 'left', label: 'Left over', value: Math.max(0, f.left), color: '#10b981', children: [] }
     ].filter(node => node.value > 0);
     const total = Math.max(f.income + shortfall, middle.reduce((s, n) => s + n.value, 0));
-    const scale = (H - GAP * (middle.length - 1)) / total;
-    const band = (x0, a0, a1, x2, b0, b1, color, title) => {
-      const mx = (x0 + x2) / 2;
-      return `<path d="M${x0} ${a0.toFixed(1)}C${mx} ${a0.toFixed(1)} ${mx} ${b0.toFixed(1)} ${x2} ${b0.toFixed(1)}L${x2} ${b1.toFixed(1)}C${mx} ${b1.toFixed(1)} ${mx} ${a1.toFixed(1)} ${x0} ${a1.toFixed(1)}Z" fill="${color}" fill-opacity=".28"><title>${esc(title)}</title></path>`;
+    const scale = (BASE_H - GAP * (middle.length - 1)) / total;
+    const pct = value => `${Math.round(value / f.income * 100)}%`;
+    const fx = value => value.toFixed(1);
+    let defs = '', bands = '', nodes = '', labels = '', gradient = 0;
+    const band = (x0, a0, a1, x2, b0, b1, from, to, title) => {
+      const id = `pro-sk-g${gradient++}`, mx = (x0 + x2) / 2;
+      defs += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x2}" y2="0"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient>`;
+      bands += `<path class="pro-sk-band" d="M${x0} ${fx(a0)}C${mx} ${fx(a0)} ${mx} ${fx(b0)} ${x2} ${fx(b0)}L${x2} ${fx(b1)}C${mx} ${fx(b1)} ${mx} ${fx(a1)} ${x0} ${fx(a1)}Z" fill="url(#${id})"><title>${esc(title)}</title></path>`;
     };
-    const pctOf = value => `${Math.round(value / f.income * 100)}% of income`;
-    let svg = '', labels = '', y = 0, source = 0, rightY = 0;
+    const block = (x, y, w, h, color, name, value, title) => {
+      nodes += `<rect class="pro-sk-block" x="${x}" y="${fx(y)}" width="${w}" height="${fx(h)}" rx="8" fill="${color}"><title>${esc(title)}</title></rect>`;
+      labels += h >= 46
+        ? `<text x="${x + 14}" y="${fx(y + 23)}" class="pro-sk-in">${esc(name)}</text><text x="${x + 14}" y="${fx(y + 40)}" class="pro-sk-in-sub">${value}</text>`
+        : `<text x="${x + 14}" y="${fx(y + h / 2 + 4.5)}" class="pro-sk-in">${esc(name)}<tspan class="pro-sk-in-sub" dx="6">${value}</tspan></text>`;
+    };
     const incomeH = f.income * scale;
-    svg += `<rect x="0" y="0" width="${NODE}" height="${incomeH.toFixed(1)}" rx="3" fill="#059669"><title>Income ${money(f.income, true)} a month</title></rect>`;
-    labels += `<text x="${NODE + 8}" y="16" class="pro-sk-label">Income</text><text x="${NODE + 8}" y="32" class="pro-sk-value">${money(f.income, true)}/mo</text>`;
+    block(0, 0, SRC_W, incomeH, INCOME, 'Income', `${money(f.income, true)}/mo`, `Income ${money(f.income, true)} a month`);
+    let bottom = incomeH;
     if (shortfall) {
-      svg += `<rect x="0" y="${incomeH.toFixed(1)}" width="${NODE}" height="${(shortfall * scale).toFixed(1)}" rx="3" fill="#e11d48"><title>Spent more than came in: ${money(shortfall, true)} a month</title></rect>`;
-      labels += `<text x="${NODE + 8}" y="${(incomeH + 14).toFixed(1)}" class="pro-sk-label is-bad">Overspent ${money(shortfall, true)}</text>`;
+      const sh = shortfall * scale;
+      nodes += `<rect x="0" y="${fx(incomeH)}" width="${SRC_W}" height="${fx(Math.max(sh, 2))}" rx="4" fill="#e11d48"><title>Spent more than came in: ${money(shortfall, true)} a month</title></rect>`;
+      labels += `<text x="0" y="${fx(incomeH + sh + 18)}" class="pro-sk-label is-bad">Overspent ${money(shortfall, true)}/mo</text>`;
+      bottom = incomeH + sh + 24;
     }
+    let y = 0, source = 0, rightY = 0;
     for (const node of middle) {
-      const h = node.value * scale;
-      svg += band(NODE, source, source + h, X1, y, y + h, node.color, `${node.label}: ${money(node.value, true)} a month (${pctOf(node.value)})`);
-      svg += `<rect x="${X1}" y="${y.toFixed(1)}" width="${NODE}" height="${Math.max(h, 1.5).toFixed(1)}" rx="3" fill="${node.color}"/>`;
-      const ly = Math.min(Math.max(y + Math.min(h / 2, 14) + 4, 12), H - 4);
-      labels += `<text x="${X1 + NODE + 8}" y="${ly.toFixed(1)}" class="pro-sk-label pro-sk-halo">${esc(node.label)} <tspan class="pro-sk-value">${money(node.value, true)}</tspan></text>`;
-      let childY = Math.max(rightY, y - CHILD_GAP * (node.children.length - 1) / 2), offset = y;
-      const span = node.children.reduce((s, c) => s + c.amount * scale, 0) + CHILD_GAP * Math.max(0, node.children.length - 1);
-      if (childY + span > H) childY = Math.max(rightY, H - span);
-      for (const child of node.children) {
-        const ch = child.amount * scale;
-        const t = tone(child.id ? byId.get(child.id) : null);
+      const h = node.value * scale, bh = Math.max(h, MIN_BLOCK), inset = (bh - h) / 2;
+      const name = node.title || node.label;
+      band(SRC_W, source, source + h, MID_X, y + inset, y + inset + h, INCOME, node.color, `${name}: ${money(node.value, true)} a month (${pct(node.value)} of income)`);
+      block(MID_X, y, MID_W, bh, node.color, node.label, `${money(node.value, true)} · ${pct(node.value)}`, `${name}: ${money(node.value, true)} a month (${pct(node.value)} of income)`);
+      const kids = node.children.map(child => ({ child, h: child.amount * scale, slot: Math.max(child.amount * scale, SLOT) }));
+      const span = kids.reduce((s, k) => s + k.slot, 0) + CHILD_GAP * Math.max(0, kids.length - 1);
+      let cy = Math.max(rightY, y + bh / 2 - span / 2), offset = y + inset;
+      for (const kid of kids) {
+        const t = tone(kid.child.id ? byId.get(kid.child.id) : null);
         const color = t && t !== 'ok' ? TONE_COLORS[t] : node.color;
-        svg += band(X1 + NODE, offset, offset + ch, X2, childY, childY + ch, color, `${child.label}: ${money(child.amount, true)} a month (${pctOf(child.amount)})`);
-        svg += `<rect x="${X2}" y="${childY.toFixed(1)}" width="${NODE}" height="${Math.max(ch, 1.5).toFixed(1)}" rx="3" fill="${color}"/>`;
-        labels += `<text x="${X2 + NODE + 8}" y="${(childY + ch / 2 + 4).toFixed(1)}" class="pro-sk-label${t === 'act' ? ' is-bad' : ''}">${esc(shortLabel(child.label))} <tspan class="pro-sk-value">${money(child.amount, true)}</tspan></text>`;
-        offset += ch; childY += ch + CHILD_GAP;
+        const ny = cy + (kid.slot - kid.h) / 2;
+        band(MID_X + MID_W, offset, offset + kid.h, DST_X, ny, ny + kid.h, node.color, color, `${kid.child.label}: ${money(kid.child.amount, true)} a month (${pct(kid.child.amount)} of income)`);
+        nodes += `<rect x="${DST_X}" y="${fx(ny)}" width="${DST_W}" height="${fx(Math.max(kid.h, 2))}" rx="3" fill="${color}"/>`;
+        labels += `<text x="${DST_X + DST_W + 10}" y="${fx(cy + kid.slot / 2 + 4.5)}" class="pro-sk-label${t === 'act' ? ' is-bad' : ''}">${esc(shortLabel(kid.child.label))}<tspan class="pro-sk-value" dx="7">${money(kid.child.amount, true)}</tspan><tspan class="pro-sk-pct" dx="6">${pct(kid.child.amount)}</tspan></text>`;
+        offset += kid.h; cy += kid.slot + CHILD_GAP;
       }
-      if (node.children.length) rightY = childY;
-      source += h; y += h + GAP;
+      if (kids.length) rightY = cy - CHILD_GAP + GROUP_GAP;
+      source += h; y += bh + GAP;
     }
+    const H = Math.ceil(Math.max(y - GAP, rightY - GROUP_GAP, bottom)) + TOP + 4;
+    const heads = [[0, 'MONEY IN'], [MID_X, 'WHERE IT GOES'], [DST_X, 'BY CATEGORY · SHARE OF INCOME']]
+      .map(([x, text]) => `<text x="${x}" y="12" class="pro-sk-head">${text}</text>`).join('');
+    const svg = `${heads}<g transform="translate(0 ${TOP})">${bands}${nodes}${labels}</g>`;
     const per100 = value => money(Math.round(value / f.income * 100), true);
     const split = [['fixed bills', f.fixed.total], ['everyday spending', f.everyday.total], ['debt not yet imported', f.debt]]
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
-    const svgEl = `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}">${svg}${labels}</svg>`;
+    const svgEl = `<div class="pro-sankey-wrap"><svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg></div><p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
     return card(`Where your money flows${how(`Monthly average of the last ${f.months} full month${f.months === 1 ? '' : 's'}. Transfers between your own accounts are left out, so "left over" is the same typical monthly surplus your dashboard shows. Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }

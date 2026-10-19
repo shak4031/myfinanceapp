@@ -234,10 +234,20 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-venn-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .pro-venn-group li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 .pro-venn-group li span { color: #52637a; font-size: 12.5px; text-align: right; }
-.pro-sankey path { transition: fill-opacity .15s; } .pro-sankey path:hover { fill-opacity: .55; }
-.pro-sk-label { font-size: 12.5px; font-weight: 700; fill: #122138; } .pro-sk-label.is-bad { fill: #be123c; }
-.pro-sk-value { font-weight: 500; fill: #52637a; }
-.pro-sk-halo { paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.pro-sankey-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pro-sankey-wrap .pro-sankey { min-width: 680px; }
+.pro-sk-band { opacity: .34; transition: opacity .18s; } .pro-sk-band:hover { opacity: .7; }
+.pro-sk-block { filter: drop-shadow(0 1px 2px rgba(15,23,42,.12)); }
+.pro-sk-head { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; fill: #94a3b8; }
+.pro-sk-in { font-size: 13.5px; font-weight: 700; fill: #fff; }
+.pro-sk-in-sub { font-size: 12.5px; font-weight: 500; fill: rgba(255,255,255,.86); font-variant-numeric: tabular-nums; }
+.pro-sk-label { font-size: 13px; font-weight: 650; fill: #122138; } .pro-sk-label.is-bad { fill: #be123c; }
+.pro-sk-value { font-weight: 600; fill: #334155; font-variant-numeric: tabular-nums; }
+.pro-sk-pct { font-size: 11.5px; font-weight: 500; fill: #94a3b8; }
+.pro-sk-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0 0; font-size: 12.5px; color: #52637a; }
+.pro-sk-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pro-sk-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.pro-sk-legend .pro-sk-hint { color: #94a3b8; }
 .pro-venn circle { stroke-width: 1.5; }
 .pro-venn-a { fill: rgba(225,29,72,.12); stroke: #e11d48; } .pro-venn-b { fill: rgba(245,158,11,.13); stroke: #f59e0b; } .pro-venn-c { fill: rgba(124,58,237,.11); stroke: #7c3aed; }
 .pro-venn-set { font-size: 15px; font-weight: 800; fill: #52637a; }

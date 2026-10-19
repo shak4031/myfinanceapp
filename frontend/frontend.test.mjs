@@ -1150,8 +1150,21 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /data-analytics-action="household-save"/);
   assert.match(html, /Consumer Expenditure Survey/);
   assert.doesNotMatch(html, /undefined|NaN|Infinity/);
+  // Polished Sankey: labelled blocks with their share of income, one gradient per ribbon, a colour key.
+  assert.match(html, /<text[^>]*class="pro-sk-in">Income<\/text>/);
+  assert.match(html, /class="pro-sk-in">Fixed bills<\/text><text[^>]*class="pro-sk-in-sub">\$[\d,]+ · \d+%/);
+  assert.equal((html.match(/<linearGradient id="pro-sk-g/g) || []).length, (html.match(/class="pro-sk-band"/g) || []).length);
+  assert.match(html, /class="pro-sk-legend"/);
   await f.context.loadAnalyticsPage(true);
   assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
+
+  // A month that spends more than came in shows the shortfall under income instead of a "left over" block.
+  payload.moneyFlow.flow = { ...mf.flow, left: -300, everyday: { ...mf.flow.everyday, total: mf.flow.everyday.total + 300 - mf.flow.left } };
+  await f.context.loadAnalyticsPage(true, 'compass');
+  const over = f.node('analytics-content').innerHTML;
+  assert.match(over, /Overspent \$300\/mo/);
+  assert.doesNotMatch(over, /class="pro-sk-in">Left over/);
+  assert.doesNotMatch(over, /undefined|NaN|Infinity/);
 });
 
 const browserBits = (f, { reduced = true } = {}) => {
