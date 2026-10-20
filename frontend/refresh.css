@@ -617,7 +617,7 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 #similar-error:empty { display: none; }
 #similar-error { margin: 0; color: #b91c1c; font-size: 13px; }
 /* Renamed payees */
-.tx-desc-cell { display: flex; align-items: flex-start; gap: 8px; }
+.tx-desc-cell { display: flex; align-items: center; gap: 8px; }
 .tx-desc-text { min-width: 0; flex: 1; }
 .tx-name { display: block; color: var(--text-primary, #0f172a); font-weight: 650; }
 .tx-original { margin-top: 2px; font-size: 11px; color: var(--text-secondary, #64748b); overflow-wrap: anywhere; }

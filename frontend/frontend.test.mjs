@@ -593,7 +593,7 @@ test('processor-prefixed merchants never group unrelated restaurants by TST or S
     assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], change).map(item => item.transaction.id), [2]);
   }
 });
-for (const renamed of [false, true]) test(`Peri Peri category correction respects the search and updates only confirmed matches (${renamed ? 'renamed' : 'original'} payee)`, async () => {
+for (const renamed of [false, true, 'partial', 'friendly-search']) test(`Peri Peri category correction respects the search and updates only confirmed matches (${renamed || 'original'} payee)`, async () => {
   const calls = [];
   const transactions = [
     { id: 1, date: '2026-09-23', description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ', amount: 35.45 },
@@ -602,7 +602,7 @@ for (const renamed of [false, true]) test(`Peri Peri category correction respect
     { id: 4, date: '2026-04-15', description: 'VISA DDA PUR AP 469216 TST CHAI CHENAK NEW BRUNSWICK * NJ', amount: 35.45 },
     { id: 5, date: '2026-03-30', description: 'VISA DDA PUR AP 469216 TST SHIR CHAI CO NORTH BRUNSWI * NJ', amount: 31.18 },
     { id: 6, date: '2026-02-01', description: 'TST TRIBOS GRILL METUCHEN NJ', amount: 35.45 }
-  ].map(t => ({ ...t, direction: 'DEBIT', category: 'Shopping', display_name: renamed && [1, 2, 3, 6].includes(t.id) ? 'Tribos' : null }));
+  ].map(t => ({ ...t, direction: 'DEBIT', category: 'Shopping', display_name: renamed === true && [1, 2, 3, 6].includes(t.id) ? 'Tribos' : renamed && t.id === 1 ? 'Favorite dinner' : null }));
   const f = fixture(async (url, options = {}) => {
     calls.push([url, options.body ? JSON.parse(options.body) : null]);
     if (url === '/api/categories') return response(200, [{ name: 'Shopping' }, { name: 'Dining' }]);
@@ -610,7 +610,8 @@ for (const renamed of [false, true]) test(`Peri Peri category correction respect
     return response(200, { success: true, updated: 1 });
   });
   f.run('refresh.js');
-  f.node('txn-filter-search').value = 'peri peri';
+  const query = renamed === 'friendly-search' ? 'Favorite dinner' : 'peri peri';
+  f.node('txn-filter-search').value = query;
   await f.context.loadAllTransactions();
   const select = { value: 'Dining', disabled: false, matches: selector => selector === '[data-category]', closest: () => ({ dataset: { transaction: '0' } }) };
   const pending = f.node('full-txn-table').onchange({ target: select });
@@ -618,7 +619,7 @@ for (const renamed of [false, true]) test(`Peri Peri category correction respect
   const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
   assert.equal(dialog.open, true);
   assert.match(f.node('similar-copy').innerHTML, /Found <strong>2<\/strong> other transactions/);
-  assert.match(f.node('similar-copy').innerHTML, /Matching your search “peri peri”/);
+  assert.ok(f.node('similar-copy').innerHTML.includes(`Started from your search “${query}”`));
   assert.doesNotMatch(f.node('similar-list').innerHTML, /CHAI|GRILL/);
   assert.match(f.node('similar-list').innerHTML, /href="#transactions\/2"/);
   assert.match(f.node('similar-list').innerHTML, /href="#transactions\/3"/);
@@ -631,7 +632,7 @@ for (const renamed of [false, true]) test(`Peri Peri category correction respect
   assert.deepEqual(calls.find(([url]) => url === '/api/transactions/categorization-apply')[1], {
     updates: [{ id: 2, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: true, protectCorrections: false
   });
-  assert.equal(f.node('txn-filter-search').value, 'peri peri');
+  assert.equal(f.node('txn-filter-search').value, query);
   assert.equal(dialog.open, false);
 });
 test('marking a fixed bill offers similar payments and flags only the confirmed ones', async () => {
@@ -1765,7 +1766,7 @@ test('strategy cards explain the dates, the first target and identical orders', 
   assert.match(html, /Avalanche and Snowball<\/b> attack your debts in the same order/);
   assert.match(html, /href="#tutorials\/debt-strategies"/);
 });
-test('renamed payees show the friendly name, stay searchable and can be renamed from any row', async () => {
+test('renamed payees show the friendly name, stay searchable and can be renamed from any row', async t => {
   const calls = [];
   const rows = [
     { id: 1, date: '2026-10-03', description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA', display_name: 'Tutor <Cristiane>', amount: 100, direction: 'DEBIT', category: 'Other' },
@@ -1782,6 +1783,30 @@ test('renamed payees show the friendly name, stay searchable and can be renamed 
       : { pattern: body.pattern.toUpperCase(), count: 4, samples: ['SENT 77ZZ Zelle SAM PATEL'] });
     if (url === '/api/transactions/name-rules') return response(200, { success: true, rule: { id: 9, pattern: 'ZELLE SAM PATEL', name: 'Sam Patel', matches: 4 }, changed: 4 });
     return response(200, {});
+  });
+  await t.test('editing a narrow processor rename previews cross-bank merchant matches before saving', async () => {
+    const calls = [];
+    const f = fixture(async (url, options = {}) => {
+      const body = options.body ? JSON.parse(options.body) : {};
+      calls.push([url, body]);
+      if (url === '/api/transactions/name-rules/preview') return response(200, body.description
+        ? { suggested: 'TRIBOS PERI PERI', current: { id: 9, pattern: 'TST TRIBOS PERI PERI M METUCHEN NJ', name: 'Peri Peri' }, count: 3 }
+        : { pattern: body.pattern, count: 3, samples: ['TST* TRIBOS PERI PERI - M METUCHEN NJ', 'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ'] });
+      if (url === '/api/transactions/name-rules') return response(200, { rule: { name: 'Peri Peri', matches: 3 } });
+      if (url === '/api/categories') return response(200, []);
+      if (url === '/api/dashboard/all-transactions') return response(200, { transactions: [] });
+      return response(200, {});
+    });
+    f.run('refresh.js');
+    await f.context.openRenameDialog({ description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ', display_name: 'Peri Peri' });
+    assert.equal(f.node('rename-pattern').value, 'TRIBOS PERI PERI');
+    assert.match(f.node('rename-preview').innerHTML, /Matches 3 transactions/);
+    assert.match(f.node('rename-preview').innerHTML, /VISA DDA PUR AP/);
+    await f.node('rename-form').onsubmit({ preventDefault() {} });
+    assert.deepEqual(calls.find(([url]) => url === '/api/transactions/name-rules')[1], { id: 9, pattern: 'TRIBOS PERI PERI', name: 'Peri Peri' });
+  });
+  await t.test('rename controls are centered beside multiline descriptions', () => {
+    assert.match(source('refresh.css'), /\.tx-desc-cell\s*\{[^}]*align-items:\s*center/);
   });
   f.run('refresh.js');
   await f.context.loadAllTransactions();

@@ -225,6 +225,11 @@ test('rename words ignore reference numbers and case; the most specific rule win
   assert.equal(nameKey(zelle), 'SENT ZELLE CRISTIANE DE LIMA');
   assert.equal(suggestNamePattern(zelle), 'ZELLE CRISTIANE DE LIMA');
   assert.equal(suggestNamePattern('VISA DDA PUR AP 420429 TRADER JOE S #552'), 'TRADER JOE S');
+  for (const description of [
+    'TST* TRIBOS PERI PERI - M METUCHEN NJ',
+    'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',
+    'SQ * TRIBOS PERI PERI METUCHEN NJ'
+  ]) assert.equal(suggestNamePattern(description), 'TRIBOS PERI PERI');
   const rules = compileNameRules([{ id: 1, pattern: 'zelle', name: 'Zelle' }, { id: 2, pattern: 'Zelle  Cristiane de Lima', name: 'Cristiane De Lima' }, { id: 3, pattern: '1234', name: 'Numbers only' }]);
   assert.equal(rules.length, 2, 'a pattern of only numbers matches nothing and is skipped');
   assert.equal(resolveName('SENT 77XQ12 ZELLE CRISTIANE DE LIMA', rules).name, 'Cristiane De Lima');
@@ -286,6 +291,19 @@ test('rename rules apply to past rows, new imports and manual rows, and can be r
     assert.equal((await client.query('SELECT COUNT(*)::int AS n FROM transactions WHERE display_name IS NOT NULL')).rows[0].n, 0);
     assert.equal((await request('/api/transactions/name-rules/abc', undefined, 'DELETE')).status, 400);
     assert.equal((await request(`/api/transactions/name-rules/${saved.body.rule.id}`, undefined, 'DELETE')).status, 404);
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category) VALUES
+      ('2026-09-23','TST* TRIBOS PERI PERI - M METUCHEN NJ',29.50,'DEBIT','Dining'),
+      ('2026-08-10','VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',94.30,'DEBIT','Dining'),
+      ('2026-08-06','VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',33.94,'DEBIT','Dining'),
+      ('2026-08-01','TST CHAI CHENAK NEW BRUNSWICK NJ',29.50,'DEBIT','Shopping')`);
+    const narrow = await request('/api/transactions/name-rules', { pattern: 'TST TRIBOS PERI PERI M METUCHEN NJ', name: 'Peri Peri' });
+    assert.equal(narrow.body.rule.matches, 1);
+    const merchantPreview = await request('/api/transactions/name-rules/preview', { description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ' });
+    assert.equal(merchantPreview.body.suggested, 'TRIBOS PERI PERI');
+    assert.equal(merchantPreview.body.count, 3);
+    const broadened = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: merchantPreview.body.suggested, name: 'Peri Peri' });
+    assert.equal(broadened.body.rule.matches, 3);
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%CHAI CHENAK%'")).rows[0].display_name, null);
   } finally {
     await new Promise(resolve => server.close(resolve));
     Database.prototype.transaction = original;

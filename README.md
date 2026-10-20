@@ -85,10 +85,15 @@ The detail panel has its own calendar and **All time** action. Dashboard
 month-to-date cards continue to open the specific month shown on the dashboard.
 
 When editing a transaction, the similar-payment confirmation respects the active
-search text (while still looking across months). Toast/TST and Square prefixes
+search text, and also checks the same bank merchant even if only the selected
+payment has the searched friendly name (while still looking across months). Toast/TST and Square prefixes
 identify payment processors, not merchants; suggestions use the following merchant
 words instead. Renamed payees still group by the chosen name. Review and confirm
 the suggested rows before applying changes to other transactions.
+Renaming only one payment does not disconnect it from unrenamed payments with
+the same bank merchant identity; two explicitly different payee names stay separate.
+Rename previews suggest merchant words without processor/location boilerplate for
+Toast and Square payments, so the same payee can match across bank formats.
 
 Month-to-date spending cards emphasize the category, amount spent and transaction
 count. Hover or keyboard-focus the **6-month history** footer, or select it on

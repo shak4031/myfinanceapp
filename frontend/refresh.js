@@ -167,23 +167,32 @@
     tokens = [...new Set(tokens)];
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
-  // A renamed payee groups by the name the user chose; everything else by the merchant words.
-  const similarKey = t => t?.display_name ? `NAME:${String(t.display_name).trim().toUpperCase()}` : window.merchantKey(t?.description);
+  const payeeName = t => String(t?.display_name || '').trim().toUpperCase();
+  const bankPayeeKey = t => {
+    const tokens = window.merchantTokens(t?.description);
+    const rail = tokens.findIndex(token => PAYMENT_RAILS.has(token));
+    return rail < 0 ? window.merchantKey(t?.description) : tokens.slice(rail).join(' ');
+  };
+  const samePayee = (a, b) => {
+    const aName = payeeName(a), bName = payeeName(b);
+    if (aName && bName) return aName === bName;
+    const key = bankPayeeKey(a);
+    return !!key && key === bankPayeeKey(b);
+  };
   // Likely repeats of the same payment: same merchant and direction; amount within 10% (min $1) is flagged as a strong match.
   // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for counting deposits as pay; rows already in that state are skipped.
   window.findSimilarTransactions = (transactions, source, change) => {
-    const key = similarKey(source);
     const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
     const byPay = change && typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
     const byIncome = change && typeof change === 'object' && typeof change.income === 'boolean';
-    if (!key || (!byFixed && !byPay && !byIncome && !change)) return [];
+    if (!byFixed && !byPay && !byIncome && !change) return [];
     const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed
       : byPay ? t => payModeOf(t) !== (change.payMode || null)
       : byIncome ? t => !!t.counts_as_income !== change.income
       : t => t.category !== change;
     const amount = Math.abs(Number(source.amount) || 0), direction = String(source.direction).toUpperCase();
     return transactions
-      .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && similarKey(t) === key)
+      .filter(t => String(t.id) !== String(source.id) && differs(t) && String(t.direction).toUpperCase() === direction && samePayee(source, t))
       .map(transaction => ({ transaction, sameAmount: Math.abs(Math.abs(Number(transaction.amount) || 0) - amount) <= Math.max(1, amount * 0.1) }))
       .sort((a, b) => (b.sameAmount - a.sameAmount) || (transactionDate(b.transaction.date) - transactionDate(a.transaction.date)));
   };
@@ -622,7 +631,7 @@
     const hint = byIncome ? 'All deposits from this sender are preselected so your payday forecast stays consistent. '
       : byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
       : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
-    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${query ? `Matching your search “${escape(query)}”. ` : ''}${hint}Choose which should ${action}.`;
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${query ? `Started from your search “${escape(query)}”; also checked the same bank merchant across other transactions. ` : ''}${hint}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
       const from = byIncome ? incomeLabel(!!transaction.counts_as_income) : byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
@@ -717,7 +726,10 @@
       if (!renameState) return;
       const current = result.current;
       renameState.id = current?.id ?? null;
-      $('rename-pattern').value = current?.pattern || result.suggested || '';
+      const merchant = window.merchantKey(transaction.description);
+      const broaden = result.count > 1 && result.suggested === merchant
+        && current?.pattern?.includes(result.suggested);
+      $('rename-pattern').value = broaden ? result.suggested : current?.pattern || result.suggested || '';
       $('rename-name').value = current?.name || transaction.display_name || window.suggestDisplayName(result.suggested);
       $('rename-remove').hidden = !current;
       $('rename-title').textContent = current ? 'Edit this name' : 'Rename this payee';
@@ -825,7 +837,9 @@
         const row = event.target.closest('[data-transaction]');
         if (!row) return;
         const item = rows[Number(row.dataset.transaction)];
-        const candidates = transactions.filter(t => window.matchesTransactionSearch(t, query));
+        const merchant = window.merchantKey(item.description);
+        const candidates = transactions.filter(t => window.matchesTransactionSearch(t, query)
+          || (merchant && window.merchantKey(t.description) === merchant));
         event.target.disabled = true;
         try {
           if (event.target.matches('[data-income]')) {

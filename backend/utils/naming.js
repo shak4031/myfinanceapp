@@ -20,6 +20,10 @@ export function suggestNamePattern(description) {
   const words = nameWords(description);
   let start = 0;
   while (start < words.length - 1 && LEADING_NOISE.has(words[start])) start++;
+  if (['TST', 'TOAST', 'SQ', 'SQUARE'].includes(words[start])) {
+    while (['TST', 'TOAST', 'SQ', 'SQUARE'].includes(words[start])) start++;
+    return words.slice(start, start + 3).join(' ');
+  }
   return words.slice(start).join(' ');
 }
 
