@@ -97,6 +97,15 @@ and category signals; these details are collapsed by default. Category icons
 use whole-word matching so names such as Healthcare and Credit Card do not
 accidentally receive a car icon. Custom names without a match use a neutral icon.
 
+The raised-card depth also appears on finance panels, summary cards, Accounts,
+Debts, and Goals, with subtle tinted surfaces and reduced-motion support.
+Accounts show **Last data update** (the latest transaction date or statement
+closing date) and, when known, when transaction data was last added. Data more
+than **45 calendar days** old receives an amber **Stale data** marker and an
+import reminder; exactly 45 days is not flagged. Importing historical data or
+renaming an account does not make its coverage current. Accounts without data
+explicitly show that freshness is unknown; external recipients are not flagged.
+
 When editing a transaction, the similar-payment confirmation respects the active
 search text, and also checks the same bank merchant even if only the selected
 payment has the searched friendly name (while still looking across months). Toast/TST and Square prefixes

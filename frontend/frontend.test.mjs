@@ -52,6 +52,49 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
+test('account freshness marks only data older than 45 calendar days and keeps import time separate', async () => {
+  const accounts = [
+    { id: 1, name: 'Fresh checking', kind: 'checking', dataAsOf: '2026-09-04', lastDataAddedAt: '2026-10-19T10:00:00Z' },
+    { id: 2, name: 'Old savings', kind: 'savings', dataAsOf: '2026-09-03', lastDataAddedAt: '2026-10-19T10:00:00Z', updated_at: '2026-10-19T10:00:00Z' },
+    { id: 3, name: 'Empty account', kind: 'checking', dataAsOf: null },
+    { id: 4, name: 'Recipient', kind: 'external', dataAsOf: '2025-01-01' },
+    { id: 5, name: 'Today', kind: 'credit_card', dataAsOf: '2026-10-19' },
+    { id: 6, name: 'Future', kind: 'checking', dataAsOf: '2026-10-20' }
+  ].map(account => ({ status: 'active', transactions: 0, ...account }));
+  const f = fixture(async () => response(200, { accounts, kinds: [] }));
+  const RealDate = Date;
+  f.context.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [2026, 9, 19, 23, 59])); }
+  };
+  f.run('accounts.js');
+  await f.context.FinanceAccounts.loadPage();
+  const cards = [...f.node('accounts-root').innerHTML.matchAll(/<article class="acct-card[^]*?<\/article>/g)].map(match => match[0]);
+  const card = id => cards.find(html => html.includes(`data-account="${id}"`));
+  assert.match(card(1), /2026-09-04<\/time> \(45 days ago\)/);
+  assert.doesNotMatch(card(1), /acct-stale|Stale data/);
+  assert.match(card(2), /acct-stale/);
+  assert.match(card(2), /46 days ago/);
+  assert.match(card(2), /Stale data - over 45 days old/);
+  assert.match(card(2), /Transaction data last added: <time datetime="2026-10-19T10:00:00Z"/);
+  assert.match(card(2), /Import a recent statement/);
+  assert.match(card(3), /Last data update: unavailable/);
+  assert.doesNotMatch(card(3), /acct-stale/);
+  assert.match(card(4), /External recipient/);
+  assert.doesNotMatch(card(4), /acct-stale|Stale data/);
+  assert.match(card(5), /\(today\)/);
+  assert.doesNotMatch(card(5), /acct-stale/);
+  assert.doesNotMatch(card(6), /acct-stale|NaN|Invalid Date/);
+});
+
+test('shared raised surfaces preserve nested spending cards, target states and reduced motion', () => {
+  const css = source('refresh.css');
+  assert.match(css, /--card-depth: inset 0 1px 0 #fff/);
+  assert.match(css, /body \.view \.panel,[^]*?box-shadow: var\(--card-depth\)/);
+  assert.match(css, /\.metric-card:not\(\.mtd-category-card\)/);
+  assert.match(css, /\.plan-debt:not\(\.is-excluded\):not\(\.is-target\)/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*?\.plan-goal:hover \{ transform: none/);
+});
+
 test('all frontend scripts and inline application code parse', () => {
   for (const file of ['session.js','client-errors.js','ui.js','refresh.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);

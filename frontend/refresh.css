@@ -4,6 +4,8 @@
   --bg-primary: #e9eef5; --bg-secondary: #fff; --bg-tertiary: #f1f5f9;
   --text-primary: #122138; --text-secondary: #52637a; --border: #d3dce8; --divider: #e4e9f0;
   --shadow: 0 16px 48px rgba(15,23,42,.08); --shadow-sm: 0 2px 8px rgba(15,23,42,.05);
+  --card-depth: inset 0 1px 0 #fff, inset 0 -3px 0 #23365005, 0 3px 5px #23365008, 0 14px 24px -18px #23365060;
+  --card-depth-raised: inset 0 1px 0 #fff, 0 6px 10px -6px #23365024, 0 22px 30px -20px #23365060;
 }
 [hidden] { display: none !important; }
 /* Loaded before the legacy stylesheet; these scoped rules retain the light palette. */
@@ -740,3 +742,40 @@ tr:hover .tx-rename, .tx-rename:focus-visible { opacity: 1; }
 .how-calc > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .how-calc[open] > summary { color: var(--primary); border-color: var(--primary); }
 .how-calc > p { position: absolute; z-index: 40; top: calc(100% + 6px); left: -8px; width: min(280px, 70vw); margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); box-shadow: var(--shadow); font-size: 12px; line-height: 1.45; white-space: normal; text-align: left; }
+
+/* Keep depth on outer surfaces, not nested spending-card buttons or table rows. */
+body .view .panel,
+body .view .metric-card:not(.mtd-category-card),
+body .view .acct-card,
+body .view .plan-debt:not(.is-excluded):not(.is-target),
+body .view .plan-goal:not(.is-excluded) {
+  box-shadow: var(--card-depth);
+}
+body .view .metric-card:not(.mtd-category-card),
+body .view .acct-card,
+body .view .plan-debt:not(.is-excluded),
+body .view .plan-goal:not(.is-excluded) {
+  background-image: radial-gradient(ellipse at 100% 0, #e4effb80, transparent 80%), linear-gradient(145deg, #fff, #f3f8f6);
+}
+body .view .metric-card:not(.mtd-category-card),
+body .view .acct-card {
+  transition: box-shadow .2s ease;
+}
+@media (hover: hover) {
+  body .view .metric-card:not(.mtd-category-card):hover,
+  body .view .acct-card:hover,
+  body .view .plan-debt:not(.is-excluded):not(.is-target):hover,
+  body .view .plan-goal:not(.is-excluded):hover { box-shadow: var(--card-depth-raised); }
+}
+.acct-freshness { margin: 14px 0; padding: 12px 14px; border: 1px solid #d3dce8; border-radius: 12px; background: #ffffffb3; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.acct-freshness .muted { margin: 4px 0 0; font-size: 12px; }
+.acct-freshness .acct-badge { display: inline-block; margin: 3px 0; }
+.acct-freshness.is-stale { border-color: #d9b465; background: #fff8e8; color: #783f0c; }
+body .view .acct-stale { border-color: #d9b465; }
+@media (prefers-reduced-motion: reduce) {
+  body .view .metric-card:not(.mtd-category-card),
+  body .view .acct-card,
+  body .view .plan-debt,
+  body .view .plan-goal { transition: none; }
+  body .view .plan-debt:hover, body .view .plan-goal:hover { transform: none; }
+}

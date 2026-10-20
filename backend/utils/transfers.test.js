@@ -150,6 +150,11 @@ test('imports require an account and transfers between own accounts never count 
 
     const kinds = async () => Object.fromEntries((await call('/api/dashboard/all-transactions')).body.transactions.map(row => [row.description, row.transfer_kind]));
     let accounts = (await call('/api/accounts')).body;
+    const checkingUpdate = accounts.accounts.find(account => account.id === imported.body.account.id);
+    assert.equal(checkingUpdate.dataAsOf, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
+    assert.ok(Number.isFinite(Date.parse(checkingUpdate.lastDataAddedAt)));
+    assert.equal(accounts.accounts.find(account => account.last4 === '4821').dataAsOf, null, 'incoming transfer references do not update the recipient data');
+    assert.equal(accounts.accounts.find(account => account.last4 === '4821').lastDataAddedAt, null);
     const discovered = accounts.accounts.filter(account => account.status === 'needs_review').map(account => account.last4).sort();
     assert.deepEqual(discovered, ['4821', '7702']);
     assert.equal(accounts.unknownTransfers.count, 2);
@@ -180,6 +185,11 @@ test('imports require an account and transfers between own accounts never count 
     assert.equal(after['ONLINE TRANSFER TO SAV XXXXXX4821'], 'savings');
     assert.equal(after['INTEREST PAYMENT'], null, 'interest is real income');
     accounts = (await call('/api/accounts')).body;
+    const renamedChecking = await call(`/api/accounts/${checkingUpdate.id}`, { method: 'PATCH', body: { name: 'Renamed checking' } });
+    assert.equal(renamedChecking.status, 200);
+    const afterRename = (await call('/api/accounts')).body.accounts.find(account => account.id === checkingUpdate.id);
+    assert.equal(afterRename.dataAsOf, checkingUpdate.dataAsOf);
+    assert.equal(afterRename.lastDataAddedAt, checkingUpdate.lastDataAddedAt);
     assert.equal(accounts.savedThisMonth.amount ?? accounts.savedThisMonth, 500);
     assert.equal(accounts.unknownTransfers.count, 0);
 

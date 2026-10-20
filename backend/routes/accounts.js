@@ -103,14 +103,14 @@ router.get('/', route(async (req, res) => {
   const userId = currentUserId();
   const result = await db.transaction(async client => {
     const accounts = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id = $1 ORDER BY (status = 'needs_review') DESC, kind, name, id`, [userId])).rows;
-    const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, source, transfer_kind, transfer_account_id
+    const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, source, transfer_kind, transfer_account_id, created_at
       FROM transactions WHERE user_id = $1`, [userId])).rows;
     return { accounts, rows };
   });
   const { accounts, rows } = result;
   const byId = new Map(accounts.map(account => [account.id, account]));
   const balances = accountBalances(rows, accounts);
-  const stats = new Map(accounts.map(account => [account.id, { transactions: 0, firstDate: null, lastDate: null, transfersTo: 0, unknown: 0, unknownTotal: 0 }]));
+  const stats = new Map(accounts.map(account => [account.id, { transactions: 0, firstDate: null, lastDate: null, lastDataAddedAt: null, transfersTo: 0, unknown: 0, unknownTotal: 0 }]));
   const unassigned = new Map();
   const today = new Date();
   const monthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -123,6 +123,10 @@ router.get('/', route(async (req, res) => {
       entry.transactions++;
       if (iso && (!entry.firstDate || iso < entry.firstDate)) entry.firstDate = iso;
       if (iso && (!entry.lastDate || iso > entry.lastDate)) entry.lastDate = iso;
+      if (row.created_at) {
+        const addedAt = new Date(row.created_at).toISOString();
+        if (!entry.lastDataAddedAt || addedAt > entry.lastDataAddedAt) entry.lastDataAddedAt = addedAt;
+      }
     } else if (row.account_id == null) {
       const key = row.source || 'import';
       if (!unassigned.has(key)) unassigned.set(key, { source: key, transactions: 0, firstDate: null, lastDate: null });
@@ -151,8 +155,10 @@ router.get('/', route(async (req, res) => {
     accounts: accounts.map(account => {
       const entry = stats.get(account.id);
       const balance = balances.get(account.id) || null;
+      const statementDate = parseTxDate(account.statement?.closingDate)?.iso || null;
+      const dataAsOf = [entry.lastDate, statementDate].filter(Boolean).sort().at(-1) || null;
       return { ...account, kindLabel: ACCOUNT_KIND_LABELS[account.kind], ...entry, unknownTotal: cents(entry.unknownTotal),
-        balance: balance?.balance ?? null, balanceAsOf: balance?.asOf ?? null };
+        dataAsOf, balance: balance?.balance ?? null, balanceAsOf: balance?.asOf ?? null };
     }),
     unassigned: [...unassigned.values()].sort((a, b) => b.transactions - a.transactions),
     unknownTransfers: { count: unknownCount, total: cents(unknownTotal),

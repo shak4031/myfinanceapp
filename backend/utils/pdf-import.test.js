@@ -74,6 +74,8 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     const account = accounts.find(item => item.id === accountId);
     assert.equal(account.balance, 110);
     assert.equal(account.balanceAsOf, '2026-10-03');
+    assert.equal(account.dataAsOf, '2026-10-03', 'statement closing date counts even after the last transaction');
+    assert.ok(Number.isFinite(Date.parse(account.lastDataAddedAt)));
     assert.equal(account.statement.purchaseApr, 24.99);
     assert.equal(account.statement.minimumPayment, 25);
     const rows = (await call('/api/dashboard/all-transactions')).body.transactions;
@@ -95,6 +97,7 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     const retained = (await call('/api/accounts')).body.accounts.find(item => item.id === accountId);
     assert.equal(retained.statement.closingDate, '2026-10-03');
     assert.equal(retained.balance, 110, 'older statements never overwrite newer metadata');
+    assert.equal(retained.dataAsOf, account.dataAsOf, 'adding historical data must not refresh coverage');
 
     const beforeErrors = await counts();
     const malformed = await call('/api/import/import-pdf', { ...cardBody, pdfBase64: pdf(cardLines.filter(line => !line.includes('00001 09/10'))) });

@@ -125,10 +125,27 @@
   }
 
   // ---------- Accounts page ----------
+  function freshness(account) {
+    if (account.kind === 'external') return { stale: false, markup: '<p class="muted acct-freshness">External recipient - no account data expected.</p>' };
+    const date = account.dataAsOf;
+    if (!date) return { stale: false, markup: '<p class="acct-freshness"><span class="acct-badge">No account data</span> Last data update: unavailable. Import a recent statement to establish freshness.</p>' };
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const age = Math.max(0, Math.floor((today - Date.parse(`${date}T00:00:00Z`)) / 86400000));
+    const stale = age > 45;
+    const added = account.lastDataAddedAt ? new Date(account.lastDataAddedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+    return { stale, markup: `<div class="acct-freshness${stale ? ' is-stale' : ''}">
+      <p><strong>Last data update:</strong> <time datetime="${escape(date)}">${escape(date)}</time> (${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} ago`})
+      ${stale ? '<span class="acct-badge warn">Stale data - over 45 days old</span>' : ''}</p>
+      <p class="muted">Data covers activity or a statement through this date.${stale ? ' Import a recent statement to update this account.' : ''}</p>
+      <p class="muted">${added ? `Transaction data last added: <time datetime="${escape(account.lastDataAddedAt)}">${escape(added)}</time>` : 'Transaction import time unavailable.'}</p>
+    </div>` };
+  }
   function accountRow(account) {
     const review = account.status === 'needs_review';
+    const update = freshness(account);
     const range = account.firstDate ? `${account.firstDate} → ${account.lastDate}` : 'No statements imported';
-    return `<article class="acct-card${review ? ' acct-review' : ''}" data-account="${account.id}" data-review="${review}">
+    return `<article class="acct-card${review ? ' acct-review' : ''}${update.stale ? ' acct-stale' : ''}" data-account="${account.id}" data-review="${review}">
       <div class="acct-head">
         <div>
           <h3>${escape(account.name)}${review ? ' <span class="acct-badge warn">Needs review</span>' : ''}</h3>
@@ -136,6 +153,7 @@
         </div>
         ${account.balance != null ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">${account.kind === 'credit_card' ? 'Statement balance' : 'Recorded balance'} · ${escape(account.balanceAsOf || '')}</span></div>` : ''}
       </div>
+      ${update.markup}
       ${account.statement?.type === 'credit-card' ? `<div class="acct-statement"><strong>Latest statement · ${escape(account.statement.closingDate)}</strong><p>Purchase APR: ${account.statement.purchaseApr == null ? 'Not available (check statement)' : `${escape(account.statement.purchaseApr)}%`}${account.statement.minimumPayment == null ? '' : ` · Minimum payment: ${money(account.statement.minimumPayment)}`}${account.statement.paymentDueDate ? ` · Due: ${escape(account.statement.paymentDueDate)}` : ''}${account.statement.creditLimit == null ? '' : ` · Credit limit: ${money(account.statement.creditLimit)}`}</p><p class="muted">Statement facts only. Review any separately entered debt-plan balance or APR before using a payoff forecast.</p></div>` : ''}
       ${review ? `<div class="acct-found"><strong>Is this one of your accounts?</strong><p>This reference appeared in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}. These transfers are excluded from spending and income until you review it.</p>${account.discovered_from ? `<blockquote>${escape(account.discovered_from)}</blockquote>` : ''}<p>If it is yours, choose its type and confirm below.${account.suggested_kind ? ` Suggested type: <strong>${escape(kindLabel(account.suggested_kind))}</strong> (please check).` : ''}</p></div>` : ''}
       <p class="muted acct-stats">${account.transactions} transaction${account.transactions === 1 ? '' : 's'} · ${escape(range)}${account.transfersTo && !review ? ` · ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'} in from other accounts` : ''}</p>
