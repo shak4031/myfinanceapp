@@ -1520,7 +1520,7 @@ test('analytics page shows a locked preview without Pro', async () => {
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });
 
-test('Compass date ranges update only the selected panel, support quarters/custom dates and show errors', async () => {
+test('Compass date ranges offer only four month presets and custom dates, update independently and show errors', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
@@ -1541,9 +1541,28 @@ test('Compass date ranges update only the selected panel, support quarters/custo
   });
   await f.context.loadAnalyticsPage(false, 'compass');
   assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 7);
-  const values = { preset: { value: '6' }, from: { value: '' }, to: { value: '' } };
+  const initial = f.node('analytics-content').innerHTML;
+  const selectors = [...initial.matchAll(/<select name="preset">([\s\S]*?)<\/select>/g)];
+  assert.equal(selectors.length, 7);
+  for (const [, options] of selectors) {
+    assert.deepEqual([...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]), ['3', '6', '12', '24', 'custom']);
+  }
+  assert.equal((initial.match(/<label hidden>Start month/g) || []).length, 7);
+  assert.equal((initial.match(/<label hidden>End month/g) || []).length, 7);
+  const values = { preset: { value: '6' }, from: { value: '', parentElement: {} }, to: { value: '', parentElement: {} } };
   const form = { dataset: { compassRange: 'heatmap' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
   const event = { preventDefault() {}, target: { name: 'preset', value: '6', closest: () => form } };
+  for (const months of [3, 6, 12, 24]) {
+    event.target.value = String(months);
+    f.listeners.get('document:change')(event);
+    const end = now.getFullYear() * 12 + now.getMonth() - 1;
+    const key = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
+    assert.equal(values.from.value, key(end - months + 1));
+    assert.equal(values.to.value, key(end));
+    assert.equal(values.from.parentElement.hidden, true);
+    assert.equal(values.to.parentElement.hidden, true);
+  }
+  event.target.value = '6';
   f.listeners.get('document:change')(event);
   assert.match(values.from.value, /^\d{4}-\d{2}$/);
   await f.listeners.get('document:submit')(event);
@@ -1553,23 +1572,27 @@ test('Compass date ranges update only the selected panel, support quarters/custo
   assert.match(panel('flow'), /Default calculation/);
   assert.match(panel('plan'), /Default calculation/);
   assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, 1);
-  values.preset.value = `q:${now.getFullYear() - 1}:2`;
+  values.preset.value = 'custom';
   event.target.value = values.preset.value;
   f.listeners.get('document:change')(event);
-  assert.equal(values.from.value, `${now.getFullYear() - 1}-04`);
-  assert.equal(values.to.value, `${now.getFullYear() - 1}-06`);
+  assert.equal(values.from.parentElement.hidden, false);
+  assert.equal(values.to.parentElement.hidden, false);
+  values.from.value = `${now.getFullYear() - 1}-04`;
+  values.to.value = `${now.getFullYear() - 1}-06`;
   event.target.name = 'from';
   f.listeners.get('document:change')(event);
   assert.equal(values.preset.value, 'custom');
+  await f.listeners.get('document:submit')(event);
+  html = f.node('analytics-content').innerHTML;
+  assert.match(panel('heatmap'), /\d+ of 3 completed months available/);
+  assert.match(panel('heatmap'), /<label>Start month/);
+  assert.match(panel('heatmap'), /<option value="custom" selected>/);
+  assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
   values.from.value = 'bad';
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
   assert.match(panel('heatmap'), /Could not update this panel: Choose valid completed months/);
   assert.match(panel('flow'), /Default calculation/);
-  values.preset.value = 'default';
-  await f.listeners.get('document:submit')(event);
-  html = f.node('analytics-content').innerHTML;
-  assert.match(panel('heatmap'), /Default calculation/);
 });
 
 test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {

@@ -105,9 +105,9 @@ Renamed payees resets names currently assigned by that rule, not unrelated names
 
 Every main Spending Compass panel has its own period selector: plan/headline and
 insights, money flow, signal overlap, merchants, heatmap, normal range, and technical
-readings. Choose 3, 6, 12 or 24 **completed months**, a specific completed calendar
-quarter, or a custom range of 1–24 months, then Apply. Other panels keep their ranges.
-Default view restores the original calculations. Selections survive navigation and
+readings. Choose 3, 6, 12 or 24 **completed months**, or Custom to reveal start and end
+month fields for a range of 1–24 completed months, then Apply. Other panels keep
+their ranges. Until Apply, the original calculations remain. Selections survive navigation and
 data refreshes within the page, but are not saved across browser reloads.
 Panels retain the full available content width, with the range controls above each.
 Merchant bubbles can be sized by **Total amount** or **Transactions** in the period

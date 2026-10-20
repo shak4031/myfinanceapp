@@ -11,15 +11,12 @@
     const { esc } = pro().format;
     const state = compassRanges.get(key);
     const end = lastCompleteMonth();
-    const option = (value, label) => `<option value="${value}"${state?.preset === value ? ' selected' : ''}>${label}</option>`;
-    const quarters = [];
-    for (let year = Math.floor(end / 12); year >= Math.floor(end / 12) - 5; year--) {
-      for (let q = 4; q >= 1; q--) if (year * 12 + q * 3 - 1 <= end) quarters.push(option(`q:${year}:${q}`, `Q${q} ${year}`));
-    }
+    const preset = state?.preset || '3';
+    const option = (value, label) => `<option value="${value}"${preset === value ? ' selected' : ''}>${label}</option>`;
     return `<form class="compass-range" data-compass-range="${key}" aria-label="${esc(title)} date range">
-      <label>Period<select name="preset">${option('default', 'Default view')}${[3, 6, 12, 24].map(n => option(String(n), `${n} completed months`)).join('')}${quarters.join('')}${option('custom', 'Custom months')}</select></label>
-      <label>From<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
-      <label>Through<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
+      <label>Period<select name="preset">${[3, 6, 12, 24].map(n => option(String(n), `${n} months`)).join('')}${option('custom', 'Custom')}</select></label>
+      <label${preset === 'custom' ? '' : ' hidden'}>Start month<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
+      <label${preset === 'custom' ? '' : ' hidden'}>End month<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
       <button type="submit" class="btn btn-secondary btn-compact">Apply</button>
       <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Default calculation · completed months only. Choose a period to explore.'}</p></form>`;
   }
@@ -800,14 +797,13 @@
   document.addEventListener('change', event => {
     const form = event.target?.closest?.('[data-compass-range]');
     if (!form) return;
-    if (event.target.name !== 'preset') { form.querySelector('[name="preset"]').value = 'custom'; return; }
+    if (event.target.name !== 'preset') return;
     const preset = event.target.value;
-    let end = lastCompleteMonth(), start = end - Number(preset) + 1;
-    if (preset.startsWith('q:')) {
-      const [, year, q] = preset.split(':').map(Number);
-      start = year * 12 + (q - 1) * 3; end = start + 2;
+    for (const name of ['from', 'to']) {
+      form.querySelector(`[name="${name}"]`).parentElement.hidden = preset !== 'custom';
     }
-    if (preset === 'custom' || preset === 'default') return;
+    if (preset === 'custom') return;
+    const end = lastCompleteMonth(), start = end - Number(preset) + 1;
     form.querySelector('[name="from"]').value = monthKey(start);
     form.querySelector('[name="to"]').value = monthKey(end);
   });
@@ -817,7 +813,6 @@
     event.preventDefault();
     const key = form.dataset.compassRange;
     const preset = form.querySelector('[name="preset"]').value;
-    if (preset === 'default') { compassRanges.delete(key); render(current); return; }
     const from = form.querySelector('[name="from"]').value, to = form.querySelector('[name="to"]').value;
     const state = { preset, from, to, loading: true, data: compassRanges.get(key)?.data };
     compassRanges.set(key, state);
