@@ -7,23 +7,19 @@
     <button type="button" data-dash-view="cards" aria-pressed="${view === 'cards'}">Cards</button>
     <button type="button" data-dash-view="pie" aria-pressed="${view === 'pie'}">${locked ? globalThis.FinancePro.ICONS.lock : ''}Pie</button></div>`;
 
-  function deltaChip(category) {
+  function budgetVisual(category) {
     const { money, esc } = globalThis.FinancePro.format;
-    if (category.lastMonthToDate <= 0 && category.mtd <= 0) return '';
-    if (category.lastMonthToDate <= 0) return '<span class="pro-delta is-new">New this month</span>';
-    const delta = category.deltaMtd, up = delta > 0.5, down = delta < -0.5;
-    if (!up && !down) return '<span class="pro-delta is-flat">• Same as last month</span>';
-    const pctText = category.deltaPct == null ? '' : category.deltaPct > 5 ? ' (>500%)' : ` (${Math.abs(Math.round(category.deltaPct * 100))}%)`;
-    return `<span class="pro-delta ${up ? 'is-up' : 'is-down'}" title="Compared with the same point last month (${esc(money(category.lastMonthToDate))})">${up ? '▲' : '▼'} ${money(Math.abs(delta), true)}${pctText} <em>vs last month</em></span>`;
-  }
-
-  function budgetBar(category) {
-    const { money } = globalThis.FinancePro.format;
-    if (!category.budget) return '';
-    const used = Math.min(1, category.budgetUsed), projected = Math.min(1, category.budgetProjected || 0);
-    const label = category.budgetStatus === 'over' ? 'Over budget' : category.budgetStatus === 'risk' ? 'On pace to exceed' : 'On track';
-    return `<span class="pro-budget is-${category.budgetStatus}"><span class="pro-budget-meta"><strong>${Math.round(category.budgetUsed * 100)}%</strong> of ${money(category.budget, true)}<em>${label}</em></span>
-      <span class="pro-budget-bar" title="Projected month-end: ${money(category.projected, true)}"><i style="width:${(used * 100).toFixed(1)}%"></i><b style="left:${(projected * 100).toFixed(1)}%"></b></span></span>`;
+    const budget = Number(category.budget);
+    if (!Number.isFinite(budget) || budget <= 0) return null;
+    const spent = Math.max(0, Number(category.mtd) || 0);
+    const remaining = budget - spent;
+    const state = remaining < 0 ? 'over' : category.budgetStatus === 'risk' ? 'risk' : 'ok';
+    const remainder = remaining < 0 ? `${money(-remaining)} over budget` : remaining === 0 ? 'Budget reached' : `${money(remaining)} left`;
+    const description = `${category.name}: ${money(spent)} spent of ${money(budget)} monthly budget. ${remainder}. Projected month-end: ${money(category.projected || 0)}.`;
+    return {
+      remainder: `<span class="mtd-budget-remainder is-${state} pro-added">${esc(remainder)}</span>`,
+      meter: `<span class="mtd-budget-meter is-${state} pro-added" role="meter" aria-label="${esc(category.name)} monthly budget" aria-valuemin="0" aria-valuemax="${budget}" aria-valuenow="${Math.min(spent, budget)}" aria-valuetext="${esc(description)}" title="${esc(description)}"><i aria-hidden="true" style="height:${(Math.min(1, spent / budget) * 100).toFixed(1)}%"></i></span>`
+    };
   }
 
   function summary(analytics) {
@@ -79,7 +75,11 @@
       const byName = new Map(analytics.categories.map(c => [c.name, c]));
       section.querySelectorAll('.mtd-category-card').forEach(card => {
         const category = byName.get(card.dataset.category);
-        if (category) card.querySelector('.mtd-card-body').insertAdjacentHTML('beforeend', `<span class="pro-card-extra pro-added">${deltaChip(category)}${budgetBar(category)}</span>`);
+        const visual = category && budgetVisual(category);
+        if (visual) {
+          card.querySelector('.mtd-card-body').insertAdjacentHTML('beforeend', visual.remainder);
+          card.insertAdjacentHTML('beforeend', visual.meter);
+        }
       });
     } catch (error) {
       if (run === token) head.insertAdjacentHTML('afterend', `<p class="pro-inline-error pro-added">Analytics are unavailable right now: ${pro.format.esc(error.message)}</p>`);

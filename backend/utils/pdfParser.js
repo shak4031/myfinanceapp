@@ -47,6 +47,45 @@ function labeledMoney(lines, pattern, name) {
   if (new Set(found).size > 1) throw fail(`Conflicting ${name} values were found. Upload one statement per file.`);
   return found.length ? found[0] : null;
 }
+function accountIdentity(lines, card) {
+  const endings = new Set();
+  const endingLabel = /\b(?:(?:account|card)(?:\s+(?:number|no\.?|#))?\s+ending(?:\s+in)?|ending in)\s*:?\s*[Xx*•. \t-]*(\d{4})(?!\d)/gi;
+  const accountLabel = /\b(?:account|card)\s*(?:number|no\.?|#)(?!\s+ending)\s*:?\s*((?:[Xx*•.\d][ \t-]*){4,24})/gi;
+  for (const line of lines) {
+    for (const match of line.matchAll(endingLabel)) endings.add(match[1]);
+    for (const match of line.matchAll(accountLabel)) {
+      const digits = match[1].replace(/\D/g, '');
+      if (digits.length >= 4) endings.add(digits.slice(-4));
+    }
+  }
+  // Only issuer/header text is eligible; a merchant or payment destination is not the issuer.
+  const header = lines.slice(0, 40).filter(line => !ROW.test(line));
+  const issuerLabel = header.map(line => line.match(/^(?:bank name|financial institution|issuer)\s*:\s*(.{2,80})$/i)?.[1]).find(Boolean);
+  const brands = [
+    ['Credit One', /\bcredit\s*one(?:\s+bank)?\b|creditonebank\.com/i],
+    ['Capital One', /\bcapital\s*one\b|capitalone\.com/i],
+    ['Bank of America', /\bbank of america\b|bankofamerica\.com/i],
+    ['Chase', /\b(?:jpmorgan\s+)?chase\b|chase\.com/i],
+    ['Wells Fargo', /\bwells fargo\b|wellsfargo\.com/i],
+    ['Discover', /\bdiscover\s+(?:bank|card|financial services)\b|^discover$|discover\.com/i],
+    ['American Express', /\bamerican express\b|americanexpress\.com/i],
+    ['Citi', /\bcitibank\b|\bciti\s+(?:cards?|bank)\b|citi\.com/i],
+    ['Ollo', /\bollo\b|ollocard\.com/i],
+    ['Ally', /\bally bank\b|ally\.com/i],
+    ['US Bank', /\bu\.?s\.? bank\b|usbank\.com/i],
+    ['TD Bank', /\btd bank\b|tdbank\.com/i]
+  ];
+  const issuers = issuerLabel ? [issuerLabel.trim()] : brands.filter(([, pattern]) => header.some(line => pattern.test(line))).map(([name]) => name);
+  const institution = issuers.length === 1 ? issuers[0] : null;
+  const checking = header.some(line => /\bchecking\b/i.test(line));
+  const savings = header.some(line => /\bsavings\b/i.test(line));
+  return {
+    last4: endings.size === 1 ? [...endings][0] : null,
+    institution,
+    accountKind: card ? 'credit_card' : checking !== savings ? checking ? 'checking' : 'savings' : null,
+    identityAmbiguous: endings.size > 1 || issuers.length > 1
+  };
+}
 function metadata(lines) {
   const text = lines.join('\n');
   const card = /credit\s*card\s*statement|(?:new (?:statement )?balance)[\s\S]*minimum payment|annual percentage rate\s*\(APR\)/i.test(text);
@@ -76,8 +115,7 @@ function metadata(lines) {
   const warnings = [];
   if (new Set(aprs).size > 1) warnings.push('Multiple purchase APRs were found; no single purchase APR was saved. Review promotional rates on the statement.');
   if (card && !aprs.length) warnings.push('Purchase APR was not readable; no APR was inferred from cash advance or balance transfer rates.');
-  const account = text.match(/(?:account (?:number(?: ending)?|ending)|ending in)\s*:?\s*((?:[Xx*•.\d][ \t-]*){4,24})/i);
-  const digits = account?.[1].replace(/\D/g, '');
+  const identity = accountIdentity(lines, card);
   const due = text.match(/payment due date\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))/i);
   const totals = card ? {
     purchases: labeledMoney(lines, /^\+?\s*purchases\s*\+?\s*/i, 'purchases'),
@@ -93,7 +131,7 @@ function metadata(lines) {
   };
   return {
     type, closingDate, startDate, balance: cash(balance), previousBalance: previousBalance == null ? null : cash(previousBalance),
-    purchaseApr: new Set(aprs).size === 1 ? aprs[0] : null, last4: digits?.slice(-4) || null,
+    purchaseApr: new Set(aprs).size === 1 ? aprs[0] : null, ...identity,
     minimumPayment: card ? toCash(labeledMoney(lines, /minimum payment due\s*:?\s*/i, 'minimum payment')) : null,
     creditLimit: card ? toCash(labeledMoney(lines, /^credit limit\s*:?\s*/i, 'credit limit')) : null,
     paymentDueDate: due ? dateValue(due[1]) : null, totals, warnings

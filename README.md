@@ -84,6 +84,13 @@ and opening a category carries that month into its floating detail panel.
 The detail panel has its own calendar and **All time** action. Dashboard
 month-to-date cards continue to open the specific month shown on the dashboard.
 
+Month-to-date spending cards emphasize the category and amount spent. With Pro
+analytics enabled, budgeted categories show a single remaining or over-budget
+amount and a right-side vertical budget meter, rather than repeated budget totals
+and percentages. Over-budget cards use explicit text and a striped red meter;
+screen readers receive the spent, budget and forecast amounts. Budget editing,
+the analytics toggle and category transaction drill-down remain available.
+
 Category details, imports, goal/debt editors, confirmations, and savings entry
 use centered, viewport-constrained floating dialogs with dimmed backdrops.
 Dialogs retain keyboard focus, close with Escape or their close/cancel controls,

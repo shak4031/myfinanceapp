@@ -2,15 +2,24 @@
 
 ## Importing a statement
 
-1. Open **Import statements**, choose the account (or create one), and select **PDF**.
+1. Open **Import statements** and select **PDF**. No account form is required by default.
 2. Upload one original, text-based statement per file, no larger than 12 MB or
-   100 pages. Use **Credit card** for card statements, **Checking** or **Savings**
-   for deposit accounts.
+   100 pages.
 3. The server detects the document type from its contents, not its filename or a
-   manually selected PDF template. A mismatched account type or account ending
-   stops the import without saving anything.
+   manually selected PDF template. It reads the account ending, card/checking/savings
+   type, and recognizable issuer text. A unique compatible saved account is reused;
+   otherwise a clearly identified new account is created automatically. Only the
+   last four digits are retained, not the full account number.
 4. Review the result: detected type, statement closing date, closing balance,
    purchase APR if available, imported count, duplicates, and warnings.
+
+Use **Choose account instead** for an explicit account selection. If the statement
+omits an account ending, contains conflicting identities, matches multiple saved
+accounts, or does not distinguish checking from savings, the import stops without
+saving and reveals the manual account picker. An account marked "not my account"
+is never silently converted. CSV/OFX imports still require an account selection.
+Issuer recognition is best-effort: an otherwise unambiguous new account with an
+unknown issuer gets a type-and-ending name that can be renamed on Accounts.
 
 Required-account validation errors appear inside the dialog. During import an
 animated, indeterminate progress bar shows reading and server-processing stages;
@@ -78,20 +87,24 @@ Authenticated, same-origin `POST /api/import/import-pdf`:
 ```json
 {
   "pdfBase64": "<raw base64, without a data URL prefix>",
-  "source": "statement.pdf",
-  "accountId": 123
+  "source": "statement.pdf"
 }
 ```
 
-Alternatively send `newAccount` with `name`, `kind`, optional `last4` and
-`institution`. Legacy `statementType` hints are ignored; content detection wins.
+Optionally override automatic account resolution with `accountId`, or `newAccount`
+with `name`, `kind`, optional `last4` and `institution`. Explicit selections still
+must match the detected statement type and account ending. Legacy `statementType`
+hints are ignored; content detection wins.
 Success includes `imported`, `duplicates`, `totalInFile`, `account`, `statement`,
 `reconciliation` and `warnings`. Invalid uploads/account choices return 400;
 unsupported/unverifiable statements return 422. No account or financial rows are
-saved on failure.
+saved on failure. Ambiguous account identity returns 422 with
+`code: "ACCOUNT_REVIEW_REQUIRED"` and `detectedAccount` (kind, last4, institution)
+for manual review. Automatic resolution is tenant-scoped and serialized so
+simultaneous automatic first uploads do not create duplicate accounts.
 
 For `POST /api/import/import-batch`, each file has `type: "pdf"`, `data` containing
-raw base64, optional `source`, and its account choice (or a top-level default).
+raw base64, optional `source`, and an optional account choice (or a top-level default).
 Each result includes the same statement/reconciliation facts.
 
 ## Implementation and tests

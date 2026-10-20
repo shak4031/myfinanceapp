@@ -280,6 +280,39 @@ body .floating-dialog { width: min(600px,calc(100vw - 40px)); padding: 0; }
 #add-goal-modal { width: min(520px,calc(100vw - 40px)); }
 .floating-dialog-body { width: 100%; }
 .dialog-close, .mtd-dialog-close { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; background: #f1f5f9; color: #334155; border: 1px solid var(--border); font-size: 24px; cursor: pointer; }
+body #import-modal { width: min(520px,calc(100vw - 24px)); max-width: calc(100vw - 24px); padding: 0; overscroll-behavior: contain; scrollbar-width: thin; }
+.import-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; }
+.import-header h2 { margin: 0; font-size: 21px; line-height: 1.3; letter-spacing: -.5px; }
+.import-header p { margin: 5px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+#import-modal .dialog-close { width: 40px; height: 40px; }
+.import-tabs { display: flex; gap: 4px; margin: 0 24px; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-tertiary); }
+.import-tabs button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 0; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.import-content { padding: 20px 24px 24px; }
+#import-modal .import-account { margin-bottom: 16px; padding-bottom: 16px; }
+#import-account-select { width: 100%; min-height: 44px; padding: 10px 12px; background: #fff; color: var(--text-primary); border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 14px; }
+#import-modal .import-new-account { grid-template-columns: repeat(2,minmax(0,1fr)); }
+#import-modal .import-new-account :is(input,select) { width: 100%; min-width: 0; min-height: 44px; }
+.import-description { margin: 0 0 14px; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.import-hint { margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.import-dropzone { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; width: 100%; min-height: 132px; padding: 18px 14px; border: 1.5px dashed #94aaa4; border-radius: 12px; background: #f6faf8; color: var(--text-primary); font: inherit; text-align: center; cursor: pointer; transition: background .15s,border-color .15s; }
+.import-dropzone:hover { border-color: var(--primary); background: #edf7f2; }
+.import-dropzone strong { font-size: 14px; font-weight: 650; }
+.import-dropzone > span:last-child { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.import-file-icon { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 2px; border-radius: 8px; background: #e2eee7; color: #226452; font-size: 23px; }
+.import-file-list { margin-top: 12px; overflow-wrap: anywhere; }
+.import-file-list:empty { display: none; }
+.import-actions { margin-top: 16px; }
+#import-modal .import-actions .btn { width: 100%; min-height: 44px; }
+.import-detected-account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #dce9e1; border-radius: 10px; background: #f6faf8; color: #35584a; font-size: 12px; line-height: 1.5; }
+.import-detected-account button { min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: #226452; font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+#import-result { margin-top: 16px; padding: 14px; border-radius: 10px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+#import-modal :is(button,input,select):focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 540px) {
+  .import-header { padding: 18px 18px 14px; }
+  .import-tabs { margin-inline: 18px; }
+  .import-content { padding: 16px 18px 20px; }
+  #import-modal :is(input,select) { font-size: 16px; }
+}
 body .mtd-dialog { width: min(780px,calc(100vw - 40px)); padding: 0; overflow: hidden; }
 .mtd-dialog-shell { max-height: calc(100vh - 50px); max-height: calc(100dvh - 50px); grid-template-rows: auto auto auto minmax(80px,1fr) auto; }
 .mtd-dialog-header { padding: 26px 28px 20px; background: #f8fafc; }
@@ -330,12 +363,13 @@ body .metric-card { position: relative; overflow: hidden; }
 .metric-card.expense { --accent: var(--danger); }
 .metric-card.net { --accent: #2563eb; }
 .metric-card.balance { --accent: #0f766e; }
-/* Month-to-date tiles mirror the Categories cards: white, accented, divided, on a tinted well. */
+/* Quiet spending tiles keep the amount primary; the budget fills upward at the right. */
 #mtd-spending-section { background: #f3f6fa; }
 #mtd-spending-section > .mtd-grid { margin: 0; padding: 24px; }
 body .mtd-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 18px; }
-body .mtd-category-card { --mtd-accent: #38bdf8; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; background: #fff; color: var(--text-primary); border: 1px solid #cfd8e3; border-top: 4px solid var(--mtd-accent); border-radius: 14px; box-shadow: 0 1px 2px #0f172a14, 0 10px 22px -12px #0f172a33; font: inherit; text-align: left; transition: transform .15s, border-color .15s, box-shadow .15s; }
-body .mtd-category-card:hover { transform: translateY(-3px); border-color: var(--mtd-accent); box-shadow: 0 16px 28px -14px #0f172a4d; }
+body .mtd-category-card { --mtd-accent: #0f766e; position: relative; display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 0; overflow: hidden; background: #fff; color: var(--text-primary); border: 1px solid #dce4e8; border-radius: 14px; box-shadow: 0 2px 4px #0f172a06; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s; }
+body .mtd-category-card:hover { border-color: #94aaa4; box-shadow: 0 4px 14px #0f172a12; }
+body .mtd-category-card:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 .mtd-grid .mtd-category-card:nth-child(6n+1) { --mtd-accent: #10b981; }
 .mtd-grid .mtd-category-card:nth-child(6n+2) { --mtd-accent: #38bdf8; }
 .mtd-grid .mtd-category-card:nth-child(6n+3) { --mtd-accent: #818cf8; }
@@ -343,13 +377,23 @@ body .mtd-category-card:hover { transform: translateY(-3px); border-color: var(-
 .mtd-grid .mtd-category-card:nth-child(6n+5) { --mtd-accent: #fb7185; }
 .mtd-grid .mtd-category-card:nth-child(6n+6) { --mtd-accent: #fb923c; }
 body .mtd-grid .mtd-category-card { padding: 0; }
-.mtd-card-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--divider); }
+.mtd-card-head { display: flex; align-items: center; padding: 20px 20px 0; }
 .mtd-card-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; font-size: 21px; background: color-mix(in srgb, var(--mtd-accent) 18%, #fff); border-radius: 10px; }
-.mtd-card-head strong { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 650; overflow-wrap: anywhere; }
+.mtd-card-head strong { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; font-weight: 600; color: #475569; overflow-wrap: anywhere; }
 .mtd-card-arrow { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #f1f5f9; color: #334155; font-size: 14px; }
-.mtd-card-body { display: grid; gap: 3px; padding: 14px 16px 16px; }
-.mtd-card-total { font-size: 22px; font-weight: 720; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.mtd-card-body { display: grid; gap: 4px; padding: 10px 20px 20px; }
+.mtd-card-total { font-size: clamp(24px,2.4vw,30px); line-height: 1.2; font-weight: 720; letter-spacing: -.7px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .mtd-card-body small { color: var(--text-secondary); font-size: 12px; }
+.mtd-category-card:has(.mtd-budget-meter) :is(.mtd-card-head, .mtd-card-body) { padding-right: 48px; }
+.mtd-budget-remainder { margin-top: 10px; color: #047857; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mtd-budget-remainder.is-risk { color: #92400e; }
+.mtd-budget-remainder.is-over { color: #b91c1c; }
+.mtd-budget-meter { position: absolute; top: 20px; bottom: 20px; right: 20px; width: 10px; min-height: 60px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 999px; background: #edf2f4; }
+.mtd-budget-meter i { position: absolute; inset: auto 0 0; background: #047857; border-radius: inherit; }
+.mtd-budget-meter.is-risk i { background: #b45309; }
+.mtd-budget-meter.is-over { border-color: #b91c1c; background: #fee2e2; }
+.mtd-budget-meter.is-over i { background: repeating-linear-gradient(135deg,#b91c1c 0 5px,#ef4444 5px 8px); }
+.mtd-category-card:has(.mtd-budget-meter.is-over) { border-color: #e6a5a5; }
 body .transaction-panel { padding: 0; }
 .transactions-table { width: 100%; border-collapse: collapse; }
 .transactions-table th { background: #f1f5f9; }
@@ -653,13 +697,14 @@ tr:hover .tx-rename, .tx-rename:focus-visible { opacity: 1; }
   .section-panel > :not(.section-head) { margin: 16px; }
   .section-panel > #dashboard-payments { margin: 0; }
   .data-table th, .data-table td { padding: 10px 12px !important; }
-  body .mtd-grid { grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap: 12px; }
+  body .mtd-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,210px),1fr)); gap: 12px; }
   #mtd-spending-section > .mtd-grid { padding: 16px; }
-  .mtd-card-head { padding: 12px; gap: 10px; }
+  .mtd-card-head { padding: 16px 16px 0; }
   .mtd-card-icon { width: 34px; height: 34px; font-size: 18px; }
   .mtd-card-arrow { display: none; }
-  .mtd-card-body { padding: 12px; }
-  .mtd-card-total { font-size: 19px; }
+  .mtd-card-body { padding: 8px 16px 16px; }
+  .mtd-card-total { font-size: 26px; }
+  .mtd-budget-meter { top: 16px; right: 16px; bottom: 16px; }
   .transactions-table th:first-child, .transactions-table td:first-child { padding-left: 12px !important; }
   .transactions-table th:last-child, .transactions-table td:last-child { padding-right: 12px !important; }
   .category-card-copy strong { max-width: none; font-size: 14px; }

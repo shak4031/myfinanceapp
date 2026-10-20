@@ -26,6 +26,19 @@ test('wrapped merchant names and amounts on subsequent lines are retained', () =
   assert.equal(result.transactions[0].description, 'SAMPLE MARKET CITY NJ');
   assert.equal(result.transactions.length, 6);
 });
+test('statement identity reads masked endings, issuer headers and account type without storing full numbers', () => {
+  for (const label of ['Account Number: XXXX-XXXX-XXXX-1111', 'Card Number: **** 1111', 'Account ending in 1111', 'Account #: 4000 0000 0000 1111', 'Cardmember Ending in 1111 1 of 4']) {
+    const result = card(cardLines.map(line => line.startsWith('Account Number') ? label : line.replace('EXAMPLE CREDIT CARD', 'Credit One Bank CREDIT CARD')));
+    assert.equal(result.statement.last4, '1111', label);
+    assert.equal(result.statement.institution, 'Credit One');
+    assert.equal(result.statement.accountKind, 'credit_card');
+    assert.equal(result.statement.identityAmbiguous, false);
+    assert.ok(!JSON.stringify(result.statement).includes('4000 0000'));
+  }
+  assert.equal(bank().statement.accountKind, 'checking');
+  assert.equal(bank(bankLines.map(line => line.replace('CHECKING', 'SAVINGS'))).statement.accountKind, 'savings');
+  assert.equal(card([...cardLines, 'Account Number Ending 9999']).statement.identityAmbiguous, true);
+});
 test('years come from the statement period including December/January rollover', () => {
   const result = card(cardLines.map(line => line
     .replace('September 04, 2026 to October 03, 2026', 'December 06, 2026 to January 05, 2027')

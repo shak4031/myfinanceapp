@@ -9,13 +9,14 @@ import { incomeKey } from '../utils/income.js';
 import { compileNameRules, loadNameRules, resolveName } from '../utils/naming.js';
 import { currentUserId } from '../utils/tenant.js';
 import { reconcileTransfers } from '../utils/transfers.js';
-import { resolveImportAccount } from './accounts.js';
+import { resolveImportAccount, resolveStatementAccount } from './accounts.js';
 
 const router = express.Router();
 const db = new Database();
 const route = handler => async (req, res) => {
   try { await handler(req, res); } catch (error) {
-    res.status(error.status || 500).json({ success: false, error: error.message });
+    res.status(error.status || 500).json({ success: false, error: error.message,
+      ...(error.code === 'ACCOUNT_REVIEW_REQUIRED' ? { code: error.code, detectedAccount: error.detectedAccount } : {}) });
   }
 };
 
@@ -84,7 +85,7 @@ export async function importTransactions(client, transactions, config, source, a
 
 // Imports are tied to an account so transfers between your own accounts can be recognised and left out of totals.
 async function importInto(client, body, parsed, config, fallbackSource) {
-  const account = await resolveImportAccount(client, body);
+  const account = parsed.statement ? await resolveStatementAccount(client, body, parsed.statement) : await resolveImportAccount(client, body);
   await saveStatement(client, account, parsed.statement);
   const result = await importTransactions(client, parsed.transactions, config, body.source || fallbackSource, account.id, { preserveOccurrences: !!parsed.statement });
   return { ...result, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
@@ -130,7 +131,6 @@ router.post('/import-csv', route(async (req, res) => {
 }));
 router.post('/import-pdf', route(async (req, res) => {
   const started = Date.now();
-  requireAccountChoice(req.body);
   const parsed = await parseFile({ type: 'pdf', data: req.body?.pdfBase64 });
   const result = await db.transaction(async client => {
     const config = await loadCategorization(client);
@@ -144,7 +144,7 @@ router.post('/import-batch', route(async (req, res) => {
   if (!Array.isArray(files) || !files.length) throw failure(400, 'No files provided');
   // Each file names its own account; a top-level accountId/newAccount applies to files that do not.
   const choices = files.map(file => (file?.accountId != null || file?.newAccount ? file : { ...file, accountId: req.body.accountId, newAccount: req.body.newAccount }));
-  choices.forEach(requireAccountChoice);
+  choices.forEach((choice, index) => { if (files[index]?.type !== 'pdf') requireAccountChoice(choice); });
   const parsed = [];
   for (const file of files) parsed.push(await parseFile(file));
   const results = await db.transaction(async client => {

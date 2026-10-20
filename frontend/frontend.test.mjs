@@ -217,6 +217,7 @@ test('account review requires an owned type and the not-mine action saves an ext
     Object.assign(f.context, {
       pendingPdfFile: { name: 'statement.pdf', size: 1024 },
       pdfImportInProgress: false,
+      pdfManualAccount: true,
       AbortSignal,
       FinanceAccounts: { choice: () => ({ accountId: 1 }), afterImport: async () => {}, resultNote: () => '' },
       FileReader: class { readAsDataURL() { this.result = 'data:application/pdf;base64,JVBERg=='; setTimeout(() => this.onload(), 0); } },
@@ -227,6 +228,9 @@ test('account review requires an owned type and the not-mine action saves an ext
     const modalStart = html.indexOf('    function openImportModal()');
     const modalEnd = html.indexOf('    function switchImportTab', modalStart);
     vm.runInContext(html.slice(modalStart, modalEnd), f.context);
+    const chooseStart = html.indexOf('    function choosePdfAccount()');
+    const chooseEnd = html.indexOf('    function onPdfSelected', chooseStart);
+    vm.runInContext(html.slice(chooseStart, chooseEnd), f.context);
     const start = html.indexOf('    async function importPDF()');
     const end = html.indexOf('    // ===========================================', start);
     vm.runInContext(html.slice(start, end), f.context);
@@ -237,6 +241,23 @@ test('account review requires an owned type and the not-mine action saves an ext
       success: true, imported: 6, duplicates: 0, totalInFile: 6,
       statement: { type: 'credit-card', closingDate: '2026-10-03', balance: 110, purchaseApr: 24.99 },
       reconciliation: { status: 'balanced' }, warnings: ['Check <promotional> rate']
+    });
+    test('PDF auto account mode uploads without requiring account input and reveals manual fallback only on review', async () => {
+      const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1 });
+      f.context.pdfManualAccount = false;
+      f.context.FinanceAccounts.choice = () => { throw new Error('Automatic PDF import must not ask for an account'); };
+      await f.context.importPDF();
+      assert.equal(f.requests.length, 1);
+      assert.equal(f.requests[0][1].accountId, undefined);
+      assert.equal(f.requests[0][1].newAccount, undefined);
+      const review = pdfUploadFixture(422, { code: 'ACCOUNT_REVIEW_REQUIRED', error: 'Several accounts match. Choose the account.' });
+      review.context.pdfManualAccount = false;
+      review.node('import-account-picker').hidden = true;
+      await review.context.importPDF();
+      assert.equal(review.context.pdfManualAccount, true);
+      assert.equal(review.node('import-account-picker').hidden, false);
+      assert.match(review.node('import-result').innerHTML, /Several accounts match/);
+      assert.equal(review.node('pdf-import-btn').disabled, false);
     });
     await Promise.all([f.context.importPDF(), f.context.importPDF()]);
     assert.equal(f.requests.length, 1);

@@ -66,6 +66,39 @@ export async function resolveImportAccount(client, body) {
   throw failure(400, 'Choose which account this statement is from (accountId or newAccount is required)');
 }
 
+export async function resolveStatementAccount(client, body, statement) {
+  if (body?.accountId != null && body.accountId !== '' || body?.newAccount) return resolveImportAccount(client, body);
+  const userId = currentUserId();
+  const review = message => Object.assign(failure(422, `${message} Choose the account for this PDF and retry. Nothing was imported.`), {
+    code: 'ACCOUNT_REVIEW_REQUIRED',
+    detectedAccount: { last4: statement.last4, institution: statement.institution, kind: statement.accountKind }
+  });
+  if (!statement.last4 || statement.identityAmbiguous) throw review('The statement account could not be identified unambiguously.');
+  // Serialise automatic account creation for a tenant, including simultaneous first imports.
+  await client.query('SELECT pg_advisory_xact_lock(74938121,$1::integer)', [userId]);
+  const matches = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id=$1 AND last4=$2 ORDER BY id FOR UPDATE`, [userId, statement.last4])).rows;
+  const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/bank$/, '');
+  const compatible = matches.filter(account => account.kind === 'unknown' || (statement.type === 'credit-card'
+    ? account.kind === 'credit_card' : ['checking', 'savings'].includes(account.kind)));
+  const kindMatches = statement.accountKind ? compatible.filter(account => account.kind === statement.accountKind || account.kind === 'unknown') : compatible;
+  const issuerMatches = statement.institution ? kindMatches.filter(account => !account.institution || normalize(account.institution) === normalize(statement.institution)) : kindMatches;
+  if (issuerMatches.length > 1) throw review('Several saved accounts share this statement account ending.');
+  const existing = issuerMatches[0];
+  if (existing) {
+    if (existing.kind !== 'unknown') return existing;
+    if (!statement.accountKind) throw review('The statement does not clearly identify checking versus savings.');
+    return (await client.query(`UPDATE accounts SET kind=$1, institution=COALESCE(institution,$2), status='active', updated_at=NOW()
+      WHERE id=$3 AND user_id=$4 RETURNING ${COLUMNS}`, [statement.accountKind, statement.institution, existing.id, userId])).rows[0];
+  }
+  if (matches.some(account => account.kind === 'external')) throw review('An account with this ending is marked "not my account".');
+  if (matches.length) throw review('The statement account identity conflicts with a saved account.');
+  if (!statement.accountKind) throw review('The statement does not clearly identify checking versus savings.');
+  const label = ACCOUNT_KIND_LABELS[statement.accountKind];
+  const name = `${statement.institution || label} ${statement.institution ? label.toLowerCase() + ' ' : ''}••${statement.last4}`.slice(0, 80);
+  return (await client.query(`INSERT INTO accounts (user_id,name,kind,institution,last4,status) VALUES ($1,$2,$3,$4,$5,'active') RETURNING ${COLUMNS}`,
+    [userId, name, statement.accountKind, statement.institution, statement.last4])).rows[0];
+}
+
 router.get('/', route(async (req, res) => {
   const userId = currentUserId();
   const result = await db.transaction(async client => {
