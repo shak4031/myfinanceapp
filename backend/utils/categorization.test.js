@@ -85,7 +85,7 @@ async function fixture() {
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
-      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT, display_name TEXT);
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE);
     CREATE TABLE name_rules (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
       pattern TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(user_id,pattern));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
@@ -304,6 +304,29 @@ test('rename rules apply to past rows, new imports and manual rows, and can be r
     const broadened = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: merchantPreview.body.suggested, name: 'Peri Peri' });
     assert.equal(broadened.body.rule.matches, 3);
     assert.equal((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%CHAI CHENAK%'")).rows[0].display_name, null);
+    const periRows = (await client.query("SELECT id,description FROM transactions WHERE user_id=1 AND description LIKE '%TRIBOS%' ORDER BY id")).rows;
+    const selectedId = periRows[0].id;
+    const selective = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: 'TRIBOS PERI PERI', name: 'Dinner spot', ids: [selectedId], remember: true });
+    assert.equal(selective.status, 200);
+    assert.equal(selective.body.rule.matches, 1);
+    assert.deepEqual((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%TRIBOS%' ORDER BY id")).rows.map(row => row.display_name), ['Dinner spot', 'Peri Peri', 'Peri Peri']);
+    await request('/api/transactions/name-rules', { pattern: 'CHAI CHENAK', name: 'Chai' });
+    assert.deepEqual((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%TRIBOS%' ORDER BY id")).rows.map(row => row.display_name), ['Dinner spot', 'Peri Peri', 'Peri Peri'], 'later rule recomputation preserves unchecked rows');
+    await importTransactions(client, [{ date: '2026-09-25', description: 'TST TRIBOS PERI PERI METUCHEN NJ', amount: 30, direction: 'DEBIT' }], config, 'test');
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-09-25'")).rows[0].display_name, 'Dinner spot');
+    const foreign = (await client.query('SELECT id FROM transactions WHERE user_id=2 LIMIT 1')).rows[0].id;
+    assert.equal((await request('/api/transactions/name-rules', { pattern: 'TRIBOS PERI PERI', name: 'No', ids: [foreign], remember: false })).status, 409);
+    assert.equal((await request('/api/transactions/name-rules', { pattern: 'TRIBOS PERI PERI', name: 'No', ids: [selectedId, selectedId], remember: false })).status, 400);
+    const oneTime = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: 'TRIBOS PERI PERI', name: 'One dinner', ids: [selectedId], remember: false });
+    assert.equal(oneTime.status, 200);
+    assert.equal((await client.query('SELECT id FROM name_rules WHERE id=$1', [narrow.body.rule.id])).rows.length, 0);
+    const labelsBefore = (await client.query('SELECT COUNT(*)::int AS n FROM transaction_labels')).rows[0].n;
+    const categoryOnce = await request('/api/transactions/categorization-apply', { updates: [{ id: selectedId, category: 'Shopping', expectedCategory: 'Dining' }], learnRules: false, protectCorrections: false });
+    assert.equal(categoryOnce.status, 200);
+    assert.equal((await client.query('SELECT COUNT(*)::int AS n FROM transaction_labels')).rows[0].n, labelsBefore);
+    const clearOnce = await request('/api/transactions/categorization-apply', { updates: [{ id: selectedId, category: '', expectedCategory: 'Shopping' }], learnRules: false, protectCorrections: false });
+    assert.equal(clearOnce.status, 200);
+    assert.equal((await client.query('SELECT category FROM transactions WHERE id=$1', [selectedId])).rows[0].category, null);
   } finally {
     await new Promise(resolve => server.close(resolve));
     Database.prototype.transaction = original;

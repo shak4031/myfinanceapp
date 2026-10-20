@@ -566,7 +566,7 @@ test('similar-payment matcher normalizes statement noise with regex and weighs a
   ];
   const similar = f.context.findSimilarTransactions(rows, rows[0], 'Subscriptions');
   assert.deepEqual(similar.map(item => [item.transaction.id, item.sameAmount]), [['2', true], ['3', true], ['4', false]]);
-  assert.equal(f.context.findSimilarTransactions(rows, rows[0], '').length, 0);
+  assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], '').map(item => item.transaction.id), ['2', '3', '6', '4']);
   rows[1].is_fixed = true;
   const fixedMatches = f.context.findSimilarTransactions(rows, rows[0], { isFixed: true });
   assert.deepEqual(fixedMatches.map(item => item.transaction.id), ['3', '6', '4']);
@@ -618,6 +618,7 @@ for (const renamed of [false, true, 'partial', 'friendly-search']) test(`Peri Pe
   await new Promise(resolve => setTimeout(resolve, 0));
   const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
   assert.equal(dialog.open, true);
+  assert.equal(calls.some(([url]) => url === '/api/transactions/categorization-apply' || url === '/api/transactions/update-transaction'), false, 'no category writes before confirmation');
   assert.match(f.node('similar-copy').innerHTML, /Found <strong>2<\/strong> other transactions/);
   assert.ok(f.node('similar-copy').innerHTML.includes(`Started from your search “${query}”`));
   assert.doesNotMatch(f.node('similar-list').innerHTML, /CHAI|GRILL/);
@@ -628,9 +629,8 @@ for (const renamed of [false, true, 'partial', 'friendly-search']) test(`Peri Pe
   f.node('similar-list').querySelectorAll = () => [{ checked: true, dataset: { similar: '0' } }, { checked: false, dataset: { similar: '1' } }];
   await f.node('similar-form').onsubmit({ preventDefault() {} });
   await pending;
-  assert.deepEqual(calls.find(([url]) => url === '/api/transactions/update-transaction')[1], { id: 1, category: 'Dining', apply_to_all: false });
   assert.deepEqual(calls.find(([url]) => url === '/api/transactions/categorization-apply')[1], {
-    updates: [{ id: 2, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: true, protectCorrections: false
+    updates: [{ id: 1, category: 'Dining', expectedCategory: 'Shopping' }, { id: 2, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: true, protectCorrections: false
   });
   assert.equal(f.node('txn-filter-search').value, query);
   assert.equal(dialog.open, false);
@@ -693,10 +693,10 @@ test('changing a category offers similar payments and applies only the confirmed
   await f.node('similar-form').onsubmit({ preventDefault() {} });
   await pending;
   const apply = calls.find(([url]) => url === '/api/transactions/categorization-apply')[1];
-  assert.deepEqual(apply, { updates: [{ id: 2, category: 'Subscriptions', expectedCategory: 'Entertainment' }, { id: 3, category: 'Subscriptions', expectedCategory: null }], learnRules: true, protectCorrections: false });
+  assert.deepEqual(apply, { updates: [{ id: 1, category: 'Subscriptions', expectedCategory: 'Entertainment' }, { id: 2, category: 'Subscriptions', expectedCategory: 'Entertainment' }, { id: 3, category: 'Subscriptions', expectedCategory: null }], learnRules: true, protectCorrections: false });
   assert.equal(dialog.open, false);
 });
-test('pay-mode column, filter and similar-payment prompt mark auto-pay and manual debits', async () => {
+test('pay-mode column, filter and similar-payment prompt mark auto-pay and manual debits', async t => {
   const calls = [];
   const transactions = [
     { id: '1', date: '2026-09-29', description: 'VISA DDA PUR AP 420429 NETFLIX COM 408 5403700 * CA', amount: 28.78, direction: 'DEBIT', category: 'Subscriptions', pay_mode: null },
@@ -709,6 +709,33 @@ test('pay-mode column, filter and similar-payment prompt mark auto-pay and manua
     if (url === '/api/categories') return response(200, [{ name: 'Subscriptions' }, { name: 'Salary' }]);
     if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
     return response(200, { success: true, updated: 1 });
+  });
+  await t.test('category review can cancel or change only the starting payment without remembering a rule', async () => {
+    const writes = [];
+    const transactions = [{ id: 1, date: '2026-09-01', description: 'LOCAL CAFE', amount: 20, direction: 'DEBIT', category: 'Shopping' }];
+    const f = fixture(async (url, options = {}) => {
+      if (options.method === 'POST') writes.push(JSON.parse(options.body));
+      if (url === '/api/categories') return response(200, [{ name: 'Dining' }, { name: 'Shopping' }]);
+      if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+      return response(200, { updated: 1 });
+    });
+    f.run('refresh.js');
+    await f.context.loadAllTransactions();
+    const select = { value: 'Dining', matches: () => false, closest: () => ({ dataset: { transaction: '0' } }) };
+    const pending = f.node('full-txn-table').onchange({ target: select });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+    assert.equal(dialog.open, true);
+    assert.equal(writes.length, 0);
+    f.node('similar-cancel').onclick();
+    await pending;
+    assert.equal(writes.length, 0);
+    const retry = f.node('full-txn-table').onchange({ target: select });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    f.node('similar-remember').checked = false;
+    await f.node('similar-skip').onclick();
+    await retry;
+    assert.deepEqual(writes, [{ updates: [{ id: 1, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: false, protectCorrections: false }]);
   });
   f.run('refresh.js');
   await f.context.loadAllTransactions();
@@ -1493,6 +1520,58 @@ test('analytics page shows a locked preview without Pro', async () => {
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });
 
+test('Compass date ranges update only the selected panel, support quarters/custom dates and show errors', async () => {
+  const { buildDemoData } = await import('../backend/utils/demo.js');
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
+  const now = new Date(), demo = buildDemoData(now), calls = [];
+  const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, today: now }) };
+  const f = loadPro(async url => {
+    calls.push(url);
+    if (url === '/api/license') return response(200, { active: true, features: [] });
+    if (url.startsWith('/api/analytics/compass?')) {
+      const params = new URL(url, 'http://local').searchParams;
+      if (params.get('from') === 'bad') return response(400, { error: 'Choose valid completed months' });
+      const [year, month] = params.get('to').split('-').map(Number);
+      const [startYear, startMonth] = params.get('from').split('-').map(Number);
+      const range = { from: params.get('from'), to: params.get('to'), months: (year - startYear) * 12 + month - startMonth + 1, endYear: year, endMonth: month - 1 };
+      return response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range }), range });
+    }
+    return response(200, payload);
+  });
+  await f.context.loadAnalyticsPage(false, 'compass');
+  assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 7);
+  const values = { preset: { value: '6' }, from: { value: '' }, to: { value: '' } };
+  const form = { dataset: { compassRange: 'heatmap' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
+  const event = { preventDefault() {}, target: { name: 'preset', value: '6', closest: () => form } };
+  f.listeners.get('document:change')(event);
+  assert.match(values.from.value, /^\d{4}-\d{2}$/);
+  await f.listeners.get('document:submit')(event);
+  let html = f.node('analytics-content').innerHTML;
+  const panel = key => html.split(`data-compass-panel="${key}"`)[1].split('data-compass-panel=')[0];
+  assert.match(panel('heatmap'), /6 of 6 completed months available/);
+  assert.match(panel('flow'), /Default calculation/);
+  assert.match(panel('plan'), /Default calculation/);
+  assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, 1);
+  values.preset.value = `q:${now.getFullYear() - 1}:2`;
+  event.target.value = values.preset.value;
+  f.listeners.get('document:change')(event);
+  assert.equal(values.from.value, `${now.getFullYear() - 1}-04`);
+  assert.equal(values.to.value, `${now.getFullYear() - 1}-06`);
+  event.target.name = 'from';
+  f.listeners.get('document:change')(event);
+  assert.equal(values.preset.value, 'custom');
+  values.from.value = 'bad';
+  await f.listeners.get('document:submit')(event);
+  html = f.node('analytics-content').innerHTML;
+  assert.match(panel('heatmap'), /Could not update this panel: Choose valid completed months/);
+  assert.match(panel('flow'), /Default calculation/);
+  values.preset.value = 'default';
+  await f.listeners.get('document:submit')(event);
+  html = f.node('analytics-content').innerHTML;
+  assert.match(panel('heatmap'), /Default calculation/);
+});
+
 test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
@@ -1534,7 +1613,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /<svg class="pro-sankey"[^>]*aria-label="Money flow: income/);
   assert.match(html, /Of every \$100 you bring home: .*left over/);
   assert.match(html, /<svg class="pro-venn"/);
-  assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual last month/);
+  assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual latest month/);
   // The Venn takes the full row with its overlap spelled out beside it, strongest signals first.
   assert.match(html, /<div class="pro-venn-layout"><svg class="pro-venn" viewBox="0 0 560 446"/);
   const flagged = mf.categories.filter(c => c.benchmarkStatus === 'high' || c.benchmarkStatus === 'above' || c.rising || c.spike || c.band?.position === 'above');
@@ -1780,7 +1859,7 @@ test('renamed payees show the friendly name, stay searchable and can be renamed 
     if (url === '/api/dashboard/all-transactions') return response(200, { transactions: rows });
     if (url === '/api/transactions/name-rules/preview') return response(200, body.description
       ? { suggested: 'ZELLE SAM PATEL', current: null, pattern: 'ZELLE SAM PATEL', count: 4, samples: ['SENT 77ZZ Zelle SAM PATEL'] }
-      : { pattern: body.pattern.toUpperCase(), count: 4, samples: ['SENT 77ZZ Zelle SAM PATEL'] });
+      : { pattern: body.pattern.toUpperCase(), count: 4, transactions: [{ id: 3, date: '2026-10-05', description: 'SENT 77ZZ Zelle SAM PATEL', amount: 40 }], samples: ['SENT 77ZZ Zelle SAM PATEL'] });
     if (url === '/api/transactions/name-rules') return response(200, { success: true, rule: { id: 9, pattern: 'ZELLE SAM PATEL', name: 'Sam Patel', matches: 4 }, changed: 4 });
     return response(200, {});
   });
@@ -1791,7 +1870,7 @@ test('renamed payees show the friendly name, stay searchable and can be renamed 
       calls.push([url, body]);
       if (url === '/api/transactions/name-rules/preview') return response(200, body.description
         ? { suggested: 'TRIBOS PERI PERI', current: { id: 9, pattern: 'TST TRIBOS PERI PERI M METUCHEN NJ', name: 'Peri Peri' }, count: 3 }
-        : { pattern: body.pattern, count: 3, samples: ['TST* TRIBOS PERI PERI - M METUCHEN NJ', 'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ'] });
+        : { pattern: body.pattern, count: 3, transactions: [{ id: 1, date: '2026-09-23', description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ', amount: 29.5 }, { id: 2, date: '2026-08-10', description: 'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ', amount: 94.3 }], samples: [] });
       if (url === '/api/transactions/name-rules') return response(200, { rule: { name: 'Peri Peri', matches: 3 } });
       if (url === '/api/categories') return response(200, []);
       if (url === '/api/dashboard/all-transactions') return response(200, { transactions: [] });
@@ -1802,8 +1881,10 @@ test('renamed payees show the friendly name, stay searchable and can be renamed 
     assert.equal(f.node('rename-pattern').value, 'TRIBOS PERI PERI');
     assert.match(f.node('rename-preview').innerHTML, /Matches 3 transactions/);
     assert.match(f.node('rename-preview').innerHTML, /VISA DDA PUR AP/);
+    f.node('rename-preview').querySelectorAll = () => [{ checked: true, dataset: { renameMatch: '1' } }, { checked: false, dataset: { renameMatch: '2' } }];
+    f.node('rename-remember').checked = false;
     await f.node('rename-form').onsubmit({ preventDefault() {} });
-    assert.deepEqual(calls.find(([url]) => url === '/api/transactions/name-rules')[1], { id: 9, pattern: 'TRIBOS PERI PERI', name: 'Peri Peri' });
+    assert.deepEqual(calls.find(([url]) => url === '/api/transactions/name-rules')[1], { id: 9, pattern: 'TRIBOS PERI PERI', name: 'Peri Peri', ids: [1], remember: false });
   });
   await t.test('rename controls are centered beside multiline descriptions', () => {
     assert.match(source('refresh.css'), /\.tx-desc-cell\s*\{[^}]*align-items:\s*center/);
@@ -1830,7 +1911,8 @@ test('renamed payees show the friendly name, stay searchable and can be renamed 
   assert.equal(f.node('rename-pattern').value, 'ZELLE SAM PATEL');
   assert.equal(f.node('rename-name').value, 'Sam Patel');
   assert.equal(f.node('rename-remove').hidden, true);
-  assert.match(f.node('rename-preview').innerHTML, /Matches 4 transactions<\/strong> now, plus future imports/);
+  assert.match(f.node('rename-preview').innerHTML, /Matches 4 transactions<\/strong>/);
+  f.node('rename-preview').querySelectorAll = () => [{ checked: true, dataset: { renameMatch: '3' } }];
   await f.node('rename-form').onsubmit({ preventDefault() {} });
-  assert.deepEqual(calls.find(([url, method]) => url === '/api/transactions/name-rules' && method === 'POST')[2], { pattern: 'ZELLE SAM PATEL', name: 'Sam Patel' });
+  assert.deepEqual(calls.find(([url, method]) => url === '/api/transactions/name-rules' && method === 'POST')[2], { pattern: 'ZELLE SAM PATEL', name: 'Sam Patel', ids: [3], remember: true });
 });

@@ -57,9 +57,10 @@ export function openApiSpec() {
       '/api/transactions/update-income-role': { post: op('Finance', "Override income detection for deposits (income_role 'income', 'other' or null to auto-detect)", body({ ids: [1], income_role: 'other' })) },
       '/api/transactions/name-rules': {
         get: op('Finance', 'Renamed payees: each rule with how many transactions it names'),
-        post: op('Finance', 'Create or edit a rename rule (send id to edit); shown for all matching past and future transactions', body({ pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane De Lima' }))
+        post: op('Finance', 'Rename selected owned matching transactions using ids; remember controls future imports. Unselected existing names are preserved. Send id to edit/remove an existing future rule. Omitting ids retains legacy all-matches behavior.', body({ pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane De Lima', ids: [1], remember: true }))
       },
-      '/api/transactions/name-rules/preview': { post: op('Finance', 'Count and sample the transactions a pattern would rename; send description instead to get a suggested pattern and any rule already naming it', body({ description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA' })) },
+      '/api/transactions/name-rules/preview': { post: op('Finance', 'Return matching transactions, count and samples for selective rename review; send description instead to get a suggested pattern and any current rule', body({ description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA' })) },
+      '/api/transactions/categorization-apply': { post: op('Finance', 'Apply confirmed category updates atomically with stale-category checks; learnRules separately controls future import mappings. Empty category clears to Uncategorized.', body({ updates: [{ id: 1, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: false, protectCorrections: false })) },
       '/api/transactions/name-rules/{id}': { delete: op('Finance', 'Remove a rename rule; matching transactions show the bank description again', pathId) },
       '/api/debts': { get: op('Pro Plus', 'List debts; all debt operations require Pro Plus (402 PRO_PLUS_REQUIRED otherwise)') },
       '/api/goals': { get: op('Pro Plus', 'List savings goals; all goal operations require Pro Plus') },
@@ -75,6 +76,7 @@ export function openApiSpec() {
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },
       '/api/analytics': { get: op('Pro', 'Category signals, KPIs, forecast, cash flow, anomalies, recurring charges, merchants, plus Spending Compass data (moneyFlow: categories with percentile ranges and purchase drivers, opportunities, money-flow Sankey totals, small-purchase totals, insight cards, a category-by-month heatmap and everyday merchant bubbles) against BLS household benchmarks') },
       '/api/analytics/household': { put: op('Pro', 'Set the household the Spending Compass compares with; each field may be null', body({ size: 4, region: 'northeast', housing: 'own' })) },
+      '/api/analytics/compass': { get: op('Pro', 'Spending Compass for 1–24 completed calendar months; from/to are YYYY-MM, inclusive. Returns selected-period averages, range metadata and history coverage. Technical indicators retain their named windows within the selection.', query('from', 'to')) },
       '/api/analytics/export.csv': { get: op('Pro', 'CSV export of transactions or category analytics; transactionId optionally restricts transaction exports to one owned record', query('type', 'from', 'to', 'transactionId')) }
     }
   };

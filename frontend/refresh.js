@@ -185,7 +185,7 @@
     const byFixed = change && typeof change === 'object' && typeof change.isFixed === 'boolean';
     const byPay = change && typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
     const byIncome = change && typeof change === 'object' && typeof change.income === 'boolean';
-    if (!byFixed && !byPay && !byIncome && !change) return [];
+    if (!byFixed && !byPay && !byIncome && typeof change !== 'string') return [];
     const differs = byFixed ? t => fixed(t.is_fixed) !== change.isFixed
       : byPay ? t => payModeOf(t) !== (change.payMode || null)
       : byIncome ? t => !!t.counts_as_income !== change.income
@@ -602,7 +602,8 @@
   similarDialog.innerHTML = `<form id="similar-form"><p class="eyebrow">MATCHING PAYMENTS FOUND</p><h2 id="similar-title">Update similar transactions?</h2><p id="similar-copy" class="muted"></p>
     <div class="similar-head"><label class="similar-all"><input type="checkbox" id="similar-all">Select all</label><span id="similar-count"></span></div>
     <div id="similar-list" class="similar-list"></div><p id="similar-error" role="alert"></p>
-    <div class="toolbar"><button type="button" class="btn btn-secondary" id="similar-skip">Only this one</button><button class="btn btn-primary" id="similar-apply">Update selected</button></div></form>`;
+    <label id="similar-remember-label" class="similar-all"><input type="checkbox" id="similar-remember" checked>Remember this category for future imports</label>
+    <div class="toolbar"><button type="button" class="btn btn-secondary" id="similar-cancel">Cancel</button><button type="button" class="btn btn-secondary" id="similar-skip">Only this one</button><button class="btn btn-primary" id="similar-apply">Update selected</button></div></form>`;
   document.body.appendChild(similarDialog);
   let similarState = null;
   const similarChecked = () => [...$('similar-list').querySelectorAll('input[data-similar]')].filter(box => box.checked);
@@ -610,32 +611,40 @@
     const total = similarState ? similarState.items.length : 0, count = similarChecked().length;
     $('similar-count').textContent = `${count} of ${total} selected`;
     $('similar-all').checked = total > 0 && count === total;
-    $('similar-apply').textContent = count ? `Update ${count} transaction${count === 1 ? '' : 's'}` : 'Update selected';
-    $('similar-apply').disabled = !count;
+    const selected = count + (similarState?.categoryReview ? 1 : 0);
+    $('similar-apply').textContent = selected ? `Update ${selected} transaction${selected === 1 ? '' : 's'}` : 'Update selected';
+    $('similar-apply').disabled = !selected;
   }
-  // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
+  // Category review includes the starting transaction; other edits return only extra updates.
   // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for deposits.
   function promptSimilarTransactions(source, change, items, query = '') {
     const byPay = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
     const byIncome = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'income');
     const byFixed = typeof change === 'object' && !byPay && !byIncome;
     const preselect = byPay || byIncome;
-    similarState = { change, byFixed, byPay, byIncome, items, updated: 0 };
+    const categoryReview = typeof change === 'string';
+    similarState = { source, change, byFixed, byPay, byIncome, categoryReview, items, updated: 0 };
+    $('similar-remember-label').hidden = !categoryReview;
+    $('similar-remember').checked = true;
+    $('similar-skip').disabled = false;
+    $('similar-cancel').hidden = !categoryReview;
+    $('similar-cancel').disabled = false;
     const strong = items.filter(item => item.sameAmount).length;
     const incomeLabel = value => value ? 'Income' : 'Not income';
     const action = byIncome ? (change.income ? 'also <strong>count as your income</strong>' : 'also <strong>stop counting as income</strong>')
       : byPay ? (change.payMode ? `also be marked <strong>${payLabel(change.payMode)}</strong>` : 'also have their <strong>payment method cleared</strong>')
-      : byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change)}</strong>`;
+      : byFixed ? (change.isFixed ? 'also be marked as <strong>fixed bills</strong>' : 'also <strong>stop being fixed bills</strong>') : `also move to <strong>${escape(change || 'Uncategorized')}</strong>`;
     const fixedLabel = value => value ? 'Fixed bill' : 'Not fixed';
     $('similar-title').textContent = byIncome ? 'Apply to other deposits from this sender?' : byPay ? 'Apply to similar payments?' : byFixed ? (change.isFixed ? 'Mark similar payments as fixed?' : 'Unmark similar payments?') : 'Update similar transactions?';
     const hint = byIncome ? 'All deposits from this sender are preselected so your payday forecast stays consistent. '
       : byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
       : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
     $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${query ? `Started from your search “${escape(query)}”; also checked the same bank merchant across other transactions. ` : ''}${hint}Choose which should ${action}.`;
+    if (categoryReview) $('similar-copy').innerHTML += ' The transaction you started from is included. Nothing changes until you confirm.';
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
       const from = byIncome ? incomeLabel(!!transaction.counts_as_income) : byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
-      const to = byIncome ? incomeLabel(change.income) : byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change);
+      const to = byIncome ? incomeLabel(change.income) : byPay ? payLabel(change.payMode) : byFixed ? fixedLabel(change.isFixed) : escape(change || 'Uncategorized');
       return `<label class="similar-row${sameAmount || preselect ? ' is-strong' : ''}"><input type="checkbox" data-similar="${index}" ${sameAmount || preselect ? 'checked' : ''}>
         <span class="similar-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>
         <span class="similar-desc">${window.transactionLink(transaction.id, transaction.display_name || transaction.description)}<small>${from} &rarr; ${to}${sameAmount || preselect ? '' : ' &middot; different amount'}</small></span>
@@ -648,12 +657,20 @@
   similarDialog.addEventListener('close', () => { const state = similarState; similarState = null; state?.resolve?.(state.updated); });
   $('similar-list').onchange = updateSimilarCount;
   $('similar-all').onchange = () => { [...$('similar-list').querySelectorAll('input[data-similar]')].forEach(box => { box.checked = $('similar-all').checked; }); updateSimilarCount(); };
-  $('similar-skip').onclick = () => similarDialog.close();
+  $('similar-skip').onclick = () => similarState?.categoryReview ? saveSimilar(true) : similarDialog.close();
+  $('similar-cancel').onclick = () => { if (!similarState?.saving) similarDialog.close(); };
   $('similar-form').onsubmit = async event => {
     event.preventDefault();
-    if (!similarState) return;
-    const selected = similarChecked().map(box => similarState.items[Number(box.dataset.similar)].transaction);
+    await saveSimilar();
+  };
+  async function saveSimilar(onlySource = false) {
+    if (!similarState || similarState.saving) return;
+    const selected = onlySource ? [] : similarChecked().map(box => similarState.items[Number(box.dataset.similar)].transaction);
+    if (similarState.categoryReview) selected.unshift(similarState.source);
     if (!selected.length) return similarDialog.close();
+    similarState.saving = true;
+    $('similar-skip').disabled = true;
+    $('similar-cancel').disabled = true;
     $('similar-apply').disabled = true; $('similar-error').textContent = '';
     try {
       const result = similarState.byIncome
@@ -664,15 +681,19 @@
         ? await json('/api/transactions/update-fixed-many', 'POST', { ids: selected.map(t => Number(t.id)), is_fixed: similarState.change.isFixed })
         : await json('/api/transactions/categorization-apply', 'POST', {
           updates: selected.map(t => ({ id: Number(t.id), category: similarState.change, expectedCategory: t.category ?? null })),
-          learnRules: true, protectCorrections: false
+          learnRules: $('similar-remember').checked, protectCorrections: false
         });
       similarState.updated = Number(result?.updated ?? selected.length);
       similarDialog.close();
     } catch (error) {
+      similarState.saving = false;
+      $('similar-skip').disabled = false;
+      $('similar-cancel').disabled = false;
       $('similar-error').textContent = error.message || 'Could not update these transactions.';
       $('similar-apply').disabled = false;
     }
-  };
+    similarDialog.addEventListener('cancel', event => { if (similarState?.saving) event.preventDefault(); });
+  }
   // Rename rules: a friendly name shown for every past and future transaction containing the chosen words.
   // The bank's own description is kept (and shown underneath) because transfer and income detection rely on it.
   const RAIL_WORDS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH', 'APP', 'SQUARE', 'SQ', 'TO', 'FROM', 'SENT', 'RECEIVED', 'PAYMENT']);
@@ -690,31 +711,39 @@
     <label for="rename-pattern">Match transactions containing these words<input id="rename-pattern" maxlength="256" required autocomplete="off" spellcheck="false">
       <small class="muted">These words, in this order, anywhere in the bank description. Numbers such as reference codes are ignored, so every payment to the same payee matches.</small></label>
     <div id="rename-preview" class="rename-preview" aria-live="polite"></div><p id="rename-error" role="alert"></p>
+    <label class="similar-all"><input type="checkbox" id="rename-remember" checked>Remember this name for future imports</label>
     <div class="toolbar"><button type="button" class="btn btn-secondary rename-remove" id="rename-remove" hidden>Remove rename</button><span class="toolbar-spacer"></span><button type="button" class="btn btn-secondary" id="rename-cancel">Cancel</button><button class="btn btn-primary" id="rename-save">Rename</button></div></form>`;
   document.body.appendChild(renameDialog);
   const rulesDialog = document.createElement('dialog');
   rulesDialog.id = 'name-rules-dialog'; rulesDialog.className = 'editor rename-dialog';
   rulesDialog.setAttribute('aria-labelledby', 'name-rules-title');
   rulesDialog.innerHTML = `<div><p class="eyebrow">YOUR NAMES</p><h2 id="name-rules-title">Renamed payees</h2>
-    <p class="muted">Each rename applies to every matching transaction, including future imports. To add one, press <strong>Rename</strong> next to any transaction.</p>
+    <p class="muted">Saved rules name future matching imports. Existing payments keep the names you selected in the rename review. To rename payments, press <strong>Rename</strong> next to a transaction.</p>
     <div id="name-rules-list" class="name-rules-list"></div><p id="name-rules-error" role="alert"></p>
     <div class="toolbar"><span class="toolbar-spacer"></span><button type="button" class="btn btn-primary" id="name-rules-close">Done</button></div></div>`;
   document.body.appendChild(rulesDialog);
   let renameState = null, renameTimer = null, renameRequest = 0;
+  let renameMatches = [];
   const plural = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
   async function previewRename() {
     const request = ++renameRequest, pattern = $('rename-pattern').value;
+    renameMatches = [];
+    $('rename-save').disabled = true;
     try {
       const result = await json('/api/transactions/name-rules/preview', 'POST', { pattern });
       if (request !== renameRequest) return;
+      renameMatches = result.transactions || [];
       $('rename-preview').innerHTML = !result.pattern
         ? '<p class="rename-none">Add at least one word (numbers on their own are ignored).</p>'
-        : `<p><strong>Matches ${plural(result.count, 'transaction')}</strong> now, plus future imports containing <code>${escape(result.pattern)}</code>.</p>${result.samples.length ? `<ul>${result.samples.map(sample => `<li>${escape(sample)}</li>`).join('')}</ul>` : ''}`;
-      $('rename-save').disabled = !result.pattern;
-    } catch (error) { if (request === renameRequest) $('rename-preview').textContent = error.message; }
+        : `<p><strong>Matches ${plural(result.count, 'transaction')}</strong>. Select the payments to rename. Future imports are controlled separately below.</p><label class="similar-all"><input type="checkbox" id="rename-all" checked>Select all</label><div class="similar-list">${renameMatches.map(t => `<label class="similar-row"><input type="checkbox" data-rename-match="${t.id}" checked><span class="similar-date">${escape(transactionDate(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span><span class="similar-desc">${escape(t.display_name || t.description)}${t.display_name ? `<small>${escape(t.description)}</small>` : ''}</span><span class="similar-amt">${String(t.direction).toUpperCase() === 'CREDIT' ? '+' : '−'}${money(Math.abs(t.amount))}</span></label>`).join('')}</div>`;
+      $('rename-save').disabled = !result.pattern || !renameMatches.length;
+    } catch (error) { if (request === renameRequest) { renameMatches = []; $('rename-save').disabled = true; $('rename-preview').textContent = error.message; } }
   }
   window.openRenameDialog = async transaction => {
     renameState = { id: null };
+    const state = renameState;
+    renameMatches = [];
+    $('rename-remember').checked = true;
     $('rename-original').textContent = transaction.description || '';
     $('rename-error').textContent = ''; $('rename-preview').textContent = 'Checking matching transactions…';
     $('rename-name').value = transaction.display_name || ''; $('rename-pattern').value = '';
@@ -723,7 +752,7 @@
     renameDialog.showModal();
     try {
       const result = await json('/api/transactions/name-rules/preview', 'POST', { description: transaction.description || '' });
-      if (!renameState) return;
+      if (renameState !== state) return;
       const current = result.current;
       renameState.id = current?.id ?? null;
       const merchant = window.merchantKey(transaction.description);
@@ -736,10 +765,21 @@
       $('rename-save').textContent = current ? 'Save name' : 'Rename';
       $('rename-name').focus(); $('rename-name').select();
       await previewRename();
-    } catch (error) { $('rename-error').textContent = error.message; }
+    } catch (error) { if (renameState === state) $('rename-error').textContent = error.message; }
   };
   renameDialog.addEventListener('close', () => { renameState = null; renameRequest++; clearTimeout(renameTimer); });
-  $('rename-pattern').oninput = () => { clearTimeout(renameTimer); renameTimer = setTimeout(previewRename, 250); };
+  $('rename-pattern').oninput = () => {
+    renameRequest++; renameMatches = []; $('rename-save').disabled = true;
+    clearTimeout(renameTimer); renameTimer = setTimeout(previewRename, 250);
+  };
+  $('rename-preview').onchange = event => {
+    const boxes = [...$('rename-preview').querySelectorAll('[data-rename-match]')];
+    if (event.target.id === 'rename-all') boxes.forEach(box => { box.checked = event.target.checked; });
+    const count = boxes.filter(box => box.checked).length;
+    $('rename-all').checked = count === boxes.length && count > 0;
+    $('rename-save').disabled = !count || !renameMatches.length;
+    $('rename-save').textContent = count ? `Rename ${count} payment${count === 1 ? '' : 's'}` : 'Select payments';
+  };
   $('rename-cancel').onclick = () => renameDialog.close();
   const afterRename = async message => {
     window.FinancePlan?.invalidate?.();
@@ -749,14 +789,21 @@
   };
   $('rename-form').onsubmit = async event => {
     event.preventDefault();
-    if (!renameState) return;
+    if (!renameState || renameState.saving) return;
     $('rename-save').disabled = true; $('rename-error').textContent = '';
     try {
-      const result = await json('/api/transactions/name-rules', 'POST', { pattern: $('rename-pattern').value, name: $('rename-name').value, ...(renameState.id ? { id: renameState.id } : {}) });
+      const ids = [...$('rename-preview').querySelectorAll('[data-rename-match]')].filter(box => box.checked).map(box => Number(box.dataset.renameMatch));
+      if (!ids.length || !renameMatches.length) throw new Error('Select payments from the current matching preview before saving.');
+      const remember = $('rename-remember').checked;
+      renameState.saving = true;
+      $('rename-cancel').disabled = true;
+      const result = await json('/api/transactions/name-rules', 'POST', { pattern: $('rename-pattern').value, name: $('rename-name').value, ids, remember, ...(renameState.id ? { id: renameState.id } : {}) });
       renameDialog.close();
-      await afterRename(`Now showing “${result.rule.name}” for ${plural(result.rule.matches, 'transaction')}. Future imports with these words get the same name.`);
-    } catch (error) { $('rename-error').textContent = error.message; $('rename-save').disabled = false; }
+      await afterRename(`Now showing “${result.rule.name}” for ${plural(result.rule.matches, 'transaction')}.${remember ? ' Future imports with these words get the same name.' : ' No future rename rule saved.'}`);
+    } catch (error) { if (renameState) renameState.saving = false; $('rename-error').textContent = error.message; $('rename-save').disabled = false; }
+    finally { $('rename-cancel').disabled = false; }
   };
+  renameDialog.addEventListener('cancel', event => { if (renameState?.saving) event.preventDefault(); });
   $('rename-remove').onclick = async () => {
     if (!renameState?.id) return;
     try {
@@ -865,10 +912,9 @@
             notify(`${verb} for this${extra ? ` and ${extra} similar payment${extra === 1 ? '' : 's'}` : ' payment only'}.`);
           } else {
             const category = event.target.value;
-            await json('/api/transactions/update-transaction', 'POST', { id: item.id, category, apply_to_all: false });
             const similar = window.findSimilarTransactions(candidates, item, category);
-            const extra = similar.length ? await promptSimilarTransactions(item, category, similar, query) : 0;
-            notify(extra ? `Category set to ${category} for this and ${extra} similar transaction${extra === 1 ? '' : 's'}.` : 'Category updated for this transaction only.');
+            const updated = await promptSimilarTransactions(item, category, similar, query);
+            if (updated) notify(`Category set to ${category || 'Uncategorized'} for ${updated} transaction${updated === 1 ? '' : 's'}.`);
           }
         } catch (error) { reportError(error); }
         finally { if (FinanceSession.isAuthenticated()) await loadAllTransactions(); }

@@ -362,7 +362,7 @@
             </div>
             ${similar('Update similar transactions?', 'Found <b>6</b> other transactions from <b>BLUE BOTTLE</b>. 4 with about the same amount are preselected.', [['Oct 4 · $6.75', 'Uncategorized → Dining'], ['Sep 27 · $6.75', 'Uncategorized → Dining'], ['Sep 3 · $18.40', 'Uncategorized → Dining · different amount', false]], 'Update 4 transactions', 2.1, 5.6)}
                         ${cursor('cat', 0.3)}${cursor('similar-apply', 4, 'cat')}${toast('Moved 5 Blue Bottle visits to Dining', 6)}` },
-        { id: 'rules', title: 'Rules sort future imports', caption: 'Every fix teaches a rule. The next statement you import is sorted automatically for merchants you have already taught. Rename categories or tidy rules any time from Manage categories.',
+        { id: 'rules', title: 'Rules sort future imports', caption: 'Review matching payments before confirming a category change. Leave Remember this category checked to teach future imports, or uncheck it for an existing-payment-only correction. Rename categories or tidy rules any time from Manage categories.',
           render: () => `${chip(3, 'Rules sort future imports')}
             <div class="tm-split tm-split-tight">
               <div class="tm-panel tut-in" ${at(0.3)}><small>YOUR RULES · LEARNED FROM FIXES</small>

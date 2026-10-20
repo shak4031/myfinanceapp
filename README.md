@@ -29,9 +29,11 @@ For a new loan not yet in imported spending, uncheck **Monthly payment already
 included in imported spending** so its minimum payment is reserved separately.
 Check it again once that obligation is represented in the imported history.
 
-Changing a transaction's category automatically saves a normalized, literal
-merchant mapping for future imports; setting it to Uncategorized disables that
-merchant mapping. It never rewrites other transactions or Fixed Payment flags.
+Changing a transaction's category opens a review before saving. Choose matching
+payments individually, use **Only this one**, or dismiss without changes.
+**Remember this category for future imports** separately controls saving a normalized,
+literal merchant mapping; when checked, setting Uncategorized disables that mapping.
+Leaving it unchecked does not change existing mappings. Fixed Payment flags are untouched.
 Category management supports creating, renaming, and deleting categories;
 deletion requires choosing a replacement and moves existing transactions and
 merchant mappings to it. Categorization suggestions can also be reviewed and
@@ -94,6 +96,25 @@ Renaming only one payment does not disconnect it from unrenamed payments with
 the same bank merchant identity; two explicitly different payee names stay separate.
 Rename previews suggest merchant words without processor/location boilerplate for
 Toast and Square payments, so the same payee can match across bank formats.
+The rename dialog lists individual matching payments with checkboxes and Select all.
+Its separate **Remember this name for future imports** option controls the future
+rule. Unchecked existing payments retain their names, including when rules are
+recomputed later. Unchecking Remember while editing a saved rule removes that
+rule; existing transaction-specific names remain. Removing a saved rule via
+Renamed payees resets names currently assigned by that rule, not unrelated names.
+
+Every main Spending Compass panel has its own period selector: plan/headline and
+insights, money flow, signal overlap, merchants, heatmap, normal range, and technical
+readings. Choose 3, 6, 12 or 24 **completed months**, a specific completed calendar
+quarter, or a custom range of 1–24 months, then Apply. Other panels keep their ranges.
+Default view restores the original calculations. Selections survive navigation and
+data refreshes within the page, but are not saved across browser reloads.
+Selected-period averages, money flow and distributions use the selected history;
+technical trend indicators retain their labelled 3/6/12-month windows within it.
+Merchant changes compare with the preceding equal-length period when available.
+Each panel reports available history; short ranges may have insufficient data for
+signals, and missing statements can understate spending. Historical selections
+continue to use the published 2024 BLS benchmarks, not fabricated historical benchmarks.
 
 Month-to-date spending cards emphasize the category, amount spent and transaction
 count. Hover or keyboard-focus the **6-month history** footer, or select it on

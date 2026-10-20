@@ -1,6 +1,16 @@
 /* MyFinance Pro: plan chrome, toggles, dashboard + category insights, analytics page, dialogs. */
 :root { --pro: #6d28d9; --pro-soft: #f3efff; --pro-grad: linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#0ea5e9 100%); --good: #047857; --bad: #be123c; }
 
+.compass-panel { min-width: 0; }
+.compass-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 14px 18px; margin-bottom: 8px; border: 1px solid #ddd6fe; border-radius: 14px; background: linear-gradient(115deg,#faf8ff,#f0fdfa); box-shadow: 0 3px 12px #4c1d9508; }
+.compass-range label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #475569; }
+.compass-range select, .compass-range input { min-height: 36px; max-width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; font: inherit; font-size: 13px; }
+.compass-range-status { flex-basis: 100%; margin: 0; font-size: 12px; color: #475569; }
+@media (max-width: 480px) {
+  .compass-range { padding: 12px; }
+  .compass-range label { flex: 1 1 120px; min-width: 0; }
+}
+
 /* Plan chrome */
 .pro-nav-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; color: #fff; background: var(--pro-grad); }
 .pro-nav-badge.is-free { background: #24364f; color: #c7d2e2; }

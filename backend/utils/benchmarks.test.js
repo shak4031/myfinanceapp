@@ -13,6 +13,39 @@ function history(category, amounts, extra = {}) {
   });
 }
 
+test('Compass selected periods recompute monthly totals, chart widths and historical quarters', () => {
+  const transactions = [
+    ...history('Dining', [...Array(12).fill(50), ...Array(6).fill(100), ...Array(3).fill(200), ...Array(3).fill(300)]),
+    ...history('Salary', Array(24).fill(2000), { direction: 'CREDIT' })
+  ];
+  const run = (months, endMonth = 8) => buildMoneyFlowSignals({ transactions, today: TODAY, range: { months, endYear: 2026, endMonth } });
+  assert.equal(run(3).categories[0].average3, 300);
+  assert.equal(run(6).categories[0].average3, 250);
+  assert.equal(run(12).categories[0].average3, 175);
+  assert.equal(run(24).categories[0].average3, 112.5);
+  for (const months of [3, 6, 12, 24]) {
+    const result = run(months);
+    assert.equal(result.monthsAnalyzed, months);
+    assert.equal(result.flow.months, months);
+    assert.equal(result.heatmap.months.length, months);
+    assert.equal(result.categories[0].series.length, months);
+    assert.equal(result.categories[0].range.months, months);
+    assert.equal(result.flow.income, 2000);
+    assert.equal(result.flow.everyday.total, result.categories[0].average3);
+  }
+  const q2 = run(3, 5);
+  assert.deepEqual(q2.heatmap.months, ['Apr 2026', 'May 2026', 'Jun 2026']);
+  assert.equal(q2.categories[0].average3, 200);
+  assert.equal(q2.flow.everyday.total, 200);
+  assert.equal(q2.categories[0].range.latest, 200);
+  const changedOutsideQuarter = [...transactions, { date: '2026-10-02', amount: 900, category: 'Dining', direction: 'DEBIT' }];
+  assert.deepEqual(buildMoneyFlowSignals({ transactions: changedOutsideQuarter, range: { months: 3, endYear: 2026, endMonth: 5 } }).categories, q2.categories);
+  const single = run(1);
+  assert.equal(single.status, 'needs-history');
+  assert.equal(single.flow.everyday.total, 300);
+  assert.equal(single.heatmap.months.length, 1);
+});
+
 test('typical spending scales with household size, region and housing', () => {
   const all = expectedMonthly('groceries', null);
   const single = expectedMonthly('groceries', { size: 1 });

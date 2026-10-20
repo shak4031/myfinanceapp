@@ -229,6 +229,7 @@ export async function migratePrivateSchema(client) {
       name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS display_name TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS name_override BOOLEAN NOT NULL DEFAULT FALSE;
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`

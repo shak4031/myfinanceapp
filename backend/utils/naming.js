@@ -46,10 +46,10 @@ export function validateNameRule(input) {
 export const loadNameRules = async client =>
   (await client.query(`SELECT id,pattern,name FROM name_rules WHERE ${TENANT} ORDER BY id`)).rows;
 
-// Recomputes display_name for every transaction of the current user. Rows without a matching rule are reset to NULL.
+// Recompute rule-derived names, preserving explicit per-payment selections.
 export async function applyNameRules(client) {
   const compiled = compileNameRules(await loadNameRules(client));
-  const rows = (await client.query(`SELECT id,description,display_name FROM transactions WHERE ${TENANT}`)).rows;
+  const rows = (await client.query(`SELECT id,description,display_name FROM transactions WHERE ${TENANT} AND NOT name_override`)).rows;
   const ids = [], names = [];
   for (const row of rows) {
     const name = resolveName(row.description, compiled)?.name ?? null;
@@ -65,9 +65,9 @@ export async function applyNameRules(client) {
 export async function previewNameRule(client, input) {
   const pattern = nameKey(input?.pattern);
   if (!pattern) return { pattern, count: 0, samples: [] };
-  const rows = (await client.query(`SELECT description FROM transactions WHERE ${TENANT} ORDER BY date DESC, id DESC`)).rows;
+  const rows = (await client.query(`SELECT id,date,description,amount,direction,display_name FROM transactions WHERE ${TENANT} ORDER BY date DESC, id DESC`)).rows;
   const matched = rows.filter(row => matchesName(row.description, pattern));
-  return { pattern, count: matched.length, samples: [...new Set(matched.map(row => String(row.description).replace(/\s+/g, ' ').trim()))].slice(0, 5) };
+  return { pattern, count: matched.length, transactions: matched, samples: [...new Set(matched.map(row => String(row.description).replace(/\s+/g, ' ').trim()))].slice(0, 5) };
 }
 
 // Rules with how many transactions each one currently names (a more specific rule takes precedence).
@@ -75,9 +75,9 @@ export async function listNameRules(client) {
   const rules = await loadNameRules(client);
   const compiled = compileNameRules(rules);
   const counts = new Map();
-  for (const row of (await client.query(`SELECT description FROM transactions WHERE ${TENANT}`)).rows) {
+  for (const row of (await client.query(`SELECT description,display_name FROM transactions WHERE ${TENANT}`)).rows) {
     const rule = resolveName(row.description, compiled);
-    if (rule) counts.set(rule.id, (counts.get(rule.id) || 0) + 1);
+    if (rule && row.display_name === rule.name) counts.set(rule.id, (counts.get(rule.id) || 0) + 1);
   }
   return rules.map(rule => ({ ...rule, matches: counts.get(rule.id) || 0 }));
 }

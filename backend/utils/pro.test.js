@@ -94,6 +94,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(blocked.body.code, 'PRO_REQUIRED');
     assert.equal((await call('/api/budgets', { cookie: customerCookie })).status, 402);
     assert.equal((await call('/api/analytics/export.csv', { cookie: customerCookie })).status, 402);
+    assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 402);
     await assertPlanningLocked(customerCookie);
 
     // The 7-day trial can be started exactly once.
@@ -165,6 +166,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     const day = new Date();
     const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-01`;
     await database.query("INSERT INTO transactions (user_id,date,description,amount,direction,category) VALUES ($1,$2,'SHOPRITE 12',120,'DEBIT','Groceries'), (1,$2,'OWNER SECRET',999,'DEBIT','Travel')", [customerId, date]);
+    assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 200, 'range endpoint works before any overview request');
     const analytics = await call('/api/analytics', { cookie: customerCookie });
     const groceries = analytics.body.categories.find(category => category.name === 'Groceries');
     assert.equal(groceries.mtd, 120);
@@ -172,6 +174,13 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(analytics.body.categories.some(category => category.name === 'Travel'), false);
     assert.equal(analytics.body.moneyFlow.status, 'needs-history');
     assert.equal(analytics.body.moneyFlow.profileSet, false);
+    assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 200);
+    const historicalCompass = await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie });
+    assert.equal(historicalCompass.body.monthsAnalyzed, 0);
+    assert.equal(JSON.stringify(historicalCompass.body).includes('OWNER SECRET'), false);
+    for (const query of ['from=bad&to=2020-03', 'from=2020-13&to=2020-14', 'from=2020-04&to=2020-03', 'from=2020-01&to=2022-01', `from=${date.slice(0, 7)}&to=${date.slice(0, 7)}`]) {
+      assert.equal((await call(`/api/analytics/compass?${query}`, { cookie: customerCookie })).status, 400);
+    }
     assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { size: 0 }, cookie: customerCookie })).status, 400);
     assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { region: 'mars' }, cookie: customerCookie })).status, 400);
     assert.equal((await call('/api/analytics/household', { method: 'PUT', body: { housing: 'boat' }, cookie: customerCookie })).status, 400);
@@ -180,6 +189,20 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.deepEqual(withHousehold.profile, { size: 5, region: 'south', housing: 'rent' });
     assert.match(withHousehold.comparedWith, /5-person household in the South that rents/);
     assert.equal((await call('/api/analytics', { cookie: ownerCookie })).body.moneyFlow.profileSet, false);
+    const rangeMonths = [3, 2, 1].map(back => {
+      const value = new Date(day.getFullYear(), day.getMonth() - back, 2);
+      return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+    });
+    for (const month of rangeMonths) await database.query(`INSERT INTO transactions (user_id,date,description,amount,direction,category,source) VALUES
+      ($1,$2,'COMPASS CUSTOMER DINING',100,'DEBIT','Dining','compass-range-test'),
+      ($1,$2,'COMPASS CUSTOMER PAY',1000,'CREDIT','Salary','compass-range-test'),
+      (1,$2,'COMPASS OWNER DINING',999,'DEBIT','Dining','compass-range-test')`, [customerId, `${month}-02`]);
+    const chosenCompass = await call(`/api/analytics/compass?from=${rangeMonths[0]}&to=${rangeMonths[2]}`, { cookie: customerCookie });
+    assert.equal(chosenCompass.body.categories.find(row => row.id === 'dining').average3, 100);
+    assert.equal(chosenCompass.body.flow.income, 1000);
+    assert.equal(chosenCompass.body.flow.everyday.total, 100);
+    assert.deepEqual(chosenCompass.body.range, { from: rangeMonths[0], to: rangeMonths[2], months: 3, endYear: Number(rangeMonths[2].slice(0, 4)), endMonth: Number(rangeMonths[2].slice(5)) - 1 });
+    await database.query("DELETE FROM transactions WHERE source='compass-range-test'");
     const csv = await call('/api/analytics/export.csv?type=transactions', { cookie: customerCookie });
     assert.equal(csv.status, 200);
     assert.match(csv.headers.get('content-type'), /text\/csv/);

@@ -4,7 +4,7 @@ import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
 import { isPayMode } from '../utils/payMode.js';
 import { isIncomeRole, incomeSources } from '../utils/income.js';
-import { applyNameRules, compileNameRules, currentNameRule, listNameRules, loadNameRules, previewNameRule, resolveName, suggestNamePattern, validateNameRule } from '../utils/naming.js';
+import { applyNameRules, compileNameRules, currentNameRule, listNameRules, loadNameRules, matchesName, nameKey, previewNameRule, resolveName, suggestNamePattern, validateNameRule } from '../utils/naming.js';
 
 const router = Router();
 const db = new Database();
@@ -181,21 +181,46 @@ router.post('/name-rules/preview', route(async (req, res) => {
 router.post('/name-rules', route(async (req, res) => {
   const { pattern, name } = validateNameRule(req.body);
   const id = req.body?.id == null ? null : ruleId(req.body.id);
+  const { ids, remember = true } = req.body || {};
+  if (typeof remember !== 'boolean' || (ids !== undefined && (!Array.isArray(ids) || !ids.length || ids.length > 5000
+    || ids.some(value => !Number.isSafeInteger(value) || value < 1) || new Set(ids).size !== ids.length))) {
+    throw failure(400, 'ids must be unique positive integers (at most 5000) and remember must be a boolean');
+  }
+  if (!remember && ids === undefined) throw failure(400, 'Select transactions to rename');
   const result = await db.transaction(async client => {
+    if (ids !== undefined) {
+      if (id && !(await client.query(`SELECT id FROM name_rules WHERE id=$1 AND ${TENANT}`, [id])).rows.length) throw failure(404, 'Rename rule not found');
+      const rows = (await client.query(`SELECT id,description FROM transactions WHERE ${TENANT} ORDER BY id FOR UPDATE`)).rows;
+      const matched = rows.filter(row => matchesName(row.description, nameKey(pattern)));
+      const matchedIds = new Set(matched.map(row => Number(row.id)));
+      if (ids.some(value => !matchedIds.has(value))) throw failure(409, 'Selected transactions no longer match; refresh the preview');
+      // Existing unchecked rows retain their current names even when a future rule is saved.
+      await client.query(`UPDATE transactions SET name_override=TRUE WHERE id=ANY($1::integer[]) AND ${TENANT}`, [matched.map(row => row.id)]);
+      await client.query(`UPDATE transactions SET display_name=$1,name_override=TRUE WHERE id=ANY($2::integer[]) AND ${TENANT}`, [name, ids]);
+      if (!remember) {
+        if (id) await client.query(`DELETE FROM name_rules WHERE id=$1 AND ${TENANT}`, [id]);
+        return { rule: { name, pattern, matches: ids.length }, changed: ids.length, remembered: false };
+      }
+    }
     const saved = id == null
       ? await client.query(`INSERT INTO name_rules (pattern,name) VALUES ($1,$2)
           ON CONFLICT (user_id,pattern) DO UPDATE SET name=EXCLUDED.name RETURNING id,pattern,name`, [pattern, name])
       : await client.query(`UPDATE name_rules SET pattern=$1,name=$2 WHERE id=$3 AND ${TENANT} RETURNING id,pattern,name`, [pattern, name, id]);
     if (!saved.rows[0]) throw failure(404, 'Rename rule not found');
-    const changed = await applyNameRules(client);
+    const changed = ids === undefined ? await applyNameRules(client) : ids.length;
     const rule = (await listNameRules(client)).find(row => row.id === saved.rows[0].id);
-    return { rule, changed };
+    return { rule: ids === undefined ? rule : { ...rule, matches: ids.length }, changed, remembered: true };
   });
   res.json({ success: true, ...result });
 }));
 router.delete('/name-rules/:id', route(async (req, res) => {
   const id = ruleId(req.params.id);
   const changed = await db.transaction(async client => {
+    const rule = (await client.query(`SELECT pattern,name FROM name_rules WHERE id=$1 AND ${TENANT}`, [id])).rows[0];
+    if (!rule) throw failure(404, 'Rename rule not found');
+    const rows = (await client.query(`SELECT id,description,display_name FROM transactions WHERE ${TENANT} FOR UPDATE`)).rows;
+    const reset = rows.filter(row => row.display_name === rule.name && matchesName(row.description, nameKey(rule.pattern))).map(row => row.id);
+    await client.query(`UPDATE transactions SET name_override=FALSE WHERE id=ANY($1::integer[]) AND ${TENANT}`, [reset]);
     const removed = await client.query(`DELETE FROM name_rules WHERE id=$1 AND ${TENANT}`, [id]);
     if (!removed.rowCount) throw failure(404, 'Rename rule not found');
     return applyNameRules(client);

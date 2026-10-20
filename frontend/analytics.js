@@ -3,6 +3,31 @@
 (() => {
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
+  const compassRanges = new Map();
+  const panelFlow = key => compassRanges.get(key)?.data || current?.moneyFlow;
+  const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
+  const lastCompleteMonth = () => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth() - 1; };
+  function rangeControls(key, title) {
+    const { esc } = pro().format;
+    const state = compassRanges.get(key);
+    const end = lastCompleteMonth();
+    const option = (value, label) => `<option value="${value}"${state?.preset === value ? ' selected' : ''}>${label}</option>`;
+    const quarters = [];
+    for (let year = Math.floor(end / 12); year >= Math.floor(end / 12) - 5; year--) {
+      for (let q = 4; q >= 1; q--) if (year * 12 + q * 3 - 1 <= end) quarters.push(option(`q:${year}:${q}`, `Q${q} ${year}`));
+    }
+    return `<form class="compass-range" data-compass-range="${key}" aria-label="${esc(title)} date range">
+      <label>Period<select name="preset">${option('default', 'Default view')}${[3, 6, 12, 24].map(n => option(String(n), `${n} completed months`)).join('')}${quarters.join('')}${option('custom', 'Custom months')}</select></label>
+      <label>From<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
+      <label>Through<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
+      <button type="submit" class="btn btn-secondary btn-compact">Apply</button>
+      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Default calculation · completed months only. Choose a period to explore.'}</p></form>`;
+  }
+  function compassPanel(key, title, renderer, base) {
+    const mf = compassRanges.get(key)?.data || base;
+    const body = ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
+    return `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
+  }
   const pro = () => globalThis.FinancePro;
   const charts = () => globalThis.ProCharts;
   const dateShort = iso => iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '&mdash;';
@@ -227,7 +252,7 @@
       ${mf.profileSet ? '' : '<p class="pro-mf-hint">Add your household size, region and whether you rent or own for a fair comparison. Until then you are compared with the average U.S. household.</p>'}`;
     if (mf.status !== 'ok' || !mf.categories.length) {
       return `<section class="pro-compass-hero panel"><div class="pro-hero-main"><p class="pro-hero-eyebrow">SPENDING COMPASS</p><strong class="pro-hero-figure is-small">Your compass needs a little more history</strong>
-        <p class="pro-hero-sub">Import at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare) to see your compass.</p>${household}</div></section>`;
+        <p class="pro-hero-sub">This view needs at least 3 full months of spending in standard categories (groceries, dining, utilities, gas, shopping, entertainment, healthcare). Try a wider period or import more statements.</p>${household}</div></section>`;
     }
     const plan = mf.opportunities.length
       ? `<ol class="pro-hero-plan">${mf.opportunities.map(o => {
@@ -321,12 +346,12 @@
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
     const svgEl = `<div class="pro-sankey-wrap"><svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg></div><p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
-    return card(`Where your money flows${how(`Monthly average of the last ${f.months} full month${f.months === 1 ? '' : 's'}. Transfers between your own accounts are left out, so "left over" is the same typical monthly surplus your dashboard shows. Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
+    return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }
 
   // Three-set Venn diagram: the categories where several independent signals agree are the ones worth acting on.
-  const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual last month' };
+  const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' };
   function signalVenn(mf) {
     const { esc } = pro().format;
     const regions = { a: [128, 140], b: [432, 140], c: [280, 372], ab: [280, 96], ac: [192, 262], bc: [368, 262], abc: [280, 200] };
@@ -352,7 +377,7 @@
     const heading = { 3: ['All three signals', 'Act now', 'act'], 2: ['Two signals agree', 'Worth changing', 'act'], 1: ['One signal', 'Keep an eye on it', 'watch'] };
     const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
       ${clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
-    return card(`Where the signals overlap${how('Above similar homes: your 3-month average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trending up: up more than 10% on the same months last year (confirmed by the recent trend), or the 3-month average clearly above the 12-month average. Unusual last month: last month was above the 95th percentile of the months before it, or above its 2-standard-deviation band. One signal is worth watching; where two or three overlap, the habit is real and worth changing.')}`,
+    return card(`Where the signals overlap${how(`Above similar homes: your ${mf.range ? 'selected-period' : '3-month'} average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trend indicators retain their 3/6/12-month windows within the selected history. The latest selected month is compared with earlier months in that history. Short ranges may not support all signals.`)}`,
       'One signal is worth watching. Where circles overlap, act.', `<div class="pro-venn-layout">${svg}${side}</div>`, 'span-3');
   }
 
@@ -367,7 +392,7 @@
       const rank = r.compared ? (r.higherThan === r.compared ? `Highest in ${r.compared + 1} months` : r.higherThan === 0 ? `Lowest in ${r.compared + 1} months` : `Above ${r.higherThan} of ${r.compared} prior months`) : '';
       return `<li class="pro-range-row">
         <div class="pro-range-name"><b>${esc(shortLabel(c.label))}</b><small>${esc(r.month.split(' ')[0])}: ${money(r.latest, true)}</small></div>
-        <div class="pro-range-track" role="img" aria-label="${esc(c.label)}: last month ${money(r.latest, true)}; your usual range ${money(r.p5, true)} to ${money(r.p95, true)}; median ${money(r.p50, true)}${c.expected ? `; similar households ${money(c.expected, true)}` : ''}">
+        <div class="pro-range-track" role="img" aria-label="${esc(c.label)}: latest selected month ${money(r.latest, true)}; your usual range ${money(r.p5, true)} to ${money(r.p95, true)}; median ${money(r.p50, true)}${c.expected ? `; similar households ${money(c.expected, true)}` : ''}">
           <span class="pro-range-band" style="left:${at(r.p5)};width:calc(${at(r.p95)} - ${at(r.p5)})"></span>
           <span class="pro-range-median" style="left:${at(r.p50)}"></span>
           ${months.map(v => `<i style="left:${at(v)}"></i>`).join('')}
@@ -376,9 +401,9 @@
         </div>
         <div class="pro-range-note"><b class="${t}">${esc(rank)}</b><small>Usual ${money(r.p5, true)}&ndash;${money(r.p95, true)}${c.expected ? ` &middot; similar homes ${money(c.expected, true)}` : ''}</small></div></li>`;
     }).join('');
-    const legend = '<div class="pro-range-legend"><span><i class="is-band"></i>Your usual range (5th&ndash;95th percentile)</span><span><i class="is-median"></i>Your median</span><span><i class="is-dot"></i>Each month</span><span><i class="is-latest"></i>Last month</span><span><i class="is-typical"></i>Similar households</span></div>';
-    return card(`Your normal range${how('Each row uses the last 12 full months of that category, scaled to itself. The shaded bar runs from your 5th to your 95th percentile month, so 9 in 10 of your months fall inside it. A last month beyond the right edge of the bar is a top-5% month. The diamond is what similar households spend, from the U.S. Bureau of Labor Statistics. Large one-off purchases are set aside.')}`,
-      'Where last month landed against your own history and against similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
+    const legend = '<div class="pro-range-legend"><span><i class="is-band"></i>Your usual range (5th&ndash;95th percentile)</span><span><i class="is-median"></i>Your median</span><span><i class="is-dot"></i>Each month</span><span><i class="is-latest"></i>Latest selected month</span><span><i class="is-typical"></i>Similar households</span></div>';
+    return card(`Your normal range${how(`Each row uses ${mf.range ? 'the selected completed months' : 'the last 12 full months'} of that category, scaled to itself. The shaded bar runs from your 5th to your 95th percentile month. The diamond is what similar households spend. Large one-off purchases are set aside.`)}`,
+      'Where the latest selected month landed against your own history and similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
   }
 
   // Category x month heatmap. Each row is coloured against its own median month, so a steady bill stays neutral and
@@ -443,15 +468,15 @@
     const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of everyday spending.${climber && climb(climber) >= 10 ? ` Biggest climber: <b>${esc(climber.name)}</b>, up ${money(climb(climber), true)} a month.` : ''} Tap a bubble for its story.`;
     const aside = v.setAside ? `<p class="pro-footnote">${v.setAside.count} one-off purchase${v.setAside.count === 1 ? '' : 's'} over ${money(v.setAside.over, true)} set aside so a single big buy does not swamp the picture.</p>` : '';
     return card(`Who gets your money${how(`Your ${v.items.length} biggest everyday merchants over the last ${v.months} full months (fixed bills and transfers between your own accounts excluded). Size is the monthly average spend or the number of visits a month. In Change colours, red is spending more than the ${v.compareMonths || 3} months before and green is spending less; the deeper the colour, the bigger the change. In Category colours, the deeper the colour, the more often you go. Drag bubbles to rearrange them.`)}`,
-      `Last ${v.months} months &middot; ${money(v.total, true)} a month across everyday merchants. Drag them around.`,
+      `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} months`} &middot; ${money(v.total, true)} a month across everyday merchants. Drag them around.`,
       `${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
        <p class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</p><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
   }
 
   function bubbleDetail(item) {
     const { money, esc } = pro().format;
-    const change = item.isNew ? 'new in the last 3 months' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'about the same as the 3 months before'
-      : `${item.change > 0 ? 'up' : 'down'} ${money(Math.abs(climb(item)), true)} a month (${Math.abs(item.change) > 2 ? 'more than tripled' : `${Math.round(Math.abs(item.change) * 100)}%`}) on the 3 months before`;
+    const change = item.isNew ? 'new in the selected period' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'about the same as the preceding comparison period'
+      : `${item.change > 0 ? 'up' : 'down'} ${money(Math.abs(climb(item)), true)} a month (${Math.abs(item.change) > 2 ? 'more than tripled' : `${Math.round(Math.abs(item.change) * 100)}%`}) on the preceding comparison period`;
     return `<b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.monthly, true)}</b> a month (${money(item.monthly * 12, true)} a year) &middot; ${item.visits} visit${item.visits === 1 ? '' : 's'} a month at about ${money(item.ticket, true)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; every month' : ''}`;
   }
 
@@ -615,7 +640,7 @@
     const rows = mf.categories.map(c => {
       const [label, cls] = MF_STATUS[c.benchmarkStatus] || ['&mdash;', 'is-inline'];
       return `<tr><th scope="row"><span>${esc(c.label)}</span><small>${esc(c.covers)}</small></th>
-        <td class="num"><strong>${money(c.average3, true)}</strong><small>3-month average</small></td>
+        <td class="num"><strong>${money(c.average3, true)}</strong><small>${mf.range ? 'Selected-period' : '3-month'} average</small></td>
         <td class="num">${money(c.expected, true)}<small>${c.vsTypical == null ? '' : `${c.vsTypical >= 0 ? '+' : ''}${Math.round(c.vsTypical * 100)}%`}</small></td>
         <td class="num"><span class="pro-signal ${cls}">${label}</span></td>
         <td class="num">${momentum(c)}</td><td class="num">${cross(c)}</td><td class="num">${band(c)}</td>
@@ -633,10 +658,12 @@
     const mf = a.moneyFlow;
     if (!mf) return '<p class="pro-empty panel">The Spending Compass is not available yet. Try again in a moment.</p>';
     const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
-    if (mf.status !== 'ok' || !mf.categories.length) return `<div class="pro-compass">${compassHero(mf)}${source}</div>`;
-    return `<div class="pro-compass">${compassHero(mf)}${compassInsights(mf)}
-      <div class="pro-grid pro-compass-grid">${flowSankey(mf)}${signalVenn(mf)}${vendorField(mf)}${spendHeatmap(mf)}${rangeStrips(mf)}</div>
-      ${compassReadings(mf)}${source}</div>`;
+    return `<div class="pro-compass">${compassPanel('plan', 'Compass plan and headline', m => compassHero(m) + compassInsights(m), mf)}
+      <div class="pro-grid pro-compass-grid">${[
+        ['flow', 'Where your money flows', flowSankey], ['signals', 'Where the signals overlap', signalVenn],
+        ['vendors', 'Who gets your money', vendorField], ['heatmap', 'Hot and cold months', spendHeatmap],
+        ['range', 'Your normal range', rangeStrips], ['readings', 'Technical readings', compassReadings]
+      ].map(([key, title, renderer]) => compassPanel(key, title, renderer, mf)).join('')}</div>${source}</div>`;
   }
 
   const HEADERS = {
@@ -653,7 +680,7 @@
 
   function tabs(a) {
     const { money } = pro().format;
-    const found = a?.moneyFlow?.potentialMonthly;
+    const found = compassRanges.get('plan')?.data?.potentialMonthly ?? a?.moneyFlow?.potentialMonthly;
     const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
     const help = tab === 'compass' ? '<a class="pro-tab-help" href="#tutorials/compass">&#9654; How it works</a>' : '';
     return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}${help}</nav>`;
@@ -663,7 +690,7 @@
     const { esc } = pro().format;
     if (tab === 'compass') {
       $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
-      mountBubbles(a.moneyFlow?.vendors);
+      mountBubbles(panelFlow('vendors')?.vendors);
       return;
     }
     stopField();
@@ -683,9 +710,19 @@
     const entitlement = await pro().ensureEntitlement();
     if (run !== request) return;
     renderActions();
-    if (!entitlement.active) { content.innerHTML = lockedPreview(entitlement); return; }
+    if (!entitlement.active) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
       current = await pro().getAnalytics(force);
+      if (force) {
+        await Promise.all([...compassRanges].map(async ([key, state]) => {
+          try {
+            const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`);
+            if (compassRanges.get(key) === state) { state.data = data; state.error = ''; }
+          } catch (error) {
+            if (compassRanges.get(key) === state) state.error = `Could not refresh this period: ${error.message}. Previous result shown.`;
+          }
+        }));
+      }
       if (run === request) render(current);
     } catch (error) {
       if (run !== request) return;
@@ -730,7 +767,7 @@
       if (target.dataset.bubbleSize) bubbleSize = target.dataset.bubbleSize;
       if (target.dataset.bubbleColor) bubbleColor = target.dataset.bubbleColor;
       target.parentElement?.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === target)));
-      return mountBubbles(current?.moneyFlow?.vendors);
+      return mountBubbles(panelFlow('vendors')?.vendors);
     }
     if (target.dataset.sort) {
       sortDir = sortKey === target.dataset.sort ? -sortDir : target.dataset.sort === 'name' ? 1 : -1;
@@ -756,5 +793,44 @@
     if (!pro().requirePro('CSV export is part of MyFinance Pro.')) return;
     if (action === 'export-transactions') location.href = '/api/analytics/export.csv?type=transactions';
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';
+  });
+  document.addEventListener('change', event => {
+    const form = event.target?.closest?.('[data-compass-range]');
+    if (!form) return;
+    if (event.target.name !== 'preset') { form.querySelector('[name="preset"]').value = 'custom'; return; }
+    const preset = event.target.value;
+    let end = lastCompleteMonth(), start = end - Number(preset) + 1;
+    if (preset.startsWith('q:')) {
+      const [, year, q] = preset.split(':').map(Number);
+      start = year * 12 + (q - 1) * 3; end = start + 2;
+    }
+    if (preset === 'custom' || preset === 'default') return;
+    form.querySelector('[name="from"]').value = monthKey(start);
+    form.querySelector('[name="to"]').value = monthKey(end);
+  });
+  document.addEventListener('submit', async event => {
+    const form = event.target?.closest?.('[data-compass-range]');
+    if (!form || !current) return;
+    event.preventDefault();
+    const key = form.dataset.compassRange;
+    const preset = form.querySelector('[name="preset"]').value;
+    if (preset === 'default') { compassRanges.delete(key); render(current); return; }
+    const from = form.querySelector('[name="from"]').value, to = form.querySelector('[name="to"]').value;
+    const state = { preset, from, to, loading: true, data: compassRanges.get(key)?.data };
+    compassRanges.set(key, state);
+    render(current);
+    try {
+      const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      if (compassRanges.get(key) !== state) return;
+      state.data = data; state.loading = false;
+    } catch (error) {
+      if (compassRanges.get(key) !== state) return;
+      state.error = `Could not update this panel: ${error.message}. The previous result is unchanged.`;
+      state.loading = false;
+    }
+    if (tab === 'compass') render(current);
+  });
+  document.addEventListener('pro:entitlement', event => {
+    if (event.detail && !event.detail.active) { compassRanges.clear(); current = null; stopField(); }
   });
 })();

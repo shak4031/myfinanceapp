@@ -128,7 +128,7 @@ const ONE_OFF_MIN = 250, ONE_OFF_MULTIPLE = 5;
 const isFixed = tx => tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true';
 
 // Completed months only: the current month is still filling up and would read as a false drop.
-function monthlySeries(transactions, today) {
+function monthlySeries(transactions, today, months = HISTORY) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
   const byCategory = new Map(), visitCounts = new Map(), entries = new Map(), oneOffs = new Map();
   let firstIndex = Infinity, firstDay = 1;
@@ -141,7 +141,7 @@ function monthlySeries(transactions, today) {
     if (String(tx.direction).toUpperCase() !== 'DEBIT' || isTransferRow(tx)) continue;
     const category = benchmarkCategoryFor(tx.category);
     const offset = currentIndex - 1 - index;
-    if (!category || offset < 0 || offset >= HISTORY) continue;
+    if (!category || offset < 0 || offset >= months) continue;
     if (!entries.has(category.id)) entries.set(category.id, []);
     entries.get(category.id).push({ tx, amount, iso: parsed.iso, slot: HISTORY - 1 - offset });
   }
@@ -159,7 +159,7 @@ function monthlySeries(transactions, today) {
   }
   // A history that starts mid-month makes the first month look artificially cheap, so it is skipped.
   const startIndex = firstIndex + (firstDay > 3 ? 1 : 0);
-  const available = Number.isFinite(firstIndex) ? Math.max(0, Math.min(HISTORY, currentIndex - startIndex)) : 0;
+  const available = Number.isFinite(firstIndex) ? Math.max(0, Math.min(months, currentIndex - startIndex)) : 0;
   return { byCategory, visitCounts, oneOffs, available, currentIndex };
 }
 
@@ -167,10 +167,11 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const monthLabel = index => `${MONTH_NAMES[index % 12]} ${Math.floor(index / 12)}`;
 
 function analyzeCategory(category, series, context, visits = null) {
-  const { profile, currentIndex } = context;
+  const { profile, currentIndex, selectedRange } = context;
   const n = series.length;
   const last = n => series.slice(-n);
-  const avg3 = mean(last(3));
+  const avg3 = mean(selectedRange ? series : last(3));
+  const fast = mean(last(3));
   const slowWindow = n >= 12 ? 12 : 6;
   const slow = mean(last(slowWindow));
   const expected = expectedMonthly(category.id, profile);
@@ -180,9 +181,9 @@ function analyzeCategory(category, series, context, visits = null) {
   // Moving-average crossover: the 3-month average against the longer-run average. "Crossed" means it moved above
   // (or below) within the last two months, the money-flow version of a golden or death cross.
   const fastPrev = n > 4 ? mean(series.slice(-5, -2)) : null, slowPrev = n > slowWindow + 1 ? mean(series.slice(-slowWindow - 2, -2)) : null;
-  const gap = slow ? avg3 / slow - 1 : null;
+  const gap = slow ? fast / slow - 1 : null;
   const crossover = gap == null ? null : {
-    fast: round(avg3), slow: round(slow), slowMonths: slowWindow, gap: round(gap, 4),
+    fast: round(fast), slow: round(slow), slowMonths: selectedRange ? Math.min(n, slowWindow) : slowWindow, gap: round(gap, 4),
     state: gap > 0.1 ? 'above' : gap < -0.1 ? 'below' : 'flat',
     crossed: fastPrev != null && slowPrev != null && gap > 0.1 && fastPrev <= slowPrev * 1.1 ? 'up'
       : fastPrev != null && slowPrev != null && gap < -0.1 && fastPrev >= slowPrev * 0.9 ? 'down' : null
@@ -240,7 +241,7 @@ function analyzeCategory(category, series, context, visits = null) {
 
   // Your own distribution over the last 12 months: the 5th-95th percentile is the range 9 in 10 of your months fall in.
   // A "spike" is a latest month above the 95th percentile of the months before it.
-  const year = last(Math.min(12, n)), prior = year.slice(0, -1), latest = series[n - 1];
+  const year = last(Math.min(selectedRange ? n : 12, n)), prior = year.slice(0, -1), latest = series[n - 1];
   const range = { p5: round(quantile(year, 0.05)), p50: round(quantile(year, 0.5)), p95: round(quantile(year, 0.95)),
     latest: round(latest), month: monthLabel(currentIndex - 1), months: year.length,
     higherThan: prior.filter(value => value < latest).length, compared: prior.length };
@@ -314,7 +315,7 @@ function flowGroup(totals, income, months, restLabel) {
   return { total: round(sum(items.map(item => item.amount))), items: shown.map(item => ({ ...item, amount: round(item.amount) })) };
 }
 
-function moneyFlow(transactions, today, typical) {
+function moneyFlow(transactions, today, typical, span = 3, available = null) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
   const months = new Set(), fixedTotals = new Map(), everydayTotals = new Map(), merchants = new Map();
   let income = 0, recorded = 0, smallCount = 0, smallTotal = 0;
@@ -323,7 +324,7 @@ function moneyFlow(transactions, today, typical) {
     const amount = Math.abs(Number(tx.amount));
     if (!parsed || !Number.isFinite(amount) || isTransferRow(tx)) continue;
     const offset = currentIndex - (parsed.year * 12 + parsed.month);
-    if (offset < 1 || offset > 3) continue;
+    if (offset < 1 || offset > span) continue;
     months.add(offset);
     const direction = String(tx.direction).toUpperCase();
     if (direction === 'CREDIT') { income += amount; continue; }
@@ -338,7 +339,7 @@ function moneyFlow(transactions, today, typical) {
       merchants.set(name, (merchants.get(name) || 0) + 1);
     }
   }
-  const m = months.size;
+  const m = available ?? months.size;
   if (!m) return { flow: null, small: null };
   const monthlyIncome = income / m;
   // Minimum payments for debts not yet visible in imported history are part of the shared surplus figure.
@@ -359,10 +360,10 @@ function moneyFlow(transactions, today, typical) {
 // Category x month grid of every spending category (fixed bills included, transfers excluded) for the heatmap.
 // Raw monthly totals: the client colours each row against its own median so a steady bill stays neutral.
 const HEATMAP_MONTHS = 12, HEATMAP_ROWS = 10;
-function categoryHeatmap(transactions, today, available) {
+function categoryHeatmap(transactions, today, available, limit = null) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
-  const span = Math.min(HEATMAP_MONTHS, available);
-  if (span < 3) return null;
+  const span = Math.min(limit ?? HEATMAP_MONTHS, available);
+  if (span < (limit === null ? 3 : 1)) return null;
   const rows = new Map();
   for (const tx of transactions) {
     const parsed = parseTxDate(tx.date);
@@ -388,7 +389,7 @@ function categoryHeatmap(transactions, today, available) {
 // Everyday merchants (fixed bills and transfers excluded) over the last three full months against the three before.
 // One-off purchases are set aside, as in the category signals, so a single TV does not become the biggest bubble.
 const VENDOR_LIMIT = 36;
-function vendorBubbles(transactions, today) {
+function vendorBubbles(transactions, today, span = 3, available = null) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
   const recentMonths = new Set(), priorMonths = new Set(), everyday = [];
   for (const tx of transactions) {
@@ -396,25 +397,31 @@ function vendorBubbles(transactions, today) {
     const amount = Math.abs(Number(tx.amount));
     if (!parsed || !Number.isFinite(amount) || !amount) continue;
     const offset = currentIndex - (parsed.year * 12 + parsed.month);
-    if (offset < 1 || offset > 6) continue;
-    (offset <= 3 ? recentMonths : priorMonths).add(offset);
+    if (offset < 1 || offset > span * 2 || (available !== null && offset > available && offset <= span)) continue;
+    (offset <= span ? recentMonths : priorMonths).add(offset);
     if (String(tx.direction).toUpperCase() === 'DEBIT' && !isTransferRow(tx) && !isFixed(tx)) everyday.push({ tx, amount, offset, iso: parsed.iso });
   }
-  const rm = recentMonths.size, pm = priorMonths.size;
+  let first = Infinity;
+  for (const tx of transactions) {
+    const date = parseTxDate(tx.date);
+    if (date) first = Math.min(first, date.year * 12 + date.month + (date.day > 3 ? 1 : 0));
+  }
+  const rm = available ?? recentMonths.size, pm = available === null ? priorMonths.size : Math.max(0, Math.min(span, currentIndex - span - first));
   if (!rm) return null;
-  const limit = Math.max(ONE_OFF_MIN, (median(everyday.map(entry => entry.amount)) || 0) * ONE_OFF_MULTIPLE);
+  const comparable = available === null ? everyday : everyday.filter(entry => entry.offset <= span + pm);
+  const limit = Math.max(ONE_OFF_MIN, (median(comparable.map(entry => entry.amount)) || 0) * ONE_OFF_MULTIPLE);
   const groups = new Map();
   let setAsideCount = 0, setAsideTotal = 0;
-  for (const entry of everyday) {
+  for (const entry of comparable) {
     const key = merchantGroup(entry.tx);
     if (!key) continue;
     if (entry.amount >= limit) {
-      if (entry.offset <= 3) { setAsideCount += 1; setAsideTotal += entry.amount; }
+      if (entry.offset <= span) { setAsideCount += 1; setAsideTotal += entry.amount; }
       continue;
     }
     if (!groups.has(key)) groups.set(key, { recent: 0, prior: 0, visits: 0, months: new Set(), categories: new Map(), latest: null });
     const group = groups.get(key);
-    if (entry.offset > 3) { group.prior += entry.amount; continue; }
+    if (entry.offset > span) { group.prior += entry.amount; continue; }
     group.recent += entry.amount;
     group.visits += 1;
     group.months.add(entry.offset);
@@ -488,14 +495,20 @@ function buildInsights({ categories, opportunities, flow, small }) {
   }
   return insights.slice(0, 4);
 }
-export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date(), typical = null } = {}) {
+export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date(), typical = null, range = null } = {}) {
+  if (range) today = new Date(range.endYear, range.endMonth + 1, 1);
   const normalized = normalizeProfile(profile);
   const profileSet = !!(normalized && (normalized.size || normalized.region || normalized.housing));
-  const { byCategory, visitCounts, oneOffs, available, currentIndex } = monthlySeries(transactions, today);
+  const { byCategory, visitCounts, oneOffs, available, currentIndex } = monthlySeries(transactions, today, range?.months);
   const who = profileLabel(normalized);
   const base = { source: SOURCE, profile: normalized, profileSet, comparedWith: who, monthsAnalyzed: available, categories: [], opportunities: [] };
-  if (available < 3) return { ...base, status: 'needs-history' };
-  const context = { profile: normalized, currentIndex };
+  const { flow, small } = moneyFlow(transactions, today, typical, range ? available : undefined, range ? available : null);
+  const panels = {
+    flow, small, heatmap: categoryHeatmap(transactions, today, available, range?.months),
+    vendors: vendorBubbles(transactions, today, range?.months, range ? available : null)
+  };
+  if (available < 3) return { ...base, ...(range ? panels : {}), status: 'needs-history' };
+  const context = { profile: normalized, currentIndex, selectedRange: !!range };
   const categories = BENCHMARK_CATEGORIES
     .filter(category => byCategory.has(category.id))
     .map(category => ({ ...analyzeCategory(category, byCategory.get(category.id).slice(-available), context, visitCounts.get(category.id).slice(-available)), oneOffs: oneOffs.get(category.id) || [] }))
@@ -503,10 +516,8 @@ export function buildMoneyFlowSignals({ transactions = [], profile = null, today
   const opportunities = categories.filter(row => row.opportunity)
     .sort((a, b) => b.opportunity.monthly - a.opportunity.monthly)
     .map(row => ({ id: row.id, label: row.label, monthly: row.opportunity.monthly, annual: row.opportunity.annual, target: row.opportunity.target, message: headline(row, who) }));
-  const { flow, small } = moneyFlow(transactions, today, typical);
   return {
-    ...base, status: 'ok', categories, opportunities, flow, small,
-    heatmap: categoryHeatmap(transactions, today, available), vendors: vendorBubbles(transactions, today),
+    ...base, ...panels, status: 'ok', categories, opportunities,
     insights: buildInsights({ categories, opportunities, flow, small }),
     potentialMonthly: round(sum(opportunities.map(item => item.monthly))),
     potentialAnnual: round(sum(opportunities.map(item => item.annual)))

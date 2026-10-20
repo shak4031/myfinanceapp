@@ -38,6 +38,25 @@ router.get('/', async (req, res, next) => {
       ...buildAnalytics({ ...inputs, typical }),
       moneyFlow: buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical })
     });
+
+  } catch (error) { next(error); }
+});
+
+router.get('/compass', async (req, res, next) => {
+  try {
+    const now = new Date();
+    const monthIndex = value => {
+      if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return null;
+      return Number(value.slice(0, 4)) * 12 + Number(value.slice(5)) - 1;
+    };
+    const from = monthIndex(req.query.from), to = monthIndex(req.query.to);
+    if (from === null || to === null || from > to || to - from >= 24 || from < 1900 * 12
+      || to >= now.getFullYear() * 12 + now.getMonth()) {
+      return res.status(400).json({ error: 'Choose 1–24 completed calendar months, with a valid start and end (YYYY-MM).' });
+    }
+    const inputs = await loadInputs();
+    const range = { from: req.query.from, to: req.query.to, months: to - from + 1, endYear: Math.floor(to / 12), endMonth: to % 12 };
+    res.json({ ...buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, range }), range });
   } catch (error) { next(error); }
 });
 
