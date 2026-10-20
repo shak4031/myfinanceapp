@@ -1895,16 +1895,26 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.match(html, /Take a one-minute tour/);
   assert.match(html, /1 \/ 3/);
   assert.match(html, /<mark class="welcome-hl">28th<\/mark>/);
-  assert.match(html, /fx-rise[\s\S]*fx-pop[\s\S]*fx-swipe/);
+  assert.doesNotMatch(html, /fx-pop|fx-swipe|welcome-mascot|welcome-confetti|welcome-aurora/);
+  assert.equal((html.match(/class="welcome-insight-icon"/g) || []).length, 3);
+  assert.match(html, /class="welcome-pulse-icon" aria-hidden="true"><svg/);
   const slides = [...html.matchAll(/<article class="welcome-slide[^]*?<\/article>/g)].map(match => match[0]);
   assert.equal(slides.length, 3);
   assert.match(slides[0], /tone-danger[^]*welcome-slide-tone">Action needed<\/span>[^]*Balance dips &lt;below&gt; zero[^]*Move a payment\.[^]*data-welcome-action="0">See upcoming/);
   assert.match(slides[1], /tone-warning[^]*welcome-slide-tone">Heads up<\/span>[^]*Dining is over budget/);
-  assert.match(html, /⚠️[\s\S]*🔥/);
+  assert.doesNotMatch(html, /⚠️|🔥/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');
   await f.context.FinanceWelcome.load();
   assert.doesNotMatch(f.node('welcome-hero').innerHTML, /Take a one-minute tour/);
+});
+test('welcome styling uses quiet neutral surfaces and scoped urgency with reduced motion', () => {
+  const css = source('welcome.css');
+  assert.match(css, /--welcome-accent: #226452/);
+  assert.match(css, /\.welcome-pulse-row \{[^}]*background: #f8faf7/);
+  assert.match(css, /\.welcome-slide\.tone-danger \{ --tone: #a52d40/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*animation: none !important; transition: none !important/);
+  assert.doesNotMatch(css, /@keyframes[^]*(?:confetti|aurora|welcome-flip|welcome-wave)/);
 });
 test('a failed insights load shows a retry in the welcome hero', async () => {
   const f = fixture(async () => response(500, { error: 'Insights offline' }));

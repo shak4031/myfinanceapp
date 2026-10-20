@@ -185,6 +185,11 @@ calendar-filter, filtered-summary, and request-order regressions.
 ### Actionable alerts and account review
 
 The welcome greeting is followed directly by the rotating insight carousel.
+Its restrained emerald, navy and neutral palette pairs simple line icons with
+a small, static greeting wave. Red and amber accents remain reserved for urgent
+insights and at-risk balances; neutral metric cards keep amounts easy to scan.
+The carousel uses a gentle transition, retains pause and manual navigation,
+and respects reduced-motion preferences.
 **Action needed** and **Heads up** messages include the flagged item's details
 and action within their slides, without a separate badge or duplicate alert list.
 Unknown-transfer badges link to Accounts for review.

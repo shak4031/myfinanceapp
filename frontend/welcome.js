@@ -55,18 +55,13 @@
     return list;
   }
 
-  const MASCOT = { alert: '⚠️', calendar: '📅', hand: '✋', cash: '💸', flag: '🏁', target: '🎯', gauge: '🔥', trend: '📈', search: '🔍', repeat: '🔁', spark: '✨', shield: '🛡️', upload: '📤', play: '🎬' };
-  // Each slide enters with its own motion so the rotation never feels repetitive.
-  const EFFECTS = ['rise', 'pop', 'swipe', 'flip', 'cascade', 'zoom'];
   const HIGHLIGHT = /([−-]?\$[\d,]+(?:\.\d+)?[kKmM]?|\d+(?:\.\d+)?%|\b\d{1,2}(?:st|nd|rd|th)\b|\b\d+ (?:days?|weeks?|months?)\b|\b(?:today|tomorrow)\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b)/i;
 
-  // Splits a title into word spans (for staggered entrances) and marks money, percentages and dates.
+  // Emphasize key amounts and dates without animating individual words.
   function titleArt(title) {
-    let word = 0;
     return String(title ?? '').split(HIGHLIGHT).map((part, i) => {
       if (!part) return '';
-      if (i % 2) return `<span class="welcome-w" style="--i:${word++}"><mark class="welcome-hl">${esc(part)}</mark></span>`;
-      return part.split(/(\s+)/).map(bit => /^\s+$/.test(bit) ? ' ' : bit ? `<span class="welcome-w" style="--i:${word++}">${esc(bit)}</span>` : '').join('');
+      return i % 2 ? `<mark class="welcome-hl">${esc(part)}</mark>` : esc(part);
     }).join('');
   }
 
@@ -74,27 +69,27 @@
     const today = new Date().getDate();
     const dated = iso => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const rows = [];
-    rows.push(['🏦', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint']);
+    rows.push(['cash', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint']);
     if (pulse.nextIncome) {
       const away = pulse.nextIncome.daysAway;
-      rows.push(['💰', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · ${pulse.nextIncome.date ? dated(pulse.nextIncome.date) : `the ${ordinal(pulse.nextIncome.day)}`}`, 'good']);
+      rows.push(['calendar', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · ${pulse.nextIncome.date ? dated(pulse.nextIncome.date) : `the ${ordinal(pulse.nextIncome.day)}`}`, 'good']);
     }
     const safe = pulse.safeToSpend;
     if (safe) {
       const until = safe.untilDate ? `before payday on ${dated(safe.untilDate)}` : safe.untilDay ? `before payday on the ${ordinal(safe.untilDay)}` : 'within the forecast window';
       const how = globalThis.FinanceUI?.howCalc?.(`Your latest balance (${money(pulse.balance, 2)}) minus ${safe.count} bill${safe.count === 1 ? '' : 's'} and planned payment${safe.count === 1 ? '' : 's'} totaling ${money(safe.committed, 2)} due ${until}. Paychecks are not counted until they arrive.`, 'How safe to spend is calculated') || '';
-      rows.push(['🛟', 'Safe to spend', money(safe.amount), safe.untilDate ? `Until payday · ${dated(safe.untilDate)}` : safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Next 30 days', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
+      rows.push(['shield', 'Safe to spend', money(safe.amount), safe.untilDate ? `Until payday · ${dated(safe.untilDate)}` : safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Next 30 days', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
     }
-    rows.push(['🧾', 'Bills in next 30 days', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'}, including overdue` : 'Nothing else due', 'sky']);
-    if (pulse.lowPoint) rows.push(['📉', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.date ? dated(pulse.lowPoint.date) : pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
+    rows.push(['repeat', 'Bills in next 30 days', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'}, including overdue` : 'Nothing else due', 'sky']);
+    if (pulse.lowPoint) rows.push(['gauge', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.date ? dated(pulse.lowPoint.date) : pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
     if (pulse.debtFreeDate) {
       const [year, month] = pulse.debtFreeDate.split('-').map(Number);
-      rows.push(['🏁', 'Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'grape']);
+      rows.push(['flag', 'Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'grape']);
     }
     if (pulse.lastImport && pulse.lastImport.daysAgo >= 7) {
-      rows.push(['📥', 'Last import', `${pulse.lastImport.daysAgo} days ago`, pulse.lastImport.latestDate ? `Newest transaction ${new Date(`${pulse.lastImport.latestDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Import to stay current', pulse.lastImport.daysAgo >= 14 ? 'warn' : 'sky']);
+      rows.push(['upload', 'Last import', `${pulse.lastImport.daysAgo} days ago`, pulse.lastImport.latestDate ? `Newest transaction ${new Date(`${pulse.lastImport.latestDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Import to stay current', pulse.lastImport.daysAgo >= 14 ? 'warn' : 'sky']);
     }
-    return rows.map(([emoji, label, value, note, tone, how = ''], i) => `<div class="welcome-pulse-row is-${tone}" style="--i:${i}"><dt><span class="welcome-pulse-emoji" aria-hidden="true">${emoji}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
+    return rows.map(([symbol, label, value, note, tone, how = '']) => `<div class="welcome-pulse-row is-${tone}"><dt><span class="welcome-pulse-icon" aria-hidden="true">${icon(symbol, 15)}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
   }
 
   function actionLink(item, index) {
@@ -106,10 +101,8 @@
   }
   function slide(item, index, total) {
     const action = actionLink(item, index);
-    const burst = item.tone === 'success' || item.tone === 'pro' || item.tone === 'learn'
-      ? `<span class="welcome-burst" aria-hidden="true">${'<i></i>'.repeat(8)}</span>` : '';
-    return `<article class="welcome-slide tone-${esc(item.tone)} fx-${EFFECTS[index % EFFECTS.length]}${index === state.index ? ' is-active' : ''}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}" aria-hidden="${index !== state.index}" data-index="${index}">
-      <span class="welcome-mascot" aria-hidden="true"><span class="welcome-mascot-face">${MASCOT[item.icon] || '✨'}</span>${burst}</span>
+    return `<article class="welcome-slide tone-${esc(item.tone)}${index === state.index ? ' is-active' : ''}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}" aria-hidden="${index !== state.index}" data-index="${index}">
+      <span class="welcome-insight-icon" aria-hidden="true">${icon(item.icon, 24)}</span>
       <div class="welcome-slide-copy">
         <span class="welcome-slide-tone">${esc(TONE_LABEL[item.tone] || 'Insight')}</span>
         <h3><span class="visually-hidden">${esc(item.title)}</span><span class="welcome-title-art" aria-hidden="true">${titleArt(item.title)}</span></h3>
@@ -128,10 +121,9 @@
     state.index = Math.min(state.index, insights.length - 1);
     root.setAttribute('data-tone', insights[state.index]?.tone || 'info');
     root.innerHTML = `
-      <span class="welcome-blob welcome-blob-a" aria-hidden="true"></span><span class="welcome-blob welcome-blob-b" aria-hidden="true"></span><span class="welcome-blob welcome-blob-c" aria-hidden="true"></span>
       <div class="welcome-top">
         <div class="welcome-greeting">
-          <p class="welcome-date"><span aria-hidden="true">☀️</span>${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
+          <p class="welcome-date">${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
           <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
         </div>
         <div class="welcome-top-actions">
