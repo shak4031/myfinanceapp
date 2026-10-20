@@ -448,28 +448,29 @@
   }
 
   // Merchant bubbles: size and colour switch between attributes; the field itself is a small physics simulation (mountBubbles).
-  let bubbleSize = 'spend', bubbleColor = 'change', field = null;
+  let bubbleSize = 'spend', bubbleColor = 'category', field = null;
   const CATEGORY_RGB = ['167,139,250', '56,189,248', '251,191,36', '52,211,153', '244,114,182', '251,146,60', '129,140,248', '45,212,191', '250,204,21', '248,113,113'];
   const changeText = item => item.isNew ? 'New' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'Steady' : `${item.change > 0 ? '+' : '&minus;'}${Math.abs(item.change) > 2 ? '200%+' : `${Math.round(Math.abs(item.change) * 100)}%`}`;
   const climb = item => item.change == null ? 0 : item.monthly - item.monthly / (1 + item.change);
+  const swingText = item => item.swingPct == null ? 'Needs 2 months' : `${Math.round(item.swingPct * 100)}% swing`;
 
   function vendorField(mf) {
     const { money, esc } = pro().format;
     const v = mf.vendors;
     if (!v?.items?.length) return '';
     const top5 = v.items.slice(0, 5).reduce((s, i) => s + (i.share || 0), 0);
-    const climber = [...v.items].sort((a, b) => climb(b) - climb(a))[0];
+    const widest = [...v.items].filter(item => item.swingPct != null).sort((a, b) => b.swingPct - a.swingPct)[0];
     const seg = (kind, value, label, active) => `<button type="button" data-bubble-${kind}="${value}" aria-pressed="${active}">${label}</button>`;
     const controls = `<div class="pro-bubble-controls">
-      <div class="pro-seg" role="group" aria-label="Bubble size"><span>Size</span>${seg('size', 'spend', 'Monthly spend', bubbleSize === 'spend')}${seg('size', 'visits', 'Visits', bubbleSize === 'visits')}</div>
-      <div class="pro-seg" role="group" aria-label="Bubble colour"><span>Colour</span>${seg('color', 'change', 'Change', bubbleColor === 'change')}${seg('color', 'category', 'Category', bubbleColor === 'category')}</div></div>`;
-    const said = item => `${esc(item.name)}: ${money(item.monthly, true)} a month, ${item.visits} visit${item.visits === 1 ? '' : 's'} a month${item.isNew ? ', new' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? ', steady' : `, ${item.change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(item.change) * 100)}%`}`;
+      <div class="pro-seg" role="group" aria-label="Bubble size"><span>Size</span>${seg('size', 'spend', 'Total amount', bubbleSize === 'spend')}${seg('size', 'transactions', 'Transactions', bubbleSize === 'transactions')}</div>
+      <div class="pro-seg" role="group" aria-label="Bubble colour"><span>Colour</span>${seg('color', 'category', 'Category', bubbleColor === 'category')}${seg('color', 'swing', 'Spending swing %', bubbleColor === 'swing')}${seg('color', 'change', 'Vs previous period', bubbleColor === 'change')}</div></div>`;
+    const said = item => `${esc(item.name)}: ${money(item.amount, true)} total, ${item.transactions} transaction${item.transactions === 1 ? '' : 's'}, ${money(item.monthly, true)} a month; ${swingText(item)}; monthly low ${money(item.monthlyLow, true)}, high ${money(item.monthlyHigh, true)}`;
     const bubbles = v.items.map((item, i) => `<button type="button" class="pro-bubble" data-bubble="${i}" aria-label="${said(item)}"><b>${esc(item.name)}</b><small></small></button>`).join('');
-    const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of everyday spending.${climber && climb(climber) >= 10 ? ` Biggest climber: <b>${esc(climber.name)}</b>, up ${money(climb(climber), true)} a month.` : ''} Tap a bubble for its story.`;
+    const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of everyday spending.${widest && widest.swingPct > 0 ? ` Widest spending swing: <b>${esc(widest.name)}</b>, ${Math.round(widest.swingPct * 100)}% (${money(widest.monthlyLow, true)}&ndash;${money(widest.monthlyHigh, true)} per month).` : ''} Tap a bubble for its story.`;
     const aside = v.setAside ? `<p class="pro-footnote">${v.setAside.count} one-off purchase${v.setAside.count === 1 ? '' : 's'} over ${money(v.setAside.over, true)} set aside so a single big buy does not swamp the picture.</p>` : '';
-    return card(`Who gets your money${how(`Your ${v.items.length} biggest everyday merchants over the last ${v.months} full months (fixed bills and transfers between your own accounts excluded). Size is the monthly average spend or the number of visits a month. In Change colours, red is spending more than the ${v.compareMonths || 3} months before and green is spending less; the deeper the colour, the bigger the change. In Category colours, the deeper the colour, the more often you go. Drag bubbles to rearrange them.`)}`,
+    return card(`Who gets your money${how(`Your ${v.items.length} biggest everyday merchants over ${v.months} completed months. Fixed bills, transfers and identified one-off purchases are excluded. Size shows total amount spent or actual transaction count in the period, not store visits. Category uses one colour per category. Spending swing % is (highest monthly spend minus lowest monthly spend) divided by average monthly spend; zero-spend months within available history count. At least 2 months are needed. Vs previous period compares monthly average spend with the preceding period (${v.compareMonths} comparison months available); red is more and green is less. Drag bubbles to rearrange them.`)}`,
       `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} months`} &middot; ${money(v.total, true)} a month across everyday merchants. Drag them around.`,
-      `${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
+      `${controls}<p class="pro-footnote">Size: total spending or transaction count in this period. Swing: (highest &minus; lowest monthly spending) &divide; monthly average. It measures variability, not whether spending is good or bad.</p><div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
        <p class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</p><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
   }
 
@@ -477,7 +478,7 @@
     const { money, esc } = pro().format;
     const change = item.isNew ? 'new in the selected period' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'about the same as the preceding comparison period'
       : `${item.change > 0 ? 'up' : 'down'} ${money(Math.abs(climb(item)), true)} a month (${Math.abs(item.change) > 2 ? 'more than tripled' : `${Math.round(Math.abs(item.change) * 100)}%`}) on the preceding comparison period`;
-    return `<b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.monthly, true)}</b> a month (${money(item.monthly * 12, true)} a year) &middot; ${item.visits} visit${item.visits === 1 ? '' : 's'} a month at about ${money(item.ticket, true)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; every month' : ''}`;
+    return `<b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.amount, true)}</b> total &middot; ${item.transactions} transaction${item.transactions === 1 ? '' : 's'} at ${money(item.ticket, true)} on average &middot; ${money(item.monthly, true)}/month &middot; monthly low ${money(item.monthlyLow, true)}, high ${money(item.monthlyHigh, true)} &middot; ${swingText(item)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; transactions every month' : ''}`;
   }
 
   function stopField() {
@@ -494,7 +495,7 @@
     stopField();
     const w = el.clientWidth, h = el.clientHeight;
     if (!w || !h) return;
-    const values = v.items.map(item => Math.max(bubbleSize === 'visits' ? item.visits : item.monthly, 0.01));
+    const values = v.items.map(item => Math.max(bubbleSize === 'transactions' ? item.transactions : item.amount, 0.01));
     const total = values.reduce((s, x) => s + x, 0);
     const maxR = Math.min(w, h) * 0.2, minR = w < 500 ? 10 : 13;
     const categories = [...new Set(v.items.map(item => item.category))];
@@ -503,7 +504,8 @@
       const item = v.items[i];
       const r = Math.min(maxR, Math.max(minR, Math.sqrt(values[i] / total * w * h * 0.5 / Math.PI)));
       let rgb = '148,163,184', k = 0.2;
-      if (bubbleColor === 'category') { rgb = CATEGORY_RGB[categories.indexOf(item.category) % CATEGORY_RGB.length]; k = Math.min(1, 0.2 + item.visits / 8); }
+      if (bubbleColor === 'category') { rgb = CATEGORY_RGB[categories.indexOf(item.category) % CATEGORY_RGB.length]; k = 0.6; }
+      else if (bubbleColor === 'swing') { rgb = item.swingPct == null ? '148,163,184' : '167,139,250'; k = item.swingPct == null ? 0.2 : Math.min(1, 0.2 + item.swingPct / 2 * 0.8); }
       else if (item.isNew) { rgb = '56,189,248'; k = 0.6; }
       else if (item.change != null && Math.abs(item.change) >= 0.05) { rgb = item.change > 0 ? '244,63,94' : '34,197,94'; k = Math.min(1, 0.25 + Math.abs(item.change) / 0.6); }
       b.style.setProperty('--r', r.toFixed(1));
@@ -514,14 +516,15 @@
       // Shrink the font until the longest word fits the bubble's inner width (about 0.74em per bold uppercase character).
       const longest = Math.max(...item.name.split(/\s+/).map(word => word.length));
       b.style.setProperty('--fit', Math.max(0.5, Math.min(1, (r * 1.6) / (0.74 * longest * (r * 0.22 + 4)))).toFixed(2));
-      b.querySelector('small').innerHTML = bubbleColor === 'change' ? changeText(item) : bubbleSize === 'visits' ? `${item.visits}&times;/mo` : compact(item.monthly);
+      b.querySelector('small').innerHTML = bubbleColor === 'change' ? changeText(item) : bubbleColor === 'swing' ? swingText(item) : bubbleSize === 'transactions' ? `${item.transactions} txn` : compact(item.amount);
       const old = kept?.[i], angle = i * 2.4, dist = 12 * Math.sqrt(i + 1) * (w / 400);
       return { i, b, r, x: old ? old.x / (keptW || w) * w : w / 2 + Math.cos(angle) * dist, y: old ? old.y : h / 2 + Math.sin(angle) * dist * 0.6, vx: 0, vy: 0 };
     });
     const legend = $('pro-bubble-legend');
     if (legend) legend.innerHTML = bubbleColor === 'category'
-      ? `${categories.map((c, i) => `<span><i style="--rgb:${CATEGORY_RGB[i % CATEGORY_RGB.length]}"></i>${pro().format.esc(c)}</span>`).join('')}<span class="pro-bubble-note">Deeper colour = more visits</span>`
-      : '<span><i style="--rgb:244,63,94"></i>Spending more</span><span><i style="--rgb:34,197,94"></i>Spending less</span><span><i style="--rgb:56,189,248"></i>New</span><span><i style="--rgb:148,163,184"></i>Steady</span><span class="pro-bubble-note">Deeper colour = bigger change</span>';
+      ? categories.map((c, i) => `<span><i style="--rgb:${CATEGORY_RGB[i % CATEGORY_RGB.length]}"></i>${pro().format.esc(c)}</span>`).join('')
+      : bubbleColor === 'swing' ? '<span><i style="--rgb:167,139,250"></i>Deeper violet = larger high-to-low swing relative to average monthly spend (scale caps at 200%)</span><span><i style="--rgb:148,163,184"></i>Needs 2 months</span>'
+      : `<span><i style="--rgb:244,63,94"></i>Higher monthly average</span><span><i style="--rgb:34,197,94"></i>Lower monthly average</span><span><i style="--rgb:56,189,248"></i>New in this period</span><span><i style="--rgb:148,163,184"></i>Steady / no comparison</span><span class="pro-bubble-note">Compared with the preceding period (${v.months} selected months; ${v.compareMonths} comparison months available). Deeper colour = larger percentage change.</span>`;
     field = { el, w, h, nodes, raf: 0, drag: null, frames: 0, v };
     const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduced || !kept) for (let t = 0; t < 300; t++) stepField(field);

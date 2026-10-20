@@ -1626,7 +1626,15 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   // Merchant bubbles (positioned client-side) and the category heatmap.
   assert.match(html, /Who gets your money/);
   assert.equal((html.match(/class="pro-bubble" data-bubble="/g) || []).length, mf.vendors.items.length);
-  assert.match(html, /data-bubble-size="spend" aria-pressed="true"[\s\S]*data-bubble-color="change" aria-pressed="true"/);
+  assert.match(html, /data-bubble-size="spend" aria-pressed="true">Total amount/);
+  assert.match(html, /data-bubble-size="transactions" aria-pressed="false">Transactions/);
+  assert.match(html, /data-bubble-color="category" aria-pressed="true">Category/);
+  assert.match(html, /data-bubble-color="swing" aria-pressed="false">Spending swing %/);
+  assert.match(html, /data-bubble-color="change" aria-pressed="false">Vs previous period/);
+  assert.doesNotMatch(html, />Visits<\/button>|>Change<\/button>/);
+  assert.match(html, /Swing: \(highest &minus; lowest monthly spending\) &divide; monthly average/);
+  assert.match(html, /Widest spending swing/);
+  assert.match(source('analytics.css'), /\.compass-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
   assert.match(html, /Your top 5 merchants take <b>\d+%<\/b> of everyday spending/);
   assert.match(html, /one-off purchase/, 'the demo TV is set aside');
   assert.match(html, /Hot and cold months/);

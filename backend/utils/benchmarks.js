@@ -408,6 +408,7 @@ function vendorBubbles(transactions, today, span = 3, available = null) {
   }
   const rm = available ?? recentMonths.size, pm = available === null ? priorMonths.size : Math.max(0, Math.min(span, currentIndex - span - first));
   if (!rm) return null;
+  const monthOffsets = available === null ? [...recentMonths].sort((a, b) => b - a) : Array.from({ length: rm }, (_, i) => rm - i);
   const comparable = available === null ? everyday : everyday.filter(entry => entry.offset <= span + pm);
   const limit = Math.max(ONE_OFF_MIN, (median(comparable.map(entry => entry.amount)) || 0) * ONE_OFF_MULTIPLE);
   const groups = new Map();
@@ -419,12 +420,13 @@ function vendorBubbles(transactions, today, span = 3, available = null) {
       if (entry.offset <= span) { setAsideCount += 1; setAsideTotal += entry.amount; }
       continue;
     }
-    if (!groups.has(key)) groups.set(key, { recent: 0, prior: 0, visits: 0, months: new Set(), categories: new Map(), latest: null });
+    if (!groups.has(key)) groups.set(key, { recent: 0, prior: 0, visits: 0, months: new Set(), monthlyTotals: Array(rm).fill(0), categories: new Map(), latest: null });
     const group = groups.get(key);
     if (entry.offset > span) { group.prior += entry.amount; continue; }
     group.recent += entry.amount;
     group.visits += 1;
     group.months.add(entry.offset);
+    group.monthlyTotals[monthOffsets.indexOf(entry.offset)] += entry.amount;
     const category = entry.tx.category || 'Uncategorized';
     group.categories.set(category, (group.categories.get(category) || 0) + entry.amount);
     if (!group.latest || entry.iso >= group.latest.iso) group.latest = entry;
@@ -433,10 +435,13 @@ function vendorBubbles(transactions, today, span = 3, available = null) {
   const total = sum(active.map(group => group.recent));
   const items = active.map(group => {
     const monthly = group.recent / rm;
+    const low = Math.min(...group.monthlyTotals), high = Math.max(...group.monthlyTotals);
     return {
       name: merchantLabel(group.latest.tx),
       category: [...group.categories.entries()].sort((a, b) => b[1] - a[1])[0][0],
       monthly: round(monthly), visits: round(group.visits / rm, 1), ticket: round(group.recent / group.visits),
+      amount: round(group.recent), transactions: group.visits,
+      monthlyLow: round(low), monthlyHigh: round(high), swingPct: rm >= 2 ? round((high - low) / monthly, 4) : null,
       share: round(group.recent / total, 4), regular: group.months.size === rm && rm >= 2,
       change: pm && group.prior ? round(monthly / (group.prior / pm) - 1, 3) : null,
       isNew: pm > 0 && !group.prior

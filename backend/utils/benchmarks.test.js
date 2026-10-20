@@ -259,13 +259,37 @@ test('merchant bubbles compare the last three months with the three before and s
   assert.deepEqual(vendors.setAside, { count: 1, monthly: 416.67, over: 250 });
   const shack = vendors.items.find(v => v.name.startsWith('SHAKE SHACK'));
   assert.deepEqual({ monthly: shack.monthly, visits: shack.visits, change: shack.change, regular: shack.regular }, { monthly: 60, visits: 1, change: 1, regular: true });
+  assert.deepEqual([shack.amount, shack.transactions, shack.monthlyLow, shack.monthlyHigh, shack.swingPct], [180, 3, 60, 60, 0]);
   const coffee = vendors.items.filter(v => v.name.startsWith('STARBUCKS'));
   assert.equal(coffee.length, 1, 'different store numbers are one merchant');
   assert.deepEqual({ visits: coffee[0].visits, ticket: coffee[0].ticket, change: coffee[0].change }, { visits: 2, ticket: 6, change: 0 });
   const cafe = vendors.items.find(v => v.name === 'NEW CAFE');
   assert.equal(cafe.isNew, true);
   assert.equal(cafe.change, null);
+  assert.deepEqual([cafe.amount, cafe.transactions, cafe.monthlyLow, cafe.monthlyHigh, cafe.swingPct], [12, 1, 0, 12, 3]);
   assert.equal(vendors.items[0].name.startsWith('SHAKE SHACK'), true, 'biggest monthly spend first');
+});
+
+test('merchant spending swing uses monthly high minus low divided by the period average, not the previous period', () => {
+  const transactions = [
+    ...history('Dining', [90, 90, 90, 30, 90, 60], { description: 'CORNER CAFE' }),
+    ...history('Dining', [200, 200, 200, 40, 40, 40], { description: 'STEADY DINER' }),
+    ...history('Salary', Array(6).fill(1000), { direction: 'CREDIT' }),
+    { date: '2026-09-12', description: 'CORNER CAFE', amount: 30, category: 'Dining', direction: 'DEBIT' }
+  ];
+  const range = { months: 3, endYear: 2026, endMonth: 8 };
+  const data = buildMoneyFlowSignals({ transactions, today: TODAY, range }).vendors;
+  const cafe = data.items.find(item => item.name === 'CORNER CAFE');
+  assert.deepEqual([cafe.amount, cafe.transactions, cafe.monthly, cafe.monthlyLow, cafe.monthlyHigh, cafe.swingPct], [210, 4, 70, 30, 90, 0.8571]);
+  assert.equal(cafe.change, -0.222);
+  const steady = data.items.find(item => item.name === 'STEADY DINER');
+  assert.equal(steady.swingPct, 0);
+  assert.equal(steady.change, -0.8, 'prior-period decline is different from within-period swing');
+  const single = buildMoneyFlowSignals({ transactions, today: TODAY, range: { ...range, months: 1 } }).vendors.items.find(item => item.name === 'CORNER CAFE');
+  assert.equal(single.swingPct, null, 'one month cannot measure variability');
+  assert.deepEqual([single.amount, single.transactions], [90, 2]);
+  const quarter = buildMoneyFlowSignals({ transactions, today: TODAY, range: { ...range, endMonth: 5 } }).vendors.items.find(item => item.name === 'CORNER CAFE');
+  assert.equal(quarter.swingPct, 0, 'historical range excludes later changes');
 });
 
 test('renamed transactions group and display under the name the user chose', () => {

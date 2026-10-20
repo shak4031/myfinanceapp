@@ -109,6 +109,19 @@ readings. Choose 3, 6, 12 or 24 **completed months**, a specific completed calen
 quarter, or a custom range of 1–24 months, then Apply. Other panels keep their ranges.
 Default view restores the original calculations. Selections survive navigation and
 data refreshes within the page, but are not saved across browser reloads.
+Panels retain the full available content width, with the range controls above each.
+Merchant bubbles can be sized by **Total amount** or **Transactions** in the period
+(transaction count, not physical store visits). Colour defaults to **Category**,
+with a consistent intensity per category. **Spending swing %** uses
+`(highest monthly spend - lowest monthly spend) / average monthly spend`; the
+deeper violet highlights greater variability, not good/bad spending. The scale
+caps at 200%, but exact percentages remain visible in the detail. Zero-spend
+months within available history count, and fewer than two months shows insufficient
+history rather than a fabricated swing. Tap a bubble for totals, count, average
+transaction amount, monthly low/high, and swing. **Vs previous period** remains
+optional: red/green compare monthly average spend with the preceding period, with
+the comparison-month count shown. Fixed bills, transfers, and identified one-offs
+remain excluded; incomplete imports can distort all these measures.
 Selected-period averages, money flow and distributions use the selected history;
 technical trend indicators retain their labelled 3/6/12-month windows within it.
 Merchant changes compare with the preceding equal-length period when available.

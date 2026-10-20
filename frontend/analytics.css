@@ -1,7 +1,7 @@
 /* MyFinance Pro: plan chrome, toggles, dashboard + category insights, analytics page, dialogs. */
 :root { --pro: #6d28d9; --pro-soft: #f3efff; --pro-grad: linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#0ea5e9 100%); --good: #047857; --bad: #be123c; }
 
-.compass-panel { min-width: 0; }
+.compass-panel { min-width: 0; grid-column: 1 / -1; }
 .compass-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 14px 18px; margin-bottom: 8px; border: 1px solid #ddd6fe; border-radius: 14px; background: linear-gradient(115deg,#faf8ff,#f0fdfa); box-shadow: 0 3px 12px #4c1d9508; }
 .compass-range label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #475569; }
 .compass-range select, .compass-range input { min-height: 36px; max-width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; font: inherit; font-size: 13px; }
@@ -306,7 +306,7 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-heat-legend i.is-neutral { box-shadow: inset 0 0 0 1px rgba(148,163,184,.4); }
 /* Who gets your money: draggable merchant bubbles */
 .pro-bubble-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 12px; }
-.pro-seg { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+.pro-seg { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
 .pro-seg > span { margin-right: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
 .pro-seg button { border: 1px solid var(--border); background: transparent; color: var(--text-primary); padding: 5px 12px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; }
 .pro-seg button[aria-pressed="true"] { background: #0f172a; border-color: #0f172a; color: #fff; }
