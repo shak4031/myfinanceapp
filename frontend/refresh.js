@@ -232,8 +232,8 @@
   };
   function selectImportFile(kind, file) {
     if (!file) return;
-    if (kind === 'pdf' && pdfImportInProgress) {
-      window.setImportStatus('progress', 'A PDF import is already running. Wait for its result before choosing another file.');
+    if (window.importIsBusy?.()) {
+      window.setImportStatus('progress', 'An import is already running. Import one file at a time; wait for its result before choosing another file.');
       return;
     }
     if (kind === 'csv') pendingCsvFile = file;
@@ -242,14 +242,21 @@
     $(`${kind}-import-btn`).disabled = false;
     return true;
   }
-  window.onCsvSelected = event => { selectImportFile('csv', event.target.files[0]); window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
-  window.onPdfSelected = event => { if (selectImportFile('pdf', event.target.files[0])) window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
+  function singleImportFile(files) {
+    if (files.length > 1) {
+      window.setImportStatus(window.importIsBusy?.() ? 'progress' : 'error', 'Choose one file at a time. No files from this selection were added.');
+      return null;
+    }
+    return files[0];
+  }
+  window.onCsvSelected = event => { const file = singleImportFile(event.target.files); if (selectImportFile('csv', file)) window.FinanceAccounts?.suggestFromFile(file); };
+  window.onPdfSelected = event => { const file = singleImportFile(event.target.files); if (selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
   window.handleCsvDrop = event => {
     event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv')) { selectImportFile('csv', file); window.FinanceAccounts?.suggestFromFile(file); }
+    const file = singleImportFile(event.dataTransfer.files);
+    if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv') && selectImportFile('csv', file)) window.FinanceAccounts?.suggestFromFile(file);
   };
-  window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf' && selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
+  window.handlePdfDrop = event => { event.preventDefault(); const file = singleImportFile(event.dataTransfer.files); if (file?.type === 'application/pdf' && selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
 
   // Navigation is explicit: labels can change without breaking the active state.
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.

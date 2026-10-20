@@ -13,6 +13,42 @@
 4. Review the result: detected type, statement closing date, closing balance,
    purchase APR if available, imported count, duplicates, and warnings.
 
+### One file at a time in the dialog
+
+The upload dialog handles **one file/import at a time**, shared across CSV, OFX
+and PDF. Wait for a result before selecting another file. Dropping several files
+is rejected explicitly; the dialog does not silently pick the first or queue them.
+The guard is local to this browser page, not a cross-tab/server-wide job queue.
+The developer batch API remains available for explicit multi-file requests:
+files are processed sequentially and commit together or roll back together.
+
+### Supporting import issues
+
+Each submitted request has a **Support reference** displayed with its result,
+including rejected files. The browser sends the reference before upload so it is
+also available after a timeout/network failure; if the request never reaches the
+server, no matching server event will exist.
+
+For support, search the reference in **Admin > Logs** or
+`GET /api/admin/logs?level=info&requestId=<reference>`, and in the audit viewer
+using its request-ID filter. Import diagnostics include:
+
+- `import.started` and `import.stage`: validation, parsing, account resolution,
+  saving, transfer reconciliation, and committed stages.
+- `import.result`: readable outcome, failure stage/reason, counts and duration.
+- Durable `import.completed` / `import.failed` audit events: format, file count,
+  parsed/imported/duplicate/unreadable row counts, warning count, duration,
+  committed flag, and safe reason (`PDF_REVIEW_REQUIRED`,
+  `ACCOUNT_REVIEW_REQUIRED`, `INPUT_REJECTED`, or `PROCESSING_FAILED`).
+
+These diagnostics deliberately exclude filenames, file contents/base64, account
+names/numbers, merchant descriptions, financial values and parser exception text.
+They describe processing health, not the customer's statement. A failed import's
+imported count is zero because the transaction rolls back. Completed batch counts
+are aggregated across files. Detailed live stage logs follow the existing log
+retention behavior; warnings/errors are persisted in the log store and final
+outcomes in the audit store, under its configured retention policy.
+
 Use **Choose account instead** for an explicit account selection. If the statement
 omits an account ending, contains conflicting identities, matches multiple saved
 accounts, or does not distinguish checking from savings, the import stops without

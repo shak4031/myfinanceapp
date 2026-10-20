@@ -85,8 +85,8 @@ The detail panel has its own calendar and **All time** action. Dashboard
 month-to-date cards continue to open the specific month shown on the dashboard.
 
 Month-to-date spending cards emphasize the category, amount spent and transaction
-count. Hover a card on desktop, focus it with the keyboard, or select **6-month
-history** to open a layered historical preview. The preview shows six completed
+count. Hover or keyboard-focus the **6-month history** footer, or select it on
+touch screens, to open a layered historical preview. The preview shows six completed
 calendar months (not the current partial month), monthly spending and an average.
 Months before imported history are marked **No data**, not fabricated zeroes;
 all totals depend on the statements imported. Escape, close, or moving away

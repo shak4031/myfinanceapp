@@ -134,30 +134,33 @@
   function delayedClose() {
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
-      if (!inside(document.activeElement) && !active?.matches(':hover') && !popup?.matches(':hover')) dismiss();
+      const trigger = active?.querySelector('.mtd-history-trigger');
+      if (document.activeElement !== trigger && !popup?.contains(document.activeElement) && !trigger?.matches(':hover') && !popup?.matches(':hover')) dismiss();
     }, 180);
   }
   document.addEventListener('pointerover', event => {
     if (event.pointerType === 'touch' || document.documentElement.clientWidth < 640) return;
     if (popup?.contains(event.target)) { clearTimeout(closeTimer); return; }
-    const wrapper = wrapperFor(event.target);
-    if (!wrapper || wrapper.contains(event.relatedTarget)) return;
+    const trigger = event.target.closest?.('.mtd-history-trigger');
+    const wrapper = trigger && wrapperFor(trigger);
+    if (!wrapper || trigger.contains(event.relatedTarget)) return;
     clearTimeout(openTimer); clearTimeout(closeTimer);
     openTimer = setTimeout(() => show(wrapper), 260);
   });
   document.addEventListener('pointerout', event => {
-    const wrapper = wrapperFor(event.target);
-    if (wrapper && !wrapper.contains(event.relatedTarget)) {
+    const trigger = event.target.closest?.('.mtd-history-trigger');
+    const wrapper = trigger && wrapperFor(trigger);
+    if (wrapper && !trigger.contains(event.relatedTarget)) {
       clearTimeout(openTimer);
       if (suppressed === wrapper) suppressed = null;
-      if (!inside(event.relatedTarget)) delayedClose();
+      if (!popup?.contains(event.relatedTarget)) delayedClose();
     } else if (popup?.contains(event.target) && !popup.contains(event.relatedTarget) && !inside(event.relatedTarget)) delayedClose();
   });
   document.addEventListener('focusin', event => {
     if (popup?.contains(event.target)) { clearTimeout(closeTimer); return; }
-    const wrapper = wrapperFor(event.target);
+    const wrapper = event.target.closest?.('.mtd-history-trigger') && wrapperFor(event.target);
     if (wrapper && event.target.matches?.(':focus-visible')) show(wrapper);
-    else if (!inside(event.target)) dismiss();
+    else dismiss();
   });
   document.addEventListener('focusout', event => {
     if (suppressed?.contains(event.target) && !suppressed.contains(event.relatedTarget)) suppressed = null;

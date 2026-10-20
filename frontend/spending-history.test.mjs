@@ -11,13 +11,13 @@ const category = {
 };
 function fixture(fetchImpl = async () => ({ ok: true, json: async () => ({ pro: true, categories: [category] }) })) {
   const listeners = new Map(), windows = new Map(), popups = [];
-  const trigger = { setAttribute() {}, focus() {}, closest: selector => selector === '[data-spending-history]' ? trigger : null };
+  const trigger = { setAttribute() {}, focus() {}, matches: () => true, contains: node => node === trigger };
   const card = { dataset: { category: category.name }, setAttribute() {}, removeAttribute() {}, matches: () => true, closest: () => wrapper };
   const wrapper = {
     isConnected: true, querySelector: selector => selector === '.mtd-history-trigger' ? trigger : card,
     contains: node => node === trigger || node === card, getBoundingClientRect: () => ({ left: 50, bottom: 200, top: 50 }), matches: () => false
   };
-  trigger.closest = selector => selector === '[data-spending-history]' ? trigger : selector.includes('.mtd-card-wrap') ? wrapper : null;
+  trigger.closest = selector => ['[data-spending-history]', '.mtd-history-trigger'].includes(selector) ? trigger : selector.includes('.mtd-card-wrap') ? wrapper : null;
   const body = { appendChild(node) { node.isConnected = true; popups.push(node); } };
   const context = {
     console, setTimeout, clearTimeout, fetch: fetchImpl, innerHeight: 900,
@@ -96,16 +96,30 @@ test('history load errors are explicit and retry succeeds without a stale error'
 });
 test('keyboard focus opens history and Escape suppresses reopening until explicitly requested', async () => {
   const f = fixture();
-  f.card.closest = () => f.wrapper;
+  f.card.closest = () => null;
   f.listeners.get('focusin')({ target: f.card });
+  assert.equal(f.popups.length, 0, 'focusing the spending amount does not open history');
+  f.listeners.get('focusin')({ target: f.trigger });
   await f.flush();
   assert.equal(f.popups[0].hidden, false);
   f.listeners.get('keydown')({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
   assert.equal(f.popups[0].hidden, true);
-  f.listeners.get('focusin')({ target: f.card });
+  f.listeners.get('focusin')({ target: f.trigger });
   assert.equal(f.popups[0].hidden, true);
   f.click(); await f.flush();
   assert.equal(f.popups[0].hidden, false);
+});
+test('hovering the card body never loads history, only the footer triggers it', async () => {
+  let requests = 0;
+  const f = fixture(async () => { requests++; return { ok: true, json: async () => ({ pro: true, categories: [category] }) }; });
+  f.card.closest = () => null;
+  f.listeners.get('pointerover')({ target: f.card, pointerType: 'mouse', relatedTarget: null });
+  await new Promise(resolve => setTimeout(resolve, 280));
+  assert.equal(requests, 0);
+  f.listeners.get('pointerover')({ target: f.trigger, pointerType: 'mouse', relatedTarget: f.card });
+  await new Promise(resolve => setTimeout(resolve, 280));
+  assert.equal(requests, 1);
+  f.context.FinanceSpendingHistory.reset();
 });
 test('card markup keeps transaction counts visible and history controls outside the drill-down button', () => {
   const html = readFileSync(new URL('index.html', import.meta.url), 'utf8');

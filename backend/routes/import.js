@@ -10,14 +10,47 @@ import { compileNameRules, loadNameRules, resolveName } from '../utils/naming.js
 import { currentUserId } from '../utils/tenant.js';
 import { reconcileTransfers } from '../utils/transfers.js';
 import { resolveImportAccount, resolveStatementAccount } from './accounts.js';
+import { recordAudit, structuredLog } from '../utils/audit.js';
 
 const router = express.Router();
 const db = new Database();
 const route = handler => async (req, res) => {
-  try { await handler(req, res); } catch (error) {
+  const started = Date.now();
+  const format = req.path === '/import-pdf' ? 'pdf' : req.path === '/import-csv' ? 'csv-ofx' : 'batch';
+  const diagnostic = { format, fileCount: format === 'batch' && Array.isArray(req.body?.files) ? req.body.files.length : 1 };
+  let result, failed;
+  const json = res.json.bind(res);
+  res.json = body => { result = body; return json({ ...body, requestId: req.id }); };
+  req.importStage = 'validation';
+  structuredLog('info', { event: 'import.started', requestId: req.id, subject: currentUserId(), ...diagnostic });
+  try {
+    await handler(req, res);
+  } catch (error) {
+    failed = error;
     res.status(error.status || 500).json({ success: false, error: error.message,
       ...(error.code === 'ACCOUNT_REVIEW_REQUIRED' ? { code: error.code, detectedAccount: error.detectedAccount } : {}) });
   }
+  const status = res.statusCode;
+  const rows = result?.results || (result?.success ? [result] : []);
+  const detail = {
+    ...diagnostic, stage: req.importStage, durationMs: Date.now() - started,
+    reason: failed ? ['ACCOUNT_REVIEW_REQUIRED', 'PDF_REVIEW_REQUIRED'].includes(failed.code) ? failed.code : status < 500 ? 'INPUT_REJECTED' : 'PROCESSING_FAILED' : null,
+    parsedRows: rows.length ? rows.reduce((sum, row) => sum + (row.totalInFile || 0), 0) : req.importParsedRows || 0,
+    importedRows: rows.reduce((sum, row) => sum + (row.imported || 0), 0),
+    duplicateRows: rows.reduce((sum, row) => sum + (row.duplicates || 0), 0),
+    unreadableRows: rows.reduce((sum, row) => sum + (row.errors || 0), 0),
+    warningCount: rows.reduce((sum, row) => sum + (row.warnings?.length || 0), 0),
+    committed: !failed && !!result?.success
+  };
+  structuredLog(failed ? status >= 500 ? 'error' : 'warn' : 'info', {
+    event: 'import.result', requestId: req.id, status,
+    message: `${format} import ${failed ? 'failed' : 'completed'} at ${detail.stage}; reason=${detail.reason || 'OK'}; files=${detail.fileCount}; parsed=${detail.parsedRows}; imported=${detail.importedRows}; duplicates=${detail.duplicateRows}; unreadable=${detail.unreadableRows}; warnings=${detail.warningCount}; committed=${detail.committed}; durationMs=${detail.durationMs}`
+  });
+  await recordAudit(req, failed ? 'import.failed' : 'import.completed', failed ? status >= 500 ? 'error' : 'failure' : 'success', { status, detail });
+};
+const stage = (req, name, detail = {}) => {
+  req.importStage = name;
+  structuredLog('info', { event: 'import.stage', requestId: req.id, subject: currentUserId(), stage: name, message: `Import stage: ${name}`, ...detail });
 };
 
 const ACCOUNT_TYPES = new Set(['checking', 'savings', 'credit_card']);
@@ -84,8 +117,10 @@ export async function importTransactions(client, transactions, config, source, a
 }
 
 // Imports are tied to an account so transfers between your own accounts can be recognised and left out of totals.
-async function importInto(client, body, parsed, config, fallbackSource) {
+async function importInto(client, body, parsed, config, fallbackSource, req) {
+  stage(req, 'account-resolution');
   const account = parsed.statement ? await resolveStatementAccount(client, body, parsed.statement) : await resolveImportAccount(client, body);
+  stage(req, 'saving');
   await saveStatement(client, account, parsed.statement);
   const result = await importTransactions(client, parsed.transactions, config, body.source || fallbackSource, account.id, { preserveOccurrences: !!parsed.statement });
   return { ...result, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
@@ -118,25 +153,36 @@ router.post('/import-csv', route(async (req, res) => {
   requireAccountChoice(req.body);
   const accountType = req.body.accountType || req.body.newAccount?.kind;
   const result = await db.transaction(async client => {
+    stage(req, 'account-resolution');
     const account = await resolveImportAccount(client, req.body);
+    stage(req, 'parsing');
     const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source, accountType: PARSER_TYPE[account.kind] || accountType });
+    req.importParsedRows = parsed.transactions.length;
+    stage(req, 'saving', { parsedRows: parsed.transactions.length, unreadableRows: parsed.errors.length });
     const config = await loadCategorization(client);
     const imported = await importTransactions(client, parsed.transactions, config, req.body.source || 'csv_import', account.id);
+    stage(req, 'transfer-reconciliation');
     const transfers = await reconcileTransfers(client, currentUserId());
     return { parsed, imported: { ...imported, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 }, ...summarize(transfers) } };
   });
   const { parsed } = result;
+  stage(req, 'committed');
   res.json({ success: true, ...result.imported, errors: parsed.errors.length, skipped: parsed.skipped, format: parsed.format,
     parserDetails: parsed.errors.slice(0, 5), totalInFile: parsed.transactions.length, duration: Date.now() - started });
 }));
 router.post('/import-pdf', route(async (req, res) => {
   const started = Date.now();
+  stage(req, 'parsing');
   const parsed = await parseFile({ type: 'pdf', data: req.body?.pdfBase64 });
+  req.importParsedRows = parsed.transactions.length;
+  stage(req, 'parsed', { parsedRows: parsed.transactions.length, statementType: parsed.statement.type, balanced: parsed.reconciliation.status === 'balanced', warningCount: parsed.warnings.length });
   const result = await db.transaction(async client => {
     const config = await loadCategorization(client);
-    const imported = await importInto(client, req.body, parsed, config, 'pdf_import');
+    const imported = await importInto(client, req.body, parsed, config, 'pdf_import', req);
+    stage(req, 'transfer-reconciliation');
     return { ...imported, ...summarize(await reconcileTransfers(client, currentUserId())) };
   });
+  stage(req, 'committed');
   res.json({ success: true, ...result, ...pdfDetails(parsed), totalInFile: parsed.transactions.length, duration: Date.now() - started });
 }));
 router.post('/import-batch', route(async (req, res) => {
@@ -146,19 +192,26 @@ router.post('/import-batch', route(async (req, res) => {
   const choices = files.map(file => (file?.accountId != null || file?.newAccount ? file : { ...file, accountId: req.body.accountId, newAccount: req.body.newAccount }));
   choices.forEach((choice, index) => { if (files[index]?.type !== 'pdf') requireAccountChoice(choice); });
   const parsed = [];
-  for (const file of files) parsed.push(await parseFile(file));
+  for (const [index, file] of files.entries()) {
+    stage(req, 'parsing', { fileIndex: index + 1 });
+    const result = await parseFile(file);
+    parsed.push(result);
+    req.importParsedRows = (req.importParsedRows || 0) + result.transactions.length;
+  }
   const results = await db.transaction(async client => {
     // One rule/category snapshot for the entire import, not one query per transaction.
     const config = await loadCategorization(client);
     const results = [];
     for (let index = 0; index < files.length; index++) {
-      const result = await importInto(client, choices[index], parsed[index], config, files[index].source);
+      const result = await importInto(client, choices[index], parsed[index], config, files[index].source, req);
       results.push({ ...result, type: files[index].type, fileName: files[index].source,
         ...pdfDetails(parsed[index]), totalInFile: parsed[index].transactions.length, errors: parsed[index].errors.length });
     }
+    stage(req, 'transfer-reconciliation');
     const transfers = summarize(await reconcileTransfers(client, currentUserId()));
     return results.map(result => ({ ...result, ...transfers }));
   });
+  stage(req, 'committed');
   res.json({ success: true, results, totalImported: results.reduce((sum, row) => sum + row.imported, 0),
     totalDuplicates: results.reduce((sum, row) => sum + row.duplicates, 0) });
 }));

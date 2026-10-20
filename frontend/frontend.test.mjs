@@ -219,6 +219,7 @@ test('account review requires an owned type and the not-mine action saves an ext
       pdfImportInProgress: false,
       pdfManualAccount: true,
       AbortSignal,
+      crypto: { randomUUID: () => '1f21b779-639a-4206-a9d0-350f08587dcd' },
       FinanceAccounts: { choice: () => ({ accountId: 1 }), afterImport: async () => {}, resultNote: () => '' },
       FileReader: class { readAsDataURL() { this.result = 'data:application/pdf;base64,JVBERg=='; setTimeout(() => this.onload(), 0); } },
       escapeHtml: f.context.FinanceTools.escape, usd: value => `$${Number(value).toFixed(2)}`,
@@ -234,8 +235,48 @@ test('account review requires an owned type and the not-mine action saves an ext
     const start = html.indexOf('    async function importPDF()');
     const end = html.indexOf('    // ===========================================', start);
     vm.runInContext(html.slice(start, end), f.context);
+    const csvStart = html.indexOf('    async function importCSV()');
+    const csvEnd = html.indexOf('    let pendingPdfFile', csvStart);
+    vm.runInContext(html.slice(csvStart, csvEnd), f.context);
     return { ...f, requests, notices };
   }
+  test('PDF results include the support reference returned by the server', async () => {
+    const f = pdfUploadFixture(422, { error: 'Nothing was imported.', requestId: 'support-reference-123' });
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /Nothing was imported[^]*Support reference:[^]*support-reference-123/);
+  });
+  test('CSV and PDF share a one-at-a-time guard and multi-file drops are rejected', async () => {
+    const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1 });
+    f.context.pendingCsvFile = { name: 'sample.csv', size: 50 };
+    const original = f.context.pendingCsvFile;
+    const running = f.context.importPDF();
+    await f.context.importCSV();
+    f.context.handleCsvDrop({ preventDefault() {}, dataTransfer: { files: [{ name: 'replacement.csv', type: 'text/csv' }] } });
+    assert.equal(f.context.pendingCsvFile, original);
+    assert.match(f.node('import-result').innerHTML, /one file at a time/);
+    await running;
+    assert.equal(f.requests.length, 1);
+    f.context.handlePdfDrop({ preventDefault() {}, dataTransfer: { files: [
+      { name: 'one.pdf', type: 'application/pdf' }, { name: 'two.pdf', type: 'application/pdf' }
+    ] } });
+    assert.equal(f.context.pendingPdfFile, null);
+    assert.match(f.node('import-result').innerHTML, /No files from this selection were added/);
+  });
+  test('CSV double submits are blocked, PDF cannot overlap, and CSV failures have a support reference', async () => {
+    const f = pdfUploadFixture(422, { error: 'Bad export.', requestId: 'csv-support-123' });
+    f.context.pendingCsvFile = { name: 'sample.csv', size: 50 };
+    f.context.FileReader = class {
+      readAsText() { this.result = 'Date,Description,Amount'; setTimeout(() => this.onload(), 0); }
+    };
+    const running = f.context.importCSV();
+    await f.context.importCSV();
+    await f.context.importPDF();
+    await running;
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0][0], '/api/import/import-csv');
+    assert.match(f.node('import-result').innerHTML, /Bad export[^]*csv-support-123/);
+    assert.equal(f.node('csv-import-btn').disabled, false);
+  });
   test('PDF upload prevents double submits and displays detected statement/reconciliation facts', async () => {
     const f = pdfUploadFixture(200, {
       success: true, imported: 6, duplicates: 0, totalInFile: 6,

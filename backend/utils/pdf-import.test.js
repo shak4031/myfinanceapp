@@ -6,8 +6,12 @@ import { PGlite } from '@electric-sql/pglite';
 import application from '../app.js';
 import { migratePrivateSchema } from './schema.js';
 import { cardLines, bankLines, statementPDF } from './test-fixtures/statements.js';
+import { onLogEntry } from './logger.js';
 
 test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verified statement facts', async t => {
+  const importLogs = [];
+  const stopLogging = onLogEntry(entry => { if (entry.event?.startsWith('import.')) importLogs.push(entry); });
+  t.after(stopLogging);
   const database = new PGlite();
   let lock = Promise.resolve();
   t.mock.method(pg.Pool.prototype, 'connect', async () => {
@@ -54,6 +58,17 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     assert.equal(imported.body.totalInFile, 6);
     assert.equal(imported.body.statement.type, 'credit-card', 'content wins over legacy client hint');
     assert.equal(imported.body.reconciliation.status, 'balanced');
+    assert.equal(imported.body.requestId, imported.headers.get('x-request-id'));
+    const logged = importLogs.filter(entry => entry.requestId === imported.body.requestId);
+    assert.ok(logged.some(entry => entry.event === 'import.started'));
+    assert.ok(logged.some(entry => entry.stage === 'parsing'));
+    assert.ok(logged.some(entry => entry.stage === 'account-resolution'));
+    assert.ok(logged.some(entry => entry.stage === 'committed'));
+    const complete = logged.find(entry => entry.event === 'import.completed');
+    assert.equal(complete.detail.importedRows, 6);
+    assert.equal(complete.detail.committed, true);
+    assert.ok(complete.detail.durationMs >= 0);
+    assert.doesNotMatch(JSON.stringify(logged), /synthetic-card\.pdf|Example card|SAMPLE MARKET|24\.99|pdfBase64|JVBER|4000 0000/);
     const accountId = imported.body.account.id;
     const accounts = (await call('/api/accounts')).body.accounts;
     const account = accounts.find(item => item.id === accountId);
@@ -85,6 +100,11 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     const malformed = await call('/api/import/import-pdf', { ...cardBody, pdfBase64: pdf(cardLines.filter(line => !line.includes('00001 09/10'))) });
     assert.equal(malformed.status, 422);
     assert.match(malformed.body.error, /do not reconcile/);
+    const failedLog = importLogs.find(entry => entry.requestId === malformed.body.requestId && entry.event === 'import.failed');
+    assert.equal(failedLog.detail.reason, 'PDF_REVIEW_REQUIRED');
+    assert.equal(failedLog.detail.stage, 'parsing');
+    assert.equal(failedLog.detail.committed, false);
+    assert.equal(failedLog.detail.importedRows, 0);
     assert.equal((await call('/api/import/import-pdf', { ...cardBody, newAccount: { name: 'Wrong bank kind', kind: 'checking' } })).status, 422);
     assert.equal((await call('/api/import/import-pdf', { pdfBase64: cardBody.pdfBase64, accountId: another.body.account.id })).status, 422);
     assert.equal((await call('/api/import/import-pdf', { pdfBase64: 'bad', accountId })).status, 400);
@@ -187,6 +207,8 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     assert.equal(isolated.status, 200, JSON.stringify(isolated.body));
     assert.notEqual(isolated.body.account.id, accountId);
     assert.equal(isolated.body.imported, 6, 'automatic matching never crosses tenants');
+    const stored = (await database.query("SELECT detail FROM audit_events WHERE request_id=$1 AND event_type='import.completed'", [imported.body.requestId])).rows[0];
+    assert.equal(stored.detail.importedRows, 6, 'support diagnostics survive in the audit store');
   } finally {
     await new Promise(resolve => server.close(resolve));
     await database.close();

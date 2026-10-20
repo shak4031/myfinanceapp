@@ -833,6 +833,7 @@
       </div>
 
       <div class="import-content">
+        <p class="import-hint" id="import-limit-note">Import one file at a time. Wait for its result before starting another CSV, OFX or PDF import. Multiple-file drops are not supported.</p>
         <div id="import-account-picker" class="import-account">
           <label for="import-account-select">Account <span class="muted">(required)</span></label>
           <select id="import-account-select" aria-describedby="import-account-help"><option value="">Loading accounts…</option></select>
@@ -1545,8 +1546,17 @@
       result.style.background = kind === 'error' ? 'rgba(255, 107, 107, 0.15)' : 'rgba(74, 158, 255, 0.1)';
       result.setAttribute('role', kind === 'error' ? 'alert' : 'status');
       result.setAttribute('aria-busy', String(kind === 'progress'));
-      result.innerHTML = `${kind === 'progress' ? '<progress aria-label="PDF import in progress"></progress>' : ''}<div>${escapeHtml(message)}</div>`;
+      result.innerHTML = `${kind === 'progress' ? '<progress aria-label="File import in progress"></progress>' : ''}<div>${escapeHtml(message)}</div>`;
       result.scrollIntoView({ block: 'nearest' });
+    }
+    let csvImportInProgress = false;
+    function importIsBusy() { return csvImportInProgress || pdfImportInProgress; }
+    function importSupportReference(response, data) {
+      return data?.requestId || response.headers?.get?.('X-Request-Id') || '';
+    }
+    function appendImportReference(reference) {
+      if (!reference) return;
+      document.getElementById('import-result').innerHTML += `<p class="import-hint">Support reference: <code>${escapeHtml(reference)}</code></p>`;
     }
 
     function switchImportTab(tab) {
@@ -1579,31 +1589,41 @@
     }
 
     async function importCSV() {
-      if (!pendingCsvFile) { notify('Select a CSV file first'); return; }
+      if (importIsBusy()) return;
+      if (!pendingCsvFile) { setImportStatus('error', 'Select a bank export first.'); return; }
       const account = FinanceAccounts.choice();
       if (!account) return;
+      const file = pendingCsvFile;
+      csvImportInProgress = true;
+      const button = document.getElementById('csv-import-btn');
+      button.disabled = true;
+      button.textContent = 'Importing...';
+      let reference = '';
 
       const resultDiv = document.getElementById('import-result');
-      resultDiv.style.display = 'block';
-      resultDiv.innerHTML = '<div style="color: var(--primary)">Reading CSV...</div>';
-      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+      setImportStatus('progress', 'Reading bank export... Import one file at a time; wait for this result.');
 
       try {
         const csvData = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsText(pendingCsvFile);
+          reader.onerror = () => reject(new Error('The bank export could not be read. Choose the file again.'));
+          reader.onabort = () => reject(new Error('Reading the bank export was interrupted.'));
+          reader.readAsText(file);
         });
 
-        resultDiv.innerHTML = '<div style="color: var(--primary)">Parsing transactions...</div>';
+        setImportStatus('progress', 'Processing transactions... Please wait for the result before importing another file.');
 
+        reference = crypto.randomUUID();
         const res = await fetch('/api/import/import-csv', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvData, source: pendingCsvFile.name, ...account })
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': reference },
+          signal: AbortSignal.timeout(120000),
+          body: JSON.stringify({ csvData, source: file.name, ...account })
         });
-        const data = await res.json();
-        if (data.success) {
+        reference = importSupportReference(res) || reference;
+        const data = await res.json().catch(() => { throw new Error(`The server returned an unreadable response (${res.status}). Check Transactions before retrying.`); });
+        reference = importSupportReference(res, data) || reference;
+        if (res.ok && data.success) {
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
             <div style="color: var(--success); font-weight: 700;">✅ Import Complete</div>
@@ -1613,18 +1633,28 @@
             ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
             ${FinanceAccounts.resultNote(data)}
           `;
-          FinanceAccounts.afterImport(data);
+          FinanceAccounts.afterImport(data).catch(error => {
+            resultDiv.innerHTML += `<p role="alert">Imported, but account refresh failed: ${escapeHtml(error.message)}. Reload to refresh.</p>`;
+          });
           pendingCsvFile = null;
           document.getElementById('csv-file-list').innerHTML = '';
+          document.getElementById('csv-input').value = '';
           document.getElementById('csv-import-btn').disabled = true;
           loadDashboard();
         } else {
-          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
+          setImportStatus('error', data.error || `Import failed (${res.status}).`);
         }
       } catch (err) {
-        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
+        setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? 'The import request timed out. The server may still be processing it. Check Transactions before retrying.'
+          : err.message);
+      } finally {
+        csvImportInProgress = false;
+        button.disabled = !pendingCsvFile;
+        button.textContent = 'Import transactions';
+        resultDiv.setAttribute('aria-busy', 'false');
+        appendImportReference(reference);
+        resultDiv.scrollIntoView({ block: 'nearest' });
       }
     }
 
@@ -1657,7 +1687,7 @@
     }
 
     async function importPDF() {
-      if (pdfImportInProgress) return;
+      if (importIsBusy()) return;
       if (!pendingPdfFile) { setImportStatus('error', 'Select a PDF first.'); return; }
       if (pendingPdfFile.size > 12 * 1024 * 1024) { setImportStatus('error', 'Choose a PDF no larger than 12 MB.'); return; }
       const account = pdfManualAccount ? FinanceAccounts.choice() : {};
@@ -1669,6 +1699,7 @@
       button.disabled = true;
       button.textContent = 'Importing PDF...';
       button.setAttribute('aria-busy', 'true');
+      let reference = '';
 
       const resultDiv = document.getElementById('import-result');
       setImportStatus('progress', `Reading ${file.name}... You can close this dialog and reopen it to check the result.`);
@@ -1684,12 +1715,15 @@
 
         setImportStatus('progress', `Processing ${file.name}: uploading, detecting statement type, reading transactions and verifying balances. Please wait for the result.`);
 
+        reference = crypto.randomUUID();
         const res = await fetch('/api/import/import-pdf', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': reference },
           signal: AbortSignal.timeout(120000),
           body: JSON.stringify({ pdfBase64: base64, source: file.name, ...account })
         });
+        reference = importSupportReference(res) || reference;
         const data = await res.json().catch(() => { throw new Error(`The server returned an unreadable response (${res.status}). The import outcome is unknown. Check Accounts and Transactions before retrying; repeat PDF imports skip matching transactions.`); });
+        reference = importSupportReference(res, data) || reference;
         if (res.ok && data.success) {
           resultDiv.setAttribute('role', 'status');
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
@@ -1728,6 +1762,7 @@
         button.textContent = 'Import PDF';
         button.setAttribute('aria-busy', 'false');
         resultDiv.setAttribute('aria-busy', 'false');
+        appendImportReference(reference);
         resultDiv.scrollIntoView({ block: 'nearest' });
       }
     }
@@ -1786,13 +1821,13 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261024e"></script>
+  <script src="refresh.js?v=20261024f"></script>
   <script src="accounts.js?v=20261020d"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
   <script src="pro-dashboard.js?v=20261024b"></script>
-  <script src="spending-history.js?v=20261025"></script>
+  <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261020b"></script>
   <script src="analytics.js?v=20261024c"></script>
   <script src="plan.js?v=20261017r"></script>
