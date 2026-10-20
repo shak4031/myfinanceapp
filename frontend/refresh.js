@@ -304,7 +304,8 @@
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
     const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
-    Promise.resolve(loaders[view]?.()).catch(reportError);
+    const finish = window.FinancePerformance?.begin('page', view === 'analytics' && sub === 'compass' ? 'compass' : view);
+    Promise.resolve(loaders[view]?.()).then(() => finish?.(), error => { finish?.('error'); reportError(error); });
   };
   window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });
   document.addEventListener('click', event => {
@@ -373,6 +374,7 @@
         json('/api/dashboard/all-transactions')
       ]);
       if (request !== categoryRequest) return;
+      const finish = window.FinancePerformance?.begin('cpu', 'categories.render');
       rules = data.rules || []; categories = data.categories || [];
       categoryPeriod.sync(activity.transactions || []);
       const period = categoryPeriod.current();
@@ -406,6 +408,7 @@
         .filter(category => String(category.id) !== String(deletingCategory?.id))
         .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
     $('merchant-rules').innerHTML = `<table class="review-table rule-table"><thead><tr><th>Merchant</th><th>Category</th><th>Priority</th><th>Enabled</th><th></th></tr></thead><tbody>${rules.map((rule, index) => `<tr data-rule="${index}" data-rule-search="${escape(`${rule.display_label || ''} ${rule.pattern} ${rule.category || ''}`.toLowerCase())}"><td><strong>${escape(rule.display_label || rule.pattern)}</strong><details class="rule-edit"><summary>Edit merchant name</summary><input data-rule-pattern aria-label="Merchant text" maxlength="256" value="${escape(rule.pattern)}"><label>Display name<input data-rule-label aria-label="Display name" value="${escape(rule.display_label)}"></label></details></td><td><select aria-label="Rule category">${categoryOptions(rule.category)}</select></td><td><details class="rule-edit"><summary>Advanced</summary><input aria-label="Rule priority" type="number" min="0" max="1000" step="1" value="${Number(rule.priority) || 0}"></details></td><td><input aria-label="Rule enabled" type="checkbox" ${fixed(rule.enabled) ? 'checked' : ''}></td><td><button class="btn btn-secondary" data-save-rule="${index}">Save</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No saved merchant mappings yet. Change a transaction category to create one automatically.</td></tr>'}</tbody></table>`;
+      finish?.();
     } catch (error) {
       if (request !== categoryRequest) return;
       $('category-filter-status').textContent = `Could not load categories: ${error.message}`;
@@ -579,9 +582,11 @@
   $('approve-all-button').onclick = () => applySuggestions(Array.from(suggestions, (_, index) => ({ dataset: { suggestion: String(index) } })), true);
 
   window.loadAllTransactions = async function() {
+    const finish = window.FinancePerformance?.begin('panel', 'transactions.load');
     const table = $('full-txn-table');
     const request = ++transactionRequest;
     table.innerHTML = '<tr><td colspan="5" class="empty-state">Loading transactions...</td></tr>';
+    $('txn-pagination').hidden = true;
     $('txn-summary').textContent = '';
     $('txn-filter-status').textContent = 'Loading activity...';
     try {
@@ -594,7 +599,10 @@
       if (request !== transactionRequest) return;
       table.innerHTML = `<tr><td colspan="5" class="empty-state" role="alert">${escape(error.message)}</td></tr>`;
       $('txn-filter-status').textContent = 'Could not load transactions. Change a filter or reopen this page to retry.';
+      finish?.('error');
+      return;
     }
+    finish?.();
   };
   const similarDialog = document.createElement('dialog');
   similarDialog.id = 'similar-dialog'; similarDialog.className = 'editor similar-dialog';
@@ -838,7 +846,9 @@
   const describe = (transaction, query) => transaction.display_name
     ? `<strong class="tx-name">${highlight(transaction.display_name, query)}</strong><div class="tx-original" title="Bank description">${highlight(transaction.description, query)}</div>`
     : highlight(transaction.description, query);
-  function renderTransactions() {
+  const transactionDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  function renderTransactions(page = 0) {
+    const finish = window.FinancePerformance?.begin('cpu', 'transactions.render');
     const table = $('full-txn-table');
     const { allCategories, transactions } = transactionCache;
     {
@@ -855,13 +865,29 @@
       const total = direction => rows.filter(t => String(t.direction).toUpperCase() === direction && !isTransfer(t)).reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
       const transfers = rows.filter(isTransfer).length;
       const income = total('CREDIT'), expenses = total('DEBIT');
+      const pageSize = 100, pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+      page = Math.max(0, Math.min(page, pageCount - 1));
+      const offset = page * pageSize;
+      const visibleRows = rows.slice(offset, offset + pageSize);
+      const pagination = $('txn-pagination');
+      pagination.hidden = rows.length <= pageSize;
+      pagination.innerHTML = `<span role="status">${offset + 1}–${offset + visibleRows.length} of ${rows.length.toLocaleString()} transactions · Page ${page + 1} of ${pageCount}</span>
+        <button type="button" class="btn btn-secondary btn-compact" data-txn-page="previous" ${page === 0 ? 'disabled' : ''}>Previous</button>
+        <button type="button" class="btn btn-secondary btn-compact" data-txn-page="next" ${page === pageCount - 1 ? 'disabled' : ''}>Next</button>`;
+      pagination.onclick = event => {
+        const direction = event.target.closest?.('[data-txn-page]')?.dataset.txnPage;
+        if (!direction) return;
+        renderTransactions(page + (direction === 'next' ? 1 : -1));
+        $('txn-pagination').querySelector(`[data-txn-page="${direction}"]`)?.focus({ preventScroll: true });
+        table.scrollIntoView({ block: 'start' });
+      };
       $('txn-filter-status').textContent = `${transactionId ? `Transaction #${transactionId} · ` : ''}${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions${transactionId ? ' · Reset filters to see all activity.' : ''}`;
       $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
         `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}${transfers ? ` · ${transfers} transfer${transfers === 1 ? '' : 's'} not counted` : ''}</span></div>`).join('');
-      table.innerHTML = rows.length ? rows.map((transaction, index) => {
+      table.innerHTML = rows.length ? visibleRows.map((transaction, index) => {
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
-        return `<tr data-transaction="${index}">
-          <td>${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</td>
+        return `<tr data-transaction="${offset + index}">
+          <td>${escape(transactionDateFormat.format(transactionDate(transaction.date)))}</td>
           <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
@@ -920,6 +946,7 @@
         finally { if (FinanceSession.isAuthenticated()) await loadAllTransactions(); }
       };
     }
+    finish?.();
   }
   $('txn-filter-search').oninput = () => {
     clearTimeout(searchTimer);

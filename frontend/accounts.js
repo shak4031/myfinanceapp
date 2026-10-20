@@ -206,7 +206,8 @@
   }
   async function refreshAll(message) {
     await load();
-    render();
+    if (window.FinancePerformance) window.FinancePerformance.measure('cpu', 'accounts.render', render);
+    else render();
     if (message) toast(message);
     window.FinancePlan?.invalidate?.();
   }

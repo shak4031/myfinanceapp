@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
-  <script src="session.js?v=20261020c"></script>
+  <script src="session.js?v=20261026a"></script>
+  <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
@@ -763,6 +764,7 @@
             <tbody id="full-txn-table"></tbody>
           </table>
         </div>
+        <nav id="txn-pagination" class="toolbar" aria-label="Transaction pages" hidden></nav>
       </section>
 
       <!-- ETL STAGING -->
@@ -1105,7 +1107,21 @@
     }
 
     // DASHBOARD LOGIC
+    let dashboardRequest = 0;
     async function loadDashboard() {
+      const run = ++dashboardRequest;
+      const finishLoad = window.FinancePerformance?.begin('panel', 'dashboard.load');
+      const pending = ['/summary', '/upcoming-payments', '/category-spending'].map(async path => {
+        const response = await fetch(`/api/dashboard${path}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'}) });
+        const value = await response.json();
+        if (!response.ok) throw new Error(value.error || 'Unable to load dashboard panel');
+        return value;
+      }).map(promise => promise.then(value => ({ value }), error => ({ error })));
+      const readPanel = async index => {
+        const result = await pending[index];
+        if (result.error) throw result.error;
+        return result.value;
+      };
       // 0. CLEAR existing containers to prevent duplication on multiple nav clicks
       const paymentsContainer = document.getElementById('dashboard-payments');
       paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
@@ -1120,15 +1136,17 @@
 
       let data;
       try {
-        const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-        data = await summaryRes.json();
-        if (!summaryRes.ok) throw new Error(data.error || 'Unable to load account balance');
+        data = await readPanel(0);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
       } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         paymentsContainer.textContent = `Unable to load account balance: ${error.message}`;
         document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        finishLoad?.('error');
         return;
       }
       
+      const finishSummary = window.FinancePerformance?.begin('cpu', 'dashboard.metrics');
       const how = text => window.FinanceUI?.howCalc(text) || '';
       const basis = data.monthsAveraged ? `the last ${data.monthsAveraged} full month${data.monthsAveraged === 1 ? '' : 's'}` : 'the last 3 full months';
       document.getElementById('dashboard-metrics').innerHTML = `
@@ -1137,21 +1155,24 @@
         <div class="metric-card net"><div class="metric-label">Typical surplus <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Typical income minus typical spending over ${basis}. This is the same surplus your Debt, Goals and Coach pages plan with.`)}</div><div class="metric-value">${usd(data.netCashflow)}</div></div>
         <div class="metric-card balance"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? usd(data.balance) : 'Unavailable'}</div></div>
       `;
+      finishSummary?.();
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
       let timeline;
       try {
-        const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
-        const payload = await payRes.json();
-        if (!payRes.ok) throw new Error(payload.error || 'Unable to load upcoming payments');
+        const payload = await readPanel(1);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         if (!Array.isArray(payload)) throw new Error('Invalid upcoming payments response');
         timeline = payload;
       } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         paymentsContainer.textContent = `Unable to load upcoming payments: ${error.message}`;
         document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        finishLoad?.('error');
         return;
       }
       
+      const finishTimeline = window.FinancePerformance?.begin('cpu', 'dashboard.timeline');
       timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
 
       let runningBalance = data.balance;
@@ -1299,10 +1320,21 @@
         <ol class="pay-list" aria-label="Bills due in ${monthName}, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
       if (typeof window.setPayView === 'function') window.setPayView();
+      finishTimeline?.();
 
       // 2. REPEATABLE CATEGORY SPENDING (Endpoint-driven drill-down)
-      const catRes = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-      const categories = await catRes.json();
+      let categories;
+      try {
+        categories = await readPanel(2);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
+        if (!Array.isArray(categories)) throw new Error('Invalid category spending response');
+      } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
+        document.getElementById('upcoming-section').insertAdjacentHTML('afterend', `<div id="mtd-spending-section" class="panel" role="alert">Unable to load spending cards: ${escapeHtml(error.message)}</div>`);
+        finishLoad?.('error');
+        return;
+      }
+      const finishCards = window.FinancePerformance?.begin('cpu', 'dashboard.spending-cards');
       
       let catHtml = `
         <div id="mtd-spending-section" class="panel section-panel">
@@ -1336,6 +1368,8 @@
       catHtml += '</div></div>';
       document.getElementById('upcoming-section').insertAdjacentHTML('afterend', catHtml);
       window.emitFinanceEvent?.('mtd:rendered', { categories });
+      finishCards?.();
+      finishLoad?.();
     }
 
     async function toggleFixed(txnId, isFixed) {
@@ -1821,15 +1855,15 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261024i"></script>
-  <script src="accounts.js?v=20261020d"></script>
-  <script src="account.js?v=20261019a"></script>
+  <script src="refresh.js?v=20261026a"></script>
+  <script src="accounts.js?v=20261026a"></script>
+  <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
   <script src="pro-dashboard.js?v=20261024b"></script>
   <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261020b"></script>
-  <script src="analytics.js?v=20261024f"></script>
+  <script src="analytics.js?v=20261026a"></script>
   <script src="plan.js?v=20261017r"></script>
   <script src="welcome.js?v=20261020c"></script>
   <script src="income-review.js?v=20261020b"></script>

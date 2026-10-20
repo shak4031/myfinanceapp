@@ -24,6 +24,14 @@
     <div class="panel plan-card"><div><p class="eyebrow">LEARN MYFINANCE</p><h2>Watch the tutorials</h2>
       <p class="muted">One-minute narrated tours of the dashboard, the debt-free plan and savings goals.</p></div>
       <div><a class="btn btn-secondary" href="#tutorials">Open tutorials</a></div></div>
+    <div class="panel plan-card"><div><p class="eyebrow">PERFORMANCE</p><h2>Diagnose slow pages</h2>
+      <p class="muted">Start recording, visit the pages that feel slow, then return here and stop. Records page loads, panel processing, API timings and main-thread stalls. Kept only in this tab (up to 600 samples); cleared on sign-out or reload. No financial values, searches or statement contents are collected, and nothing is uploaded automatically.</p></div>
+      <div class="toolbar"><button type="button" class="btn btn-primary" data-performance="start">Start recording</button>
+        <button type="button" class="btn btn-secondary" data-performance="stop">Stop &amp; summarize</button>
+        <button type="button" class="btn btn-secondary" data-performance="download">Download report</button>
+        <button type="button" class="btn btn-secondary" data-performance="clear">Clear</button></div>
+      <p id="performance-status" role="status">Not recording.</p>
+      <div id="performance-summary" class="table-scroll"></div></div>
     <div class="panel plan-card" id="password-card"><div><p class="eyebrow">PASSWORD</p><h2>Change your password</h2>
       <p class="muted">Use at least 12 characters. You stay signed in here; every other device is signed out. Forgot your current password? Sign out and choose “Forgot your password?”.</p></div>
       <form id="password-form" class="toolbar">
@@ -61,6 +69,7 @@
   }
 
   async function loadSettings() {
+    renderPerformance();
     renderPasswordCard();
     const status = $('support-status');
     if (FinanceSession.currentSupport()) {
@@ -98,6 +107,12 @@
     } catch (error) { $('support-status').textContent = error.message; }
   });
   view.addEventListener('click', async event => {
+    const action = event.target.closest?.('[data-performance]')?.dataset.performance;
+    if (action) {
+      window.FinancePerformance[action]();
+      renderPerformance();
+      return;
+    }
     const id = event.target.dataset?.revoke;
     if (!id) return;
     try {
@@ -106,6 +121,16 @@
       await loadSettings();
     } catch (error) { $('support-status').textContent = error.message; }
   });
+
+  function renderPerformance() {
+    const report = window.FinancePerformance?.snapshot();
+    if (!report) return;
+    $('performance-status').textContent = `${report.enabled ? 'Recording' : 'Not recording'} · ${report.records.length} samples${report.dropped ? ` · ${report.dropped} older samples discarded` : ''}.${report.capabilities.longtask ? '' : ' Main-thread stall observation is unavailable in this browser.'}`;
+    $('performance-summary').innerHTML = report.summary.length
+      ? `<table><thead><tr><th>Type</th><th>Operation</th><th>Samples</th><th>Average ms</th><th>95th percentile ms</th><th>Worst ms</th></tr></thead><tbody>${report.summary.map(row =>
+        `<tr><td>${escape(row.kind)}</td><td>${escape(row.name)}</td><td>${row.count}</td><td>${row.averageMs}</td><td>${row.p95Ms}</td><td>${row.maxMs}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted">No measurements yet. Start recording before reproducing the slowdown.</p>';
+  }
 
   const baseShowView = window.showView;
   window.showView = function(name) {

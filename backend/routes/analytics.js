@@ -7,11 +7,18 @@ import { parseTxDate } from '../utils/normalize.js';
 import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 import { cashBalance } from '../utils/transfers.js';
 import { currentUserId } from '../utils/tenant.js';
+import { performance } from 'node:perf_hooks';
 
 const router = Router();
 const db = new Database();
 
 router.use(requirePro);
+
+async function timed(res, name, callback) {
+  const started = performance.now();
+  try { return await callback(); }
+  finally { res.append('Server-Timing', `${name};dur=${(performance.now() - started).toFixed(2)}`); }
+}
 
 async function loadInputs() {
   return db.transaction(async client => {
@@ -32,11 +39,14 @@ async function loadInputs() {
 router.get('/', async (req, res, next) => {
   try {
     const now = new Date();
-    const [inputs, planInputs] = await Promise.all([loadInputs(), loadPlanInputs(db, now)]);
+    const [inputs, planInputs] = await Promise.all([
+      timed(res, 'inputs', loadInputs), timed(res, 'plan', () => loadPlanInputs(db, now))
+    ]);
     const typical = typicalSurplus(planInputs, now);
+    const analytics = await timed(res, 'analytics', () => buildAnalytics({ ...inputs, typical }));
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical }));
     res.json({
-      ...buildAnalytics({ ...inputs, typical }),
-      moneyFlow: buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical })
+      ...analytics, moneyFlow
     });
 
   } catch (error) { next(error); }
@@ -54,9 +64,10 @@ router.get('/compass', async (req, res, next) => {
       || to >= now.getFullYear() * 12 + now.getMonth()) {
       return res.status(400).json({ error: 'Choose 1–24 completed calendar months, with a valid start and end (YYYY-MM).' });
     }
-    const inputs = await loadInputs();
+    const inputs = await timed(res, 'inputs', loadInputs);
     const range = { from: req.query.from, to: req.query.to, months: to - from + 1, endYear: Math.floor(to / 12), endMonth: to % 12 };
-    res.json({ ...buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, range }), range });
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, range }));
+    res.json({ ...moneyFlow, range });
   } catch (error) { next(error); }
 });
 

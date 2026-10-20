@@ -62,6 +62,7 @@ app.use((req, res, next) => {
   req.id = /^[A-Za-z0-9-]{8,64}$/.test(incoming || '') ? incoming : randomUUID();
   res.set('X-Request-Id', req.id);
   const started = process.hrtime.bigint();
+  res.locals.requestStarted = started;
   res.on('finish', () => {
     if (!req.originalUrl.startsWith('/api')) return;
     structuredLog(res.statusCode >= 500 ? 'error' : 'info', {
@@ -82,6 +83,7 @@ app.use('/api', (req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   const json = res.json.bind(res);
   res.json = body => {
+    res.append('Server-Timing', `app;dur=${(Number(process.hrtime.bigint() - res.locals.requestStarted) / 1e6).toFixed(2)}`);
     if (res.statusCode >= 500 && !res.locals.errorAudited) {
       res.locals.errorAudited = true;
       // The client only sees a generic message; the real reason goes to the log, tied to the request ID.

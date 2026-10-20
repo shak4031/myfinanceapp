@@ -21,9 +21,12 @@
       <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Default calculation · completed months only. Choose a period to explore.'}</p></form>`;
   }
   function compassPanel(key, title, renderer, base) {
+    const finish = globalThis.FinancePerformance?.begin('cpu', `compass.${key}`);
     const mf = compassRanges.get(key)?.data || base;
     const body = ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
-    return `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
+    const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
+    finish?.();
+    return html;
   }
   const pro = () => globalThis.FinancePro;
   const charts = () => globalThis.ProCharts;
@@ -486,6 +489,7 @@
   }
 
   function mountBubbles(v) {
+    const finish = globalThis.FinancePerformance?.begin('cpu', 'compass.bubble-layout');
     const el = $('pro-bubbles');
     if (!el?.isConnected || !v?.items?.length || typeof globalThis.requestAnimationFrame !== 'function') return stopField();
     const kept = field?.el === el ? field.nodes : null, keptW = field?.w;
@@ -532,6 +536,7 @@
       field.observer.observe(el);
     }
     if (!el.dataset.bound) bindField(el);
+    finish?.();
   }
 
   function stepField(f) {
@@ -687,16 +692,19 @@
   }
 
   function render(a) {
+    const finish = globalThis.FinancePerformance?.begin('cpu', `analytics.${tab}.render`);
     const { esc } = pro().format;
     if (tab === 'compass') {
       $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
       mountBubbles(panelFlow('vendors')?.vendors);
+      finish?.();
       return;
     }
     stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
     $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    finish?.();
   }
 
   // `sub` comes from the route (#analytics or #analytics/compass); reloads after a save keep the current tab.
@@ -812,6 +820,7 @@
     if (!form || !current) return;
     event.preventDefault();
     const key = form.dataset.compassRange;
+    const finish = globalThis.FinancePerformance?.begin('panel', `compass.${key}.load`);
     const preset = form.querySelector('[name="preset"]').value;
     const from = form.querySelector('[name="from"]').value, to = form.querySelector('[name="to"]').value;
     const state = { preset, from, to, loading: true, data: compassRanges.get(key)?.data };
@@ -821,10 +830,12 @@
       const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
       if (compassRanges.get(key) !== state) return;
       state.data = data; state.loading = false;
+      finish?.();
     } catch (error) {
       if (compassRanges.get(key) !== state) return;
       state.error = `Could not update this panel: ${error.message}. The previous result is unchanged.`;
       state.loading = false;
+      finish?.('error');
     }
     if (tab === 'compass') render(current);
   });
