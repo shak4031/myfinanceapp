@@ -46,11 +46,10 @@ export function sameBill(a, b) {
     || merchantKey(a) === merchantKey(b);
 }
 
-export function buildUpcomingPayments(transactions, today = new Date()) {
+export function buildUpcomingPayments(transactions, today = new Date(), { through = null } = {}) {
   const year = today.getFullYear();
   const month = today.getMonth();
   const previous = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month + 1, 0).getDate();
   const debits = transactions
     .filter(tx => String(tx.direction).toUpperCase() === 'DEBIT')
     .map(tx => ({ ...tx, parsed: parseTxDate(tx.date), amount: Number(tx.amount) }))
@@ -62,12 +61,13 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
       return true;
     });
   const lastMonth = debits.filter(tx => tx.parsed.year === previous.getFullYear() && tx.parsed.month === previous.getMonth() && isFixedPayment(tx));
-  lastMonth.sort((a, b) => b.parsed.day - a.parsed.day || Number(b.id) - Number(a.id));
+  const thisMonth = debits.filter(tx => tx.parsed.year === year && tx.parsed.month === month && tx.parsed.day <= today.getDate());
+  const candidates = through ? [...lastMonth, ...thisMonth.filter(isFixedPayment)] : lastMonth;
+  candidates.sort((a, b) => b.parsed.iso.localeCompare(a.parsed.iso) || Number(b.id) - Number(a.id));
   const templates = [];
-  for (const tx of lastMonth) {
+  for (const tx of candidates) {
     if (!templates.some(template => sameBill(template, tx))) templates.push(tx);
   }
-  const thisMonth = debits.filter(tx => tx.parsed.year === year && tx.parsed.month === month && tx.parsed.day <= today.getDate());
   // Pay mode belongs to the bill: use the row's own value, else the newest row of the same bill that has one.
   const withMode = debits.filter(tx => tx.pay_mode === 'auto' || tx.pay_mode === 'manual')
     .sort((a, b) => (b.parsed.year - a.parsed.year) || (b.parsed.month - a.parsed.month) || (b.parsed.day - a.parsed.day) || Number(b.id) - Number(a.id));
@@ -75,25 +75,34 @@ export function buildUpcomingPayments(transactions, today = new Date()) {
     : withMode.find(row => sameBill(template, row))?.pay_mode ?? null;
   const timeline = [];
   const paidIds = new Set();
-  for (const template of templates) {
-    const paid = thisMonth.filter(tx => sameBill(template, tx));
-    if (paid.length) {
-      for (const tx of paid) {
-        if (paidIds.has(tx.id)) continue;
-        paidIds.add(tx.id);
+  const end = through || new Date(year, month + 1, 0);
+  for (let offset = 0; new Date(year, month + offset, 1) <= end; offset++) {
+    const target = new Date(year, month + offset, 1);
+    const monthEnd = new Date(year, month + offset + 1, 0).getDate();
+    const dateFor = day => `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    for (const template of templates) {
+      const paid = offset === 0 ? thisMonth.filter(tx => sameBill(template, tx)) : [];
+      if (paid.length) {
+        for (const tx of paid) {
+          if (paidIds.has(tx.id)) continue;
+          paidIds.add(tx.id);
+          timeline.push({
+            id: tx.id, description: tx.display_name || tx.description, category: template.category || 'Other',
+            amount: tx.amount, dayOfMonth: tx.parsed.day, ...(through ? { date: dateFor(tx.parsed.day) } : {}),
+            isIncome: false, status: 'processed', payMode: payModeOf(tx, template)
+          });
+        }
+      } else {
+        const dayOfMonth = Math.min(template.parsed.day, monthEnd);
+        if (new Date(target.getFullYear(), target.getMonth(), dayOfMonth) > end) continue;
         timeline.push({
-          id: tx.id, description: tx.display_name || tx.description, category: template.category || 'Other',
-          amount: tx.amount, dayOfMonth: tx.parsed.day, isIncome: false, status: 'processed', payMode: payModeOf(tx, template)
+          sourceTransactionId: template.id,
+          description: template.display_name || getCanonicalMerchant(template.description), category: template.category || 'Other',
+          amount: template.amount, dayOfMonth, ...(through ? { date: dateFor(dayOfMonth) } : {}),
+          isIncome: false, status: 'projected', payMode: payModeOf(template, template)
         });
       }
-    } else {
-      timeline.push({
-        sourceTransactionId: template.id,
-        description: template.display_name || getCanonicalMerchant(template.description), category: template.category || 'Other',
-        amount: template.amount, dayOfMonth: Math.min(template.parsed.day, monthEnd),
-        isIncome: false, status: 'projected', payMode: payModeOf(template, template)
-      });
     }
   }
-  return timeline.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+  return timeline.sort((a, b) => through ? a.date.localeCompare(b.date) : a.dayOfMonth - b.dayOfMonth);
 }

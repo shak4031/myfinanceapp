@@ -3,12 +3,12 @@ import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { buildUpcomingPayments } from '../utils/fixedPayments.js';
+import { isIncomeTransaction, projectIncome } from '../utils/income.js';
 import { currentUserId } from '../utils/tenant.js';
 import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 import { getEntitlement } from '../utils/license.js';
 import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
-import { isIncomeTransaction } from '../utils/income.js';
 import { cashBalance, savedAmount } from '../utils/transfers.js';
 import { buildSpendingHistory } from '../utils/spendingHistory.js';
 
@@ -204,7 +204,8 @@ async function loadUpcoming(req, today = new Date()) {
     WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
     [currentUserId(), dateString(previousMonth), dateString(today)]
   );
-  const bills = buildUpcomingPayments(transactions, today);
+  const through = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
+  const bills = buildUpcomingPayments(transactions, today, { through });
   // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
   let extras = [], plan = null, pro = false, streams = [];
   try {
@@ -213,17 +214,27 @@ async function loadUpcoming(req, today = new Date()) {
     const computed = computePlan(inputs, { pro: !!entitlement.plusActive, now: today });
     plan = entitlement.plusActive ? computed : null;
     streams = computed.income?.streams || [];
-    extras = [...computed.incomeItems, ...(plan ? buildPlanPayments(plan, today) : [])];
+    extras = projectIncome(inputs.recent, today, { through }).items;
+    if (plan) {
+      for (let offset = 0; new Date(today.getFullYear(), today.getMonth() + offset, 1) <= through; offset++) {
+        const target = offset === 0 ? today : new Date(today.getFullYear(), today.getMonth() + offset, 1);
+        extras.push(...buildPlanPayments(plan, target).map(item => ({
+          ...item, date: dateString(new Date(target.getFullYear(), target.getMonth(), item.dayOfMonth)),
+          // Future allocations are estimates, not edits to this month's plan.
+          flexible: offset === 0 && item.flexible, futurePlan: offset > 0
+        })).filter(item => item.date <= dateString(through)));
+      }
+    }
   } catch (error) {
     log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
   }
-  const items = [...bills, ...extras].sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome));
+  const items = [...bills, ...extras].sort((a, b) => a.date.localeCompare(b.date) || Number(b.isIncome) - Number(a.isIncome));
   return { items, plan, pro, streams };
 }
 
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching monthly fixed payments based on the previous month');
+    log('DASHBOARD', 'Fetching the next 30 days of payments, overdue bills and current-month history');
     res.json((await loadUpcoming(req)).items);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);

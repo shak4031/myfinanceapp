@@ -13,6 +13,28 @@ test('projectRunway walks the month with income landing before same-day bills', 
   assert.equal(runway.ahead.length, 2);
 });
 
+test('dated runway agrees with the rolling dashboard across month boundaries and includes overdue bills', () => {
+  const now = new Date(2026, 9, 30);
+  const upcoming = [
+    bill('Next month rent', 900, 1, { date: '2026-11-01' }),
+    bill('Paid bill', 999, 20, { date: '2026-10-20', status: 'processed' }),
+    pay(1200, 1, { date: '2026-11-01' }),
+    bill('Overdue utility', 100, 3, { date: '2026-10-03' }),
+    bill('Phone', 50, 31, { date: '2026-10-31' })
+  ];
+  const runway = projectRunway(500, upcoming, now);
+  assert.equal(runway.end, 650);
+  assert.equal(runway.low.amount, 350);
+  assert.deepEqual(runway.ahead.map(item => item.description), ['Overdue utility', 'Phone', 'ACME PAYROLL', 'Next month rent']);
+  const result = buildInsights({ today: now, balance: 500, upcoming });
+  assert.deepEqual(result.pulse.safeToSpend, { amount: 350, committed: 150, count: 2, untilDay: 1, untilDate: '2026-11-01' });
+  assert.equal(result.pulse.nextIncome.daysAway, 2);
+  assert.equal(result.pulse.nextIncome.date, '2026-11-01');
+  assert.equal(result.pulse.lowPoint.date, '2026-10-31');
+  assert.equal(result.pulse.billsLeft.total, 1050);
+  assert.match(result.insights.find(item => item.id === 'covered').title, /next 30 days/);
+});
+
 test('a projected shortfall is the first, most urgent insight', () => {
   const result = buildInsights({ today, balance: 300, upcoming: [bill('Rent', 900, 20), pay(1500, 22), bill('Power', 80, 15, { payMode: 'auto' })] });
   assert.equal(result.insights[0].id, 'shortfall');

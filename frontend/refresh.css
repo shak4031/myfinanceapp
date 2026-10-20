@@ -518,6 +518,12 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-list-today { display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: #fff1f2; color: #e11d48; font-size: 10.5px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; border-top: 1px solid #fecdd3; border-bottom: 1px solid #fecdd3; }
 .pay-list-today:first-child { border-top: 0; }
 .pay-list-today::after { content: ""; flex: 1; height: 1px; background: #fda4af; }
+.pay-list-heading, .pay-window-note { padding: 12px 16px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.pay-list-heading { background: #fff8e8; color: #854d0e; font-weight: 650; }
+.pay-history { margin-top: 20px; border: 1px solid var(--border); border-radius: 14px; background: #f8fafc; }
+.pay-history > summary { padding: 16px; cursor: pointer; font-size: 13px; font-weight: 650; }
+.pay-history > summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 14px; }
+#upcoming-section .pay-history > ol.pay-list { display: block; margin: 0 12px 12px; }
 
 /* Layout toggle and which layout is visible */
 #upcoming-section .section-head > div:first-child { flex: 1 1 320px; min-width: 0; }

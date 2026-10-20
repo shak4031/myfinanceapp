@@ -124,3 +124,41 @@ test('invalid payment data produces an explicit error', () => {
   assert.throws(() => buildUpcomingPayments([tx(1, { date: 'invalid' })], today), /Invalid payment date/);
   assert.throws(() => buildUpcomingPayments([tx(1, { date: '2026-09-31' })], today), /Invalid payment date/);
 });
+
+test('rolling payments retain overdue bills and paid history, then recur across the 30-day boundary', () => {
+  const now = new Date(2026, 9, 20);
+  const through = new Date(2026, 10, 19);
+  const result = buildUpcomingPayments([
+    tx(1, { date: '2026-09-03', description: 'VERIZON', amount: 80 }),
+    tx(2, { date: '2026-09-18', amount: 125 }),
+    tx(3, { date: '2026-10-18', amount: 140, is_fixed: false }),
+    tx(4, { date: '2026-09-20', description: 'NETFLIX', amount: 20 }),
+    tx(5, { date: '2026-09-25', description: 'GEICO', amount: 100 })
+  ], now, { through });
+  assert.deepEqual(result.map(item => [item.date, item.status]), [
+    ['2026-10-03', 'projected'], ['2026-10-18', 'processed'],
+    ['2026-10-20', 'projected'], ['2026-10-25', 'projected'],
+    ['2026-11-03', 'projected'], ['2026-11-18', 'projected']
+  ]);
+  assert.equal(result.filter(item => item.status !== 'processed').reduce((balance, item) => balance - item.amount, 1000), 595);
+  assert.ok(result.every(item => item.date <= '2026-11-19'));
+});
+
+test('rolling horizon includes its last day but not day 31 and carries newly flagged current bills', () => {
+  const result = buildUpcomingPayments([
+    tx(1, { date: '2026-10-19' }),
+    tx(2, { date: '2026-09-20', description: 'VERIZON' })
+  ], new Date(2026, 9, 20), { through: new Date(2026, 10, 19) });
+  assert.ok(result.some(item => item.date === '2026-11-19' && item.status === 'projected'));
+  assert.ok(result.some(item => item.date === '2026-10-19' && item.status === 'processed'));
+  assert.ok(!result.some(item => item.date === '2026-11-20'));
+});
+
+test('rolling dates cross December and clamp February while keeping distinct monthly occurrences', () => {
+  const december = buildUpcomingPayments([tx(1, { date: '2026-11-03' })], new Date(2026, 11, 20), { through: new Date(2027, 0, 19) });
+  assert.deepEqual(december.map(item => item.date), ['2026-12-03', '2027-01-03']);
+  for (const [year, last] of [[2027, '28'], [2028, '29']]) {
+    const result = buildUpcomingPayments([tx(1, { date: `${year}-01-31` })], new Date(year, 1, 20), { through: new Date(year, 2, 22) });
+    assert.deepEqual(result.map(item => item.date), [`${year}-02-${last}`]);
+  }
+});

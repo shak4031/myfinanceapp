@@ -232,6 +232,14 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal((await call('/api/plan/what-if', { body: { extra: 100 }, cookie: customerCookie })).status, 200);
     const plusTimeline = (await call('/api/dashboard/upcoming-payments', { body: {}, cookie: customerCookie })).body;
     assert.ok(plusTimeline.some(item => item.planned), 'Pro Plus includes planning calendar items');
+    assert.ok(plusTimeline.every(item => /^\d{4}-\d{2}-\d{2}$/.test(item.date)), 'income and plan entries use full dates too');
+    const windowEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 30);
+    const nextContribution = new Date(day.getFullYear(), day.getMonth() + 1, 15);
+    if (nextContribution <= windowEnd) {
+      const nextGoal = plusTimeline.find(item => item.planKind === 'goal' && item.date.slice(0, 7) !== date.slice(0, 7));
+      assert.ok(nextGoal?.futurePlan, 'next-month goal allocations are included as estimates');
+      assert.equal(nextGoal.flexible, false, 'future estimates must not edit the current-month allocation');
+    }
 
     // Downgrades lock planning immediately without deleting the saved data.
     await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie });

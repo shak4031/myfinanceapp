@@ -49,6 +49,18 @@ test('income detection recognizes weekly, semimonthly and monthly pay and ignore
   assert.equal(detectIncomeStreams(stale, today).length, 0, 'a job that stopped paying is not projected');
 });
 
+test('rolling income uses actual dates and includes future paychecks through day 30 without repeating received pay', () => {
+  const now = new Date(2026, 9, 20);
+  const { items } = projectIncome(paychecks('2026-04-02', 14, '2026-10-15'), now, { through: new Date(2026, 10, 19) });
+  assert.deepEqual(items.map(item => [item.date, item.status]), [
+    ['2026-10-01', 'processed'], ['2026-10-15', 'processed'],
+    ['2026-10-29', 'projected'], ['2026-11-12', 'projected']
+  ]);
+  assert.equal(new Set(items.map(item => item.key || item.id)).size, items.length);
+  const endDay = projectIncome(paychecks('2026-04-02', 14, '2026-10-15'), new Date(2026, 9, 13), { through: new Date(2026, 10, 12) });
+  assert.ok(endDay.items.some(item => item.date === '2026-11-12'));
+});
+
 test('a user override beats income detection, and the review groups deposits by sender with a reason', () => {
   const today = new Date('2026-10-15T12:00:00Z');
   const pay = paychecks('2026-04-02', 14, '2026-10-15');

@@ -324,11 +324,17 @@ spending and income; account-type-specific savings and loan rules are unchanged.
 
 #### Upcoming fixed payments
 
-- The current month's schedule uses fixed **debit** payments from the immediately
-  preceding calendar month, not older historical transactions.
-- Each bill uses its most recent payment day and amount from that month. A day
-  that does not exist in the current month is moved to the month's final day.
-- Payments matched in the current month appear greyed out as **Paid**, even if
+- The main calendar and list always cover **today through 30 days from today**
+  (including the final day), not just the remainder of the calendar month.
+  Earlier unpaid bills from this month extend the view back to their earliest
+  pending date and remain included in projected cash. Month labels distinguish
+  repeated day numbers across month and year boundaries. Welcome insights,
+  safe-to-spend and lowest-balance indicators use this same dated window.
+- Bill templates use the latest flagged **debit** from the previous or current
+  month. They recur monthly throughout the window; older history alone does not
+  revive a bill. Days missing from a target month clamp to its final day.
+- Payments matched in the current month remain accessible in the expandable
+  **This month's history** section as **Paid**, with transaction links, even if
   the imported payment is missing its fixed flag or has a different amount.
   Matching uses the merchant/label and distinguishes masked account numbers.
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
@@ -336,8 +342,12 @@ spending and income; account-type-specific savings and loan rules are unchanged.
 - **Income is projected too.** Credits categorised as Salary/Income are treated as
   fixed automatically; the pay cadence (weekly, biweekly on a weekday, semi-monthly
   or monthly) is detected from the last months of deposits, and expected paychecks
-  are added to the running balance. Debt-free-plan and goal contributions appear as
-  violet **Flexible** cards that can be adjusted or skipped for a single month.
+  are added to the running balance through the same 30-day horizon.
+  Debt-free-plan and goal contributions appear as violet **Flexible** cards
+  that can be adjusted or skipped for the current month. Future-month entries
+  are labeled **Plan estimate**, use current allocations and that month's saved
+  overrides, and do not edit this month's plan. Past allocations appear as
+  **Planned**, never as verified paid bills.
 - **You decide what counts as pay.** Regular deposits (even Zelle or Venmo money
   from a friend) can look like a paycheck. Each deposit in Transactions has an
   **Income** toggle under *Fixed / Income*, and **Review income** (Transactions
@@ -351,7 +361,7 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   Unflagged transactions do not create bill templates; credits do not create
   payments. Startup and auto-categorization never turn your choices on or off.
 - Use the transaction's Fixed Bill checkbox to manage recurring bills. New bills
-  need a payment in the previous month before they can supply a monthly template.
+  can supply a monthly template as soon as a payment is recorded this month.
   The projection is based on imported records, not verified bank due dates; keep
   imports up to date. Missing balance/payment data is shown explicitly, never as
   a fully funded result.

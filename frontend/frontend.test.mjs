@@ -900,6 +900,39 @@ test('upcoming payments switch between calendar and list views and remember the 
   assert.match(html, /data-pay-view="calendar"[^>]*onclick="setPayView\('calendar'\)"/);
   assert.match(html, /data-pay-view="list"[^>]*onclick="setPayView\('list'\)"/);
 });
+test('dashboard rolls across months, includes overdue in cash and keeps paid history out of the main views', async () => {
+  const timeline = [
+    { date: '2026-11-19', amount: 50, description: 'End day bill' },
+    { date: '2026-10-03', amount: 100, description: 'Overdue bill' },
+    { date: '2026-10-10', amount: 900, description: 'Paid mortgage', status: 'processed', id: 42 },
+    { date: '2026-11-01', amount: 500, description: 'Next month rent' },
+    { date: '2026-11-01', amount: 800, description: 'Paycheck', isIncome: true },
+    { date: '2026-11-20', amount: 9999, description: 'Outside horizon' },
+    { date: '2026-09-30', amount: 9999, description: 'Prior history', status: 'processed' }
+  ].map(item => ({ status: 'projected', dayOfMonth: Number(item.date.slice(-2)), ...item }));
+  const f = fixture(async url => response(200, url.endsWith('/summary') ? { balance: 1000, income: 2000, expenses: 1000, netCashflow: 1000 }
+    : url.endsWith('/upcoming-payments') ? timeline : []));
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 9, 20, 12])); } };
+  f.context.escapeHtml = value => String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.context.transactionLink = (id, name) => `<a href="#transactions/${id}">${name}</a>`;
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  const markup = f.node('dashboard-payments').innerHTML;
+  const [main, history] = markup.split('<details class="pay-history">');
+  assert.match(main, /Projected balance in 30 days<\/span><strong>\$1,150\.00/);
+  assert.match(main, /data-date="2026-10-03"/);
+  assert.match(main, /data-date="2026-11-19"/);
+  assert.doesNotMatch(main, /data-date="2026-11-20"|Outside horizon|Paid mortgage|Prior history/);
+  assert.match(main, /Earlier this month &middot; still pending/);
+  assert.match(history, /href="#transactions\/42">Paid mortgage/);
+  assert.match(history, /1 paid bill.*\$900\.00/);
+  assert.match(main, /Next 30 days/);
+  assert.match(source('refresh.css'), /#upcoming-section \.pay-history > ol\.pay-list \{ display: block/);
+});
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
   const f = activityFixture(); f.run('refresh.js');
   await f.context.loadCategories();

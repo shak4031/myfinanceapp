@@ -72,20 +72,21 @@
 
   function pulseRows(pulse) {
     const today = new Date().getDate();
+    const dated = iso => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const rows = [];
     rows.push(['🏦', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint']);
     if (pulse.nextIncome) {
       const away = pulse.nextIncome.daysAway;
-      rows.push(['💰', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · the ${ordinal(pulse.nextIncome.day)}`, 'good']);
+      rows.push(['💰', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · ${pulse.nextIncome.date ? dated(pulse.nextIncome.date) : `the ${ordinal(pulse.nextIncome.day)}`}`, 'good']);
     }
     const safe = pulse.safeToSpend;
     if (safe) {
-      const until = safe.untilDay ? `before payday on the ${ordinal(safe.untilDay)}` : 'before month end';
+      const until = safe.untilDate ? `before payday on ${dated(safe.untilDate)}` : safe.untilDay ? `before payday on the ${ordinal(safe.untilDay)}` : 'within the forecast window';
       const how = globalThis.FinanceUI?.howCalc?.(`Your latest balance (${money(pulse.balance, 2)}) minus ${safe.count} bill${safe.count === 1 ? '' : 's'} and planned payment${safe.count === 1 ? '' : 's'} totaling ${money(safe.committed, 2)} due ${until}. Paychecks are not counted until they arrive.`, 'How safe to spend is calculated') || '';
-      rows.push(['🛟', 'Safe to spend', money(safe.amount), safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Until month end', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
+      rows.push(['🛟', 'Safe to spend', money(safe.amount), safe.untilDate ? `Until payday · ${dated(safe.untilDate)}` : safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Next 30 days', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
     }
-    rows.push(['🧾', 'Bills left this month', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'} to go` : 'Nothing else due', 'sky']);
-    if (pulse.lowPoint) rows.push(['📉', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
+    rows.push(['🧾', 'Bills in next 30 days', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'}, including overdue` : 'Nothing else due', 'sky']);
+    if (pulse.lowPoint) rows.push(['📉', 'Lowest point ahead', money(pulse.lowPoint.amount), pulse.lowPoint.date ? dated(pulse.lowPoint.date) : pulse.lowPoint.day === today ? 'Today' : `On the ${ordinal(pulse.lowPoint.day)}`, pulse.lowPoint.amount < 0 ? 'bad' : pulse.lowPoint.amount < 250 ? 'warn' : 'sky']);
     if (pulse.debtFreeDate) {
       const [year, month] = pulse.debtFreeDate.split('-').map(Number);
       rows.push(['🏁', 'Debt-free', new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), 'On your current plan', 'grape']);

@@ -13,6 +13,10 @@ const sumAmounts = items => cents(items.reduce((sum, item) => sum + Number(item.
 const shortDate = iso => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 const dateFor = (today, day) => new Date(today.getFullYear(), today.getMonth(), day);
+const relativeDay = (item, today) => item.date
+  ? 1 + Math.round((Date.parse(`${item.date}T00:00:00Z`) - Date.UTC(today.getFullYear(), today.getMonth(), 1)) / DAY_MS)
+  : item.dayOfMonth;
+const paymentDate = item => item.date ? shortDate(item.date) : `the ${ordinal(item.dayOfMonth)}`;
 const dayLabel = (today, day) => {
   const diff = day - today.getDate();
   if (diff === 0) return 'today';
@@ -34,11 +38,11 @@ const listNames = items => {
   return `${names.join(', ')}${more > 0 ? ` and ${more} more` : ''}`;
 };
 
-// Walks the rest of the month from today's balance. Same-day income lands before same-day bills.
+// Dated windows include overdue commitments. Same-day income lands before same-day bills.
 export function projectRunway(balance, upcoming, today) {
   const todayDay = today.getDate();
-  const ahead = upcoming.filter(item => item.status !== 'processed' && item.dayOfMonth >= todayDay)
-    .sort((a, b) => a.dayOfMonth - b.dayOfMonth || Number(b.isIncome) - Number(a.isIncome));
+  const ahead = upcoming.filter(item => item.status !== 'processed' && (item.date || item.dayOfMonth >= todayDay))
+    .sort((a, b) => relativeDay(a, today) - relativeDay(b, today) || Number(b.isIncome) - Number(a.isIncome));
   if (balance == null || !Number.isFinite(Number(balance))) return { ahead, low: null, shortfall: null, end: null };
   let running = Number(balance), low = { amount: running, day: todayDay, item: null }, shortfall = null;
   for (const item of ahead) {
@@ -49,14 +53,15 @@ export function projectRunway(balance, upcoming, today) {
   return { ahead, low, shortfall, end: running };
 }
 
-// Balance minus every bill and planned payment due before the next paycheck (or month end if none is expected).
+// Balance minus commitments before the next paycheck (or the end of the supplied window).
 export function safeToSpend(balance, runway, today) {
   if (balance == null || !Number.isFinite(Number(balance))) return null;
-  const nextPayday = runway.ahead.find(item => item.isIncome && item.dayOfMonth > today.getDate()) || null;
-  const committed = runway.ahead.filter(item => !item.isIncome && (!nextPayday || item.dayOfMonth < nextPayday.dayOfMonth));
+  const nextPayday = runway.ahead.find(item => item.isIncome && relativeDay(item, today) >= today.getDate()) || null;
+  const committed = runway.ahead.filter(item => !item.isIncome && (!nextPayday || relativeDay(item, today) < relativeDay(nextPayday, today)));
   return {
     amount: cents(Number(balance) - sumAmounts(committed)), committed: sumAmounts(committed), count: committed.length,
-    untilDay: nextPayday ? nextPayday.dayOfMonth : null
+    untilDay: nextPayday ? nextPayday.dayOfMonth : null,
+    ...(nextPayday?.date ? { untilDate: nextPayday.date } : {})
   };
 }
 
@@ -82,23 +87,23 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
   // Cash runway
   if (runway.shortfall) {
     const { day, amount, item } = runway.shortfall;
-    const flexible = outflows.filter(entry => entry.flexible && entry.dayOfMonth <= day);
-    add({ id: 'shortfall', tone: 'danger', icon: 'alert', title: `You could run short ${dayLabel(today, day)}`,
-      detail: `After ${nameOf(item)} on the ${ordinal(day)}, your projected balance drops to ${signedMoney(amount)}.${flexible.length ? ` Trimming a flexible plan payment (${listNames(flexible)}) would help.` : ' Move money in or shift a payment before then.'}`,
+    const flexible = outflows.filter(entry => entry.flexible && relativeDay(entry, today) <= relativeDay(item, today));
+    add({ id: 'shortfall', tone: 'danger', icon: 'alert', title: `You could run short ${dayLabel(today, relativeDay(item, today))}`,
+      detail: `After ${nameOf(item)} on ${paymentDate(item)}, your projected balance drops to ${signedMoney(amount)}.${flexible.length ? ` Trimming a flexible plan payment (${listNames(flexible)}) would help.` : ' Move money in or shift a payment before then.'}`,
       action: { label: 'Review the calendar', act: 'upcoming' } }, -day);
   } else if (runway.low && outflows.length && runway.low.amount < 250 && runway.low.item) {
-    add({ id: 'tight', tone: 'warning', icon: 'alert', title: `Things get tight around the ${ordinal(runway.low.day)}`,
-      detail: `Your balance is projected to dip to ${money(runway.low.amount)} after ${nameOf(runway.low.item)}. Hold off on extras until ${nextIncome ? `payday on the ${ordinal(nextIncome.dayOfMonth)}` : 'it clears'}.`,
+    add({ id: 'tight', tone: 'warning', icon: 'alert', title: `Things get tight around ${paymentDate(runway.low.item)}`,
+      detail: `Your balance is projected to dip to ${money(runway.low.amount)} after ${nameOf(runway.low.item)}. Hold off on extras until ${nextIncome ? `payday on ${paymentDate(nextIncome)}` : 'it clears'}.`,
       action: { label: 'Review the calendar', act: 'upcoming' } });
   } else if (runway.low && bills.length) {
-    add({ id: 'covered', tone: 'success', icon: 'shield', title: 'Your bills are covered this month',
-      detail: `${bills.length} bill${bills.length === 1 ? '' : 's'} totaling ${money(bills.reduce((sum, item) => sum + Number(item.amount), 0))} still to go. Your lowest projected balance is ${money(runway.low.amount)}${runway.low.item ? ` on the ${ordinal(runway.low.day)}` : ''}.`,
+    add({ id: 'covered', tone: 'success', icon: 'shield', title: 'Your next 30 days of bills are covered',
+      detail: `${bills.length} bill${bills.length === 1 ? '' : 's'} totaling ${money(bills.reduce((sum, item) => sum + Number(item.amount), 0))} still to go, including overdue commitments. Your lowest projected balance is ${money(runway.low.amount)}${runway.low.item ? ` on ${paymentDate(runway.low.item)}` : ''}.`,
       action: { label: 'See upcoming payments', act: 'upcoming' } });
   }
 
   if (safe && safe.amount <= 0 && !runway.shortfall) {
     add({ id: 'safe-to-spend', tone: 'warning', icon: 'alert', title: 'Nothing is safe to spend before payday',
-      detail: `Bills and planned payments of ${money(safe.committed)} are due ${safe.untilDay ? `before the ${ordinal(safe.untilDay)}` : 'before month end'}, which uses your whole balance. Hold off on extras until then.`,
+      detail: `Bills and planned payments of ${money(safe.committed)} are due ${safe.untilDate ? `before ${shortDate(safe.untilDate)}` : safe.untilDay ? `before the ${ordinal(safe.untilDay)}` : 'within the forecast window'}, which uses your whole balance. Hold off on extras until then.`,
       action: { label: 'Review the calendar', act: 'upcoming' } });
   }
 
@@ -127,15 +132,15 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
   }
 
   // Bills due in the next three days, manual ones first.
-  const soon = bills.filter(item => item.dayOfMonth - todayDay <= 3)
-    .sort((a, b) => Number(b.payMode === 'manual') - Number(a.payMode === 'manual') || a.dayOfMonth - b.dayOfMonth);
+  const soon = bills.filter(item => relativeDay(item, today) - todayDay >= 0 && relativeDay(item, today) - todayDay <= 3)
+    .sort((a, b) => Number(b.payMode === 'manual') - Number(a.payMode === 'manual') || relativeDay(a, today) - relativeDay(b, today));
   if (soon.length) {
     const manual = soon.filter(item => item.payMode === 'manual');
     const first = soon[0];
     const total = soon.reduce((sum, item) => sum + Number(item.amount), 0);
     add(soon.length === 1
       ? { id: 'due-soon', tone: manual.length ? 'warning' : 'info', icon: 'calendar',
-        title: `${nameOf(first)} is due ${dayLabel(today, first.dayOfMonth)}`,
+        title: `${nameOf(first)} is due ${dayLabel(today, relativeDay(first, today))}`,
         detail: `${money(first.amount)}${first.payMode === 'manual' ? ' and it is a manual payment, so you need to pay it yourself.' : first.payMode === 'auto' ? ' goes out automatically.' : '. Mark it auto-pay or manual on the Transactions page so you know whether to act.'}`,
         action: { label: 'See upcoming payments', act: 'upcoming' } }
       : { id: 'due-soon', tone: manual.length ? 'warning' : 'info', icon: 'calendar',
@@ -143,18 +148,18 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
         detail: `${money(total)} in total: ${listNames(soon)}.${manual.length ? ` ${manual.length} ${manual.length === 1 ? 'needs' : 'need'} you to pay manually.` : ''}`,
         action: { label: 'See upcoming payments', act: 'upcoming' } });
   }
-  const laterManual = bills.filter(item => item.payMode === 'manual' && item.dayOfMonth - todayDay > 3);
+  const laterManual = bills.filter(item => item.payMode === 'manual' && relativeDay(item, today) - todayDay > 3);
   if (laterManual.length) {
-    add({ id: 'manual', tone: 'info', icon: 'hand', title: `${laterManual.length} manual payment${laterManual.length === 1 ? '' : 's'} later this month`,
+    add({ id: 'manual', tone: 'info', icon: 'hand', title: `${laterManual.length} manual payment${laterManual.length === 1 ? '' : 's'} later in the next 30 days`,
       detail: `${listNames(laterManual)}. These won't pay themselves. Set a reminder or switch them to auto-pay with your provider.`,
       action: { label: 'See upcoming payments', act: 'upcoming' } });
   }
 
   // Payday
   if (nextIncome) {
-    const away = nextIncome.dayOfMonth - todayDay;
+    const away = relativeDay(nextIncome, today) - todayDay;
     add({ id: 'payday', tone: 'success', icon: 'cash', title: away === 0 ? 'Payday is today' : `Payday ${away === 1 ? 'is tomorrow' : `in ${away} days`}`,
-      detail: `Expect about ${money(nextIncome.amount)} from ${nextIncome.description || 'your employer'} ${dayLabel(today, nextIncome.dayOfMonth)}${nextIncome.cadenceLabel ? ` (${String(nextIncome.cadenceLabel).toLowerCase()})` : ''}.`,
+      detail: `Expect about ${money(nextIncome.amount)} from ${nextIncome.description || 'your employer'} ${dayLabel(today, relativeDay(nextIncome, today))}${nextIncome.cadenceLabel ? ` (${String(nextIncome.cadenceLabel).toLowerCase()})` : ''}.`,
       action: { label: 'See upcoming payments', act: 'upcoming' } });
   }
 
@@ -259,12 +264,13 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
     insights: ranked,
     pulse: {
       balance: balance == null ? null : cents(Number(balance)),
-      lowPoint: runway.low && outflows.length ? { amount: runway.low.amount, day: runway.low.day } : null,
+      lowPoint: runway.low && outflows.length ? { amount: runway.low.amount, day: runway.low.day, ...(runway.low.item?.date ? { date: runway.low.item.date } : {}) } : null,
+      horizonDays: 30,
       billsLeft: { count: bills.length, total: cents(bills.reduce((sum, item) => sum + Number(item.amount || 0), 0)) },
       safeToSpend: safe,
       lastImport: importAge == null ? null : { daysAgo: importAge, latestDate: lastImport.latestDate || null },
       savedThisMonth: accounts?.savedThisMonth?.amount ?? null,
-      nextIncome: nextIncome ? { amount: cents(Number(nextIncome.amount)), day: nextIncome.dayOfMonth, daysAway: nextIncome.dayOfMonth - todayDay, description: nextIncome.description || '' } : null,
+      nextIncome: nextIncome ? { amount: cents(Number(nextIncome.amount)), day: nextIncome.dayOfMonth, daysAway: relativeDay(nextIncome, today) - todayDay, description: nextIncome.description || '', ...(nextIncome.date ? { date: nextIncome.date } : {}) } : null,
       debtFreeDate: debtPlan?.plan?.debtFree ? debtPlan.plan.debtFreeDate : null
     }
   };

@@ -237,16 +237,16 @@
                 <div class="tm-dots"><i class="tm-dot-fill" ${at(0)}></i><i class="tm-dot-fill" ${at(3.2)}></i><i></i><i></i></div>
               </div>
             </div>` },
-        { id: 'glance', title: 'Today at a glance', caption: 'Today at a glance keeps the essentials in view: your balance, next payday, what is left to pay this month and your lowest point ahead.',
+        { id: 'glance', title: 'Today at a glance', caption: 'Today at a glance keeps the essentials in view: your balance, next payday, bills over the next 30 days including overdue payments, and your lowest point ahead.',
           render: () => `${chip(2, 'Today at a glance')}
             <div class="tm-pulse">
-              ${[['Balance', '$2,310.42', 'Latest recorded'], ['Next payday', '$2,100', 'In 2 days · the 16th'], ['Bills left this month', '$2,264', '6 payments to go'], ['Lowest point ahead', '$412', 'On the 20th'], ['Debt-free', 'Mar 2028', 'On your current plan']]
+              ${[['Balance', '$2,310.42', 'Latest recorded'], ['Next payday', '$2,100', 'In 2 days · the 16th'], ['Bills in next 30 days', '$2,264', '6 payments, including overdue'], ['Lowest point ahead', '$412', 'On Oct 20'], ['Debt-free', 'Mar 2028', 'On your current plan']]
                 .map(([label, value, note], index) => `<div class="tut-in" ${at(0.5 + index * 0.7)}><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join('')}
             </div>` },
-        { id: 'week', title: 'The week ahead', caption: 'Upcoming payments are laid out week by week. Grey cards are already paid; bright cards are still coming. Each card shows the projected balance after it clears.',
+        { id: 'week', title: 'The week ahead', caption: 'Upcoming payments always look 30 days forward, week by week, and extend backward to earlier unpaid bills. Each card shows the projected balance after it clears. Paid items stay accessible in This month’s history below.',
           render: () => `${chip(3, 'The week ahead')}
-            ${week([['Sun', 12], ['Mon', 13, weekCard('Rent', '$1,450', { paid: true, balance: '$2,310', delay: 0.4 })], ['Tue', 14, weekCard('Netflix', '$15', { badge: 'Auto', balance: '$2,295', delay: 0.9 }), true], ['Wed', 15, weekCard('City Water', '$64', { badge: 'Manual', balance: '$2,231', delay: 1.4 })], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income', balance: '$4,331', delay: 1.9 })], ['Fri', 17], ['Sat', 18, weekCard('Gym', '$40', { badge: 'Auto', balance: '$4,291', delay: 2.4 })]])}
-            <div class="tm-legend tm-legend-center tut-in" ${at(3.2)}><span class="is-paid"><i></i>Paid</span><span class="is-upcoming"><i></i>Upcoming</span><span class="is-income"><i></i>Income</span></div>` },
+            ${week([['Sun', 12], ['Mon', 13], ['Tue', 14, weekCard('Netflix', '$15', { badge: 'Auto', balance: '$2,295', delay: 0.9 }), true], ['Wed', 15, weekCard('City Water', '$64', { badge: 'Manual', balance: '$2,231', delay: 1.4 })], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income', balance: '$4,331', delay: 1.9 })], ['Fri', 17], ['Sat', 18, weekCard('Gym', '$40', { badge: 'Auto', balance: '$4,291', delay: 2.4 })]])}
+            <div class="tm-drawer tut-in" ${at(3.2)}>This month's history · Rent paid $1,450 <span>⌄</span></div>` },
         { id: 'paydays', title: 'Paydays and manual bills', caption: 'Paydays are detected from your history, weekly, every other week or monthly, and counted in the running balance. Manual bills are flagged so you know which ones need you.',
           render: () => `${chip(4, 'Paydays and manual bills')}
             <div class="tm-split">
@@ -257,14 +257,14 @@
                 <div class="tm-kv"><span>Gym</span><span class="tm-badge tm-badge-auto">Auto</span></div>
                 <p class="tm-hint tut-in" ${at(3)}>Set this on any fixed bill from the Transactions page.</p></div>
             </div>` },
-        { id: 'list', title: 'Calendar or list', caption: 'Prefer a list? Switch the upcoming view to List any time. Your monthly income and expense history is still a click away further down.',
+        { id: 'list', title: 'Calendar or list', caption: 'Prefer a list? Switch to List any time. Earlier pending bills stay above Today. Expand This month’s history for paid bills and transaction links; monthly income and expense charts are further down.',
           render: () => `${chip(5, 'Calendar or list')}
             <div class="tm-row-head"><div><h3>Upcoming payments</h3></div><span class="tm-toggle"><i class="tut-off" ${at(1.6)}>Calendar</i><i class="tut-on" ${at(1.6)} data-id="list">List</i></span></div>
             <div class="tm-swap-block">
-              <div class="tut-off" ${at(1.8)}>${week([['Mon', 13, weekCard('Rent', '$1,450', { paid: true })], ['Tue', 14, weekCard('Netflix', '$15', { badge: 'Auto' }), true], ['Wed', 15, weekCard('City Water', '$64', { badge: 'Manual' })], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income' })], ['Fri', 17], ['Sat', 18], ['Sun', 19]])}</div>
+              <div class="tut-off" ${at(1.8)}>${week([['Mon', 13], ['Tue', 14, weekCard('Netflix', '$15', { badge: 'Auto' }), true], ['Wed', 15, weekCard('City Water', '$64', { badge: 'Manual' })], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income' })], ['Fri', 17], ['Sat', 18], ['Sun', 19]])}</div>
               <ul class="tm-list tut-on" ${at(1.8)}>${[['Tue 14', 'Netflix', 'Auto', '$15'], ['Wed 15', 'City Water', 'Manual', '$64'], ['Thu 16', 'Payday', '', '+$2,100'], ['Sat 18', 'Gym', 'Auto', '$40']].map(([d, n, b, a]) => `<li><span>${d}</span><b>${n}</b>${b ? `<i class="tm-badge tm-badge-${b.toLowerCase()}">${b}</i>` : '<i></i>'}<strong>${a}</strong></li>`).join('')}</ul>
             </div>
-            <div class="tm-drawer tut-in" ${at(3.4)}>Income &amp; expense history <span>⌄</span></div>
+            <div class="tm-drawer tut-in" ${at(3.4)}>This month's history · paid bills <span>⌄</span></div>
             ${cursor('list', 0.4)}` },
         { id: 'done', title: 'You are ready', caption: 'That is the tour. Check in each morning and let the insights tell you what needs you.',
           render: () => outro("You're ready", 'Insights · the week ahead · paydays', 'Go to your dashboard') }

@@ -199,10 +199,10 @@ export function threePaycheckMonths(streams = [], today = new Date(), monthsAhea
 }
 
 // Paychecks already received this month plus those still expected (today onward).
-export function projectIncome(transactions, today = new Date()) {
+export function projectIncome(transactions, today = new Date(), { through = null } = {}) {
   const streams = detectIncomeStreams(transactions, today);
   const year = today.getFullYear(), month = today.getMonth(), todayDay = today.getDate();
-  const monthEnd = Date.UTC(year, month + 1, 0);
+  const monthEnd = through ? Date.UTC(through.getFullYear(), through.getMonth(), through.getDate()) : Date.UTC(year, month + 1, 0);
   const items = [];
   for (const stream of streams) {
     const received = transactions.filter(tx => {
@@ -213,18 +213,21 @@ export function projectIncome(transactions, today = new Date()) {
     for (const tx of received) {
       items.push({
         id: tx.id, description: tx.description, category: tx.category || stream.category, amount: cents(Number(tx.amount)),
+        ...(through ? { date: parseTxDate(tx.date).iso } : {}),
         dayOfMonth: parseTxDate(tx.date).day, isIncome: true, status: 'processed', cadence: stream.cadence, cadenceLabel: stream.label, incomeKey: stream.key
       });
     }
     for (const time of nextPayDates(stream, monthEnd)) {
       const date = new Date(time);
-      if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() < todayDay) continue;
-      if (received.some(tx => parseTxDate(tx.date).day === date.getUTCDate())) continue;
+      const iso = date.toISOString().slice(0, 10);
+      if (time < Date.UTC(year, month, todayDay)) continue;
+      if (received.some(tx => parseTxDate(tx.date).iso === iso)) continue;
       items.push({
-        key: `income:${stream.key}:${date.getUTCDate()}`, description: stream.name, category: stream.category, amount: stream.amount,
+        key: `income:${stream.key}:${through ? iso : date.getUTCDate()}`, description: stream.name, category: stream.category, amount: stream.amount,
+        ...(through ? { date: iso } : {}),
         dayOfMonth: date.getUTCDate(), isIncome: true, status: 'projected', cadence: stream.cadence, cadenceLabel: stream.label, incomeKey: stream.key
       });
     }
   }
-  return { streams, items: items.sort((a, b) => a.dayOfMonth - b.dayOfMonth) };
+  return { streams, items: items.sort((a, b) => through ? a.date.localeCompare(b.date) : a.dayOfMonth - b.dayOfMonth) };
 }

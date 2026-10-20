@@ -86,6 +86,18 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     assert.equal(category.series.at(-1).amount, 125);
     assert.equal(category.stats.monthsOverBudget, 1);
     assert.equal(category.stats.budgetComparison, 'current-budget');
+    await database.query(`INSERT INTO transactions(date,description,amount,direction,category,is_fixed,user_id)
+      VALUES ($1,'ROLLING BILL',40,'DEBIT','Utilities',true,1)`, [`${priorDate.slice(0, 8)}01`]);
+    const rolling = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    assert.equal(rolling.status, 200);
+    const horizonEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
+    const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    assert.ok(rolling.body.length > 0);
+    assert.ok(rolling.body.every(item => /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.date <= iso(horizonEnd)));
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    if (nextMonth <= horizonEnd) assert.ok(rolling.body.some(item => item.date === iso(nextMonth) && item.status === 'projected'));
+    const rollingInsights = await call('/api/dashboard/insights', { cookie });
+    assert.equal(rollingInsights.body.pulse.horizonDays, 30);
     const monthly = await call('/api/dashboard/category-spending', { cookie, body: { dateFilter: 'current' } });
     assert.equal(monthly.status, 200);
     assert.ok(monthly.body.every(item => Number.isInteger(item.transactionCount)));
