@@ -10,6 +10,7 @@ import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
 import { isIncomeTransaction } from '../utils/income.js';
 import { cashBalance, savedAmount } from '../utils/transfers.js';
+import { buildSpendingHistory } from '../utils/spendingHistory.js';
 
 const router = Router();
 const db = new Database();
@@ -313,6 +314,20 @@ router.get('/insights', async (req, res) => {
     log('DASHBOARD', `Error building insights: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
+});
+
+router.get('/spending-history', async (req, res, next) => {
+  try {
+    const entitlement = await getEntitlement(currentUserId());
+    const inputs = await db.transaction(async client => {
+      const transactions = (await client.query('SELECT date,amount,direction,category,transfer_kind FROM transactions WHERE user_id=$1', [currentUserId()])).rows;
+      const budgets = entitlement.active
+        ? (await client.query('SELECT category,monthly_amount FROM category_budgets WHERE user_id=$1', [currentUserId()])).rows.map(row => ({ category: row.category, amount: Number(row.monthly_amount) }))
+        : [];
+      return { transactions, budgets };
+    });
+    res.json(buildSpendingHistory({ ...inputs, pro: entitlement.active }));
+  } catch (error) { next(error); }
 });
 
 router.post('/category-spending', async (req, res) => {

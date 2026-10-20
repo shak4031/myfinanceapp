@@ -32,8 +32,9 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     await client.query('COMMIT');
     client.release();
   };
-  const saved = { token: process.env.OWNER_SETUP_TOKEN, origin: process.env.APP_ORIGIN };
+  const saved = { token: process.env.OWNER_SETUP_TOKEN, origin: process.env.APP_ORIGIN, registration: process.env.ALLOW_REGISTRATION };
   process.env.OWNER_SETUP_TOKEN = 'test-only-setup-token-longer-than-32-characters';
+  process.env.ALLOW_REGISTRATION = 'true';
   await database.exec('CREATE TABLE transactions (id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT, balance NUMERIC(14,2), source TEXT)');
   await migrate();
 
@@ -52,6 +53,7 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
   const errors = [];
   const stop = onLogEntry(entry => { if (entry.level === 'error') errors.push(entry); });
   try {
+    assert.equal((await call('/api/dashboard/spending-history')).status, 401);
     const owner = await call('/api/auth/setup', { body: { name: 'Owner', email: 'owner@example.com', password: 'test-only-password-123456', setupToken: process.env.OWNER_SETUP_TOKEN } });
     const cookie = owner.headers.get('set-cookie').split(';')[0];
     await database.exec(`INSERT INTO transactions (date, description, amount, direction, balance, user_id) VALUES
@@ -71,11 +73,40 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
       const result = await call(path, { cookie, body });
       assert.ok(result.status < 500, `${path} -> ${result.status}`);
     }
+    const now = new Date();
+    const previous = new Date(now.getFullYear(), now.getMonth() - 1, 5);
+    const priorDate = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}-05`;
+    await database.query(`INSERT INTO transactions(date,description,amount,direction,category,user_id) VALUES ($1,'HISTORY SAMPLE',125,'DEBIT','History test',1)`, [priorDate]);
+    await database.query(`INSERT INTO category_budgets(user_id,category,monthly_amount) VALUES (1,'History test',100)`);
+    const history = await call('/api/dashboard/spending-history', { cookie });
+    assert.equal(history.status, 200, JSON.stringify(history.body));
+    assert.equal(history.body.pro, true);
+    assert.equal(history.body.months.length, 6);
+    const category = history.body.categories.find(item => item.name === 'History test');
+    assert.equal(category.series.at(-1).amount, 125);
+    assert.equal(category.stats.monthsOverBudget, 1);
+    assert.equal(category.stats.budgetComparison, 'current-budget');
+    const monthly = await call('/api/dashboard/category-spending', { cookie, body: { dateFilter: 'current' } });
+    assert.equal(monthly.status, 200);
+    assert.ok(monthly.body.every(item => Number.isInteger(item.transactionCount)));
+    const second = await call('/api/auth/register', { body: { name: 'Free', email: 'history-free@example.test', password: 'test-only-password-123456' } });
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    const freeCookie = second.headers.get('set-cookie').split(';')[0];
+    const freeId = (await database.query("SELECT id FROM users WHERE email='history-free@example.test'")).rows[0].id;
+    await database.query(`INSERT INTO transactions(date,description,amount,direction,category,user_id) VALUES ($1,'FREE HISTORY',25,'DEBIT','Free dining',$2)`, [priorDate, freeId]);
+    await database.query(`INSERT INTO category_budgets(user_id,category,monthly_amount) VALUES ($1,'Free dining',10)`, [freeId]);
+    const freeHistory = await call('/api/dashboard/spending-history', { cookie: freeCookie });
+    assert.equal(freeHistory.status, 200);
+    assert.equal(freeHistory.body.pro, false);
+    assert.equal(freeHistory.body.categories.length, 1, 'history is tenant-scoped');
+    assert.equal(freeHistory.body.categories[0].name, 'Free dining');
+    assert.equal(freeHistory.body.categories[0].series.at(-1).amount, 25);
+    assert.equal(freeHistory.body.categories[0].stats, null, 'the API does not send Pro statistics to Free clients');
     assert.deepEqual(errors.map(entry => entry.message || entry.event), []);
   } finally {
     stop();
     server.close();
-    for (const [key, value] of [['OWNER_SETUP_TOKEN', saved.token], ['APP_ORIGIN', saved.origin]]) {
+    for (const [key, value] of [['OWNER_SETUP_TOKEN', saved.token], ['APP_ORIGIN', saved.origin], ['ALLOW_REGISTRATION', saved.registration]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }

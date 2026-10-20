@@ -13,6 +13,7 @@ window.FinanceSession = (() => {
     user = null;
     support = null;
     generation++;
+    window.FinanceSpendingHistory?.reset();
     document.body.classList.add('auth-pending');
     if (cleanAppMarkup) document.querySelector('.app-container').innerHTML = cleanAppMarkup;
     document.querySelectorAll('#toasts, #csv-file-list, #pdf-file-list, #import-result').forEach(node => { node.textContent = ''; });

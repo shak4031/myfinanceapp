@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
-  <script src="session.js?v=20261020b"></script>
+  <script src="session.js?v=20261020c"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
@@ -491,6 +491,7 @@
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261024b">
+  <link rel="stylesheet" href="spending-history.css?v=20261025">
   <link rel="stylesheet" href="analytics.css?v=20261024b">
   <link rel="stylesheet" href="plan.css?v=20261017r">
   <link rel="stylesheet" href="welcome.css?v=20261020c">
@@ -1317,13 +1318,17 @@
         const now = new Date();
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
         catHtml += `
+          <div class="mtd-card-wrap">
           <button type="button" class="metric-card list-item mtd-category-card" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="window.openCategoryTransactions(this.dataset.category, this.dataset.month)">
             <span class="mtd-card-head"><strong>${escapeHtml(cat.name)}</strong></span>
             <span class="mtd-card-body">
               <span class="mtd-card-total">$${cat.totalSpending.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
               <small>spent this month</small>
+              <span class="mtd-card-count">${Number(cat.transactionCount) || 0} transaction${Number(cat.transactionCount) === 1 ? '' : 's'}</span>
             </span>
           </button>
+          <button type="button" class="mtd-history-trigger" data-spending-history="${escapeHtml(cat.name)}" aria-label="Six-month spending history for ${escapeHtml(cat.name)}" aria-expanded="false" aria-controls="spending-history-preview">6-month history <span aria-hidden="true">↗</span></button>
+          </div>
         `;
       });
       
@@ -1787,6 +1792,7 @@
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
   <script src="pro-dashboard.js?v=20261024b"></script>
+  <script src="spending-history.js?v=20261025"></script>
   <script src="pro-categories.js?v=20261020b"></script>
   <script src="analytics.js?v=20261024c"></script>
   <script src="plan.js?v=20261017r"></script>
