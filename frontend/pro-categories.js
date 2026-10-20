@@ -74,7 +74,7 @@
     const segments = mix.map((c, i) => `<i style="width:${((c.total / stats.total) * 100).toFixed(2)}%;background:${PALETTE[i]}" title="${esc(c.name)} ${pct(c.share)}"></i>`).join('') +
       (restTotal ? `<i style="width:${((restTotal / stats.total) * 100).toFixed(2)}%;background:${PALETTE[9]}" title="Other categories"></i>` : '');
     const legend = mix.map((c, i) => `<span><i style="background:${PALETTE[i]}"></i>${esc(c.name)} <strong>${pct(c.share)}</strong></span>`).join('');
-    return `<div class="pro-insight-panel panel pro-added"><div class="pro-insight-head"><div><p class="eyebrow">PRO INSIGHTS &middot; ${esc(String(period?.label || 'All time').toUpperCase())}</p><h2>Where your money went</h2></div><span class="pro-tag">PRO</span></div>
+    return `<details class="category-analytics pro-insight-panel panel pro-added"><summary><span>Explore spending insights <small>Monthly trends, spending mix &amp; category signals</small></span><span class="pro-tag">PRO</span></summary><div class="pro-insight-head"><div><p class="eyebrow">PRO INSIGHTS &middot; ${esc(String(period?.label || 'All time').toUpperCase())}</p><h2>Where your money went</h2></div></div>
       <div class="pro-kpi-row">
         <div><span>Total spend</span><strong>${money(stats.total, true)}</strong><small>${months.length} month${months.length === 1 ? '' : 's'} &middot; transfers excluded</small></div>
         <div><span>Average / month</span><strong>${money(stats.total / (months.length || 1), true)}</strong><small>Across every spending category</small></div>
@@ -82,7 +82,7 @@
         <div><span>Fastest rising</span><strong class="is-name">${rising && rising.trend > 0.05 ? esc(rising.name) : '&mdash;'}</strong><small class="${rising && rising.trend > 0.05 ? 'is-up' : ''}">${rising && rising.trend > 0.05 ? `▲ ${pct(rising.trend)} second half vs first` : multi ? 'Nothing is accelerating' : 'Select 2+ months'}</small></div>
         <div><span>Most volatile</span><strong class="is-name">${volatile ? esc(volatile.name) : '&mdash;'}</strong><small>${volatile ? `Swings &plusmn;${pct(volatile.volatility)} month to month` : 'Select 2+ months'}</small></div>
       </div>
-      ${list.length ? `<div class="pro-mix"><div class="pro-mix-bar" role="img" aria-label="Spending mix">${segments}</div><div class="pro-mix-legend">${legend}</div></div>` : ''}</div>`;
+      ${list.length ? `<div class="pro-mix"><div class="pro-mix-bar" role="img" aria-label="Spending mix">${segments}</div><div class="pro-mix-legend">${legend}</div></div>` : ''}</details>`;
   }
 
   function cardExtra(entry, months, signal) {
@@ -133,6 +133,7 @@
     if (run !== token) return;
     $('category-cards').querySelectorAll('.category-card').forEach(card => {
       const name = card.dataset.openCategory;
+      if (card.classList.contains('is-inactive')) return;
       card.insertAdjacentHTML('beforeend', cardExtra(stats.categories.get(name), months, signals.get(name)));
     });
   }

@@ -351,16 +351,25 @@
   const categoryArtwork = name => {
     const value = String(name || '').toLowerCase();
     const choices = [
-      [/grocer|food|market|dining|restaurant|coffee/, '🥑', 'fresh'],
-      [/home|mortgage|rent|house/, '🏡', 'home'],
-      [/transport|car|gas|fuel|ev|travel/, '🚗', 'travel'],
-      [/health|medical|pharmacy|pet/, '🩺', 'care'],
-      [/salary|income|payroll/, '💸', 'income'],
-      [/saving|goal|invest/, '🌱', 'growth'],
-      [/utility|electric|water|internet|phone/, '⚡', 'utility'],
-      [/shop|cloth|retail/, '🛍️', 'shop'],
-      [/subscription|entertain|stream/, '🎬', 'play'],
-      [/debt|loan|credit|tax/, '📊', 'finance']
+      [/\b(?:credit cards?|debt|loans?|tax(?:es)?|fees?|banking)\b/, '📊', 'finance'],
+      [/\b(?:childcare|child care|daycare|family|kids?)\b/, '🧸', 'care'],
+      [/\b(?:pets?|pet care|veterinary|vet)\b/, '🐾', 'care'],
+      [/\b(?:health(?:care)?|health care|medical|pharmacy|dental|fitness)\b/, '🩺', 'care'],
+      [/\b(?:personal care|beauty|salon|grooming)\b/, '🧴', 'care'],
+      [/\b(?:grocer(?:y|ies)?|food|markets?)\b/, '🥑', 'fresh'],
+      [/\b(?:dining|restaurants?|coffee|cafes?|takeout)\b/, '🍽️', 'fresh'],
+      [/\b(?:home|mortgage|rent|housing|household)\b/, '🏡', 'home'],
+      [/\b(?:travel|vacations?|flights?|hotels?)\b/, '✈️', 'travel'],
+      [/\b(?:transport(?:ation)?|cars?|auto(?:motive)?|gas|gasoline|fuel|ev|parking|tolls?|commut(?:e|ing))\b/, '🚗', 'travel'],
+      [/\b(?:salary|income|payroll|wages?)\b/, '💸', 'income'],
+      [/\b(?:savings?|goals?|invest(?:ment|ments|ing)?|retirement)\b/, '🌱', 'growth'],
+      [/\b(?:transfers?)\b/, '🔁', 'income'],
+      [/\b(?:utility|utilities|electric(?:ity)?|water|internet|phone)\b/, '⚡', 'utility'],
+      [/\b(?:shop(?:ping)?|cloth(?:es|ing)?|retail)\b/, '🛍️', 'shop'],
+      [/\b(?:subscriptions?|entertainment|stream(?:ing)?|movies?|recreation|hobbies)\b/, '🎬', 'play'],
+      [/\b(?:education|school|tuition|books?)\b/, '📚', 'home'],
+      [/\b(?:gifts?|donations?|charity)\b/, '🎁', 'shop'],
+      [/\b(?:insurance)\b/, '🛡️', 'finance']
     ];
     return choices.find(([pattern]) => pattern.test(value))?.slice(1)
       || ['✨', 'other'];
@@ -381,10 +390,15 @@
       const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', period.months);
       const counts = new Map();
       const spending = new Map();
+      const received = new Map();
+      const moved = new Map();
       for (const transaction of filtered) {
         const category = transaction.category || 'Uncategorized';
         counts.set(category, (counts.get(category) || 0) + 1);
-        if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + Math.abs(Number(transaction.amount) || 0));
+        const amount = Math.abs(Number(transaction.amount) || 0);
+        if (isTransfer(transaction)) moved.set(category, (moved.get(category) || 0) + amount);
+        else if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + amount);
+        else if (String(transaction.direction).toUpperCase() === 'CREDIT') received.set(category, (received.get(category) || 0) + amount);
       }
       $('category-filter-status').textContent = `${period.label} · ${filtered.length.toLocaleString()} transactions`;
       $('rule-category').innerHTML = categoryOptions('');
@@ -394,15 +408,33 @@
         <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}" ${categories.length < 2 ? 'disabled title="Add another category before deleting this one"' : ''}>Delete</button>
       </form>`).join('');
       const transactionCount = categories.reduce((total, category) => total + (counts.get(category.name) || 0), 0);
-      $('category-overview-summary').innerHTML = `<div><span class="summary-icon">✦</span><span><strong>${categories.length}</strong><small>categories</small></span></div><div><span class="summary-icon">↗</span><span><strong>${transactionCount.toLocaleString()}</strong><small>categorized transactions</small></span></div>`;
-      $('category-cards').innerHTML = categories.map((category, index) => {
+      const totalSpend = [...spending.values()].reduce((total, amount) => total + amount, 0);
+      const active = categories.filter(category => counts.has(category.name));
+      const spendingCategories = active.filter(category => (spending.get(category.name) || 0) > 0)
+        .sort((a, b) => spending.get(b.name) - spending.get(a.name) || a.name.localeCompare(b.name));
+      const otherCategories = active.filter(category => !(spending.get(category.name) > 0))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const inactive = categories.filter(category => !counts.has(category.name)).sort((a, b) => a.name.localeCompare(b.name));
+      $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${categories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>Across your categories</small></span></div>`;
+      const renderCard = category => {
         const [icon, art] = categoryArtwork(category.name);
         const count = counts.get(category.name) || 0;
-        return `<button class="category-card category-${art}" type="button" data-open-category="${escape(category.name)}" style="--card-order:${index}" aria-label="View ${escape(category.name)}, ${count} transaction${count === 1 ? '' : 's'}">
+        const spent = spending.get(category.name) || 0;
+        const incoming = received.get(category.name) || 0;
+        const transferred = moved.get(category.name) || 0;
+        const amount = spent || incoming || transferred;
+        const label = spent ? 'spent' : incoming ? 'received' : transferred ? 'transfer activity' : count ? 'activity' : 'No activity in this period';
+        const share = spent && totalSpend ? spent / totalSpend * 100 : 0;
+        return `<button class="category-card category-${art}${count ? '' : ' is-inactive'}" type="button" data-open-category="${escape(category.name)}" aria-label="View ${escape(category.name)}, ${count} transaction${count === 1 ? '' : 's'}">
           <span class="category-card-head"><span class="category-card-art" aria-hidden="true"><span>${icon}</span><i></i><b></b></span><strong>${escape(category.name)}</strong><span class="category-card-arrow" aria-hidden="true">↗</span></span>
-          <span class="category-card-copy"><span class="category-card-total">${money(spending.get(category.name) || 0)}</span><small>spent · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}</small></span>
+          <span class="category-card-copy">${count ? `<span class="category-card-total">${money(amount)}</span>` : ''}<small>${label}${count ? ` · ${count.toLocaleString()} transaction${count === 1 ? '' : 's'}` : ''}</small></span>
+          ${spent ? `<span class="category-card-share"><span><span>Of total spending</span><strong>${share.toFixed(1)}%</strong></span><span class="category-share-track" aria-hidden="true"><i style="width:${share.toFixed(2)}%"></i></span></span>` : ''}
         </button>`;
-      }).join('') || '<div class="category-empty">Your categories will appear here when they are ready.</div>';
+      };
+      const renderGroup = (list, title, description, id) => list.length ? `<section class="category-group" aria-labelledby="${id}"><div class="category-group-heading"><h2 id="${id}">${title} <span>${list.length}</span></h2><p>${description}</p></div><div class="category-card-grid">${list.map(renderCard).join('')}</div></section>` : '';
+      $('category-cards').innerHTML = categories.length
+        ? `${renderGroup(spendingCategories, 'Your spending', 'Largest first, so the important things stand out.', 'category-spending-title')}${renderGroup(otherCategories, 'Other money movement', 'Deposits and transfers, separate from spending. Open a category to see the breakdown.', 'category-movement-title')}${inactive.length ? `<details class="category-inactive"><summary>No activity this period <span>${inactive.length}</span></summary><div class="category-card-grid">${inactive.map(renderCard).join('')}</div></details>` : ''}`
+        : '<div class="category-empty">Your categories will appear here when they are ready.</div>';
       window.emitFinanceEvent('categories:rendered', { period, transactions: filtered, allTransactions: activity.transactions || [], categories });
       $('category-replacement').innerHTML = categories
         .filter(category => String(category.id) !== String(deletingCategory?.id))

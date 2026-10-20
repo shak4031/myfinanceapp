@@ -888,6 +888,66 @@ test('category load failure clears stale results and reports the error', async (
   assert.equal(f.node('category-cards').textContent, '');
   assert.match(f.node('category-filter-status').textContent, /Could not load categories: Service unavailable/);
 });
+test('category overview ranks spending, separates money movement, and collapses unused categories', async () => {
+  const categories = ['Dining', 'Income', 'Groceries', 'Savings', 'Travel', 'Refunds', '<Custom>'].map((name, id) => ({ id: id + 1, name }));
+  const transactions = [
+    { category: 'Dining', amount: 30, direction: 'DEBIT', date: '2026-10-01', transfer_kind: null },
+    { category: 'Groceries', amount: 120, direction: 'DEBIT', date: '2026-10-02', transfer_kind: null },
+    { category: 'Income', amount: 2000, direction: 'CREDIT', date: '2026-10-02', transfer_kind: null },
+    { category: 'Savings', amount: 500, direction: 'DEBIT', date: '2026-10-02', transfer_kind: 'savings' },
+    { category: 'Refunds', amount: 15, direction: 'CREDIT', date: '2026-10-02', transfer_kind: null },
+    { category: 'Groceries', amount: 300, direction: 'DEBIT', date: '2026-10-02', transfer_kind: 'internal' }
+  ];
+  const f = fixture(async url => response(200, url === '/api/transactions/categorization-rules'
+    ? { categories, rules: [] } : { transactions }));
+  f.run('refresh.js');
+  await f.context.loadCategories();
+  const html = f.node('category-cards').innerHTML;
+  assert.ok(html.indexOf('data-open-category="Groceries"') < html.indexOf('data-open-category="Dining"'));
+  assert.match(html, /category-spending-title[\s\S]*\$120\.00[\s\S]*80\.0%[\s\S]*\$30\.00[\s\S]*20\.0%/);
+  assert.match(html, /category-movement-title[\s\S]*\$2,000\.00[\s\S]*received[\s\S]*\$15\.00[\s\S]*received[\s\S]*\$500\.00[\s\S]*transfer activity/);
+  assert.match(html, /<details class="category-inactive"><summary>No activity this period <span>2<\/span>/);
+  assert.match(html, /data-open-category="&lt;Custom&gt;"/);
+  assert.doesNotMatch(html, /<Custom>|<details[^>]*\bopen\b/);
+  assert.match(f.node('category-overview-summary').innerHTML, /\$150\.00/);
+  assert.match(f.node('category-overview-summary').innerHTML, /Active categories<\/small><strong>5<em> \/ 7/);
+  assert.match(f.node('category-overview-summary').innerHTML, /Transactions<\/small><strong>6/);
+  f.node('category-filter-period').value = 'year:2025';
+  await f.node('category-filter-period').onchange();
+  assert.match(f.node('category-cards').innerHTML, /No activity this period <span>7<\/span>/);
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /<span class="category-card-total">/);
+  assert.match(f.node('category-overview-summary').innerHTML, /\$0\.00/);
+});
+test('category artwork uses meaningful word matches instead of car/care and ev substrings', async () => {
+  const expected = [
+    ['Healthcare', '🩺'], ['Personal Care', '🧴'], ['Childcare', '🧸'], ['Pet Care', '🐾'],
+    ['Credit Card', '📊'], ['Car Insurance', '🚗'], ['EV Charging', '🚗'],
+    ['Travel', '✈️'], ['Entertainment', '🎬'], ['Developer Tools', '✨'],
+    ['Education', '📚'], ['Utilities', '⚡'], ['Dining', '🍽️'], ['Groceries', '🥑'],
+    ['Gifts', '🎁'], ['Savings', '🌱'], ['Transfers', '🔁'], ['Shopping', '🛍️']
+  ];
+  const f = fixture(async url => response(200, url === '/api/transactions/categorization-rules'
+    ? { categories: expected.map(([name], id) => ({ id: id + 1, name })), rules: [] } : { transactions: [] }));
+  f.run('refresh.js');
+  await f.context.loadCategories();
+  const html = f.node('category-cards').innerHTML;
+  for (const [name, icon] of expected) {
+    const card = html.split(`data-open-category="${name}"`)[1]?.split('</button>')[0];
+    assert.ok(card?.includes(`<span>${icon}</span>`), `${name} uses ${icon}`);
+  }
+  assert.equal((html.match(/<span>🚗<\/span>/g) || []).length, 2);
+});
+test('category surfaces keep depth, keyboard focus, responsive layout, and reduced-motion support', () => {
+  const styles = source('categories.css');
+  assert.match(source('index.html'), /href="categories\.css\?v=/);
+  assert.match(styles, /#categories-view \.category-card \{[^}]*radial-gradient[^}]*box-shadow: inset/);
+  assert.match(styles, /\.category-card:focus-visible \{[^}]*outline:/);
+  assert.match(styles, /@media\(max-width: 600px\)[\s\S]*grid-template-columns: minmax\(0,1fr\)/);
+  assert.match(styles, /prefers-reduced-motion: reduce[\s\S]*transform: none/);
+  assert.match(styles, /#categories-view \.pro-cat-extra \{ display: none/);
+  assert.match(styles, /#categories-view:has\(\.category-analytics\[open\]\) \.pro-cat-extra \{ display: grid/);
+  assert.match(source('pro-categories.js'), /<details class="category-analytics/);
+});
 test('a closed category dialog discards a late transaction response', async () => {
   let finish;
   const f = fixture(() => new Promise(resolve => { finish = resolve; }));
@@ -1290,6 +1350,40 @@ test('category analytics derive monthly series and only show a histogram for 2+ 
   assert.match(C.cardExtra(dining, months, 'above'), /pro-hist/);
   const single = C.categoryStats(transactions, ['2026-03']);
   assert.doesNotMatch(C.cardExtra(single.categories.get('Dining'), ['2026-03'], 'inline'), /pro-hist/);
+});
+test('Pro category insights render as an opt-in disclosure, skip inactive cards, and respect the Analytics switch', async () => {
+  const f = loadPro();
+  const pro = f.context.FinancePro;
+  let enabled = true, removed = 0, analyticsRequests = 0;
+  pro.ensureEntitlement = async () => {};
+  pro.isActive = () => true;
+  pro.prefs.get = () => enabled ? 'on' : 'off';
+  pro.getAnalytics = async () => { analyticsRequests++; return { categories: [] }; };
+  const markup = [], activeExtras = [], inactiveExtras = [];
+  const cards = [
+    { dataset: { openCategory: 'Dining' }, classList: { contains: () => false }, insertAdjacentHTML: (position, html) => activeExtras.push(html) },
+    { dataset: { openCategory: 'Travel' }, classList: { contains: () => true }, insertAdjacentHTML: (position, html) => inactiveExtras.push(html) }
+  ];
+  f.node('categories-view').querySelectorAll = () => [{ remove() { removed++; } }];
+  f.node('category-cards').querySelectorAll = () => cards;
+  f.node('category-cards').insertAdjacentHTML = (position, html) => markup.push(html);
+  const event = { detail: { period: { label: 'Jan - Feb 2026', months: ['2026-01', '2026-02'] }, transactions: [
+    { category: 'Dining', date: '2026-01-05', amount: 100, direction: 'DEBIT', transfer_kind: null },
+    { category: 'Dining', date: '2026-02-05', amount: 200, direction: 'DEBIT', transfer_kind: null }
+  ] } };
+  await f.listeners.get('document:categories:rendered')(event);
+  assert.match(markup[0], /^<details class="category-analytics[^>]*><summary>/);
+  assert.doesNotMatch(markup[0], /^<details[^>]*\bopen\b/);
+  assert.match(markup[0], /Explore spending insights[\s\S]*Spending mix/);
+  assert.match(activeExtras[0], /pro-cat-hist[\s\S]*Avg\/mo/);
+  assert.equal(inactiveExtras.length, 0);
+  assert.equal(analyticsRequests, 1);
+  enabled = false;
+  await f.listeners.get('document:categories:rendered')(event);
+  assert.equal(removed, 2);
+  assert.equal(markup.length, 1);
+  assert.equal(analyticsRequests, 1);
+  assert.equal(f.node('categories-view').classList.contains('has-pro-insights'), false);
 });
 test('Pro gating opens the upgrade dialog for free accounts and offers the one-time trial', async () => {
   const f = loadPro(async url => url === '/api/license'

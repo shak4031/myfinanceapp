@@ -86,6 +86,17 @@ and opening a category carries that month into its floating detail panel.
 The detail panel has its own calendar and **All time** action. Dashboard
 month-to-date cards continue to open the specific month shown on the dashboard.
 
+The Categories overview ranks active spending categories by amount and shows
+each category's share of spending. Deposits and transfers appear in a separate
+**Other money movement** group; transfers are excluded from spending totals.
+Categories without activity stay available in the collapsed **No activity this
+period** group. Softly tinted, raised cards keep the primary view focused on the
+category, amount, and transaction count. With Pro analytics enabled, expand
+**Explore spending insights** to reveal the spending mix, monthly histograms,
+and category signals; these details are collapsed by default. Category icons
+use whole-word matching so names such as Healthcare and Credit Card do not
+accidentally receive a car icon. Custom names without a match use a neutral icon.
+
 When editing a transaction, the similar-payment confirmation respects the active
 search text, and also checks the same bank merchant even if only the selected
 payment has the searched friendly name (while still looking across months). Toast/TST and Square prefixes
