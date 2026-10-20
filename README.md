@@ -97,8 +97,12 @@ and category signals; these details are collapsed by default. Category icons
 use whole-word matching so names such as Healthcare and Credit Card do not
 accidentally receive a car icon. Custom names without a match use a neutral icon.
 
-The raised-card depth also appears on finance panels, summary cards, Accounts,
-Debts, and Goals, with subtle tinted surfaces and reduced-motion support.
+The shared raised-card depth also appears on finance panels, welcome metrics,
+analytics KPIs, payment cards and summaries, tutorial cards, Accounts, Debts,
+and Goals. Selected cards retain a focus ring in addition to the same depth.
+Neutral welcome surfaces and semantic warning colors are preserved.
+Calculation information icons open a labeled, keyboard-accessible dialog with
+the relevant formula rather than a floating tooltip clipped by its card.
 Accounts show **Last data update** (the latest transaction date or statement
 closing date) and, when known, when transaction data was last added. Data more
 than **45 calendar days** old receives an amber **Stale data** marker and an
@@ -312,10 +316,9 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   balance dipping below a safe level before payday, debt-free progress, goal status,
   price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
   can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
-  The hero is a light aurora card whose glow follows the active insight's mood; each
-  insight has an emoji mascot, highlights its key figures (amounts, %, dates) with a
-  marker swipe, and enters with a different animation (rise, pop, swipe, flip, word
-  cascade, zoom). The stage resizes smoothly to each message, so there's no empty space.
+  The hero uses quiet neutral surfaces, emerald actions, line icons and subtle
+  transitions. Only warning labels and key figures use semantic accent colors.
+  The stage resizes smoothly to each message, with reduced-motion support.
 - **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
   debt-free month. Insights come from `GET /api/dashboard/insights`
   (rules in `backend/utils/insights.js`).
@@ -339,7 +342,8 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   month. They recur monthly throughout the window; older history alone does not
   revive a bill. Days missing from a target month clamp to its final day.
 - Payments matched in the current month remain accessible in the expandable
-  **This month's history** section as **Paid**, with transaction links, even if
+  **Paid fixed bills this month** section above the calendar/list as **Paid**,
+  with transaction links, even if
   the imported payment is missing its fixed flag or has a different amount.
   Matching uses the merchant/label and distinguishes masked account numbers.
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
@@ -351,8 +355,10 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   Debt-free-plan and goal contributions appear as violet **Flexible** cards
   that can be adjusted or skipped for the current month. Future-month entries
   are labeled **Plan estimate**, use current allocations and that month's saved
-  overrides, and do not edit this month's plan. Past allocations appear as
-  **Planned**, never as verified paid bills.
+  overrides, and do not edit this month's plan. History contains only recorded
+  fixed-bill payments, not received income or past debt/savings allocations.
+  Paychecks and future plan allocations remain in the forecast; all activity
+  is still accessible on Transactions.
 - **You decide what counts as pay.** Regular deposits (even Zelle or Venmo money
   from a friend) can look like a paycheck. Each deposit in Transactions has an
   **Income** toggle under *Fixed / Income*, and **Review income** (Transactions

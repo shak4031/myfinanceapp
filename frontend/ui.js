@@ -40,13 +40,26 @@ window.FinanceUI = (() => {
       dialog.close();
     }
   });
-  // "How is this calculated?" popover: a native <details>, so it works with keyboard and screen readers.
   function howCalc(text, label = 'How is this calculated?') {
     const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-    return `<details class="how-calc"><summary aria-label="${esc(label)}" title="${esc(label)}">?</summary><p>${esc(text)}</p></details>`;
+    return `<button type="button" class="how-calc" data-calculation="${esc(text)}" data-calculation-title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="dialog" title="${esc(label)}"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v1"/></svg></button>`;
   }
   document.addEventListener('click', event => {
-    document.querySelectorAll('details.how-calc[open]').forEach(details => { if (!details.contains(event.target)) details.open = false; });
+    const trigger = event.target.closest?.('button[data-calculation]');
+    if (!trigger) return;
+    const dialog = document.createElement('dialog');
+    const id = `calculation-dialog-${++nextDialogId}`;
+    dialog.className = 'editor calculation-dialog';
+    dialog.setAttribute('aria-labelledby', `${id}-title`);
+    dialog.setAttribute('aria-describedby', `${id}-body`);
+    dialog.innerHTML = `<form method="dialog"><h2 id="${id}-title"></h2><p id="${id}-body"></p><button type="submit" class="btn btn-primary" autofocus>Got it</button></form>`;
+    const context = trigger.parentElement?.textContent.trim();
+    dialog.querySelector('h2').textContent = trigger.dataset.calculationTitle === 'How is this calculated?' && context
+      ? `${context} - calculation` : trigger.dataset.calculationTitle;
+    dialog.querySelector('p').textContent = trigger.dataset.calculation;
+    document.body.appendChild(dialog);
+    dialog.addEventListener('close', () => { dialog.remove(); trigger.focus({ preventScroll: true }); }, { once: true });
+    dialog.showModal();
   });
   return {
     confirm: (message, options) => ask(message, options),

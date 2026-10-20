@@ -92,6 +92,7 @@ test('shared raised surfaces preserve nested spending cards, target states and r
   assert.match(css, /body \.view \.panel,[^]*?box-shadow: var\(--card-depth\)/);
   assert.match(css, /\.metric-card:not\(\.mtd-category-card\)/);
   assert.match(css, /\.plan-debt:not\(\.is-excluded\):not\(\.is-target\)/);
+  for (const surface of ['welcome-pulse-row', 'pro-kpi', 'pay-cal-summary', 'plan-strategy', 'tut-card']) assert.ok(css.includes(`body .view .${surface}`));
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*?\.plan-goal:hover \{ transform: none/);
 });
 
@@ -905,6 +906,8 @@ test('dashboard rolls across months, includes overdue in cash and keeps paid his
     { date: '2026-11-19', amount: 50, description: 'End day bill' },
     { date: '2026-10-03', amount: 100, description: 'Overdue bill' },
     { date: '2026-10-10', amount: 900, description: 'Paid mortgage', status: 'processed', id: 42 },
+    { date: '2026-10-11', amount: 800, description: 'Received paycheck', status: 'processed', isIncome: true },
+    { date: '2026-10-12', amount: 100, description: 'Past savings allocation', status: 'processed', planned: true },
     { date: '2026-11-01', amount: 500, description: 'Next month rent' },
     { date: '2026-11-01', amount: 800, description: 'Paycheck', isIncome: true },
     { date: '2026-11-20', amount: 9999, description: 'Outside horizon' },
@@ -922,7 +925,10 @@ test('dashboard rolls across months, includes overdue in cash and keeps paid his
   vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
   await f.context.loadDashboard();
   const markup = f.node('dashboard-payments').innerHTML;
-  const [main, history] = markup.split('<details class="pay-history">');
+  const history = markup.match(/<details class="pay-history">[^]*?<\/details>/)[0];
+  const main = markup.replace(history, '');
+  assert.ok(markup.indexOf('<details class="pay-history">') < markup.indexOf('<div class="pay-cal"'));
+  assert.ok(markup.indexOf('<details class="pay-history">') < markup.indexOf('<ol class="pay-list" aria-label="Next 30 days'));
   assert.match(main, /Projected balance in 30 days<\/span><strong>\$1,150\.00/);
   assert.match(main, /data-date="2026-10-03"/);
   assert.match(main, /data-date="2026-11-19"/);
@@ -930,8 +936,36 @@ test('dashboard rolls across months, includes overdue in cash and keeps paid his
   assert.match(main, /Earlier this month &middot; still pending/);
   assert.match(history, /href="#transactions\/42">Paid mortgage/);
   assert.match(history, /1 paid bill.*\$900\.00/);
+  assert.doesNotMatch(history, /Received paycheck|Past savings allocation|Planned|Received/);
+  assert.match(history, /Paid fixed bills this month/);
   assert.match(main, /Next 30 days/);
   assert.match(source('refresh.css'), /#upcoming-section \.pay-history > ol\.pay-list \{ display: block/);
+});
+test('calculation information controls open readable labeled dialogs with matching content', () => {
+  const f = fixture();
+  let dialog, focused = false;
+  const create = f.context.document.createElement;
+  f.context.document.createElement = tag => {
+    const element = create(tag);
+    if (tag === 'dialog') dialog = element;
+    return element;
+  };
+  f.run('ui.js');
+  const markup = f.context.FinanceUI.howCalc('Balance minus <planned> bills.', 'Safe to spend calculation');
+  assert.match(markup, /<button[^>]*aria-haspopup="dialog"/);
+  assert.match(markup, /data-calculation="Balance minus &lt;planned&gt; bills\."/);
+  assert.doesNotMatch(markup, /<details|<summary|>\?</);
+  const trigger = {
+    dataset: { calculation: 'Balance minus <planned> bills.', calculationTitle: 'Safe to spend calculation' },
+    focus() { focused = true; }
+  };
+  f.listeners.get('document:click')({ target: { closest: () => trigger } });
+  assert.equal(dialog.open, true);
+  assert.match(dialog.innerHTML, /aria|calculation-dialog-1-title/);
+  assert.equal(dialog.querySelector('h2').textContent, trigger.dataset.calculationTitle);
+  assert.equal(dialog.querySelector('p').textContent, trigger.dataset.calculation);
+  dialog.close();
+  assert.equal(focused, true);
 });
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
   const f = activityFixture(); f.run('refresh.js');

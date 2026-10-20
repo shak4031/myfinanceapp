@@ -491,7 +491,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261029a">
+  <link rel="stylesheet" href="refresh.css?v=20261030a">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261024e">
   <link rel="stylesheet" href="categories.css?v=20261027a">
@@ -629,7 +629,7 @@
           <div class="section-head">
             <div>
               <h2>Upcoming payments &amp; projected runway</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">The next 30 days, plus unpaid bills from earlier this month. Expand this month's history to see paid items. The running balance starts from your latest recorded balance; unrecorded payments are estimates.</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">The next 30 days, plus unpaid bills from earlier this month. Paid fixed bills are in the history drawer above the timeline. The running balance starts from your latest recorded balance; unrecorded payments are estimates.</div>
             </div>
             <div class="section-head-actions">
               <div id="cashflow-safety-badge"></div>
@@ -1148,7 +1148,7 @@
       }
       
       const finishSummary = window.FinancePerformance?.begin('cpu', 'dashboard.metrics');
-      const how = text => window.FinanceUI?.howCalc(text) || '';
+      const how = (text, label) => window.FinanceUI?.howCalc(text, label) || '';
       const basis = data.monthsAveraged ? `the last ${data.monthsAveraged} full month${data.monthsAveraged === 1 ? '' : 's'}` : 'the last 3 full months';
       document.getElementById('dashboard-metrics').innerHTML = `
         <div class="metric-card income"><div class="metric-label">Typical income <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Average money in per month over ${basis}. Transfers between your own accounts are excluded.`)}</div><div class="metric-value" style="color: var(--success)">${usd(data.income)}</div></div>
@@ -1245,7 +1245,7 @@
         if (isOverdue) overdueCount++;
         if (isDeficit) riskCount++;
         const entry = { item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance };
-        if (isPaid) { history.push(entry); return; }
+        if (isPaid) { if (!item.isIncome && !item.planned) history.push(entry); return; }
         if (!byDay.has(date)) byDay.set(date, []);
         byDay.get(date).push(entry);
       });
@@ -1328,14 +1328,14 @@
           <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
           <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected balance in 30 days</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After unpaid bills and expected income'}</small></div>
         </div>
-        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-paid">Paid</span><span class="is-income">Income</span><span class="is-flex">Flexible plan</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
-        <p class="pay-window-note">${overdueCount ? `${overdueCount} earlier unpaid bill${overdueCount === 1 ? '' : 's'} carried forward. ` : ''}Forecast through ${endKey}. Past planned allocations are not proof of payment; future plan entries use your current monthly allocation.</p>
+        <details class="pay-history"><summary>Paid fixed bills this month &middot; ${monthName} &middot; ${paidCount} paid bill${paidCount === 1 ? '' : 's'} &middot; ${fmtMoney(paidTotal)}</summary>
+          <p class="pay-window-note">Recorded payments matching your fixed bills only. These are already reflected in recorded cash and are not deducted again. View all other transactions on the <a href="#transactions">Transactions page</a>.</p>
+          <ol class="pay-list" aria-label="Fixed payment history for ${monthName}">${history.map(listRow).join('') || '<li class="pay-list-heading">No recorded fixed payments yet this month.</li>'}</ol>
+        </details>
+        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-income">Income</span><span class="is-flex">Flexible plan</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
+        <p class="pay-window-note">${overdueCount ? `${overdueCount} earlier unpaid bill${overdueCount === 1 ? '' : 's'} carried forward. ` : ''}Forecast through ${endKey}. Expected income and future plan allocations are estimates; plan entries use your current monthly allocation.</p>
         <div class="pay-cal" aria-label="Next 30 days and earlier unpaid bills">${weekHead}${weeksHtml}</div>
-        <ol class="pay-list" aria-label="Next 30 days and earlier unpaid bills, in date order">${listHtml}</ol>
-        <details class="pay-history"><summary>This month's history &middot; ${monthName} &middot; ${paidCount} paid bill${paidCount === 1 ? '' : 's'} &middot; ${fmtMoney(paidTotal)}</summary>
-          <p class="pay-window-note">Paid bills, received income and past plan allocations. Already reflected in recorded cash or labeled Planned; not deducted again.</p>
-          <ol class="pay-list" aria-label="Payment history for ${monthName}">${history.map(listRow).join('') || '<li class="pay-list-heading">No recorded payments yet this month.</li>'}</ol>
-        </details>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
+        <ol class="pay-list" aria-label="Next 30 days and earlier unpaid bills, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
       if (typeof window.setPayView === 'function') window.setPayView();
       finishTimeline?.();
@@ -1872,7 +1872,7 @@
     });
 
   </script>
-  <script src="ui.js?v=20261019a"></script>
+  <script src="ui.js?v=20261030a"></script>
   <script src="refresh.js?v=20261027a"></script>
   <script src="accounts.js?v=20261028a"></script>
   <script src="account.js?v=20261026a"></script>
@@ -1885,7 +1885,7 @@
   <script src="plan.js?v=20261017r"></script>
   <script src="welcome.js?v=20261029b"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261029a"></script>
+  <script src="tutorial.js?v=20261030a"></script>
   <script src="marketing.js?v=20261020c"></script>
   <script>FinanceSession.start();</script>
 </body>

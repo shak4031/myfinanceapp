@@ -741,21 +741,42 @@ tr:hover .tx-rename, .tx-rename:focus-visible { opacity: 1; }
   #txn-summary .metric-card:last-child { grid-column: 1/-1; }
 }
 
-/* "How is this calculated?" popovers */
-.how-calc { position: relative; display: inline-block; vertical-align: middle; margin-left: 4px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.how-calc > summary { list-style: none; cursor: pointer; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-secondary); font-size: 10px; font-weight: 700; line-height: 1; }
-.how-calc > summary::-webkit-details-marker { display: none; }
-.how-calc > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.how-calc[open] > summary { color: var(--primary); border-color: var(--primary); }
-.how-calc > p { position: absolute; z-index: 40; top: calc(100% + 6px); left: -8px; width: min(280px, 70vw); margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); box-shadow: var(--shadow); font-size: 12px; line-height: 1.45; white-space: normal; text-align: left; }
+.how-calc { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 3px; vertical-align: middle; margin-left: 4px; border: 0; border-radius: 50%; color: #52637a; background: transparent; cursor: pointer; }
+.how-calc:hover { color: var(--primary); background: #edf4ef; }
+.how-calc:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+body .calculation-dialog { width: min(480px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--border); border-radius: 18px; background: #fff; color: var(--text-primary); box-shadow: var(--shadow); }
+.calculation-dialog::backdrop { background: #12213866; }
+.calculation-dialog form { display: grid; justify-items: start; gap: 18px; }
+.calculation-dialog h2 { font-size: 20px; line-height: 1.35; }
+.calculation-dialog p { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 
 /* Keep depth on outer surfaces, not nested spending-card buttons or table rows. */
 body .view .panel,
 body .view .metric-card:not(.mtd-category-card),
 body .view .acct-card,
+body .view .welcome-pulse-row,
+body .view .pro-kpi,
+body .view .pay-cal-summary > div,
+body .view .acct-review-intro,
+body .view .pay-history,
+body .view .pay-card,
+body .view .plan-strategy:not(.is-active),
+body .view .tut-card:not(.is-current),
 body .view .plan-debt:not(.is-excluded):not(.is-target),
 body .view .plan-goal:not(.is-excluded) {
   box-shadow: var(--card-depth);
+}
+body .view #welcome-hero,
+body .view .mtd-card-wrap,
+body .view .category-card:not(.is-inactive) { box-shadow: var(--card-depth); }
+body .view .plan-debt.is-target,
+body .view .plan-strategy.is-active,
+body .view .tut-card.is-current { box-shadow: 0 0 0 3px #22645218, var(--card-depth); }
+@media (hover: hover) {
+  body .view .mtd-card-wrap:hover,
+  body .view .category-card:not(.is-inactive):hover,
+  body .view .plan-strategy:not(.is-active):hover,
+  body .view .tut-card:not(.is-current):hover { box-shadow: var(--card-depth-raised); }
 }
 body .view .metric-card:not(.mtd-category-card),
 body .view .acct-card,
