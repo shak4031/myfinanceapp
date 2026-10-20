@@ -1698,7 +1698,10 @@
             ${(data.warnings || []).length ? `<ul role="status">${data.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : ''}
             ${FinanceAccounts.resultNote(data)}
           `;
-          FinanceAccounts.afterImport(data).catch(error => notify(`PDF imported, but account refresh failed: ${error.message}`));
+          FinanceAccounts.afterImport(data).catch(error => {
+            resultDiv.innerHTML += `<p role="alert">PDF imported, but account refresh failed: ${escapeHtml(error.message)}. Reload the page to refresh your accounts.</p>`;
+            resultDiv.scrollIntoView({ block: 'nearest' });
+          });
           if (pendingPdfFile === file) {
             pendingPdfFile = null;
             document.getElementById('pdf-file-list').innerHTML = '';
@@ -1778,7 +1781,7 @@
 
   </script>
   <script src="ui.js?v=20261019a"></script>
-  <script src="refresh.js?v=20261024d"></script>
+  <script src="refresh.js?v=20261024e"></script>
   <script src="accounts.js?v=20261020d"></script>
   <script src="account.js?v=20261019a"></script>
   <script src="pro-charts.js?v=20261017r"></script>

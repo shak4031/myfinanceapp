@@ -240,15 +240,16 @@
     else pendingPdfFile = file;
     $(`${kind}-file-list`).textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;
     $(`${kind}-import-btn`).disabled = false;
+    return true;
   }
   window.onCsvSelected = event => { selectImportFile('csv', event.target.files[0]); window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
-  window.onPdfSelected = event => { selectImportFile('pdf', event.target.files[0]); window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
+  window.onPdfSelected = event => { if (selectImportFile('pdf', event.target.files[0])) window.FinanceAccounts?.suggestFromFile(event.target.files[0]); };
   window.handleCsvDrop = event => {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
     if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv')) { selectImportFile('csv', file); window.FinanceAccounts?.suggestFromFile(file); }
   };
-  window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf') { selectImportFile('pdf', file); window.FinanceAccounts?.suggestFromFile(file); } };
+  window.handlePdfDrop = event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf' && selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
 
   // Navigation is explicit: labels can change without breaking the active state.
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.

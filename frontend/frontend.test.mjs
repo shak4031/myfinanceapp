@@ -310,6 +310,29 @@ test('account review requires an owned type and the not-mine action saves an ext
     assert.equal(f.requests.length, 0);
     assert.equal(f.notices.length, 0);
   });
+  test('account picker failures are visible in the import dialog', async () => {
+    const f = pdfUploadFixture(200, {});
+    f.run('accounts.js');
+    f.context.fetch = async () => response(503, { error: 'Accounts unavailable' });
+    await f.context.FinanceAccounts.loadPicker();
+    assert.match(f.node('import-result').innerHTML, /Accounts could not be loaded: Accounts unavailable/);
+  });
+  test('the actual PDF picker cannot replace an in-flight upload', async () => {
+    const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1 });
+    const file = f.context.pendingPdfFile;
+    const running = f.context.importPDF();
+    f.context.onPdfSelected({ target: { files: [{ name: 'next.pdf', size: 1024 }] } });
+    assert.equal(f.context.pendingPdfFile, file);
+    assert.match(f.node('import-result').innerHTML, /already running/);
+    await running;
+    assert.equal(f.requests.length, 1);
+  });
+  test('post-import account refresh failures remain visible alongside the saved result', async () => {
+    const f = pdfUploadFixture(200, { success: true, imported: 1, duplicates: 0, totalInFile: 1 });
+    f.context.FinanceAccounts.afterImport = async () => { throw new Error('Connection lost'); };
+    await f.context.importPDF();
+    assert.match(f.node('import-result').innerHTML, /PDF Import Complete[^]*PDF imported, but account refresh failed: Connection lost/);
+  });
   test('unreadable server responses and timeouts explain an unknown PDF outcome', async () => {
     const f = pdfUploadFixture(200, {});
     f.context.fetch = async () => ({ ok: false, status: 502, json: async () => { throw new Error('Unexpected HTML'); } });
