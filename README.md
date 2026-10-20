@@ -84,6 +84,12 @@ and opening a category carries that month into its floating detail panel.
 The detail panel has its own calendar and **All time** action. Dashboard
 month-to-date cards continue to open the specific month shown on the dashboard.
 
+When editing a transaction, the similar-payment confirmation respects the active
+search text (while still looking across months). Toast/TST and Square prefixes
+identify payment processors, not merchants; suggestions use the following merchant
+words instead. Renamed payees still group by the chosen name. Review and confirm
+the suggested rows before applying changes to other transactions.
+
 Month-to-date spending cards emphasize the category, amount spent and transaction
 count. Hover or keyboard-focus the **6-month history** footer, or select it on
 touch screens, to open a layered historical preview. The preview shows six completed

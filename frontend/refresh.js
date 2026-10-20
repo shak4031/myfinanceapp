@@ -152,11 +152,19 @@
   const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY AUTO PAY BILL BILLPAY MOBILE WEB BANKING PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
   // Person-to-person rails need the payee too, otherwise every Zelle/Venmo payment would match.
   const PAYMENT_RAILS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH']);
-  window.merchantTokens = description => [...new Set(String(description ?? '').toUpperCase().split(/[^A-Z0-9]+/)
-    .filter(token => token.length > 2 && !/\d/.test(token) && !MERCHANT_NOISE.has(token)))];
+  const MERCHANT_PROCESSORS = new Set(['TST', 'TOAST', 'SQ', 'SQUARE']);
+  window.merchantTokens = description => String(description ?? '').toUpperCase().split(/[^A-Z0-9]+/)
+    .filter(token => (token.length > 2 || MERCHANT_PROCESSORS.has(token)) && !/\d/.test(token) && !MERCHANT_NOISE.has(token));
   window.merchantKey = description => {
-    const tokens = window.merchantTokens(description);
+    let tokens = window.merchantTokens(description);
     if (!tokens.length) return '';
+    // A processor serves many unrelated merchants. Keep a conservative multiword identity,
+    // including repeated words such as PERI PERI, rather than grouping by TST or SQUARE.
+    if (MERCHANT_PROCESSORS.has(tokens[0])) {
+      while (MERCHANT_PROCESSORS.has(tokens[0])) tokens.shift();
+      return tokens.slice(0, 3).join(' ');
+    }
+    tokens = [...new Set(tokens)];
     return PAYMENT_RAILS.has(tokens[0]) ? tokens.slice(0, 2).join(' ') : tokens[0];
   };
   // A renamed payee groups by the name the user chose; everything else by the merchant words.
@@ -598,7 +606,7 @@
   }
   // Resolves with the number of extra transactions updated (0 when skipped or dismissed).
   // `change` is a category name, { isFixed } for the fixed-bill flag, { payMode } for auto-pay/manual, or { income } for deposits.
-  function promptSimilarTransactions(source, change, items) {
+  function promptSimilarTransactions(source, change, items, query = '') {
     const byPay = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'payMode');
     const byIncome = typeof change === 'object' && Object.prototype.hasOwnProperty.call(change, 'income');
     const byFixed = typeof change === 'object' && !byPay && !byIncome;
@@ -614,7 +622,7 @@
     const hint = byIncome ? 'All deposits from this sender are preselected so your payday forecast stays consistent. '
       : byPay ? 'All payments to this biller are preselected — they are usually paid the same way. '
       : strong ? `${strong} with about the same amount ${strong === 1 ? 'is' : 'are'} preselected. ` : '';
-    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${hint}Choose which should ${action}.`;
+    $('similar-copy').innerHTML = `Found <strong>${items.length}</strong> other transaction${items.length === 1 ? '' : 's'} from <strong>${escape(source.display_name || window.merchantKey(source.description))}</strong>. ${query ? `Matching your search “${escape(query)}”. ` : ''}${hint}Choose which should ${action}.`;
     $('similar-list').innerHTML = items.map(({ transaction, sameAmount }, index) => {
       const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
       const from = byIncome ? incomeLabel(!!transaction.counts_as_income) : byPay ? payLabel(payModeOf(transaction)) : byFixed ? fixedLabel(fixed(transaction.is_fixed)) : escape(transaction.category || 'Uncategorized');
@@ -817,34 +825,35 @@
         const row = event.target.closest('[data-transaction]');
         if (!row) return;
         const item = rows[Number(row.dataset.transaction)];
+        const candidates = transactions.filter(t => window.matchesTransactionSearch(t, query));
         event.target.disabled = true;
         try {
           if (event.target.matches('[data-income]')) {
             const income = event.target.checked;
             await json('/api/transactions/update-income-role', 'POST', { ids: [Number(item.id)], income_role: income ? 'income' : 'other' });
-            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { income });
-            const extra = similar.length ? await promptSimilarTransactions(item, { income }, similar) : 0;
+            const similar = window.findSimilarTransactions(candidates, item, { income });
+            const extra = similar.length ? await promptSimilarTransactions(item, { income }, similar, query) : 0;
             window.FinancePlan?.invalidate?.();
             notify(`${income ? 'Counted as income' : 'No longer counted as income'}: this${extra ? ` and ${extra} other deposit${extra === 1 ? '' : 's'}` : ' deposit only'}. Your payday forecast has been updated.`);
           } else if (event.target.matches('[data-fixed]')) {
             const isFixed = event.target.checked;
             await json('/api/transactions/update-fixed', 'POST', { id: item.id, is_fixed: isFixed, apply_to_all: false });
-            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { isFixed });
-            const extra = similar.length ? await promptSimilarTransactions(item, { isFixed }, similar) : 0;
+            const similar = window.findSimilarTransactions(candidates, item, { isFixed });
+            const extra = similar.length ? await promptSimilarTransactions(item, { isFixed }, similar, query) : 0;
             const verb = isFixed ? 'Marked as a fixed bill' : 'No longer a fixed bill';
             notify(`${verb}: this${extra ? ` and ${extra} similar transaction${extra === 1 ? '' : 's'}` : ' transaction only'}. Upcoming bills update from your marked debits.`);
           } else if (event.target.matches('[data-paymode]')) {
             const payMode = event.target.value || null;
             await json('/api/transactions/update-pay-mode', 'POST', { ids: [Number(item.id)], pay_mode: payMode });
-            const similar = window.findSimilarTransactions(transactionCache.transactions, item, { payMode });
-            const extra = similar.length ? await promptSimilarTransactions(item, { payMode }, similar) : 0;
+            const similar = window.findSimilarTransactions(candidates, item, { payMode });
+            const extra = similar.length ? await promptSimilarTransactions(item, { payMode }, similar, query) : 0;
             const verb = payMode ? `Set to ${payLabel(payMode)}` : 'Payment method cleared';
             notify(`${verb} for this${extra ? ` and ${extra} similar payment${extra === 1 ? '' : 's'}` : ' payment only'}.`);
           } else {
             const category = event.target.value;
             await json('/api/transactions/update-transaction', 'POST', { id: item.id, category, apply_to_all: false });
-            const similar = window.findSimilarTransactions(transactionCache.transactions, item, category);
-            const extra = similar.length ? await promptSimilarTransactions(item, category, similar) : 0;
+            const similar = window.findSimilarTransactions(candidates, item, category);
+            const extra = similar.length ? await promptSimilarTransactions(item, category, similar, query) : 0;
             notify(extra ? `Category set to ${category} for this and ${extra} similar transaction${extra === 1 ? '' : 's'}.` : 'Category updated for this transaction only.');
           }
         } catch (error) { reportError(error); }

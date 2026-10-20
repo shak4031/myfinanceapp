@@ -572,6 +572,68 @@ test('similar-payment matcher normalizes statement noise with regex and weighs a
   assert.deepEqual(fixedMatches.map(item => item.transaction.id), ['3', '6', '4']);
   assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], { isFixed: false }).map(item => item.transaction.id), ['2']);
 });
+test('processor-prefixed merchants never group unrelated restaurants by TST or Square', () => {
+  const f = fixture(); f.run('refresh.js');
+  const key = f.context.merchantKey;
+  assert.equal(key('TST* TRIBOS PERI PERI - M METUCHEN NJ'), 'TRIBOS PERI PERI');
+  assert.equal(key('VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ'), 'TRIBOS PERI PERI');
+  assert.equal(key('TOAST* TRIBOS PERI PERI METUCHEN NJ'), 'TRIBOS PERI PERI');
+  assert.equal(key('SQ * TRIBOS PERI PERI METUCHEN NJ'), 'TRIBOS PERI PERI');
+  assert.equal(key('SQUARE * TRIBOS PERI PERI METUCHEN NJ'), 'TRIBOS PERI PERI');
+  assert.equal(key('VISA DDA PUR AP 123456 TST'), '');
+  const rows = [
+    'TST* TRIBOS PERI PERI - M METUCHEN NJ',
+    'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',
+    'VISA DDA PUR AP 469216 TST CHAI CHENAK NEW BRUNSWICK * NJ',
+    'VISA DDA PUR AP 469216 TST SHIR CHAI CO NORTH BRUNSWI * NJ',
+    'VISA DDA PUR AP 413746 TST HUNGRY TIGER BELLE MEAD * NJ',
+    'VISA DDA PUR AP 413746 TST BAGEL BAZAAR DAYTON * NJ'
+  ].map((description, index) => ({ id: index + 1, description, date: '2026-09-01', direction: 'DEBIT', amount: 35, category: 'Shopping' }));
+  for (const change of ['Dining', { isFixed: true }, { payMode: 'manual' }, { income: true }]) {
+    assert.deepEqual(f.context.findSimilarTransactions(rows, rows[0], change).map(item => item.transaction.id), [2]);
+  }
+});
+for (const renamed of [false, true]) test(`Peri Peri category correction respects the search and updates only confirmed matches (${renamed ? 'renamed' : 'original'} payee)`, async () => {
+  const calls = [];
+  const transactions = [
+    { id: 1, date: '2026-09-23', description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ', amount: 35.45 },
+    { id: 2, date: '2026-08-10', description: 'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ', amount: 35.45 },
+    { id: 3, date: '2026-07-10', description: 'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ', amount: 86.84 },
+    { id: 4, date: '2026-04-15', description: 'VISA DDA PUR AP 469216 TST CHAI CHENAK NEW BRUNSWICK * NJ', amount: 35.45 },
+    { id: 5, date: '2026-03-30', description: 'VISA DDA PUR AP 469216 TST SHIR CHAI CO NORTH BRUNSWI * NJ', amount: 31.18 },
+    { id: 6, date: '2026-02-01', description: 'TST TRIBOS GRILL METUCHEN NJ', amount: 35.45 }
+  ].map(t => ({ ...t, direction: 'DEBIT', category: 'Shopping', display_name: renamed && [1, 2, 3, 6].includes(t.id) ? 'Tribos' : null }));
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options.body ? JSON.parse(options.body) : null]);
+    if (url === '/api/categories') return response(200, [{ name: 'Shopping' }, { name: 'Dining' }]);
+    if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
+    return response(200, { success: true, updated: 1 });
+  });
+  f.run('refresh.js');
+  f.node('txn-filter-search').value = 'peri peri';
+  await f.context.loadAllTransactions();
+  const select = { value: 'Dining', disabled: false, matches: selector => selector === '[data-category]', closest: () => ({ dataset: { transaction: '0' } }) };
+  const pending = f.node('full-txn-table').onchange({ target: select });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+  assert.equal(dialog.open, true);
+  assert.match(f.node('similar-copy').innerHTML, /Found <strong>2<\/strong> other transactions/);
+  assert.match(f.node('similar-copy').innerHTML, /Matching your search “peri peri”/);
+  assert.doesNotMatch(f.node('similar-list').innerHTML, /CHAI|GRILL/);
+  assert.match(f.node('similar-list').innerHTML, /href="#transactions\/2"/);
+  assert.match(f.node('similar-list').innerHTML, /href="#transactions\/3"/);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="0" checked/);
+  assert.match(f.node('similar-list').innerHTML, /data-similar="1" >/);
+  f.node('similar-list').querySelectorAll = () => [{ checked: true, dataset: { similar: '0' } }, { checked: false, dataset: { similar: '1' } }];
+  await f.node('similar-form').onsubmit({ preventDefault() {} });
+  await pending;
+  assert.deepEqual(calls.find(([url]) => url === '/api/transactions/update-transaction')[1], { id: 1, category: 'Dining', apply_to_all: false });
+  assert.deepEqual(calls.find(([url]) => url === '/api/transactions/categorization-apply')[1], {
+    updates: [{ id: 2, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: true, protectCorrections: false
+  });
+  assert.equal(f.node('txn-filter-search').value, 'peri peri');
+  assert.equal(dialog.open, false);
+});
 test('marking a fixed bill offers similar payments and flags only the confirmed ones', async () => {
   const calls = [];
   const transactions = [
