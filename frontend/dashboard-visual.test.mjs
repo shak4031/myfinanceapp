@@ -87,3 +87,15 @@ test('spending cards retain category drill-down hooks and readable spent context
   assert.match(html, /onclick="window\.openCategoryTransactions\(this\.dataset\.category, this\.dataset\.month\)"/);
   assert.match(html, /<small>spent this month<\/small>/);
 });
+
+test('card colors alternate at the wrapper level and retain depth and reduced-motion support', () => {
+  const styles = readFileSync(new URL('spending-history.css', import.meta.url), 'utf8');
+  const base = readFileSync(new URL('refresh.css', import.meta.url), 'utf8');
+  for (let index = 2; index <= 6; index++) {
+    assert.ok(styles.includes(`.mtd-grid > .mtd-card-wrap:nth-child(6n+${index})`));
+  }
+  assert.doesNotMatch(base, /\.mtd-category-card:nth-child\(6n/);
+  assert.match(styles, /body \.mtd-card-wrap \.mtd-category-card[^}]*var\(--mtd-tint\)/);
+  assert.match(styles, /\.mtd-card-wrap \{[^}]*box-shadow:/);
+  assert.match(styles, /prefers-reduced-motion: reduce[^]*transform: none/);
+});

@@ -363,19 +363,14 @@ body .metric-card { position: relative; overflow: hidden; }
 .metric-card.expense { --accent: var(--danger); }
 .metric-card.net { --accent: #2563eb; }
 .metric-card.balance { --accent: #0f766e; }
-/* Quiet spending tiles keep the amount primary; the budget fills upward at the right. */
-#mtd-spending-section { background: #f3f6fa; }
+/* Layered spending tiles keep the amount primary; budgets fill upward at the right. */
+#mtd-spending-section { background: radial-gradient(ellipse at 0 0,#e1f1ed 0,transparent 55%), radial-gradient(ellipse at 100% 100%,#e9e5f5 0,transparent 55%), #edf2f7; border: 1px solid #d9e3ed; box-shadow: 0 12px 32px -22px #243c6266, inset 0 1px 0 #fff; }
+#mtd-spending-section > .section-head { background: linear-gradient(110deg,#ffffffcf,#f8faff80); border-bottom: 1px solid #d8e2ec; }
 #mtd-spending-section > .mtd-grid { margin: 0; padding: 24px; }
 body .mtd-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 18px; }
-body .mtd-category-card { --mtd-accent: #0f766e; position: relative; display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 0; overflow: hidden; background: #fff; color: var(--text-primary); border: 1px solid #dce4e8; border-radius: 14px; box-shadow: 0 2px 4px #0f172a06; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s; }
+body .mtd-category-card { position: relative; display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 0; overflow: hidden; background: #fff; color: var(--text-primary); border: 1px solid #dce4e8; border-radius: 14px; box-shadow: 0 2px 4px #0f172a06; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s; }
 body .mtd-category-card:hover { border-color: #94aaa4; box-shadow: 0 4px 14px #0f172a12; }
 body .mtd-category-card:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
-.mtd-grid .mtd-category-card:nth-child(6n+1) { --mtd-accent: #10b981; }
-.mtd-grid .mtd-category-card:nth-child(6n+2) { --mtd-accent: #38bdf8; }
-.mtd-grid .mtd-category-card:nth-child(6n+3) { --mtd-accent: #818cf8; }
-.mtd-grid .mtd-category-card:nth-child(6n+4) { --mtd-accent: #fbbf24; }
-.mtd-grid .mtd-category-card:nth-child(6n+5) { --mtd-accent: #fb7185; }
-.mtd-grid .mtd-category-card:nth-child(6n+6) { --mtd-accent: #fb923c; }
 body .mtd-grid .mtd-category-card { padding: 0; }
 .mtd-card-head { display: flex; align-items: center; padding: 20px 20px 0; }
 .mtd-card-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; font-size: 21px; background: color-mix(in srgb, var(--mtd-accent) 18%, #fff); border-radius: 10px; }

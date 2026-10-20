@@ -91,6 +91,9 @@ calendar months (not the current partial month), monthly spending and an average
 Months before imported history are marked **No data**, not fabricated zeroes;
 all totals depend on the statements imported. Escape, close, or moving away
 dismisses the preview without changing the card's transaction drill-down.
+The section uses a soft mint-to-lilac backdrop; alternating tinted cards, tonal
+category markers and layered shadows separate each category without obscuring
+amounts or counts. Hover lift respects reduced-motion preferences.
 
 Pro adds the highest/lowest month, change from the preceding month, period
 transaction count, and months above the **current** monthly budget. This is a
