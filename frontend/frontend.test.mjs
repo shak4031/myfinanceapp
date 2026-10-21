@@ -1337,6 +1337,66 @@ test('debt-free page renders strategies, escaped debts, Pro locks and calendar i
   const rows = f.context.FinancePlan.debtRows();
   assert.equal(rows[0].due_date, 3);
 });
+test('debt coaching renders real funding math, spending experiments and projected first wins without saving', async () => {
+  const { computePlan } = await import('../backend/utils/moneyPlan.js');
+  const now = new Date(2026, 9, 20);
+  const history = ['07', '08', '09'].flatMap(month => [
+    { date: `2026-${month}-01`, amount: 6000, direction: 'CREDIT', category: 'Salary', description: 'Pay', transfer_kind: null },
+    { date: `2026-${month}-02`, amount: 3500, direction: 'DEBIT', category: 'Rent', description: 'Rent', is_fixed: true, transfer_kind: null },
+    { date: `2026-${month}-03`, amount: 500, direction: 'DEBIT', category: 'Dining <night>', description: 'Cafe', is_fixed: false, transfer_kind: null }
+  ]);
+  const p = computePlan({
+    history, recent: [], goals: [],
+    debts: [{ id: 1, name: '<Visa>', balance: 10000, apr: 24, min_payment: 300, payment_in_history: true }],
+    settings: { debt_budget: 500, goal_budget: 0 }
+  }, { pro: true, now });
+  const calls = [];
+  const f = loadPlan(async (url, options = {}) => {
+    calls.push([url, options.method || 'GET']);
+    return response(200, { ...p, pro: true, thisMonth: [] });
+  });
+  await f.context.loadPayoffPlan();
+  const html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /YOUR STARTING POINT/);
+  assert.match(html, /Average recorded inflow[\s\S]*\$6,000\.00/);
+  assert.match(html, /Remaining before a cushion[\s\S]*\$1,800\.00/);
+  assert.match(html, /hold back \$400/);
+  assert.match(html, /Find your next extra dollar/);
+  assert.match(html, /Dining &lt;night&gt;/);
+  assert.doesNotMatch(html, /Dining <night>|<Visa>/);
+  assert.match(html, /free up <strong>\$50\.00\/mo/);
+  assert.match(html, /about \$104\/week/);
+  assert.match(html, /First finish: &lt;Visa&gt;/);
+  assert.match(html, /Your next 3 modeled months/);
+  assert.match(html, /not a claim that payments have happened/);
+  assert.match(html, /lowest modeled interest/);
+  assert.match(html, /not a verified emergency-fund balance/);
+  assert.deepEqual(calls, [['/api/plan', 'GET']]);
+  let opened;
+  f.context.openCategoryTransactions = async (...args) => { opened = args; };
+  f.node('plan-debt-root').contains = () => true;
+  const button = { dataset: { act: 'review-spending', category: 'Dining <night>' }, disabled: false };
+  await f.node('plan-debt-root').listeners.click({ target: { closest: () => button } });
+  assert.equal(opened[0], 'Dining <night>');
+  assert.deepEqual(Array.from(opened[1].months), ['2026-07', '2026-08', '2026-09']);
+  assert.deepEqual(calls, [['/api/plan', 'GET']]);
+});
+test('a final debt clearing this month shows no false months-saved or next-debt rollover', async () => {
+  const { computePlan } = await import('../backend/utils/moneyPlan.js');
+  const now = new Date(2026, 9, 20);
+  const data = computePlan({
+    debts: [{ id: 1, name: 'Last card', balance: 50, apr: 0, min_payment: 25, included: true, payment_in_history: true }],
+    goals: [], history: [], recent: [], settings: { debt_budget: 100, goal_budget: 0, flex: {} }
+  }, { now, pro: true });
+  const f = loadPlan(async () => response(200, { ...data, pro: true }));
+  await f.context.loadPayoffPlan();
+  const html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /same payoff month/);
+  assert.doesNotMatch(html, /0 months sooner/);
+  assert.match(html, /modeled payment month 1/);
+  assert.match(html, /this last included debt cleared/);
+  assert.doesNotMatch(html, /minimum rolls to any remaining debt/);
+});
 test('goals page shows the surplus split, status and pay cadence', async () => {
   const f = loadPlan(async () => response(200, planPayload()));
   await f.context.loadGoals();

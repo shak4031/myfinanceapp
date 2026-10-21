@@ -106,7 +106,11 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(trial.body.tier, 'trial');
     assert.equal(trial.body.daysLeft, 7);
     assert.equal(trial.body.plusActive, true);
-    assert.equal((await call('/api/plan', { cookie: customerCookie })).status, 200);
+    const trialPlan = await call('/api/plan', { cookie: customerCookie });
+    assert.equal(trialPlan.status, 200);
+    assert.equal(trialPlan.body.debtPlan.coaching.status, 'needs-history');
+    assert.equal(trialPlan.body.debtPlan.coaching.supportedExtra, 0);
+    assert.deepEqual(trialPlan.body.debtPlan.coaching.opportunities, []);
     assert.equal((await call('/api/debts', { cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/goals', { cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 409);

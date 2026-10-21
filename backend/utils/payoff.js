@@ -113,7 +113,7 @@ const summary = result => ({
 const money = value => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const monthsText = months => months >= 24 && months % 12 === 0 ? `${months / 12} years` : `${months} month${months === 1 ? '' : 's'}`;
 
-export function buildDebtPlan({ debts: rows = [], settings = {}, surplus = null, pro = false, now = new Date(), whatIf = null, hasEmergencyGoal = false } = {}) {
+export function buildDebtPlan({ debts: rows = [], settings = {}, pro = false, now = new Date(), whatIf = null, hasEmergencyGoal = false } = {}) {
   const all = rows.map(normalizeDebt);
   const included = all.filter(debt => debt.included && debt.balance > 0);
   const excluded = all.filter(debt => !debt.included && debt.balance > 0);
@@ -140,18 +140,6 @@ export function buildDebtPlan({ debts: rows = [], settings = {}, surplus = null,
   const monthlyInterest = cents(included.reduce((sum, debt) => sum + debt.balance * debt.apr / 1200, 0));
   const weightedApr = totalBalance ? cents(included.reduce((sum, debt) => sum + debt.balance * debt.apr, 0) / totalBalance) : 0;
 
-  let suggestion = null;
-  if (included.length && surplus > 50 && plan.feasible) {
-    const amount = Math.floor(surplus * 0.5 / 25) * 25;
-    if (amount >= 25) {
-      const boosted = simulatePayoff(included, { budget: budget + amount, strategy, start: now });
-      if (boosted.debtFree) suggestion = {
-        extra: amount, budget: cents(budget + amount), months: boosted.months, debtFreeDate: boosted.debtFreeDate,
-        monthsSaved: plan.debtFree ? plan.months - boosted.months : null, interestSaved: plan.debtFree ? cents(plan.totalInterest - boosted.totalInterest) : null
-      };
-    }
-  }
-
   let scenario = null;
   if (whatIf && pro && included.length) {
     const scenarioExtra = Math.max(0, Number(whatIf.extra) || 0), lumpSum = Math.max(0, Number(whatIf.lumpSum) || 0);
@@ -173,7 +161,7 @@ export function buildDebtPlan({ debts: rows = [], settings = {}, surplus = null,
       if (debt.min_payment <= debt.balance * debt.apr / 1200 + 0.005) add('danger', `${debt.name} never shrinks at its minimum`, `Its ${money(debt.min_payment)} minimum barely covers about ${money(debt.balance * debt.apr / 1200)} of monthly interest. Put extra money here first or ask the lender about a hardship rate.`);
     }
     const priciest = [...included].sort((a, b) => b.apr - a.apr)[0];
-    if (priciest.apr >= 15) add('warning', `${priciest.name} is your most expensive money`, `At ${priciest.apr}% APR it costs about ${money(priciest.balance * priciest.apr / 1200)} a month in interest. Every extra dollar here is a guaranteed ${priciest.apr}% return, which is hard to beat anywhere else.`);
+    if (priciest.apr >= 15) add('warning', `${priciest.name} is your most expensive money`, `At ${priciest.apr}% APR it costs about ${money(priciest.balance * priciest.apr / 1200)} a month in interest. Reducing its principal lowers future interest at the current rate; actual savings depend on payment timing, rate changes and new charges. Keep essential bills and all minimums covered first.`);
     const focus = included.filter(debt => debt.focus);
     const avalanche = comparison.find(item => item.id === 'avalanche');
     if (focus.length && plan.debtFree) {
@@ -190,12 +178,11 @@ export function buildDebtPlan({ debts: rows = [], settings = {}, surplus = null,
       else if (strategy === 'snowball') add('info', `Snowball costs ${money(gap)} more than avalanche`, 'You are paying that for faster early wins. Switch to avalanche any time to keep that money.');
     }
     if (extra === 0 && plan.feasible) add('info', 'You are only paying minimums', `Minimums alone take ${baseline.debtFree ? monthsText(baseline.months) : 'more than 50 years'} and ${baseline.debtFree ? money(baseline.totalInterest) : 'an unknown amount'} in interest. Even a small extra amount shortens that a lot.`);
-    if (suggestion?.monthsSaved > 0) add('success', `Adding ${money(suggestion.extra)} a month makes you debt-free ${monthsText(suggestion.monthsSaved)} sooner`, `That is about half of your typical monthly surplus and saves ${money(suggestion.interestSaved)} in interest.`);
     for (const debt of included.filter(item => item.debt_type === 'credit_card' && item.credit_limit > 0)) {
       const utilization = debt.balance / debt.credit_limit;
       if (utilization > 0.3) add('info', `${debt.name} is ${Math.round(utilization * 100)}% of its limit`, `Getting below 30% (${money(debt.credit_limit * 0.3)}) usually helps your credit score.`);
     }
-    if (!hasEmergencyGoal && priciest.apr >= 8) add('info', 'Keep a starter emergency fund', 'Hold about $1,000 or one month of bills in savings before going all-in, so a surprise expense does not land back on a card.');
+    if (!hasEmergencyGoal && priciest.apr >= 8) add('info', 'Protect a starter emergency reserve', 'Choose an accessible cash reserve based on your essential bills, income stability and likely surprise expenses before going all-in. Even a small reserve can reduce the need to borrow again. The planner cannot verify how much emergency cash you actually have.');
     const cheap = included.filter(debt => debt.apr > 0 && debt.apr < 5);
     if (cheap.length && included.some(debt => debt.apr >= 8)) add('info', 'Low-rate debt can wait', `${cheap.map(debt => debt.name).join(', ')} ${cheap.length === 1 ? 'is' : 'are'} under 5% APR. Clear high-rate debt first; extra payments on cheap debt are the last priority.`);
   }
@@ -219,7 +206,7 @@ export function buildDebtPlan({ debts: rows = [], settings = {}, surplus = null,
     totals: { balance: totalBalance, monthlyInterest, weightedApr, included: included.length, excluded: excluded.length, count: all.length },
     plan: { ...summary(plan), series: plan.series, payoffs: plan.payoffs },
     baseline: { ...summary(baseline), series: baseline.series },
-    comparison, suggestion, scenario, guidance, debts,
+    comparison, suggestion: null, scenario, guidance, debts,
     interestSavedVsMinimums: plan.debtFree && baseline.debtFree ? cents(baseline.totalInterest - plan.totalInterest) : null,
     monthsSavedVsMinimums: plan.debtFree && baseline.debtFree ? baseline.months - plan.months : null
   };

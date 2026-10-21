@@ -103,6 +103,81 @@
     <button type="button" class="btn btn-primary" data-act="unlock" data-reason="${esc(reason)}">Unlock with Pro Plus</button></div></div>`;
 
   // ---------- debt-free program ----------
+  function impactText(result) {
+    if (!result.feasible) return 'Cover minimums before adding extra.';
+    if (!result.debtFree) return 'Not paid off within the 50-year model.';
+    const timing = result.monthsSaved == null ? '' : result.monthsSaved === 0 ? ' · same payoff month'
+      : ` · ${result.monthsSaved} month${result.monthsSaved === 1 ? '' : 's'} sooner`;
+    return `${monthLabel(result.debtFreeDate)}${timing}${result.interestSaved > 0 ? ` · ${money(result.interestSaved)} less interest` : ''}`;
+  }
+
+  function debtAssessment(p) {
+    const c = p.debtPlan.coaching;
+    if (!c) return '';
+    const messages = {
+      'needs-history': ['Start with a clear picture', 'Import completed-month statements before committing to an extra payment. Unknown affordability is not spare cash.'],
+      'minimum-gap': ['Protect the minimums first', 'Your debt budget does not cover all minimum payments. Review essential bills and contact lenders about hardship options before accelerating any one debt.'],
+      stabilize: ['Build breathing room before speed', 'A tighter observed month or your current allocations leave a shortfall. Keep essential bills current, review the spending below, and avoid committing more until cash flow stabilizes.'],
+      'review-history': ['A promising start, not a commitment yet', 'We need three observed completed months with inflows and outflows to suggest an increase. Missing statements or irregular deposits can make the average look stronger than it is.'],
+      'room-to-accelerate': ['There may be room to move the date', `After goals, existing extra payments and an illustrative cushion, the model leaves up to ${money(c.supportedExtra)}/mo for review. Verify available cash and your emergency reserve before applying it.`],
+      'protect-buffer': ['Consistency is the next win', 'There is no supported increase after the tighter month and planning cushion. Stay with a manageable payment; test one spending change before raising it.']
+    };
+    const [title, detail] = messages[c.status];
+    const line = (label, value) => `<div><dt>${label}</dt><dd>${value == null ? 'Unknown' : cents(value)}</dd></div>`;
+    return `<section class="panel plan-card plan-assessment">
+      <header class="plan-card-head"><div><p class="plan-eyebrow">YOUR STARTING POINT</p><h3>${esc(title)}</h3><p>${esc(detail)}</p></div></header>
+      <dl class="plan-cash-ledger">
+        ${line('Average recorded inflow / month', c.averageIncome)}${line('Average spending, including reserved minimums', c.averageExpenses)}
+        ${line('Typical monthly surplus', c.surplus)}${line('Reserved extra debt payment', c.currentExtra)}
+        ${line('Reserved savings goals', c.goalContributions)}${line('Remaining before a cushion', c.remaining)}
+      </dl>
+      <details class="plan-analysis-details"><summary>How much can this history support?</summary>
+        <p>Uses ${c.monthsUsed} of the last 3 completed months with records. These are recorded inflows, not verified recurring salary. Transfers are excluded. Three observed months do not prove all statements are imported.</p>
+        ${c.months.length ? `<ul class="plan-history-months">${c.months.map(row => `<li><span>${monthLabel(row.month)}</span><span>In ${money(row.income)} · out ${money(row.expenses)}</span><strong class="${row.surplus < 0 ? 'is-bad' : ''}">${cents(row.surplus)} left</strong></li>`).join('')}</ul>` : ''}
+        <p>Reserved minimums not in imported spending: ${money(c.unrecordedMinimums)}/mo. We use the lower of average surplus and the tightest observed month (${c.weakestSurplus == null ? 'unknown' : money(c.weakestSurplus)}), subtract goals and existing extra payments, then hold back ${c.buffer == null ? 'an unknown amount' : money(c.buffer)}: the greater of $100 or 10% of spending. This is a conservative planning rule, not a verified emergency-fund balance or a guarantee of affordability.</p>
+        <p>For debt extras and each savings goal, we reserve the higher of the long-term allocation and this month's flexible amount. A temporary reduction does not create permanent headroom. Scenarios still compare against your long-term debt budget.</p>
+        <p>Review missing accounts, irregular income, annual bills and minimum-payment settings. Check the dashboard runway before moving money. The app never sends a payment.</p>
+        <p>If minimums are difficult, consider <a href="https://www.consumerfinance.gov/ask-cfpb/what-is-credit-counseling-en-1451/">credit counseling</a>. Learn about <a href="https://www.consumerfinance.gov/an-essential-guide-to-building-an-emergency-fund/">building an emergency reserve</a> from the CFPB.</p>
+      </details>
+    </section>`;
+  }
+
+  function spendingAttack(p) {
+    const c = p.debtPlan.coaching;
+    if (!c) return '';
+    return `<section class="panel plan-card">
+      <header class="plan-card-head"><div><h3>Find your next extra dollar</h3><p>Choose one manageable experiment, not an overhaul. These are possibilities to review, not money already available.</p></div></header>
+      ${c.opportunities.length ? `<div class="plan-spending-options">${c.opportunities.map(row => `<article class="plan-spending-option">
+        <header><strong>${esc(row.category)}</strong><button type="button" class="link-btn" data-act="review-spending" data-category="${esc(row.category)}">Review activity</button></header>
+        <p>Observed ${money(row.average)}/mo · ${row.count} purchases. Try 10% less: free up <strong>${cents(row.reduction)}/mo</strong>.</p>
+        <p>Trial ceiling: ${money(row.monthlyTarget)}/month (about ${money(row.weeklyTarget)}/week).</p>
+        <p class="plan-impact">${esc(impactText(row.impact))}</p>
+        <small>If sustained and paid above your current debt budget. Review essentials and miscategorized charges first; categories do not tell us what you can comfortably give up.</small>
+      </article>`).join('')}</div>` : '<p class="plan-quiet">No clear discretionary category to suggest from these records. Review recurring services or lender rates; essentials are not assumed to be cuttable.</p>'}
+      <details class="plan-analysis-details"><summary>What would a small monthly increase change?</summary>
+        <p>Independent scenarios above your current budget, not amounts to add together. They do not assume any spending experiment succeeds.</p>
+        <div class="plan-scenario-grid">${c.scenarios.map(row => `<article><strong>+${money(row.extra)}/mo</strong><p>${esc(impactText(row))}</p><small>${row.supported ? 'Within the history-based allowance; verify cash first.' : 'Requires a new funding source or more complete history.'}</small></article>`).join('')}</div>
+      </details>
+      <p class="plan-quiet">For the next 30 days: choose one category, set its weekly ceiling, and review what actually remains each payday. Only redirect money after essentials, minimums and your reserve are covered. A smaller repeatable step beats an ambitious payment you need to borrow back.</p>
+    </section>`;
+  }
+
+  function debtMilestones(p) {
+    const c = p.debtPlan.coaching;
+    if (!c) return '';
+    const m = c.milestones, d = p.debtPlan;
+    const target = d.debts.find(row => row.rank === 1);
+    return `<section class="panel plan-card">
+      <header class="plan-card-head"><div><h3>Make the next step visible</h3><p>Projected checkpoints, not a claim that payments have happened.</p></div></header>
+      <ol class="plan-next-steps">
+        <li><strong>This month: keep every minimum covered</strong><p>${money(d.minimums)} across included debts.${target && d.plan.feasible ? ` Direct ${money(d.extra)} extra to ${esc(target.name)} first, then the next debt if it clears.` : ''} Verify due dates and available cash before paying.</p></li>
+        <li><strong>Your next ${m.months || 3} modeled months</strong><p>${m.principalReduction == null ? 'Set a budget covering minimums to see a checkpoint.' : `${money(m.principalReduction)} ${m.principalReduction < 0 ? 'more balance: interest currently outpaces payments' : 'less principal owed'}, assuming no new charges.`}</p></li>
+        <li><strong>${m.firstWin ? `First finish: ${esc(m.firstWin.name)}` : 'Build toward your first payoff'}</strong><p>${m.firstWin ? `${monthLabel(m.firstWin.date)} · modeled payment month ${m.firstWin.month}. ${d.totals.included > 1 ? `Its ${money(m.firstWin.rolledMinimum)}/mo minimum rolls to any remaining debt; it is not new spending money.` : 'With this last included debt cleared, review your reserve and next goal before spending the freed payment.'}` : 'The current model has no payoff checkpoint yet. Review the budget and lender options.'}</p></li>
+      </ol>
+      <p class="plan-quiet">Weekly check-in: acknowledge the action you completed, compare actual spending with your trial ceiling, and adjust without blame. Update balances and rates from statements so the next projection reflects reality.</p>
+    </section>`;
+  }
+
   function chart(debtPlan) {
     const charts = window.ProCharts;
     const plan = debtPlan.plan, baseline = debtPlan.baseline, scenario = state.whatIf.result;
@@ -165,6 +240,7 @@
       <div class="plan-split" aria-hidden="true"><span class="is-min" style="flex:${Math.max(1, d.minimums)}"></span><span class="is-extra" style="flex:${Math.max(0, d.extra)}"></span></div>
       <div class="plan-split-legend"><span class="is-min">Minimums ${money(d.minimums)}</span><span class="is-extra">Extra ${money(d.extra)}</span>${surplus != null ? `<span class="is-surplus">Typical surplus ${money(surplus)}/mo</span>` : ''}</div>
       ${suggestion}
+      ${suggestion ? '<p class="plan-quiet">This increase uses the history-based allowance after goals and a planning cushion. Applying changes the plan only; verify cash, emergency savings and due dates first.</p>' : ''}
     </section>`;
   }
 
@@ -266,7 +342,14 @@
       : item.feasible === undefined ? '<span class="plan-strategy-meta">Set your own order</span>'
       : !item.feasible ? '<span class="plan-strategy-meta">Budget below minimums</span>'
       : `<span class="plan-strategy-meta"><b>${item.debtFree ? monthLabel(item.debtFreeDate) : '50+ yrs'}</b><i>${money(item.totalInterest)} interest</i></span>
-        ${item.firstTarget ? `<span class="plan-strategy-first">Extra goes to <b>${esc(item.firstTarget)}</b> first</span>` : ''}`;
+        ${item.firstTarget ? `<span class="plan-strategy-first">Extra goes to <b>${esc(item.firstTarget)}</b> first</span>` : ''}
+        ${strategyTradeoff(item)}`;
+    function strategyTradeoff(item) {
+      const row = d.coaching?.strategyTradeoffs.find(row => row.id === item.id);
+      if (!row) return '';
+      return `<span class="plan-strategy-first">${row.firstWin ? `First finish: ${esc(row.firstWin.name)} · ${monthLabel(row.firstWin.date)}` : 'No first payoff in the model'}</span>
+        ${row.interestDifference == null || row.interestDifference === 0 ? '' : `<span class="plan-strategy-first">${money(Math.abs(row.interestDifference))} ${row.interestDifference > 0 ? 'more' : 'less'} interest than your selected plan</span>`}`;
+    }
     const hasDebts = d.debts.length > 0;
     const sameOrder = (a, b) => a.order?.length && a.order.join('|') === b.order?.join('|');
     const compared = strategies.filter(item => !item.locked && item.feasible);
@@ -274,17 +357,20 @@
     const active = strategies.find(item => item.id === d.strategy);
     const tieNote = twins.length > 1 && twins.some(item => item.id === d.strategy)
       ? `<p class="plan-strategy-note">${icon('info', 14)}<span><b>${esc(twins.map(item => item.name).join(', ').replace(/, ([^,]*)$/, ' and $1'))}</b> attack your debts in the same order with these balances and rates, so their dates and interest match. Switching between them changes nothing today; it will once your balances or rates diverge.</span></p>` : '';
-    const strategyIntro = `Each card shows the month you'd be debt-free and the total interest you'd pay with that strategy at your current ${money(d.budget)}/mo budget. Every strategy pays all minimums; they differ only in where the extra money goes. Star a debt to pay it first regardless.`;
+    const strategyIntro = `Each card compares the same ${money(d.budget)}/mo budget. Recommended means lowest modeled interest among available strategies, not a judgment about what will motivate you. Compare the first finish as well as the final date: snowball may offer an earlier win at a higher interest cost. Every funded strategy covers all minimums and rolls freed payments forward. A starred debt overrides the order.`;
     root.innerHTML = `${hasDebts ? debtHero(p) : ''}
+      ${hasDebts ? debtAssessment(p) : ''}
       ${d.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Your saved strategy needs MyFinance Pro Plus, so the plan is using Avalanche. <button type="button" class="link-btn" data-act="unlock" data-reason="Advanced payoff strategies are part of MyFinance Pro Plus">Renew Pro Plus</button></p>` : ''}
-      ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy${active ? ` <span class="plan-strategy-current">Using ${esc(active.name)}</span>` : ''}</h3><p>${strategyIntro}</p></div><a class="plan-help-link" href="#tutorials/debt-strategies" title="How strategies work">${icon('play', 13)} How it works</a></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}${tieNote}</section>` : ''}
+      ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy${active ? ` <span class="plan-strategy-current">Using ${esc(active.name)}</span>` : ''}</h3><p>${strategyIntro}</p></div><a class="plan-help-link" href="#tutorials/debt-strategies" title="How strategies work">${icon('play', 13)} How it works</a></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}${active ? `<p class="plan-quiet">${esc(active.detail)}</p>` : ''}${tieNote}</section>` : ''}
       <div class="plan-columns">
         <div class="plan-col-main">
           ${hasDebts ? budgetPanel(p) : ''}
+          ${hasDebts ? spendingAttack(p) : ''}
           <section class="plan-section-head"><div><h3>Your debts</h3><p>Switch a debt off to keep paying it as usual outside the program.</p></div><button type="button" class="btn btn-primary" data-act="add-debt">${icon('plus', 15)} Add debt or loan</button></section>
           ${debtCards(p)}
         </div>
         <aside class="plan-col-side">
+          ${hasDebts ? debtMilestones(p) : ''}
           ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Guidance</h3><p>Based on your rates, balances and recent cash flow.</p></div></header>${guidanceList(d.guidance)}</section>` : ''}
           ${whatIfPanel(p)}
           ${monthPanel(p)}
@@ -435,6 +521,12 @@
       case 'add-goal': return window.openAddGoalModal?.();
       case 'edit-goal': return window.openAddGoalModal?.(id);
       case 'flex': return openFlex(button.dataset.key);
+      case 'review-spending': {
+        const months = state.plan.debtPlan.coaching.months.map(row => row.month);
+        try {
+          return await window.openCategoryTransactions(button.dataset.category, { months, label: 'Debt plan review · observed completed months' });
+        } catch (error) { reportFailure(error); return; }
+      }
       case 'debt-strategy': case 'goal-strategy': {
         const list = act === 'debt-strategy' ? state.plan.debtPlan.strategies : state.plan.goalPlan.strategies;
         const choice = list.find(item => item.id === id);

@@ -2,6 +2,7 @@ import { buildFinancialPlan } from './financialPlan.js';
 import { buildDebtPlan, monthKey } from './payoff.js';
 import { buildGoalPlan } from './goalPlan.js';
 import { projectIncome } from './income.js';
+import { buildDebtCoaching } from './debtCoaching.js';
 
 const cents = value => Math.round(value * 100) / 100;
 const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -27,7 +28,7 @@ export async function loadPlanInputs(db, now = new Date()) {
     const goals = (await client.query('SELECT * FROM savings_goals ORDER BY priority, id')).rows;
     const settings = (await client.query('SELECT * FROM money_plans LIMIT 1')).rows[0];
     const history = (await client.query(`
-      SELECT id, date, description, category, direction, amount, transfer_kind FROM transactions
+      SELECT id, date, description, category, direction, amount, transfer_kind, is_fixed FROM transactions
       WHERE date::date >= (date_trunc('month', $1::date) - INTERVAL '3 months')::date
         AND date::date < date_trunc('month', $1::date)::date`, [dateString(now)])).rows;
     const recent = (await client.query(`
@@ -54,7 +55,7 @@ export function computePlan({ debts, goals, settings, history, recent }, { pro =
   const financial = buildFinancialPlan(history, goals, now, active);
   const surplus = financial.monthlySurplus;
   const hasEmergencyGoal = goals.some(goal => /emergency|rainy/i.test(goal.name || '') || /^\[plan:emergency\]/.test(goal.notes || ''));
-  const debtPlan = buildDebtPlan({ debts, settings, surplus, pro, now, whatIf, hasEmergencyGoal });
+  const debtPlan = buildDebtPlan({ debts, settings, pro, now, whatIf, hasEmergencyGoal });
   // The surplus already includes recorded minimums, so only the extra debt payment competes with goals.
   const available = surplus == null ? null : cents(surplus - debtPlan.extra);
   const priciest = debtPlan.debts.filter(debt => debt.included && debt.balance > 0 && debt.apr >= 15).sort((a, b) => b.apr - a.apr)[0];
@@ -62,6 +63,9 @@ export function computePlan({ debts, goals, settings, history, recent }, { pro =
     goals, settings, available, monthlyExpenses: financial.avgMonthlyExpenses, pro, now,
     highAprDebt: priciest ? { name: priciest.name, apr: priciest.apr } : null
   });
+  const coaching = buildDebtCoaching({ history, financial, debtPlan, goalPlan, now, flex: settings.flex?.[monthKey(now)] || {} });
+  debtPlan.coaching = coaching;
+  debtPlan.suggestion = coaching.suggested?.debtFree ? coaching.suggested : null;
   const income = projectIncome(recent, now);
   return {
     month: monthKey(now, 0),

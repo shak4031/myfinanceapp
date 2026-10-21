@@ -472,6 +472,36 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
 - Strategies: **Avalanche** (highest APR first), **Snowball** (smallest balance first),
   **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
 - APR-driven guidance, a suggested extra payment, and a debt-free date chart vs. minimums only
+- **Starting-point assessment:** shows recorded monthly inflows, spending, surplus,
+  existing extra payments, allocated goal contributions and what remains. Expand
+  the assessment to inspect each observed completed month and the funding rule.
+  These are imported cash flows, not verified recurring salary or a live cash balance.
+- **Conservative acceleration allowance:** with three observed completed months
+  containing inflows and outflows and a minimum-covering debt budget, take the lower of average
+  surplus and the tightest month's surplus, subtract existing extra payments and
+  allocated goal contributions, then reserve the greater of $100 or 10% of average
+  spending. Round the remaining increase down to $25 increments. Minimums marked
+  missing from history reduce both the average and each month's surplus once.
+  For debt extras and each goal, reserve the higher of the long-term amount and
+  this month's flexible override; temporary reductions do not inflate headroom.
+  Missing history, negative cash flow or an overcommitted plan suppresses an
+  increase suggestion. The cushion is an illustrative heuristic, not a personalized
+  emergency-fund target or guarantee; incomplete imports can overstate capacity.
+- **Spending experiments:** review up to three discretionary categories, excluding
+  fixed-marked charges, transfers and essential/debt category names. A hypothetical
+  10% reduction provides a monthly/weekly ceiling and an independently simulated
+  payoff date and interest impact. Review activity opens the underlying category
+  transactions for the same observed months. These savings are never assumed to
+  exist, combined automatically, or applied to a budget.
+- **Motivation grounded in the model:** $25/$50/$100 extra-payment comparisons,
+  first-payoff dates and interest tradeoffs by strategy, the next three modeled
+  months' principal reduction and the first minimum that rolls forward. These are
+  projections, not recorded achievements. Weekly review prompts favor sustainable
+  choices and adjustment without blame. No payment is executed by the app.
+- Guidance links to CFPB resources on [emergency savings](https://www.consumerfinance.gov/an-essential-guide-to-building-an-emergency-fund/)
+  and [credit counseling](https://www.consumerfinance.gov/ask-cfpb/what-is-credit-counseling-en-1451/).
+  It avoids guaranteed-return or credit-score promises; rates, lender terms and
+  future behavior can change results.
 - Pro Plus what-if simulator (extra per month and lump sums)
 - Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
 - **How the strategy dates work:** every strategy is simulated month by month at your
