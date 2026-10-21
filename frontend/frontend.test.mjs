@@ -1994,19 +1994,22 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.equal(slides.length, 3);
   assert.match(slides[0], /tone-danger[^]*welcome-slide-tone">Action needed<\/span>[^]*Balance dips &lt;below&gt; zero[^]*Move a payment\.[^]*data-welcome-action="0">See upcoming/);
   assert.match(slides[1], /tone-warning[^]*welcome-slide-tone">Heads up<\/span>[^]*Dining is over budget/);
-  assert.doesNotMatch(html, /⚠️|🔥/);
+  assert.doesNotMatch(html, /⚠️|🔥|👋|👏|welcome-wave/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');
   await f.context.FinanceWelcome.load();
   assert.doesNotMatch(f.node('welcome-hero').innerHTML, /Take a one-minute tour/);
 });
-test('welcome styling uses soft financial accents and scoped urgency with reduced motion', () => {
+test('welcome styling pairs a rich insight stage with accessible urgency and reduced motion', () => {
   const css = source('welcome.css');
   assert.match(css, /--welcome-accent: #16705b/);
   assert.match(css, /\.welcome-pulse-row\.is-sky \{[^}]*background: #eff5fb/);
   assert.match(css, /\.welcome-pulse-row\.is-grape \{[^}]*background: #f4f1f8/);
   assert.match(css, /\.welcome-pulse-row \{[^}]*background: #f8faf7/);
-  assert.match(css, /\.welcome-slide\.tone-danger \{ --tone: #a52d40/);
+  assert.match(css, /\.welcome-slide\.tone-danger \{ --tone: #ffbfc7/);
+  assert.match(css, /linear-gradient\(120deg, #152d46, #184c53\)/);
+  assert.match(css, /background: #dcbd80; color: #182e40/);
+  assert.match(css, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*animation: none !important; transition: none !important/);
   assert.doesNotMatch(css, /@keyframes[^]*(?:confetti|aurora|welcome-flip|welcome-wave)/);
 });

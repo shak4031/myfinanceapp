@@ -124,7 +124,7 @@
       <div class="welcome-top">
         <div class="welcome-greeting">
           <p class="welcome-date">${esc(today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))}</p>
-          <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}<span class="welcome-wave" aria-hidden="true">👋</span></h1>
+          <h1>${esc(greeting(today))}${name ? `, <span class="welcome-name">${esc(name)}</span>` : ''}</h1>
         </div>
         <div class="welcome-top-actions">
           <a class="welcome-ghost" href="#tutorials/dashboard">${icon('play', 15)}Tour</a>

@@ -200,8 +200,10 @@ calendar-filter, filtered-summary, and request-order regressions.
 ### Actionable alerts and account review
 
 The welcome greeting is followed directly by the rotating insight carousel.
-Its restrained emerald, blue and lavender palette pairs simple line icons with
-a small, static greeting wave. Red and amber accents remain reserved for urgent
+Its navy-to-teal insight stage, champagne action buttons and subtle contour rings
+add character without animated decoration or greeting emoji. Simple line icons and
+emerald, blue and lavender metric cards complement the rest of the app.
+Rose and amber insight accents remain reserved for urgent
 insights and at-risk balances; softly tinted metric cards keep amounts easy to scan.
 The carousel uses a gentle transition, retains pause and manual navigation,
 and respects reduced-motion preferences.
@@ -327,8 +329,9 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   balance dipping below a safe level before payday, debt-free progress, goal status,
   price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
   can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
-  The hero uses a soft sage-to-blue backdrop, emerald actions, line icons and subtle
-  transitions. Muted blue and lavender accents add warmth without competing with warnings.
+  The hero pairs a light greeting with a navy-to-teal insight stage, champagne
+  actions, line icons and subtle transitions. Balanced three-column metric rows
+  become two columns on phones, with blue and lavender accents alongside emerald.
   The stage resizes smoothly to each message, with reduced-motion support.
 - **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
   debt-free month. Insights come from `GET /api/dashboard/insights`
