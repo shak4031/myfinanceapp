@@ -76,16 +76,15 @@
     return `<svg class="pro-spark ${className}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,${height} ${points.join(' ')} ${width},${height}"/><polyline points="${points.join(' ')}"/><circle cx="${last[0]}" cy="${last[1]}" r="2.6"/></svg>`;
   }
 
-  // Compact monthly histogram used inside category cards.
-  function histogram(values, labels, { width = 240, height = 64 } = {}) {
+  function trendLine(values, labels, { width = 280, height = 88 } = {}) {
     const max = niceMax(Math.max(...values, 0)), avg = values.reduce((a, b) => a + b, 0) / (values.length || 1);
-    const step = width / Math.max(1, values.length), bw = Math.max(3, Math.min(22, step * 0.66));
-    const y = v => height - 2 - (v / max) * (height - 8);
-    const rects = values.map((v, i) => {
-      const h = Math.max(v > 0 ? 2 : 1, height - 2 - y(v));
-      return `<rect class="${i === values.length - 1 ? 'is-current' : ''}" x="${n(step * i + (step - bw) / 2)}" y="${n(height - 2 - h)}" width="${n(bw)}" height="${n(h)}" rx="2.5"><title>${esc(labels[i])}: ${compact(v)}</title></rect>`;
+    const x = i => 6 + i * (width - 12) / Math.max(1, values.length - 1);
+    const y = v => height - 6 - (v / max) * (height - 14);
+    const points = values.map((v, i) => `${n(x(i))},${n(y(v))}`).join(' ');
+    const dots = values.map((v, i) => {
+      return `<circle cx="${n(x(i))}" cy="${n(y(v))}" r="${i === values.length - 1 ? 4 : 2.5}"><title>${esc(labels[i])}: ${esc(Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD' }))}</title></circle>`;
     }).join('');
-    return `<svg class="pro-hist" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Monthly spending">${rects}<line x1="0" x2="${width}" y1="${n(y(avg))}" y2="${n(y(avg))}"/></svg>`;
+    return `<svg class="pro-category-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Monthly spending trend, ${labels[0]} to ${labels[labels.length - 1]}. Dashed line: monthly average ${compact(avg)}.`)}"><title>${esc(labels.map((label, i) => `${label}: ${compact(values[i])}`).join('; '))}</title><line class="trend-average" x1="6" x2="${width - 6}" y1="${n(y(avg))}" y2="${n(y(avg))}"/><polyline points="${points}"/>${dots}</svg>`;
   }
 
   // Donut built from stroked circle segments, with a small gap between slices.
@@ -102,5 +101,5 @@
     return `<svg class="pro-donut" viewBox="0 0 ${size} ${size}" role="img" aria-label="Spending by category"><g transform="rotate(-90 ${size / 2} ${size / 2})"><circle class="track" cx="${size / 2}" cy="${size / 2}" r="${n(r)}" stroke-width="${thickness}"/>${segments}</g><text class="donut-label" x="50%" y="46%" text-anchor="middle">${esc(centerLabel)}</text><text class="donut-value" x="50%" y="58%" text-anchor="middle">${esc(centerValue)}</text></svg>`;
   }
 
-  window.ProCharts = { PALETTE, bars, plot, sparkline, histogram, donut, compact, monthShort, niceMax };
+  window.ProCharts = { PALETTE, bars, plot, sparkline, trendLine, donut, compact, monthShort, niceMax };
 })();

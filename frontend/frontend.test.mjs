@@ -1558,7 +1558,7 @@ test('Pro chart helpers produce scalable SVG', () => {
   assert.equal((donut.match(/class="slice"/g) || []).length, 2);
   assert.match(donut, /A &lt;b&gt;: \$60 \(60%\)/);
 });
-test('category analytics derive monthly series and only show a histogram for 2+ months', () => {
+test('category analytics derive monthly series but never draw card trends below six months', () => {
   const { FinanceProCategories: C } = loadPro().context;
   const transactions = [
     { category: 'Dining', date: '2026-01-05', amount: 100, direction: 'DEBIT' },
@@ -1575,9 +1575,47 @@ test('category analytics derive monthly series and only show a histogram for 2+ 
   assert.deepEqual([...dining.series], [100, 0, 300]);
   assert.equal(dining.share, 0.8);
   assert.equal(stats.categories.get('Transfers').share, null);
-  assert.match(C.cardExtra(dining, months, 'above'), /pro-hist/);
+  assert.match(C.cardExtra(dining, months, true), /at least 6 completed months/);
+  assert.doesNotMatch(C.cardExtra(dining, months, true), /<svg/);
   const single = C.categoryStats(transactions, ['2026-03']);
-  assert.doesNotMatch(C.cardExtra(single.categories.get('Dining'), ['2026-03'], 'inline'), /pro-hist/);
+  assert.doesNotMatch(C.cardExtra(single.categories.get('Dining'), ['2026-03'], true), /<svg/);
+  const six = ['2025-10', '2025-11', '2025-12', ...months];
+  const entry = C.categoryStats(transactions, six).categories.get('Dining');
+  assert.doesNotMatch(C.cardExtra(entry, six.slice(1), true), /<svg/);
+  const chart = C.cardExtra(entry, six, true);
+  assert.match(chart, /6-month trend[\s\S]*pro-category-line/);
+  assert.match(chart, /Dashed line: monthly average/);
+  assert.match(chart, /New spending/);
+  assert.doesNotMatch(chart, /<rect|pro-hist|Running hot|Cooling/);
+  assert.doesNotMatch(C.cardExtra(entry, six, false), /<svg/);
+  const noSpend = C.cardExtra(null, six, true);
+  assert.match(noSpend, /No spending/);
+  assert.doesNotMatch(noSpend, /<svg|NaN|Infinity/);
+});
+test('category trend windows expand short selections to six completed months and cap long ones at 24', () => {
+  const { FinanceProCategories: C } = loadPro().context;
+  const now = new Date(2026, 9, 20);
+  const window = months => Array.from(C.trendMonths({ months }, [], now));
+  assert.deepEqual(window(['2026-08', '2026-09', '2026-10']), ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']);
+  assert.deepEqual(window(['2026-10']), window(['2026-09']));
+  assert.deepEqual(window(['2026-01']), ['2025-08', '2025-09', '2025-10', '2025-11', '2025-12', '2026-01']);
+  assert.deepEqual(window([]), []);
+  const long = Array.from(C.periodMonths(null, [{ date: '2023-01-01' }, { date: '2026-09-01' }]));
+  const capped = window(long);
+  assert.equal(capped.length, 24);
+  assert.equal(capped[0], '2024-10');
+  assert.equal(capped.at(-1), '2026-09');
+  assert.deepEqual(Array.from(C.trendMonths(null, [{ date: '2026-07-01' }, { date: '2026-10-01' }], now)), window(['2026-09']));
+});
+test('category trend lines use a zero-based scale, monthly values and an average reference', () => {
+  const { ProCharts } = loadPro().context;
+  const chart = ProCharts.trendLine([100, 100, 100, 100, 100, 100], ['A <b>', 'Feb', 'Mar', 'Apr', 'May', 'Jun']);
+  assert.match(chart, /role="img"[\s\S]*A &lt;b&gt;/);
+  assert.match(chart, /class="trend-average"/);
+  assert.equal((chart.match(/<circle /g) || []).length, 6);
+  assert.match(chart, /A &lt;b&gt;: \$100\.00/);
+  assert.doesNotMatch(chart, /<rect|NaN|Infinity/);
+  assert.doesNotMatch(ProCharts.trendLine([0, 0, 0, 0, 0, 0], ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']), /NaN|Infinity/);
 });
 test('Pro category insights render as an opt-in disclosure, skip inactive cards, and respect the Analytics switch', async () => {
   const f = loadPro();
@@ -1595,7 +1633,10 @@ test('Pro category insights render as an opt-in disclosure, skip inactive cards,
   f.node('categories-view').querySelectorAll = () => [{ remove() { removed++; } }];
   f.node('category-cards').querySelectorAll = () => cards;
   f.node('category-cards').insertAdjacentHTML = (position, html) => markup.push(html);
-  const event = { detail: { period: { label: 'Jan - Feb 2026', months: ['2026-01', '2026-02'] }, transactions: [
+  const allTransactions = ['2025-09', '2025-10', '2025-11', '2025-12', '2026-01', '2026-02'].map(month => ({
+    category: 'Dining', date: `${month}-05`, amount: 150, direction: 'DEBIT', transfer_kind: null
+  }));
+  const event = { detail: { period: { label: 'Jan - Feb 2026', months: ['2026-01', '2026-02'] }, allTransactions, transactions: [
     { category: 'Dining', date: '2026-01-05', amount: 100, direction: 'DEBIT', transfer_kind: null },
     { category: 'Dining', date: '2026-02-05', amount: 200, direction: 'DEBIT', transfer_kind: null }
   ] } };
@@ -1603,14 +1644,20 @@ test('Pro category insights render as an opt-in disclosure, skip inactive cards,
   assert.match(markup[0], /^<details class="category-analytics[^>]*><summary>/);
   assert.doesNotMatch(markup[0], /^<details[^>]*\bopen\b/);
   assert.match(markup[0], /Explore spending insights[\s\S]*Spending mix/);
-  assert.match(activeExtras[0], /pro-cat-hist[\s\S]*Avg\/mo/);
+  assert.match(activeExtras[0], /6-month trend[\s\S]*pro-category-line[\s\S]*Trend avg\/mo/);
+  assert.match(activeExtras[0], /Sep 25[\s\S]*Feb 26/);
+  assert.match(activeExtras[0], /\$150/);
+  assert.match(markup[0], /Total spend[\s\S]*\$300/);
   assert.equal(inactiveExtras.length, 0);
-  assert.equal(analyticsRequests, 1);
+  assert.equal(analyticsRequests, 0);
+  await f.listeners.get('document:categories:rendered')({ detail: { ...event.detail, allTransactions: allTransactions.filter(tx => !tx.date.startsWith('2025-11')) } });
+  assert.match(activeExtras[1], /Missing months are not treated as zero/);
+  assert.doesNotMatch(activeExtras[1], /<svg/);
   enabled = false;
   await f.listeners.get('document:categories:rendered')(event);
-  assert.equal(removed, 2);
-  assert.equal(markup.length, 1);
-  assert.equal(analyticsRequests, 1);
+  assert.equal(removed, 3);
+  assert.equal(markup.length, 2);
+  assert.equal(analyticsRequests, 0);
   assert.equal(f.node('categories-view').classList.contains('has-pro-insights'), false);
 });
 test('Pro gating opens the upgrade dialog for free accounts and offers the one-time trial', async () => {

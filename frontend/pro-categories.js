@@ -1,8 +1,8 @@
-// MyFinance Pro on Categories (monthly histograms, stats, spend mix) and Transactions (CSV export).
+// MyFinance Pro on Categories (monthly trends, stats, spend mix) and Transactions (CSV export).
 (() => {
   const $ = id => document.getElementById(id);
   const TRANSFER = /^(?:transfers?|internal transfers?|savings|savings transfer)$/i;
-  const MAX_HIST_MONTHS = 24;
+  const MIN_TREND_MONTHS = 6, MAX_TREND_MONTHS = 24;
   let lastDetail = null, token = 0;
 
   const monthOf = date => {
@@ -24,6 +24,23 @@
     const months = [];
     for (let key = seen[0]; key <= seen[seen.length - 1] && months.length < 600; key = nextMonth(key)) months.push(key);
     return months;
+  }
+
+  function trendMonths(period, transactions, now = new Date()) {
+    const selected = periodMonths(period, transactions);
+    if (!selected.length) return [];
+    const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const completed = selected.filter(month => month < current);
+    const end = completed.at(-1) || (() => {
+      const date = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    })();
+    const length = Math.min(MAX_TREND_MONTHS, Math.max(MIN_TREND_MONTHS, completed.length));
+    const [year, month] = end.split('-').map(Number);
+    return Array.from({ length }, (_, i) => {
+      const date = new Date(year, month - length + i, 1);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    });
   }
 
   // Pure: per-category monthly series and stats for the selected period. Exposed for tests.
@@ -85,19 +102,23 @@
       ${list.length ? `<div class="pro-mix"><div class="pro-mix-bar" role="img" aria-label="Spending mix">${segments}</div><div class="pro-mix-legend">${legend}</div></div>` : ''}</details>`;
   }
 
-  function cardExtra(entry, months, signal) {
+  function cardExtra(entry, months, historyComplete) {
     const { money, pct } = globalThis.FinancePro.format;
-    const { histogram, monthShort } = globalThis.ProCharts;
-    if (!entry || !entry.total) return '<span class="pro-cat-extra pro-added"><span class="pro-cat-note">No spending in this period</span></span>';
-    const shown = months.slice(-MAX_HIST_MONTHS), series = entry.series.slice(-MAX_HIST_MONTHS);
-    const chart = months.length >= 2
-      ? `<span class="pro-cat-hist">${histogram(series, shown.map(m => `${monthShort(m)} ${m.slice(0, 4)}`))}<span class="pro-cat-hist-axis"><em>${monthShort(shown[0])} ${shown[0].slice(2, 4)}</em><em>avg ${money(entry.average, true)}</em><em>${monthShort(shown[shown.length - 1])} ${shown[shown.length - 1].slice(2, 4)}</em></span></span>`
-      : '';
-    const trend = entry.trend == null ? '' : `<span class="${entry.trend > 0.05 ? 'is-up' : entry.trend < -0.05 ? 'is-down' : ''}"><small>Trend</small>${entry.trend > 0.05 ? '▲' : entry.trend < -0.05 ? '▼' : '▬'} ${pct(Math.abs(entry.trend))}</span>`;
-    const signalChip = signal && signal !== 'inline' ? `<span class="pro-signal is-${signal}">${signal === 'above' ? 'Running hot vs 3-mo avg' : signal === 'below' ? 'Cooling vs 3-mo avg' : 'New category'}</span>` : '';
-    return `<span class="pro-cat-extra pro-added">${chart}<span class="pro-cat-stats">
-      <span><small>Avg/mo</small>${money(entry.average, true)}</span>
-      <span><small>Share</small>${entry.share == null ? 'Transfer' : pct(entry.share)}</span>${trend}</span>${signalChip}</span>`;
+    const { trendLine, monthShort } = globalThis.ProCharts;
+    if (months.length < MIN_TREND_MONTHS || !historyComplete) return '<span class="pro-cat-extra pro-added"><span class="pro-cat-note">Trend needs at least 6 completed months of imported activity, with records in every month of the trend window. Missing months are not treated as zero spending.</span></span>';
+    if (!entry?.total) return '<span class="pro-cat-extra pro-added"><span class="pro-cat-note">No spending in the completed-month trend window.</span></span>';
+    const series = entry.series;
+    const average = entry.average;
+    const change = entry.trend;
+    const firstHalfTotal = series.slice(0, Math.floor(series.length / 2)).reduce((sum, value) => sum + value, 0);
+    const trend = !firstHalfTotal ? 'New spending' : `${change > 0.05 ? '▲' : change < -0.05 ? '▼' : '▬'} ${pct(Math.abs(change))}`;
+    return `<span class="pro-cat-extra pro-added"><span class="pro-cat-trend">
+      <span class="pro-cat-trend-heading">${months.length}-month trend <small>Completed months</small></span>
+      ${trendLine(series, months.map(m => `${monthShort(m)} ${m.slice(0, 4)}`))}
+      <span class="pro-cat-trend-axis"><span>${monthShort(months[0])} ${months[0].slice(2, 4)}</span><span>${monthShort(months.at(-1))} ${months.at(-1).slice(2, 4)}</span></span></span>
+      <span class="pro-cat-stats"><span><small>Trend avg/mo</small>${money(average, true)}</span>
+      <span class="${change > 0.05 ? 'is-up' : change < -0.05 ? 'is-down' : ''}"><small>2nd half vs 1st</small>${trend}</span></span>
+      <span class="pro-cat-note">Dashed line: monthly average. Totals above use your selected dates.</span></span>`;
   }
 
   function renderSwitch(active, on) {
@@ -127,14 +148,17 @@
     if (!on) return;
     const months = periodMonths(detail.period, detail.transactions || []);
     const stats = categoryStats(detail.transactions || [], months);
+    const activity = detail.allTransactions || detail.transactions || [];
+    const trendWindow = trendMonths(detail.period, activity);
+    const observed = new Set(activity.map(tx => monthOf(tx.date)));
+    const historyComplete = trendWindow.length >= MIN_TREND_MONTHS && trendWindow.every(month => observed.has(month));
+    const trends = categoryStats(activity, trendWindow);
     $('category-cards').insertAdjacentHTML('beforebegin', insightStrip(stats, months, detail.period));
-    let signals = new Map();
-    try { signals = new Map((await pro.getAnalytics()).categories.map(c => [c.name, c.signal])); } catch { /* signals are optional here */ }
     if (run !== token) return;
     $('category-cards').querySelectorAll('.category-card').forEach(card => {
       const name = card.dataset.openCategory;
       if (card.classList.contains('is-inactive')) return;
-      card.insertAdjacentHTML('beforeend', cardExtra(stats.categories.get(name), months, signals.get(name)));
+      card.insertAdjacentHTML('beforeend', cardExtra(trends.categories.get(name), trendWindow, historyComplete));
     });
   }
 
@@ -186,5 +210,5 @@
   document.addEventListener('pro:entitlement', renderExport);
   mountExport();
 
-  globalThis.FinanceProCategories = { periodMonths, categoryStats, cardExtra, exportTransactions };
+  globalThis.FinanceProCategories = { periodMonths, trendMonths, categoryStats, cardExtra, exportTransactions };
 })();

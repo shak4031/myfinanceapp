@@ -92,8 +92,18 @@ each category's share of spending. Deposits and transfers appear in a separate
 Categories without activity stay available in the collapsed **No activity this
 period** group. Softly tinted, raised cards keep the primary view focused on the
 category, amount, and transaction count. With Pro analytics enabled, expand
-**Explore spending insights** to reveal the spending mix, monthly histograms,
-and category signals; these details are collapsed by default. Category icons
+**Explore spending insights** to reveal the spending mix and category trend
+lines; these details are collapsed by default. Card trends use at least six
+completed calendar months (up to 24), ending at the last completed month in the
+selected period. Shorter selections expand the trend window backwards; card
+totals and spending shares still use the selected dates. The current partial
+month is excluded so it cannot look like a spending drop. Each line has monthly
+points and a dashed monthly-average reference; its change compares the second
+half against the first half of that same window. A zero-spend first half is
+labeled **New spending**, not a percentage increase. If any month in the window
+has no imported activity, the chart shows a history-needed message instead of
+inventing zeros. Zero category spending within months with other activity is
+shown as zero; imported activity does not prove every account is complete. Category icons
 use whole-word matching so names such as Healthcare and Credit Card do not
 accidentally receive a car icon. Custom names without a match use a neutral icon.
 
