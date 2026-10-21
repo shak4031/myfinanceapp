@@ -2132,7 +2132,7 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   browserBits(f);
   f.run('tutorial.js');
   const tours = f.context.FinanceTutorials;
-  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,compass');
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,accounts,analytics,compass');
   tours.open('debt-strategies');
   assert.equal(tours.state.tutorial.id, 'debt');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
@@ -2226,6 +2226,80 @@ test('signed-out hash links never reach the app router', () => {
   f.context.location.hash = '#marketing-pricing';
   f.listeners.get('hashchange')();
   assert.equal(f.context.location.hash, '#dashboard');
+});
+test('updated tutorials explain account freshness, real imports, debt coaching and six-month trends', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  for (const id of tours.list().map(item => item.id)) {
+    tours.open(id);
+    const tutorial = tours.state.tutorial;
+    for (const [index, scene] of tutorial.scenes.entries()) {
+      tours.go(index);
+      assert.match(f.node('tut-canvas').innerHTML, /\S/, `${id}/${scene.id} renders`);
+      assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]/);
+      assert.doesNotMatch(scene.caption, /New rows wait in Import review|half of your typical/);
+    }
+  }
+  tours.open('accounts/freshness');
+  assert.match(f.node('tut-caption').textContent, /45 calendar days[\s\S]*exactly 45 is not[\s\S]*Renaming/);
+  tours.open('accounts/ownership');
+  assert.match(f.node('tut-caption').textContent, /badge counts references[\s\S]*not stale/);
+  tours.open('accounts/refresh');
+  assert.match(f.node('tut-caption').textContent, /same saved account[\s\S]*Do not create another account/);
+  tours.open('accounts/statements');
+  assert.match(f.node('tut-caption').textContent, /not a live bank feed[\s\S]*does not automatically synchronize/);
+  tours.open('transactions/import');
+  assert.match(f.node('tut-caption').textContent, /Valid new rows save directly[\s\S]*duplicates/);
+  tours.open('transactions/import-review');
+  assert.match(f.node('tut-caption').textContent, /older queued records[\s\S]*bypasses duplicate checks/);
+  tours.open('categories/trends');
+  assert.match(f.node('tut-caption').textContent, /six completed months[\s\S]*unfinished current month[\s\S]*Missing months/);
+  tours.open('debt/assessment');
+  assert.match(f.node('tut-caption').textContent, /three completed months[\s\S]*tighter month[\s\S]*cushion/);
+  tours.open('debt/experiments');
+  assert.match(f.node('tut-caption').textContent, /independent[\s\S]*actually free up/);
+  tours.open('analytics/ranges');
+  assert.match(f.node('tut-caption').textContent, /3, 6, 12 and 24[\s\S]*three completed months/);
+  tours.open('goals/flex');
+  assert.match(f.node('tut-caption').textContent, /does not transfer money[\s\S]*does not automatically record/);
+});
+test('legacy import review leaves the main menu but remains reachable from Transactions', () => {
+  const html = source('index.html');
+  assert.doesNotMatch(html, /class="nav-btn" data-view="etl"/);
+  assert.match(html, /Older import tools[\s\S]*href="#etl" data-view="etl">Legacy import review/);
+  assert.match(html, /href="#tutorials\/accounts">How Accounts works/);
+  assert.match(html, /Older queued import records/);
+  assert.doesNotMatch(html, /forcePushStaging|dismissStaging|Watch the 1-min tour/);
+});
+test('legacy queue failures show explicit errors and successful actions refresh only after confirmation', async () => {
+  const messages = [], requests = [];
+  let fail = true;
+  const f = fixture(async (url, options = {}) => {
+    requests.push([url, options.method || 'GET']);
+    if (url.endsWith('/attention')) return fail ? response(500, { error: '<Queue offline>' }) : response(200, []);
+    return fail ? response(409, { error: 'Already processed' }) : response(200, { success: true });
+  });
+  f.context.notify = message => messages.push(message);
+  f.context.FinanceUI = { confirm: async () => true };
+  f.run('refresh.js');
+  await f.context.loadEtlStaging();
+  assert.match(f.node('etl-staging-table').innerHTML, /Could not load older records: &lt;Queue offline&gt;[\s\S]*Retry/);
+  const button = { dataset: { stagingAdd: '7' }, disabled: false, hasAttribute: () => false };
+  const click = () => f.node('etl-staging-table').onclick({ target: { closest: () => button } });
+  await click();
+  assert.deepEqual(messages, ['Already processed']);
+  assert.equal(button.disabled, false);
+  assert.equal(requests.length, 2, 'failed add never reports success or reloads the queue');
+  fail = false;
+  await click();
+  assert.match(messages[1], /Record added/);
+  assert.match(f.node('etl-staging-table').innerHTML, /No older queued records[\s\S]*not here/);
+  assert.equal(requests.length, 4);
+  f.context.FinanceUI.confirm = async () => false;
+  await click();
+  assert.equal(requests.length, 4, 'cancel never writes');
 });
 test('the router keeps a tutorial sub-path and hands it to the player', () => {
   const f = fixture(); f.run('refresh.js');

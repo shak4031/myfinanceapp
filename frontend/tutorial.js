@@ -75,11 +75,11 @@
   // ---------- tutorials ----------
   const TUTORIALS = [
     {
-      id: 'debt', title: 'Your debt-free plan', blurb: 'Pro Plus: add debts, pick a strategy, understand the dates and flex a tight month.', emoji: '🏁',
+      id: 'debt', title: 'Your debt-free plan', blurb: 'Pro Plus: assess breathing room, test spending changes and choose a sustainable payoff strategy.', emoji: '🏁',
       cta: { label: 'Open my debt-free plan', view: 'payoff' },
       scenes: [
-        { id: 'intro', title: 'Welcome', caption: 'Your debt-free plan gathers every card and loan in one place and shows the fastest, cheapest path to zero.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Your debt-free plan', 'Every balance. One plan. A real finish line.', ['💳', '🚗', '🎓', '🏁']) },
+        { id: 'intro', title: 'Welcome', caption: 'Your debt-free plan gathers cards and loans, evaluates recorded cash flow and compares projected paths to zero. These are estimates, not payments or guaranteed savings.',
+          render: () => intro('TUTORIAL', 'Your debt-free plan', 'Every balance. One plan. A modeled finish line.', ['💳', '🚗', '🎓', '🏁']) },
         { id: 'debts', title: 'Add every debt', caption: 'Start by adding each debt with its balance, APR and minimum payment. Cards, car loans, student loans and mortgages all work.',
           render: () => `${chip(1, 'Add every debt')}
             <div class="tm-row-head"><div><h3>Your debts</h3><small>Balances, rates and minimums in one place</small></div><span class="tm-btn tm-btn-primary" data-id="add">+ Add debt or loan</span></div>
@@ -97,7 +97,7 @@
             <span class="tm-tag tut-pop" ${at(2.2, 'right:44px;bottom:40px')}>Outside the program</span>
             <span class="tm-tag tm-tag-gold tut-pop" ${at(4.2, 'right:420px;top:118px')}>Pay first</span>
             ${cursor('sw', 0.6)}${cursor('star', 2.8, 'sw')}` },
-        { id: 'strategy', title: 'Choose a strategy', caption: 'Pick a strategy. Avalanche pays the highest rate first and costs the least. Snowball clears the smallest balance first for quick wins. Every strategy still pays all minimums.',
+        { id: 'strategy', title: 'Choose a strategy', caption: 'Compare the same budget across strategies. Avalanche targets the highest rate; snowball targets the smallest balance. Recommended means lowest modeled interest among available strategies. Compare the first finish too. Funded strategies cover minimums and roll freed payments forward; a starred debt overrides the order.',
           render: () => `${chip(3, 'Choose a strategy')}
             <div class="tm-row-head"><div><h3>Choose your strategy <span class="tm-using"><span class="tut-off" ${at(2.1)}>Using Avalanche</span><span class="tut-on" ${at(2.1)}>Using Snowball</span></span></h3><small>Dates and interest at your $950/mo budget</small></div></div>
             <div class="tm-strats">
@@ -119,7 +119,13 @@
               </div>
             </div>
             <div class="tm-note tut-in" ${at(5.4)}>ⓘ Same payoff order, same result. If Avalanche and Snowball target the same debt first, their dates match and switching won't change anything yet.</div>` },
-        { id: 'budget', title: 'Set your budget', caption: 'Set what you can put toward debt each month. Anything above the minimums is your extra, and the finish line moves the moment you change it.',
+        { id: 'assessment', title: 'Check your breathing room', caption: 'Your starting point separates recorded inflows, spending, savings goals and existing extra payments. Suggested increases need three completed months with inflows and outflows. The tighter month limits the allowance, with a cushion of at least $100 or ten percent of spending. Missing accounts or irregular income still need your judgment.',
+          render: () => `${chip(5, 'Your starting point')}
+            ${compare([
+              { e: '1', title: 'Review the evidence', when: 'Three completed months', asks: ['Are all accounts imported?', 'Are deposits recurring?', 'Are minimums represented?'] },
+              { e: '2', title: 'Protect breathing room', when: 'Average and tightest month', asks: ['Reserve goals and current extras.', 'Keep a planning cushion.', 'No automatic budget increase.'] }
+            ])}` },
+        { id: 'budget', title: 'Set your budget', caption: 'Set a monthly debt budget that covers minimums and fits your actual cash flow. Anything above minimums is extra. Saving a budget changes projections, not bank payments. Higher current-month flexible commitments are reserved in the assessment; a temporary reduction does not create permanent headroom.',
           render: () => `${chip(5, 'Set your monthly budget')}
             <div class="tm-split">
               <div class="tm-panel">
@@ -137,14 +143,20 @@
               </div>
             </div>
             ${cursor('knob', 0.5)}` },
-        { id: 'guidance', title: 'Follow the guidance', caption: 'Guidance reads your rates and cash flow. It flags the debt costing you most, tells you when a focus costs extra, and shows how much sooner a little more would get you there.',
+        { id: 'experiments', title: 'Find your next extra dollar', caption: 'Pick one spending experiment, not a complete overhaul. Review activity before trying ten percent less in a category. Monthly and weekly ceilings are hypothetical. The $25, $50 and $100 scenarios are independent, not amounts to add together. Only redirect money you actually free up.',
+          render: () => `${chip(6, 'Find your next extra dollar')}
+            <div class="tm-split">
+              <div class="tm-panel"><small>ILLUSTRATIVE SPENDING EXPERIMENT</small><h3>Dining</h3><div class="tm-kv"><span>Observed average</span><b>$500/mo</b></div><div class="tm-kv"><span>Try 10% less</span><b>$50/mo</b></div><div class="tm-kv"><span>Trial ceiling</span><b>$450/mo</b></div><span class="tm-btn">Review activity</span></div>
+              <div class="tm-panel tm-panel-dark"><small>TEST BEFORE COMMITTING</small><h3>+$25 / +$50 / +$100</h3><p>Each scenario uses the current debt budget as its starting point.</p><p>Check funding support, payoff timing and interest separately.</p></div>
+            </div>` },
+        { id: 'guidance', title: 'Guidance and checkpoints', caption: 'Guidance explains rate costs and focus tradeoffs. Make the next step visible shows projected principal reduction and your first modeled payoff, not recorded achievements. Review one sustainable change each week. Keep an emergency reserve suited to your circumstances; seek credit counseling if minimums are difficult.',
           render: () => `${chip(6, 'Follow the guidance')}
             <div class="tm-row-head"><div><h3>Guidance</h3><small>Based on your rates, balances and recent cash flow</small></div></div>
             <ul class="tm-guide">
               <li class="is-warn tut-in" ${at(0.6)}><i>!</i><div><b>Visa Signature is your most expensive money</b><span>At 24.9% APR it costs about $129 a month in interest.</span></div></li>
-              <li class="is-good tut-in" ${at(1.8)}><i>✓</i><div><b>Adding $100 a month makes you debt-free 4 months sooner</b><span>About half of your typical monthly surplus.</span></div></li>
+              <li class="is-good tut-in" ${at(1.8)}><i>✓</i><div><b>Compare your next three modeled months</b><span>Projected checkpoints, not payments already made.</span></div></li>
               <li class="is-info tut-in" ${at(3)}><i>i</i><div><b>Your focus on Store card costs about $18</b><span>A fair trade if clearing it matters to you.</span></div></li>
-              <li class="is-info tut-in" ${at(4.2)}><i>i</i><div><b>Keep a starter emergency fund</b><span>Hold about $1,000 so a surprise doesn't land back on a card.</span></div></li>
+              <li class="is-info tut-in" ${at(4.2)}><i>i</i><div><b>Protect an emergency reserve</b><span>Choose an amount suited to your risks and obligations.</span></div></li>
             </ul>` },
         { id: 'flex', title: 'Flex a tight month', caption: 'Your plan payments land on the dashboard calendar next to bills and paydays. Tight month? Tap the extra payment and lower it for this month only. The plan adjusts automatically.',
           render: () => `${chip(7, 'Flex a tight month')}
@@ -180,7 +192,7 @@
       cta: { label: 'Open my goals', view: 'goals' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'With Pro Plus, savings goals give every dollar of surplus a job, next to your bills and your debt-free plan.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Savings goals', 'Make room for what matters.', ['🛡️', '✈️', '💻', '🎯']) },
+          render: () => intro('TUTORIAL', 'Savings goals', 'Make room for what matters.', ['🛡️', '✈️', '💻', '🎯']) },
         { id: 'create', title: 'Create a goal', caption: 'Create a goal with an icon, a target amount and an optional date. Add anything you have already saved so progress starts in the right place.',
           render: () => `${chip(1, 'Create a goal')}
             <div class="tm-dialog tm-dialog-center tut-pop" ${at(0.3)}>
@@ -191,7 +203,7 @@
               <div class="tm-field tut-in" ${at(3.6)}><small>Already saved</small><span>$1,200</span></div>
               <span class="tm-btn tm-btn-primary tut-in" ${at(4.4)} data-id="save">Save goal</span>
             </div>${cursor('save', 4.6)}` },
-        { id: 'surplus', title: 'Where your surplus goes', caption: 'MyFinance works out your typical monthly surplus from recent months. It funds your debt extra first, then your goals, and shows what is still free.',
+        { id: 'surplus', title: 'Where your surplus goes', caption: 'Typical surplus uses up to three completed months of imported history, excluding transfers and reserving debt minimums missing from spending. The plan allocates debt extra before savings goals. Recorded inflows are not verified wages, and an average does not guarantee affordability.',
           render: () => `${chip(2, 'Where your surplus goes')}
             <div class="tm-panel tm-flow">
               <small>TYPICAL MONTHLY SURPLUS</small><strong>$1,050<em>/mo</em></strong>
@@ -203,7 +215,7 @@
             <div class="tm-strats tm-strats-3">
               ${strat('Priority order', 'Most important first', 'Emergency', 'funded first', 'Emergency fund', { active: true, reco: false, id: 'prio', ringOut: 2, unit: '' })}
               ${strat('Nearest deadline', 'Soonest date first', 'Vacation', 'funded first', 'Vacation', { id: 'dead', ringIn: 2, unit: '' })}
-              ${strat('Balanced', 'Everything moves together', '', '', '', { pro: true })}
+              ${strat('Balanced', 'Everything moves together', 'Shared', 'monthly budget', 'All included goals', { unit: '' })}
             </div>${toast('Switched to Nearest deadline. Goal amounts are updated.', 2.5)}${cursor('dead', 0.6)}` },
         { id: 'status', title: 'Stay on track', caption: 'Each goal shows its monthly amount and status. If one falls behind, you will see exactly how much more it needs each month, here and on your dashboard.',
           render: () => `${chip(4, 'Stay on track')}
@@ -212,7 +224,7 @@
               <div class="tm-goal tut-in" ${at(1)}><span class="tm-emoji">✈️</span><b>Vacation</b><small>$900 of $3,000 · $150/mo</small><div class="tm-bar"><span class="tut-grow" ${at(1.4, '--w:30%')}></span></div><em class="is-warn">Behind</em><p class="tut-in" ${at(2.6)}>Needs $60 more a month to make June.</p></div>
               <div class="tm-goal tut-in" ${at(1.6)}><span class="tm-emoji">💻</span><b>New laptop</b><small>$1,400 of $1,400</small><div class="tm-bar"><span class="tut-grow" ${at(2, '--w:100%')}></span></div><em class="is-good">Funded</em></div>
             </div>` },
-        { id: 'flex', title: 'Flex and record savings', caption: 'Goal contributions appear on the calendar too, so you can trim one in a tight month. When you move money into savings, record it and the progress bar catches up.',
+        { id: 'flex', title: 'Flex and record savings', caption: 'Goal contributions appear on the calendar, where you can trim this month without changing the long-term allocation. After actually saving money, record it once to update progress. Recording savings does not transfer money, and importing a bank transfer does not automatically record a goal contribution.',
           render: () => `${chip(5, 'Flex and record savings')}
             ${week([['Mon', 13], ['Tue', 14, '', true], ['Wed', 15], ['Thu', 16, weekCard('Payday', '+$2,100', { tone: 'income' })], ['Fri', 17, weekCard('Vacation savings', '$150', { dashed: true, tone: 'goal' })], ['Sat', 18], ['Sun', 19]])}
             <div class="tm-goal tm-goal-wide tut-in" ${at(1.4)}><span class="tm-emoji">✈️</span><b>Vacation</b><small><span class="tut-off" ${at(3.2)}>$900 of $3,000</span><span class="tut-on" ${at(3.2)}>$1,050 of $3,000</span></small><div class="tm-bar"><span class="tm-grow-step" ${at(3.2)}></span></div><span class="tm-btn" data-id="record">Record savings</span></div>
@@ -226,18 +238,18 @@
       cta: { label: 'Go to my dashboard', view: 'dashboard' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Your dashboard opens with what matters today: a greeting, timely insights and the week ahead.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Your dashboard', 'Know where you stand. Choose what comes next.', ['👋', '📅', '💵', '✅']) },
+          render: () => intro('TUTORIAL', 'Your dashboard', 'Know where you stand. Choose what comes next.', ['📅', '💵', '✅']) },
         { id: 'insights', title: 'Rotating insights', caption: 'Insights rotate through anything that needs you: a day you might run short, bills due soon, payday, goals and your debt-free date. Hover to pause, or use the arrows.',
           render: () => `${chip(1, 'Rotating insights')}
             <div class="tm-hero">
-              <small>WEDNESDAY, OCTOBER 14</small><h3>Good evening, Alex 👋</h3><p>One thing needs your attention today.</p>
+              <small>WEDNESDAY, OCTOBER 14</small><h3>Good evening, Alex</h3><p>One thing needs your attention today.</p>
               <div class="tm-hero-card">
                 <div class="tut-off" ${at(3.2)}><em class="is-bad">NEEDS ATTENTION</em><b>You could run short Tuesday</b><span>After Rent on the 20th, your balance drops to −$180.</span></div>
                 <div class="tut-on" ${at(3.2)}><em class="is-good">NICE WORK</em><b>Payday in 2 days</b><span>Expect about $2,100 from ACME on Friday (every other week).</span></div>
                 <div class="tm-dots"><i class="tm-dot-fill" ${at(0)}></i><i class="tm-dot-fill" ${at(3.2)}></i><i></i><i></i></div>
               </div>
             </div>` },
-        { id: 'glance', title: 'Today at a glance', caption: 'Today at a glance keeps the essentials in view: your balance, next payday, bills over the next 30 days including overdue payments, and your lowest point ahead.',
+        { id: 'glance', title: 'Today at a glance', caption: 'Today at a glance shows recorded balance, next payday, bills for the next 30 days plus earlier pending bills this month, and your projected low point. Calculation information opens a dialog explaining the number. These estimates depend on current account data, not a live bank connection.',
           render: () => `${chip(2, 'Today at a glance')}
             <div class="tm-pulse">
               ${[['Balance', '$2,310.42', 'Latest recorded'], ['Next payday', '$2,100', 'In 2 days · the 16th'], ['Bills in next 30 days', '$2,264', '6 payments, including overdue'], ['Lowest point ahead', '$412', 'On Oct 20'], ['Debt-free', 'Mar 2028', 'On your current plan']]
@@ -275,7 +287,7 @@
       cta: { label: 'Mark my fixed bills', view: 'transactions' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Fixed bills and regular income tell MyFinance when money moves. Mark them once and your calendar, payday forecast and low-balance warnings come to life.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Fixed bills & income', 'Teach it your rhythm once. Get a forecast every day.', ['🏠', '📱', '💵', '📅']) },
+          render: () => intro('TUTORIAL', 'Fixed bills & income', 'Teach it your rhythm once. Get a forecast every day.', ['🏠', '📱', '💵', '📅']) },
         { id: 'what', title: 'What counts as fixed', caption: 'A fixed bill repeats at about the same amount on about the same day: rent, phone, insurance, streaming. Regular income is pay you can count on. Everything else is everyday spending that changes month to month.',
           render: () => `${chip(1, 'What counts as fixed')}
             <div class="tm-split tm-split-tight">
@@ -342,7 +354,7 @@
       cta: { label: 'Open my categories', view: 'categories' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Categories turn a long list of charges into a short story: what your money is for, and where it quietly adds up.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Categories & smart rules', 'Know what your money is for.', ['🛒', '🍽️', '🏠', '🎬']) },
+          render: () => intro('TUTORIAL', 'Categories & smart rules', 'Know what your money is for.', ['🛒', '🍽️', '🏠', '🎬']) },
         { id: 'overview', title: 'Your spending, grouped', caption: 'The Categories page groups every purchase into buckets like Housing, Groceries and Dining, with totals for the period you choose. Open any category for its merchants and month-by-month trend.',
           render: () => `${chip(1, 'Your spending, grouped')}
             <div class="tm-cats">
@@ -374,7 +386,7 @@
                 <span class="tm-pill tut-pop" ${at(4)}>Only 5 left for you to review</span>
               </div>
             </div>` },
-        { id: 'period', title: 'Compare time periods', caption: 'Pick all time, one month or a few months together. Totals and cards update instantly, so you can see whether a change you made last month is working.',
+        { id: 'period', title: 'Compare time periods', caption: 'Totals start at Last 3 months. Shared choices include 3, 6, 12 and 24 months, specific periods, custom dates and an explicit All time option. Totals and spending shares use the selected dates. Open a card to review its transactions.',
           render: () => `${chip(4, 'Compare time periods')}
             <div class="tm-row-head"><div><h3>Categories</h3><small>Time period</small></div><span class="tm-toggle"><i class="tut-off" ${at(1.4)}>September</i><i class="tut-on" ${at(1.4)} data-id="oct">October</i></span></div>
             <div class="tm-cats tm-cats-3">
@@ -382,6 +394,12 @@
               <div class="tm-cat"><span class="tm-emoji">🛒</span><b>Groceries</b><strong>${swap('$540', '$612', 1.8)}</strong><small class="tut-in" ${at(2.6)}>↑ $72, expected trade-off</small></div>
               <div class="tm-cat"><span class="tm-emoji">🎬</span><b>Subscriptions</b><strong>${swap('$86', '$71', 1.8)}</strong><small class="is-good tut-in" ${at(2.8)}>↓ $15, one cancelled</small></div>
             </div>${cursor('oct', 0.3)}` },
+        { id: 'trends', title: 'Read the six-month trend', caption: 'With Pro Analytics enabled, expand Explore spending insights. Card trend lines use at least six completed months, up to 24, even when your totals cover fewer months. The unfinished current month is excluded. Dots are monthly spending, the dashed line is the average, and change compares the second half with the first. Missing months show a history-needed message, not invented zeros.',
+          render: () => `${chip(5, 'Trend and totals have different jobs')}
+            <div class="tm-split">
+              <div class="tm-panel"><small>SELECTED TOTAL</small><h3>Last 3 months</h3><p>Amount, transaction count and spending share follow your filter.</p><p>Expand Explore spending insights to reveal trends.</p></div>
+              <div class="tm-panel"><small>6-MONTH TREND · COMPLETED MONTHS</small><svg viewBox="0 0 300 110" class="tm-chart" aria-hidden="true"><path d="M8 55H292" fill="none" stroke="#64748b" stroke-dasharray="4 4"/><path d="M8 42L65 64L122 35L179 22L236 52L292 62" fill="none" stroke="#397d83" stroke-width="3"/></svg><p>Dashed line: monthly average.</p><p>Second half vs first half, not this partial month.</p></div>
+            </div>` },
         { id: 'why', title: 'Categories or transactions?', caption: 'Categories answer where your money goes: patterns and totals. Transactions answer what exactly happened: line by line. Start in Categories to spot a pattern, then jump to Transactions to find the exact charge.',
           render: () => `${chip(5, 'Categories or transactions?')}
             ${compare([PAGES.categories, PAGES.transactions])}
@@ -395,14 +413,20 @@
       cta: { label: 'Open my transactions', view: 'transactions' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Transactions is your complete history, every charge and deposit, one search away.',
-          render: () => intro('TUTORIAL · ABOUT 1 MINUTE', 'Your transactions', 'Every detail, one search away.', ['📥', '🔍', '🧾', '✅']) },
-        { id: 'import', title: 'Bring in a statement', caption: 'Import a CSV or OFX/QFX file from any bank or credit card, or a PDF statement from TD Bank. New rows wait in Import review first, so you can check them before they join your history. No bank login needed.',
+          render: () => intro('TUTORIAL', 'Your transactions', 'Every detail, one search away.', ['📥', '🔍', '🧾', '✅']) },
+        { id: 'import', title: 'Bring in a statement', caption: 'Import a supported CSV, OFX or QFX file, or a supported PDF statement. Confirm the source account; PDF account details may be detected, but ambiguous matches need your choice. Valid new rows save directly to history. Review imported counts, duplicates, warnings and errors in the result. No bank login is needed.',
           render: () => `${chip(1, 'Bring in a statement')}
             <div class="tm-dialog tm-dialog-center tut-pop" ${at(0.3)}>
-              <b>Import statements</b><small>CSV or OFX from any bank or card &middot; PDF from TD Bank</small>
+              <b>Import statements</b><small>Supported CSV, OFX/QFX or PDF &middot; confirm the source account</small>
               <div class="tm-drop"><span class="tut-off" ${at(1.6)}>Drop a file here</span><span class="tut-on tm-file" ${at(1.6)}>📊 checking-october.csv <small>38 KB</small></span></div>
-              <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import to review</span>
-            </div>${cursor('import', 2.4)}${toast('84 transactions ready in Import review', 3.8)}` },
+              <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import</span>
+            </div>${cursor('import', 2.4)}${toast('Example result: 84 imported; duplicates reported separately', 3.8)}` },
+        { id: 'import-review', title: 'Results, not an approval queue', caption: 'Current imports do not wait in a review queue. Check the result before retrying; duplicate rows are skipped, and rejected files explain the problem. Legacy import review under Transactions is only for older queued records. Add anyway deliberately bypasses duplicate checks, so compare history first. Category suggestions and Review income are separate tools.',
+          render: () => `${chip(2, 'Review the result where you import')}
+            ${compare([
+              { e: '1', title: 'Current imports', when: 'Result in the import dialog', asks: ['Check imported and duplicate counts.', 'Read warnings and errors.', 'Verify the selected account.'] },
+              { e: '2', title: 'Legacy review', when: 'Older queued records only', asks: ['Compare with existing history.', 'Add anyway can duplicate a charge.', 'Dismiss only removes the queued copy.'] }
+            ])}` },
         { id: 'table', title: 'Read the table', caption: 'Each row shows the date, description, category, a Fixed or Income tick, how it is paid and the amount. Money in is green; money out is red.',
           render: () => `${chip(2, 'Read the table')}
             <div class="tm-table">${txHead()}
@@ -416,7 +440,7 @@
               <p class="tut-in" ${at(2.8)}><span>2</span><b>Fixed / Income</b>Repeats on schedule, or is your pay.</p>
               <p class="tut-in" ${at(3.6)}><span>3</span><b>Pays by</b>Auto-pay or needs you.</p>
             </div>` },
-        { id: 'search', title: 'Search and filter', caption: 'Type a merchant, a word or even an amount like 42.50. Narrow by category, time period, pays by or fixed bills only. The money in and money out totals update to match.',
+        { id: 'search', title: 'Search and filter', caption: 'Search a merchant, word or amount like 42.50. Transactions starts at Last 3 months; choose 3, 6, 12 or 24 months, a specific period, custom months or All time. Category, payment method and fixed-only filters narrow results. Reset returns to three months. Totals follow the filters.',
           render: () => `${chip(3, 'Search and filter')}
             <div class="tm-filters tut-in" ${at(0.2)}>
               <span class="tm-search" data-id="search">🔍 <span class="tm-type" ${at(0.9)}>netflix</span></span>
@@ -447,12 +471,69 @@
       ]
     },
     {
+      id: 'accounts', title: 'Keep Accounts accurate', blurb: 'Confirm ownership, correct account types, refresh stale data and understand what updating an account really changes.', emoji: '🏦',
+      cta: { label: 'Review my accounts', view: 'accounts' },
+      scenes: [
+        { id: 'intro', title: 'Why Accounts matters', caption: 'Accounts tells MyFinance which statements belong together and whether money moved between your own accounts or went to someone else. Reviewing ownership keeps spending, income and savings meaningful. This page organizes imported records; it does not connect to your bank or move money.',
+          render: () => intro('ACCOUNTS', 'A trustworthy money picture', 'Identify the account. Confirm ownership. Keep statements current.', ['Ownership', 'Type', 'Freshness']) },
+        { id: 'ownership', title: 'Review detected references', caption: 'The Accounts menu badge counts references needing review, not stale accounts. A statement description may mention another account without proving it is yours. If it is yours, choose the correct type and confirm. If it is a friend or other recipient, choose No, it is not mine. You can correct the type later.',
+          render: () => `${chip(1, 'Is this one of your accounts?')}
+            ${compare([
+              { e: '1', title: 'Yes, it is mine', when: 'Confirm its account type', asks: ['Savings? Card? Loan?', 'Use last four digits to distinguish it.', 'Keep your own transfers out of spending.'] },
+              { e: '2', title: 'No, it is not mine', when: 'Save an external recipient reference', asks: ['Money sent counts as spending.', 'Money received is other income.', 'No bank connection is created.'] }
+            ])}` },
+        { id: 'types', title: 'Save the right account type', caption: 'Edit the name, type, bank and last four digits, then Save changes. Checking is everyday cash; savings and investments identify saving transfers. Imported card and loan payments can be recognized as your own transfers. Unknown transfers stay excluded until classified. A wrong type can distort your totals.',
+          render: () => `${chip(2, 'Account type changes the meaning')}
+            <div class="tm-panel"><small>EXAMPLE ACCOUNT DETAILS</small>
+              <div class="tm-kv"><span>Name</span><b>Everyday checking</b></div><div class="tm-kv"><span>Account type</span><b>Checking</b></div><div class="tm-kv"><span>Last four</span><b>1180</b></div><div class="tm-kv"><span>Bank</span><b>Example Bank</b></div>
+              <span class="tm-btn tm-btn-primary">Save changes</span><p class="tm-hint">Editing details does not download new transactions.</p></div>` },
+        { id: 'freshness', title: 'Understand stale data', caption: 'Last data update means the latest covered transaction or statement date, not the time you edited the account. Data more than 45 calendar days old is marked stale; exactly 45 is not. Last data added shows when transactions were imported. Renaming an account or uploading only older history does not make its coverage current.',
+          render: () => `${chip(3, 'Coverage date is not import time')}
+            ${compare([
+              { e: '1', title: 'Data as of', when: 'How recent is the financial picture?', asks: ['Latest transaction or statement coverage.', 'Older than 45 days: stale.', 'No data: import a recent statement.'] },
+              { e: '2', title: 'Last data added', when: 'When were records imported?', asks: ['An import can contain old history.', 'Saving a name does not refresh data.', 'External recipients need no statement.'] }
+            ])}` },
+        { id: 'refresh', title: 'Update with a statement', caption: 'To update financial data, choose Import a statement and confirm the same saved account. Do not create another account for each month. Review the import result, then check coverage and balances. Assign older imports without an account to the correct saved account. If no valid new rows are added, check whether the file contains newer dates.',
+          render: () => `${chip(4, 'Refresh records, not just labels')}
+            <div class="tm-panel"><small>AFTER EACH STATEMENT</small><div class="tm-kv"><span>1. Choose saved account</span><b>Check last four</b></div><div class="tm-kv"><span>2. Import recent activity</span><b>Read the result</b></div><div class="tm-kv"><span>3. Check data coverage</span><b>Confirm latest date</b></div><div class="tm-kv"><span>4. Review detected references</span><b>Mine or external?</b></div></div>` },
+        { id: 'statements', title: 'Balances and debt are separate', caption: 'Recorded balances and credit-card statement facts come from imports, not a live bank feed. Supported statements may show the closing date, purchase APR, minimum and due date. Check separately entered debt-plan balances and rates yourself; saving account details does not automatically synchronize the debt-free plan.',
+          render: () => `${chip(5, 'Statement facts are not a live connection')}
+            ${compare([
+              { e: '1', title: 'Accounts', when: 'Imported records and statement facts', asks: ['Check coverage and recorded balance.', 'Review ownership and transfer types.', 'Import again to refresh data.'] },
+              { e: '2', title: 'Debt-free plan', when: 'Separately entered planning inputs', asks: ['Review current debt balance.', 'Check APR and minimum payment.', 'Then use payoff projections.'] }
+            ])}` },
+        { id: 'done', title: 'A useful monthly habit', caption: 'After each import, review new account references, confirm coverage dates and check for stale data. Correct account details when ownership or type is wrong. Import recent statements when the financial picture is old. Neither action moves money.',
+          render: () => outro('Keep your picture current', 'Confirm ownership. Import recent records. Review projections.', 'Review my accounts') }
+      ]
+    },
+    {
+      id: 'analytics', title: 'Explore Analytics', blurb: 'Pro: navigate the overview, date ranges, mobile charts and Spending Compass without confusing totals with trends.', emoji: '📈',
+      cta: { label: 'Open Analytics', view: 'analytics' },
+      scenes: [
+        { id: 'intro', title: 'Start with the overview', caption: 'Analytics is part of Pro. Start with the overview for cash flow and spending patterns, then choose Spending Compass for household comparisons and possible changes. Both depend on imported records; missing accounts can change the story.',
+          render: () => intro('MYFINANCE PRO', 'From totals to patterns', 'Overview for the big picture. Compass for a closer look.', ['Cash flow', 'Spending', 'Compass']) },
+        { id: 'ranges', title: 'Know the analysis period', caption: 'Check each panel range before comparing numbers. Shared rolling choices are 3, 6, 12 and 24 months where applicable. Compass starts with three completed months; category-card trends require at least six completed months even when category totals use a shorter range. All time is an explicit choice, not the default.',
+          render: () => `${chip(1, 'Match the question to the window')}
+            ${compare([
+              { e: '1', title: 'Period totals', when: 'Read the selected dates', asks: ['Last 3 months is a common default.', 'All time can make totals much larger.', 'Custom ranges need selected months.'] },
+              { e: '2', title: 'Trend analysis', when: 'Use completed history', asks: ['Compass: 3 completed months by default.', 'Category lines: at least 6 completed months.', 'Different windows answer different questions.'] }
+            ])}` },
+        { id: 'mobile', title: 'Explore on your phone', caption: 'Cards stack on phones. Wide charts and tables scroll inside their panels, not across the entire page. Use swipe hints and sticky row labels to keep context. Expand details when you need the method instead of assuming every visible change is a new spending habit.',
+          render: () => `${chip(2, 'Keep context on smaller screens')}
+            <div class="tm-panel"><small>MOBILE CHECKLIST</small><div class="tm-kv"><span>Cards</span><b>Stack vertically</b></div><div class="tm-kv"><span>Wide charts and tables</span><b>Swipe inside panel</b></div><div class="tm-kv"><span>Method and readings</span><b>Expand when needed</b></div></div>` },
+        { id: 'compass', title: 'Use the Compass thoughtfully', caption: 'Set your household profile, inspect overlapping signals and review the underlying spending before acting. Suggested savings and five-year illustrations are possibilities, not promises. The separate Spending Compass tutorial explains money flow, normal ranges, one-offs and seasonal comparisons.',
+          render: () => outro('Choose one realistic experiment', 'Review the evidence before changing a habit.', 'Explore the Spending Compass tutorial') },
+        { id: 'done', title: 'You are ready', caption: 'Choose a period, read the overview and investigate one pattern at a time. Keep records current through Accounts and imports. Analytics explains the past; it cannot guarantee future income or savings.',
+          render: () => outro('Turn evidence into a next step', 'Check dates. Review context. Make one change.', 'Open Analytics') }
+      ]
+    },
+    {
       id: 'compass', title: 'Spending Compass', blurb: 'Pro: see where your money flows, which habits stand out against similar households and your own history, and what to change.', emoji: '🧭',
       cta: { label: 'Open my Spending Compass', view: 'analytics/compass' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'The Spending Compass shows where your money goes, which habits stand out against households like yours and against your own history, and where you could realistically save.',
           render: () => intro('TUTORIAL · UNDER 2 MINUTES', 'Spending Compass', 'Where your money goes. What stands out. What to change.', ['🧭', '🍽️', '⚡', '💰']) },
-        { id: 'open', title: 'Find the Compass', caption: 'Open Analytics and choose the Spending Compass tab. The top of the page says what the Compass found, $170 a month or about $10,000 over five years, and lists your plan: each category, where it is now and the level to bring it back to. Spending Compass is part of MyFinance Pro.',
+        { id: 'open', title: 'Find the Compass', caption: 'Open Analytics and choose the Spending Compass tab. It starts with three completed months. The top summarizes potential changes, such as $170 a month or about $10,000 over five years, and lists current and suggested category levels. These are illustrations, not guaranteed savings. Spending Compass is part of Pro.',
           render: () => `${chip(1, 'Find the Compass')}
             <div class="tm-row-head"><div><h3>${swap('Your spending, like a market', 'Spending Compass', 1.4)}</h3><small>Analytics</small></div></div>
             <div class="tm-tabs"><i class="tm-tab-drop" ${at(1.3)}>Overview</i><i class="tm-tab-pick" ${at(1.3)} data-id="tab">Spending Compass <em class="tut-pop" ${at(0.6)}>$170/mo</em></i></div>

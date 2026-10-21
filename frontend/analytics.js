@@ -688,7 +688,7 @@
     const { money } = pro().format;
     const found = compassRanges.get('plan')?.data?.potentialMonthly ?? a?.moneyFlow?.potentialMonthly;
     const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
-    const help = tab === 'compass' ? '<a class="pro-tab-help" href="#tutorials/compass">&#9654; How it works</a>' : '';
+    const help = `<a class="pro-tab-help" href="#tutorials/${tab === 'compass' ? 'compass' : 'analytics'}">&#9654; How it works</a>`;
     return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}${help}</nav>`;
   }
 

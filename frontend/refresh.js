@@ -221,6 +221,48 @@
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   };
+  window.loadEtlStaging = async () => {
+    const tbody = $('etl-staging-table');
+    tbody.innerHTML = '<tr><td colspan="5">Loading older queued records...</td></tr>';
+    try {
+      const items = await json('/api/staging/attention');
+      if (!Array.isArray(items)) throw new Error('Unexpected response while loading queued records.');
+      tbody.innerHTML = items.length ? items.map(item => `<tr>
+        <td>${escape(item.date || 'Unknown date')}</td><td>${escape(item.status)}</td>
+        <td>${escape(item.description)}${item.error_message ? `<div class="muted">${escape(item.error_message)}</div>` : ''}</td>
+        <td>${money(Math.abs(Number(item.amount)))}</td>
+        <td><div class="toolbar"><button type="button" class="btn btn-secondary" data-staging-add="${escape(item.id)}">Add anyway</button>
+          <button type="button" class="btn btn-secondary" data-staging-dismiss="${escape(item.id)}">Dismiss</button></div></td>
+        </tr>`).join('') : '<tr><td colspan="5">No older queued records. Current import results appear in the import dialog, not here.</td></tr>';
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="5" role="alert">Could not load older records: ${escape(error.message)} <button type="button" class="btn btn-secondary" data-staging-retry>Retry</button></td></tr>`;
+    }
+  };
+  const stagingActions = new Set();
+  $('etl-staging-table').onclick = async event => {
+    const button = event.target.closest('[data-staging-add], [data-staging-dismiss], [data-staging-retry]');
+    if (!button || button.disabled) return;
+    if (button.hasAttribute('data-staging-retry')) return window.loadEtlStaging();
+    const adding = button.dataset.stagingAdd != null;
+    const id = adding ? button.dataset.stagingAdd : button.dataset.stagingDismiss;
+    if (stagingActions.has(id)) return;
+    stagingActions.add(id);
+    button.disabled = true;
+    try {
+      if (!await FinanceUI.confirm(adding
+        ? 'Add this older record anyway? Duplicate checks are bypassed. Compare it with Transactions first. It will be saved as Other without an account; assign its source under Accounts afterwards.'
+        : 'Dismiss this queued copy? Existing transactions will not be deleted.')) return;
+      await json(`/api/staging/${adding ? 'force-push' : 'dismiss'}`, 'POST', { id });
+      window.FinancePlan?.invalidate?.();
+      notify(adding ? 'Record added. Review its category and account assignment.' : 'Queued copy dismissed. Existing transactions were not changed.');
+      await window.loadEtlStaging();
+    } catch (error) {
+      notify(error.message || 'The queued record could not be updated.');
+    } finally {
+      stagingActions.delete(id);
+      button.disabled = false;
+    }
+  };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
   window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); };
@@ -282,7 +324,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', accounts: 'Accounts', analytics: 'Analytics', etl: 'Import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', accounts: 'Accounts', analytics: 'Analytics', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';

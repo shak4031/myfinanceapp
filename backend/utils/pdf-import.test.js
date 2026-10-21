@@ -14,6 +14,7 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
   t.after(stopLogging);
   const database = new PGlite();
   let lock = Promise.resolve();
+  let failStagingMark = false;
   t.mock.method(pg.Pool.prototype, 'connect', async () => {
     let release;
     const previous = lock;
@@ -21,6 +22,7 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     await previous;
     return {
       async query(sql, params) {
+        if (failStagingMark && sql.startsWith('UPDATE staging_transactions SET status')) throw new Error('Synthetic staging write failure');
         const results = params?.length ? [await database.query(sql, params)] : await database.exec(sql);
         const result = results.at(-1) || { rows: [] };
         return { ...result, rowCount: result.affectedRows ?? result.rows?.length ?? 0 };
@@ -184,6 +186,47 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     const issuerMatch = await call('/api/import/import-pdf', { pdfBase64: pdf(cardLines.map(line => line.replace('0000 1111', '0000 1313').replace('EXAMPLE CREDIT CARD', 'Credit One Bank CREDIT CARD'))) });
     assert.equal(issuerMatch.status, 200, JSON.stringify(issuerMatch.body));
     assert.equal(issuerMatch.body.account.name, 'Known institution card');
+    const csvBody = { csvData: 'Date,Description,Amount,Balance\n10/04/2026,SYNTHETIC CSV SHOP,-12.34,987.66', source: 'synthetic-current.csv',
+      newAccount: { name: 'CSV checking', kind: 'checking', last4: '1414' } };
+    const csv = await call('/api/import/import-csv', csvBody);
+    assert.equal(csv.status, 200, JSON.stringify(csv.body));
+    assert.equal(csv.body.imported, 1);
+    assert.ok((await call('/api/dashboard/all-transactions')).body.transactions.some(row => row.description === 'SYNTHETIC CSV SHOP'), 'CSV rows are immediately available in history');
+    const csvRepeat = await call('/api/import/import-csv', { csvData: csvBody.csvData, source: csvBody.source, accountId: csv.body.account.id });
+    assert.equal(csvRepeat.body.imported, 0);
+    assert.equal(csvRepeat.body.duplicates, 1);
+    assert.deepEqual((await call('/api/staging/attention')).body, [], 'current imports, duplicates and rejected files do not populate legacy staging');
+    const queued = async (description, date = '2026-10-04') => (await database.query(
+      "INSERT INTO staging_transactions (user_id,date,description,amount,direction,source,status) VALUES (1,$1,$2,12.34,'DEBIT','legacy-test.csv','duplicate') RETURNING id",
+      [date, description]
+    )).rows[0].id;
+    const legacyId = await queued('Synthetic legacy record');
+    const beforePush = await counts();
+    failStagingMark = true;
+    const failedPush = await call('/api/staging/force-push', { id: legacyId });
+    failStagingMark = false;
+    assert.equal(failedPush.status, 500);
+    assert.deepEqual(await counts(), beforePush, 'insert rolls back if updating the queue fails');
+    assert.equal((await call('/api/staging/attention')).body.length, 1);
+    const pushed = await call('/api/staging/force-push', { id: legacyId });
+    assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
+    assert.equal((await counts()).transactions, beforePush.transactions + 1);
+    const savedLegacy = (await call('/api/dashboard/all-transactions')).body.transactions.find(row => row.description === 'Synthetic legacy record');
+    assert.equal(savedLegacy.category, 'Other');
+    assert.equal(savedLegacy.account_id, null);
+    assert.equal((await call('/api/staging/force-push', { id: legacyId })).status, 409, 'repeated adds cannot duplicate the same queued record');
+    assert.equal((await counts()).transactions, beforePush.transactions + 1);
+    assert.equal((await call('/api/staging/force-push', { id: 'bad' })).status, 400);
+    assert.equal((await call('/api/staging/dismiss', { id: null })).status, 400);
+    const invalidId = await queued('Invalid legacy date', 'not-a-date');
+    assert.equal((await call('/api/staging/force-push', { id: invalidId })).status, 422);
+    assert.equal((await call('/api/staging/dismiss', { id: invalidId })).status, 200);
+    assert.equal((await call('/api/staging/dismiss', { id: invalidId })).status, 404);
+    const impossibleDateId = await queued('Impossible legacy date', '2026-02-30');
+    assert.equal((await call('/api/staging/force-push', { id: impossibleDateId })).status, 422);
+    assert.equal((await call('/api/staging/dismiss', { id: impossibleDateId })).status, 200);
+    assert.equal((await counts()).transactions, beforePush.transactions + 1, 'dismissing queued records never deletes history');
+    const privateQueuedId = await queued('Owner only queue');
 
     // Opt-in local verification keeps customer PDFs outside the repository and the live database.
     for (const [index, file] of JSON.parse(process.env.PDF_IMPORT_TEST_FILES || '[]').entries()) {
@@ -204,6 +247,9 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
 
     const second = await call('/api/auth/register', { name: 'Second', email: 'second-pdf@example.test', password: 'test-only-password-123456' });
     cookie = second.headers.get('set-cookie').split(';')[0];
+    assert.deepEqual((await call('/api/staging/attention')).body, []);
+    assert.equal((await call('/api/staging/force-push', { id: privateQueuedId })).status, 404);
+    assert.equal((await call('/api/staging/dismiss', { id: privateQueuedId })).status, 404);
     assert.deepEqual((await call('/api/accounts')).body.accounts, []);
     assert.equal((await call('/api/import/import-pdf', { pdfBase64: cardBody.pdfBase64, accountId })).status, 400);
     const isolated = await call('/api/import/import-pdf', { pdfBase64: cardBody.pdfBase64 });

@@ -599,7 +599,6 @@
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
-        <li><a class="nav-btn" data-view="etl" href="#etl"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>Import review</a></li>
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PLUS</span></a></li>
         <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PLUS</span></a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
@@ -672,7 +671,7 @@
       <section id="categories-view" class="view">
         <header class="header category-overview-header">
           <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">A little clarity for every part of your life. Open a category to explore its transactions.</p></div>
-          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/categories"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the 1-min tour</a><button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button></div>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/categories"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button></div>
         </header>
         <div class="filter-panel panel">
           <label for="category-filter-period">Time period<select id="category-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
@@ -704,7 +703,7 @@
       <section id="payoff-view" class="view">
         <header class="header">
           <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Your debt-free plan</h1><p class="muted">Every balance in one place. Pick a strategy, set what you can afford and watch the finish line move closer.</p></div>
-          <a class="btn btn-secondary header-tour" href="#tutorials/debt"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the 1-min tour</a>
+          <a class="btn btn-secondary header-tour" href="#tutorials/debt"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a>
         </header>
         <div id="plan-debt-root" class="plan-root"></div>
       </section>
@@ -729,7 +728,7 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
-          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the 1-min tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
           <div class="filter-panel panel">
             <label for="txn-filter-search" class="search-filter">Search transactions
@@ -767,18 +766,26 @@
           </table>
         </div>
         <nav id="txn-pagination" class="toolbar" aria-label="Transaction pages" hidden></nav>
+        <details class="panel" style="padding: 16px; margin-top: 20px;">
+          <summary>Older import tools</summary>
+          <p class="muted">Current imports save valid new rows directly and show duplicates, warnings and errors in the import result. This queue is only for older records.</p>
+          <a class="btn btn-secondary" href="#etl" data-view="etl">Legacy import review</a>
+          <a class="btn btn-secondary" href="#tutorials/transactions/import-review">How import results work</a>
+        </details>
       </section>
 
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">KEEP YOUR RECORDS COMPLETE</p><h1>Import review</h1><p class="muted">Resolve flagged transactions before adding them to your account.</p></div>
+          <div><p class="eyebrow">OLDER QUEUED RECORDS ONLY</p><h1>Legacy import review</h1><p class="muted">Current imports do not wait here. Read their results in the import dialog.</p></div>
+          <a class="btn btn-secondary" href="#transactions" data-view="transactions">Back to Transactions</a>
         </header>
         <div class="panel" style="padding: 24px;">
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
-            These transactions were skipped or flagged by the ETL process (duplicates, errors, or exclusions). Review them here to prevent data loss.
+            These records came from an older import queue. Compare with Transactions before using Add anyway: it bypasses duplicate checks and saves the record as Other without an account. Review the category and assign its source under Accounts afterwards. Dismiss removes only the queued copy, not an existing transaction.
           </p>
-          <table style="width: 100%; border-collapse: collapse;">
+          <div class="table-scroll" role="region" aria-label="Older queued import records" tabindex="0">
+          <table class="review-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
               <tr>
                 <th style="padding: 12px;">Date</th>
@@ -790,6 +797,7 @@
             </thead>
             <tbody id="etl-staging-table"></tbody>
           </table>
+          </div>
         </div>
       </section>
 
@@ -806,7 +814,7 @@
       <section id="accounts-view" class="view">
         <header class="header">
           <div><p class="eyebrow">KNOW WHERE YOUR MONEY GOES</p><h1>Accounts</h1><p class="muted">Organize your imported accounts and review transfer recipients, so your spending, income and savings tell the right story.</p></div>
-          <button class="btn btn-primary" onclick="openImportModal()">Import a statement</button>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/accounts">How Accounts works</a><button class="btn btn-primary" onclick="openImportModal()">Import a statement</button></div>
         </header>
         <div id="accounts-root"></div>
       </section>
@@ -1522,48 +1530,6 @@
       }
     }
 
-    async function loadEtlStaging() {
-      const tbody = document.getElementById('etl-staging-table');
-      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading staging area...</td></tr>';
-      
-      try {
-        const res = await fetch('/api/staging/attention');
-        const items = await res.json();
-        
-        if (items.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center; color: var(--success); font-weight: 500;">✓ All set! No transactions require attention.</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = items.map(t => `
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 12px; font-size: 12px;">${t.date}</td>
-            <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${escapeHtml(t.status)}</span></td>
-            <td style="padding: 12px; font-size: 13px;">${escapeHtml(t.description)}</td>
-            <td style="padding: 12px; font-weight: 700;">${usd(Math.abs(t.amount))}</td>
-            <td style="padding: 12px; text-align: center; display: flex; gap: 8px; justify-content: center;">
-              <button data-id="${escapeHtml(t.id)}" onclick="forcePushStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
-              <button data-id="${escapeHtml(t.id)}" onclick="dismissStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load staging items</td></tr>';
-      }
-    }
-
-    async function forcePushStaging(id) {
-       await fetch('/api/staging/force-push', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
-       notify('✓ Transaction pushed to production');
-       loadEtlStaging();
-    }
-
-    async function dismissStaging(id) {
-       await fetch('/api/staging/dismiss', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
-       notify('Transaction dismissed');
-       loadEtlStaging();
-    }
-
     function notify(msg) {
       const t = document.createElement('div');
       t.className = 'toast';
@@ -1874,7 +1840,7 @@
 
   </script>
   <script src="ui.js?v=20261030a"></script>
-  <script src="refresh.js?v=20261030b"></script>
+  <script src="refresh.js?v=20261031d"></script>
   <script src="accounts.js?v=20261028a"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261031c"></script>
@@ -1882,11 +1848,11 @@
   <script src="pro-dashboard.js?v=20261024b"></script>
   <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261031c"></script>
-  <script src="analytics.js?v=20261030b"></script>
+  <script src="analytics.js?v=20261031d"></script>
   <script src="plan.js?v=20261031a"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261030a"></script>
+  <script src="tutorial.js?v=20261031d"></script>
   <script src="marketing.js?v=20261020c"></script>
   <script>FinanceSession.start();</script>
 </body>

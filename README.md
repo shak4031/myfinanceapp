@@ -522,7 +522,8 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
 
 ### Tutorials tab
 - Short animated walkthroughs for the **Debt-free plan**, **Savings goals**, the
-  **Dashboard**, **Fixed bills & income**, **Categories** and **Transactions**, with
+  **Dashboard**, **Fixed bills & income**, **Categories**, **Transactions**,
+  **Accounts**, **Analytics** and **Spending Compass**, with
   chapters, a progress bar, full screen, keyboard controls (Space/K, ←/→, F) and
   optional voice narration using the browser's speech engine.
 - The Fixed, Categories and Transactions tours each end with a "which page when?"
@@ -530,8 +531,18 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
   money is for) and Fixed bills & income for timing (when money moves).
 - Deep links such as `#tutorials/debt-strategies`, `#tutorials/income` or
   `#tutorials/which-page` open a specific chapter; they are linked from the
-  Debt-free plan ("Watch the 1-min tour", "How it works"), Goals, Categories,
-  Transactions, the dashboard welcome ("Tour") and Settings.
+  Debt-free plan ("Watch the tour", "How it works"), Goals, Categories,
+  Transactions, Accounts, Analytics, the dashboard welcome ("Tour") and Settings.
+- Accounts explains ownership review, the menu's needs-review badge, account
+  types, transfer treatment, assigning older unassigned imports, and refreshing
+  coverage by importing a recent statement into the same saved account. Editing
+  account metadata does not refresh financial data; coverage older than 45 days
+  is stale. Imported statement facts do not synchronize separately entered debts.
+- Updated chapters distinguish selected totals from six-completed-month category
+  trends, cover debt affordability and independent spending experiments, explain
+  current ranges and mobile chart scrolling, and separate savings records from
+  actual money movement. Library durations are calculated from chapter content
+  rather than promising every walkthrough takes one minute.
 - Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
   size and need no video hosting. Edit them in `frontend/tutorial.js`.
 
@@ -541,6 +552,16 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
 - Per-goal monthly contribution, contribution day, include toggle, status and timeline
 
 ### File Import ✅
+- Valid current imports save directly; duplicates, warnings and errors appear in
+  the import result. They do not populate an approval queue.
+- **Legacy import review** is no longer a main-menu item. Open **Transactions →
+  Older import tools** (or the existing `#etl` link) for historical queued records.
+  Add anyway deliberately bypasses duplicate detection, saves category Other
+  without an account, and requires explicit confirmation; review the category
+  and assign its source under Accounts afterwards. The add and queue-state update
+  are atomic, repeated adds are rejected, and invalid records must be corrected
+  at the source. Dismiss removes only the queued copy. Failed requests are
+  reported, not presented as success.
 - CSV upload from banks
 - PDF statement support
 - Drag-and-drop interface
