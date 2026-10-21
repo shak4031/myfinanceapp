@@ -41,9 +41,10 @@ function accountKey(tx) {
 }
 
 export function sameBill(a, b) {
+  if (a.account_id != null && b.account_id != null && String(a.account_id) !== String(b.account_id)) return false;
   if (accountKey(a) !== accountKey(b)) return false;
-  return (a.label_id != null && b.label_id != null && String(a.label_id) === String(b.label_id))
-    || merchantKey(a) === merchantKey(b);
+  const merchant = merchantKey(a);
+  return !!merchant && merchant === merchantKey(b);
 }
 
 export function buildUpcomingPayments(transactions, today = new Date(), { through = null } = {}) {
@@ -88,6 +89,7 @@ export function buildUpcomingPayments(transactions, today = new Date(), { throug
           paidIds.add(tx.id);
           timeline.push({
             id: tx.id, description: tx.display_name || tx.description, category: template.category || 'Other',
+            ...(through ? { isFixed: true } : {}),
             amount: tx.amount, dayOfMonth: tx.parsed.day, ...(through ? { date: dateFor(tx.parsed.day) } : {}),
             isIncome: false, status: 'processed', payMode: payModeOf(tx, template)
           });

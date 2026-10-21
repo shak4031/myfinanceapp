@@ -233,6 +233,10 @@ body .filter-panel { display: flex; flex-direction: row; flex-wrap: wrap; align-
 .filter-panel .checkbox-filter input { min-width: 0; width: 17px; }
 .filter-status { margin: 0 0 11px auto; color: var(--text-secondary); font-size: 12px; }
 body .transaction-panel { padding: 8px 20px; overflow: auto; }
+.mobile-scroll-hint { display: none; }
+@media (max-width: 768px) {
+  .mobile-scroll-hint { display: block; margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); }
+}
 .transactions-table { min-width: 720px; font-size: 13px; }
 .transactions-table th { padding: 16px 14px !important; white-space: nowrap; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
 .transactions-table td { padding: 16px 14px !important; border-bottom: 1px solid #edf2f7; }

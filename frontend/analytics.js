@@ -14,11 +14,11 @@
     const preset = state?.preset || '3';
     const option = (value, label) => `<option value="${value}"${preset === value ? ' selected' : ''}>${label}</option>`;
     return `<form class="compass-range" data-compass-range="${key}" aria-label="${esc(title)} date range">
-      <label>Period<select name="preset">${[3, 6, 12, 24].map(n => option(String(n), `${n} months`)).join('')}${option('custom', 'Custom')}</select></label>
+      <label>Time period<select name="preset">${window.monthRangePresets.map(({ months, label }) => option(String(months), label)).join('')}${option('custom', 'Choose months…')}</select></label>
       <label${preset === 'custom' ? '' : ' hidden'}>Start month<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
       <label${preset === 'custom' ? '' : ' hidden'}>End month<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
       <button type="submit" class="btn btn-secondary btn-compact">Apply</button>
-      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Default calculation · completed months only. Choose a period to explore.'}</p></form>`;
+      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Last 3 completed months · missing statements can understate totals. Choose a period to explore.'}</p></form>`;
   }
   function compassPanel(key, title, renderer, base) {
     const finish = globalThis.FinancePerformance?.begin('cpu', `compass.${key}`);
@@ -38,6 +38,7 @@
     return `<span class="pro-move ${up === upIsBad ? 'is-bad' : 'is-good'}">${up ? '▲' : '▼'} ${text}%</span>`;
   };
   const card = (title, subtitle, body, extra = '') => `<article class="pro-card panel ${extra}"><header><div><h2>${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ''}</div></header><div class="pro-card-body">${body}</div></article>`;
+  const scrollRegion = (label, body, className = 'table-scroll') => `<p class="pro-scroll-hint">Swipe sideways to explore the full ${label.toLowerCase()}.</p><div class="${className}" role="region" aria-label="${label}" tabindex="0">${body}</div>`;
   const how = text => globalThis.FinanceUI?.howCalc?.(text) || '';
   const KPI_NOTES = [
     'Everything spent since the 1st of this month, transfers between your own accounts excluded, compared with the same day last month.',
@@ -105,7 +106,7 @@
     const verdict = f.projected > f.lastMonth * 1.05 ? `<span class="pro-move is-bad">Pacing ${money(f.projected - f.lastMonth, true)} above last month</span>`
       : f.projected < f.lastMonth * 0.95 ? `<span class="pro-move is-good">Pacing ${money(f.lastMonth - f.projected, true)} below last month</span>` : '<span class="pro-move is-flat">In line with last month</span>';
     const body = `<div class="pro-forecast-head"><div><span>Projected</span><strong>${money(f.projected, true)}</strong></div><div><span>Spent</span><strong>${money(f.mtd, true)}</strong></div><div><span>Bills still due</span><strong>${money(f.remainingFixed, true)}</strong></div><div><span>Expected flexible</span><strong>${money(f.remainingVariable, true)}</strong></div></div>
-      ${plot({ series: [{ points: last, className: 'muted-line' }, { points: current, className: 'primary', area: true, dot: true }, { points: projection, className: 'primary', dashed: true }], xMax, xTicks: ticks, label: 'Month-end forecast' })}
+      ${scrollRegion('Month-end forecast chart', plot({ series: [{ points: last, className: 'muted-line' }, { points: current, className: 'primary', area: true, dot: true }, { points: projection, className: 'primary', dashed: true }], xMax, xTicks: ticks, label: 'Month-end forecast' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="primary">This month</span><span class="primary dashed">Projection</span><span class="muted-line">Last month</span>${verdict}</div>`;
     return card('Month-end forecast', 'Spending pace this month against last month, with bills still due', body, 'span-2');
   }
@@ -122,7 +123,7 @@
     const netNote = c.basis === 'typical-surplus'
       ? how(`Your typical monthly surplus: average income minus average spending over ${basis}, transfers excluded. It is the same number your dashboard, Debt and Goals pages use.`)
       : how('Average income minus last month\'s bills and your average flexible spending.');
-    const body = `${plot({ series: [{ points, className: end >= c.startBalance ? 'primary' : 'danger', area: true, dot: true }], xMax: c.months.length, xTicks: ticks, width: 380, height: 220, label: 'Projected balance' })}
+    const body = `${scrollRegion('Projected balance chart', plot({ series: [{ points, className: end >= c.startBalance ? 'primary' : 'danger', area: true, dot: true }], xMax: c.months.length, xTicks: ticks, width: 380, height: 220, label: 'Projected balance' }), 'pro-chart-scroll')}
       <div class="pro-mini-stats"><div><span>Balance today</span><strong>${money(c.startBalance, true)}</strong></div><div><span>In 6 months</span><strong class="${end < 0 ? 'is-bad' : ''}">${money(end, true)}</strong></div><div><span>${c.basis === 'typical-surplus' ? 'Typical surplus' : 'Net / month'}${netNote}</span><strong class="${net < 0 ? 'is-bad' : 'is-good'}">${net >= 0 ? '+' : ''}${money(net, true)}</strong></div><div><span>Lowest point</span><strong class="${low < 0 ? 'is-bad' : ''}">${money(low, true)}</strong></div></div>`;
     return card('6-month cash flow', 'Projected balance if your typical surplus continues each month', body);
   }
@@ -130,7 +131,7 @@
   function trendCard(a) {
     const s = a.series, { bars, monthShort } = charts();
     const sma3 = s.spend.map((_, i) => i < 2 ? null : (s.spend[i] + s.spend[i - 1] + s.spend[i - 2]) / 3);
-    const body = `${bars({ labels: a.months.map(monthShort), values: s.spend, lines: [{ values: sma3, className: 'sma' }, { values: s.income, className: 'income' }], label: 'Monthly spending' })}
+    const body = `${scrollRegion('Monthly spending chart', bars({ labels: a.months.map(monthShort), values: s.spend, lines: [{ values: sma3, className: 'sma' }, { values: s.income, className: 'income' }], label: 'Monthly spending' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="bar">Spending</span><span class="sma">3-month moving average</span><span class="income">Income</span></div>`;
     return card('Monthly spend trend', 'Twelve months of spending with a 3-month moving average', body, 'span-2');
   }
@@ -160,7 +161,7 @@
       <td class="num">${c.volatility == null ? '&mdash;' : `<span class="pro-vol" title="Month-to-month variation">${c.volatility < 0.25 ? 'Low' : c.volatility < 0.6 ? 'Medium' : 'High'}</span>`}</td>
       <td class="num"><span class="pro-signal is-${c.signal}">${SIGNAL_TEXT[c.signal] || c.signal}</span></td></tr>`).join('');
     return card('Category signals', 'Each category against its own moving averages. "Running hot" means the projected month is 15%+ above the 3-month average.',
-      rows.length ? `<div class="table-scroll"><table class="pro-table" id="pro-signals-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` : '<p class="pro-empty">Import a few months of transactions to see category signals.</p>', 'span-3');
+      rows.length ? scrollRegion('Category signals table', `<table class="pro-table" id="pro-signals-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`) : '<p class="pro-empty">Import a few months of transactions to see category signals.</p>', 'span-3');
   }
 
   function recurringCard(a) {
@@ -345,7 +346,7 @@
     const split = [['fixed bills', f.fixed.total], ['everyday spending', f.everyday.total], ['debt not yet imported', f.debt]]
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
-    const svgEl = `<div class="pro-sankey-wrap"><svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg></div><p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
+    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
     return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }
@@ -444,7 +445,7 @@
     const legend = '<div class="pro-heat-legend"><span>Cooler than usual</span><i style="background:rgba(16,185,129,.9)"></i><i style="background:rgba(16,185,129,.4)"></i><i class="is-neutral"></i><i style="background:rgba(225,29,72,.4)"></i><i style="background:rgba(225,29,72,.9)"></i><span>Hotter than usual</span></div>';
     return card(`Hot and cold months${how('Every spending category (transfers between your own accounts excluded), month by month. Each row is coloured against its own median month, so steady bills stay neutral and a category only lights up when it swings: within 8% of usual is blank, and colour deepens up to 60% above or below. "Usual" is that median month. Hover a cell for the exact figure.')}`,
       'Each row against its own usual month. Red runs hot, green runs cool.',
-      `${lede}<div class="table-scroll"><table class="pro-heatmap"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>${legend}`, 'span-3');
+      `${lede}${scrollRegion('Monthly spending heatmap', `<table class="pro-heatmap"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>`)}${legend}`, 'span-3');
   }
 
   // Merchant bubbles: size and colour switch between attributes; the field itself is a small physics simulation (mountBubbles).
@@ -651,7 +652,7 @@
         <td class="num">${momentum(c)}</td><td class="num">${cross(c)}</td><td class="num">${band(c)}</td>
         <td class="num">${c.upMonths} of ${c.upWindow}<small>months up</small></td><td class="num">${driver(c)}</td></tr>`;
     }).join('');
-    const table = `<div class="table-scroll"><table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th><th scope="col" class="num">Purchases &times; size</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const table = scrollRegion('Technical readings table', `<table class="pro-table pro-mf-table"><thead><tr><th scope="col">Category</th><th scope="col" class="num">You</th><th scope="col" class="num">Typical</th><th scope="col" class="num">Compared</th><th scope="col" class="num">Momentum</th><th scope="col" class="num">3-mo / ${mf.categories[0]?.crossover?.slowMonths || 12}-mo avg</th><th scope="col" class="num">Band</th><th scope="col" class="num">Breadth</th><th scope="col" class="num">Purchases &times; size</th></tr></thead><tbody>${rows}</tbody></table>`);
     const oneOffs = mf.categories.flatMap(c => c.oneOffs.map(o => ({ ...o, label: c.label })));
     const oneOffNote = oneOffs.length ? `<p class="pro-footnote">Set aside as one-off purchases: ${oneOffs.slice(0, 5).map(o => `${window.transactionLink(o.id, o.description)} ${money(o.amount, true)} (${dateShort(o.date)}, ${esc(o.label)})`).join('; ')}${oneOffs.length > 5 ? ` and ${oneOffs.length - 5} more` : ''}.</p>` : '';
     return `<details class="pro-mf-details panel"><summary><span>Technical readings</span><small>Moving averages, momentum, volatility bands and breadth for each category</small></summary>

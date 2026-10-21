@@ -100,7 +100,7 @@ accidentally receive a car icon. Custom names without a match use a neutral icon
 The shared raised-card depth also appears on finance panels, welcome metrics,
 analytics KPIs, payment cards and summaries, tutorial cards, Accounts, Debts,
 and Goals. Selected cards retain a focus ring in addition to the same depth.
-Neutral welcome surfaces and semantic warning colors are preserved.
+Soft emerald, blue and lavender welcome accents and semantic warning colors are preserved.
 Calculation information icons open a labeled, keyboard-accessible dialog with
 the relevant formula rather than a floating tooltip clipped by its card.
 Accounts show **Last data update** (the latest transaction date or statement
@@ -129,11 +129,22 @@ Renamed payees resets names currently assigned by that rule, not unrelated names
 
 Every main Spending Compass panel has its own period selector: plan/headline and
 insights, money flow, signal overlap, merchants, heatmap, normal range, and technical
-readings. Choose 3, 6, 12 or 24 **completed months**, or Custom to reveal start and end
+readings. The default is the last **3 completed months**, including the underlying
+money flow, merchant and heatmap calculations. Choose 3, 6, 12 or 24 **completed months**, or Choose months to reveal start and end
 month fields for a range of 1–24 completed months, then Apply. Other panels keep
-their ranges. Until Apply, the original calculations remain. Selections survive navigation and
+their ranges. Until Apply, the previous selection remains. Selections survive navigation and
 data refreshes within the page, but are not saved across browser reloads.
 Panels retain the full available content width, with the range controls above each.
+Transactions and Categories use the same **Last 3, 6, 12 and 24 months** presets and
+default (and reset) to three months, including the current month. They also retain
+current/previous month, quarter, year and explicit All time options. An empty custom
+selection shows no activity rather than silently switching to all time. Category
+details inherit the selected period; unfiltered details default to three months.
+The dashboard's 30-day forecast, month-to-date cards and annual cash-flow history
+retain their purpose-specific windows. Compass uses completed months so partial
+months do not distort its comparisons.
+On phones, Analytics stacks cards, wraps labels and controls, and keeps wide tables
+and charts in labeled, keyboard-focusable horizontal scroll regions with swipe hints.
 Merchant bubbles can be sized by **Total amount** or **Transactions** in the period
 (transaction count, not physical store visits). Colour defaults to **Category**,
 with a consistent intensity per category. **Spending swing %** uses
@@ -189,9 +200,9 @@ calendar-filter, filtered-summary, and request-order regressions.
 ### Actionable alerts and account review
 
 The welcome greeting is followed directly by the rotating insight carousel.
-Its restrained emerald, navy and neutral palette pairs simple line icons with
+Its restrained emerald, blue and lavender palette pairs simple line icons with
 a small, static greeting wave. Red and amber accents remain reserved for urgent
-insights and at-risk balances; neutral metric cards keep amounts easy to scan.
+insights and at-risk balances; softly tinted metric cards keep amounts easy to scan.
 The carousel uses a gentle transition, retains pause and manual navigation,
 and respects reduced-motion preferences.
 **Action needed** and **Heads up** messages include the flagged item's details
@@ -316,8 +327,8 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   balance dipping below a safe level before payday, debt-free progress, goal status,
   price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
   can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
-  The hero uses quiet neutral surfaces, emerald actions, line icons and subtle
-  transitions. Only warning labels and key figures use semantic accent colors.
+  The hero uses a soft sage-to-blue backdrop, emerald actions, line icons and subtle
+  transitions. Muted blue and lavender accents add warmth without competing with warnings.
   The stage resizes smoothly to each message, with reduced-motion support.
 - **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
   debt-free month. Insights come from `GET /api/dashboard/insights`
@@ -345,7 +356,10 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   **Paid fixed bills this month** section above the calendar/list as **Paid**,
   with transaction links, even if
   the imported payment is missing its fixed flag or has a different amount.
-  Matching uses the merchant/label and distinguishes masked account numbers.
+  Matching requires the same merchant or explicit payee name and distinguishes
+  source accounts and masked account numbers. A shared category label alone never
+  identifies a bill, so ordinary purchases cannot enter fixed-bill history just
+  because they have the same label.
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
   with past due days remain in the projection and are labelled overdue.
 - **Income is projected too.** Credits categorised as Salary/Income are treated as

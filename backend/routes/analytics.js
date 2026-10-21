@@ -44,7 +44,12 @@ router.get('/', async (req, res, next) => {
     ]);
     const typical = typicalSurplus(planInputs, now);
     const analytics = await timed(res, 'analytics', () => buildAnalytics({ ...inputs, typical }));
-    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical }));
+    const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
+    const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const range = { from: key(start), to: key(end), months: 3, endYear: end.getFullYear(), endMonth: end.getMonth() };
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range }));
+    moneyFlow.range = range;
     res.json({
       ...analytics, moneyFlow
     });

@@ -2,16 +2,16 @@
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 #welcome-hero.welcome-hero {
-  --welcome-accent: #226452; --welcome-accent-soft: #edf4ef;
+  --welcome-accent: #16705b; --welcome-accent-soft: #e5f5ed;
   position: relative; display: grid; gap: 24px; min-width: 0;
   padding: clamp(18px, 2.6vw, 30px) clamp(18px, 3vw, 34px); border-radius: 22px; color: #122138;
-  background: linear-gradient(120deg, #fff 60%, #f5f8f4);
-  border: 1px solid #dfe6df; box-shadow: 0 6px 24px -18px rgba(18,33,56,.2);
+  background: radial-gradient(ellipse at 100% 0%, #dcefeb 0%, transparent 52%), linear-gradient(120deg, #fff 42%, #f0f6fb);
+  border: 1px solid #cddfd9; border-top: 3px solid #67ad98; box-shadow: 0 6px 24px -18px rgba(18,33,56,.2);
 }
 .welcome-hero h1, .welcome-hero h3, .welcome-hero p { margin: 0; }
 .welcome-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .welcome-greeting { min-width: 0; }
-.welcome-date { color: #52637a; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.welcome-date { color: #345e70; font-size: 12px; font-weight: 600; line-height: 1.5; }
 .welcome-greeting h1 { margin-top: 8px !important; color: #122138; font-size: clamp(25px, 3vw, 34px); font-weight: 700; letter-spacing: -1px; line-height: 1.2; overflow-wrap: anywhere; }
 .welcome-name { color: var(--welcome-accent); }
 .welcome-wave { display: inline-block; margin-left: 8px; font-size: .65em; }
@@ -35,7 +35,8 @@
 @keyframes welcome-out { to { opacity: 0; } }
 .welcome-slide.tone-danger { --tone: #a52d40; --tone-soft: #fbf0f1; }
 .welcome-slide.tone-warning { --tone: #875117; --tone-soft: #faf3e8; }
-.welcome-slide.tone-success, .welcome-slide.tone-learn { --tone: #226452; --tone-soft: #edf4ef; }
+.welcome-slide.tone-success { --tone: #16705b; --tone-soft: #e3f4eb; }
+.welcome-slide.tone-learn { --tone: #466d9b; --tone-soft: #e8f0fa; }
 .welcome-insight-icon { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--tone-soft); border-radius: 14px; color: var(--tone); background: var(--tone-soft); }
 .welcome-slide-copy { display: grid; justify-items: start; gap: 8px; min-width: 0; }
 .welcome-slide-tone { color: var(--tone); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
@@ -65,15 +66,17 @@
 .welcome-nav { display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border: 1px solid #d9e2dc; border-radius: 50%; background: #fff; color: #334155; cursor: pointer; transition: background .2s, border-color .2s; }
 .welcome-nav:hover { background: #edf4ef; border-color: #9eb9ac; }
 
-/* Neutral metrics keep the numbers primary; only risk gets a warm accent. */
+/* Soft financial-theme accents; warm colours remain reserved for risk. */
 .welcome-pulse { min-width: 0; }
 .welcome-pulse dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0; }
 .welcome-pulse-row { --ink: #122138; display: grid; align-content: start; gap: 7px; min-width: 0; padding: 14px; border: 1px solid #e0e7e1; border-radius: 12px; background: #f8faf7; }
-.welcome-pulse-row.is-good, .welcome-pulse-row.is-mint { --ink: #226452; }
+.welcome-pulse-row.is-good, .welcome-pulse-row.is-mint { --ink: #226452; border-color: #cce3d7; background: #edf7f1; }
+.welcome-pulse-row.is-sky { --ink: #345e85; border-color: #d2e1ef; background: #eff5fb; }
+.welcome-pulse-row.is-grape { --ink: #655180; border-color: #dfd7e9; background: #f4f1f8; }
 .welcome-pulse-row.is-warn { --ink: #875117; border-color: #e7d9c2; background: #fcf9f3; }
 .welcome-pulse-row.is-bad { --ink: #a52d40; border-color: #e9cfd4; background: #fdf7f7; }
 .welcome-pulse-row dt { display: flex; align-items: center; gap: 6px; color: #475569; font-size: 12px; font-weight: 600; }
-.welcome-pulse-icon { display: inline-flex; flex: none; color: #526b60; }
+.welcome-pulse-icon { display: inline-flex; flex: none; color: var(--ink); }
 .welcome-pulse-row.is-warn .welcome-pulse-icon, .welcome-pulse-row.is-bad .welcome-pulse-icon { color: var(--ink); }
 .welcome-pulse-row dd { display: grid; gap: 3px; margin: 0; }
 .welcome-pulse-row strong { color: var(--ink); font-size: 20px; font-weight: 700; letter-spacing: -.4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

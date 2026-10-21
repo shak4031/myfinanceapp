@@ -18,7 +18,7 @@
 
   // Months covered by the selected period. "All time" spans the first to the last month with activity.
   function periodMonths(period, transactions) {
-    if (period?.months?.length) return [...new Set(period.months)].sort();
+    if (Array.isArray(period?.months)) return [...new Set(period.months)].sort();
     const seen = transactions.map(t => monthOf(t.date)).filter(Boolean).sort();
     if (!seen.length) return [];
     const months = [];
@@ -141,7 +141,12 @@
   function exportTransactions() {
     const pro = globalThis.FinancePro;
     if (!pro.requirePro('CSV export is part of MyFinance Pro.')) return;
-    const months = (globalThis.currentTransactionPeriod?.()?.months || []).slice().sort();
+    const period = globalThis.currentTransactionPeriod?.();
+    if (Array.isArray(period?.months) && !period.months.length) {
+      globalThis.notify('Choose at least one month before exporting.');
+      return;
+    }
+    const months = (period?.months || []).slice().sort();
     const params = new URLSearchParams({ type: 'transactions' });
     const transactionId = globalThis.currentTransactionId?.();
     if (transactionId) params.set('transactionId', transactionId);

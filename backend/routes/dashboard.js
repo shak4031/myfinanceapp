@@ -197,6 +197,7 @@ async function loadUpcoming(req, today = new Date()) {
       amount,
       direction,
       label_id,
+      account_id,
       is_fixed,
       pay_mode,
       display_name

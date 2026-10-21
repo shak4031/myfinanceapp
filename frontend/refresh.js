@@ -57,7 +57,8 @@
   const periodLabel = month => month ? new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'All time';
   const shortMonth = key => new Date(`${key}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const PERIOD_PRESETS = [['', 'All time'], ['this-month', 'This month'], ['last-month', 'Last month'], ['this-quarter', 'This quarter'], ['last-quarter', 'Last quarter'], ['ytd', 'Year to date'], ['last-12', 'Last 12 months']];
+  window.monthRangePresets = Object.freeze([3, 6, 12, 24].map(months => ({ months, label: `Last ${months} months` })));
+  const PERIOD_PRESETS = [...window.monthRangePresets.map(({ months, label }) => [`last-${months}`, label]), ['this-month', 'This month'], ['last-month', 'Last month'], ['this-quarter', 'This quarter'], ['last-quarter', 'Last quarter'], ['ytd', 'Year to date'], ['', 'All time']];
   // Resolves a period spec to the month keys it covers (null = all time) and a human label.
   window.resolvePeriod = (spec = '', custom = [], today = new Date()) => {
     const y = today.getFullYear(), m = today.getMonth(), quarter = Math.floor(m / 3);
@@ -71,14 +72,15 @@
       return { months: span(quarter * 3 - 3, 3), label: `Q${Math.floor(start.getMonth() / 3) + 1} ${start.getFullYear()}` };
     }
     if (spec === 'ytd') return { months: span(0, m + 1), label: `Year to date ${y}` };
-    if (spec === 'last-12') return { months: span(m - 11, 12), label: 'Last 12 months' };
+    const rolling = String(spec).match(/^last-(3|6|12|24)$/);
+    if (rolling) { const count = Number(rolling[1]); return { months: span(m - count + 1, count), label: `Last ${count} months` }; }
     const year = String(spec).match(/^year:(\d{4})$/);
     if (year) return { months: Array.from({ length: 12 }, (_, i) => `${year[1]}-${String(i + 1).padStart(2, '0')}`), label: year[1] };
     const single = String(spec).match(/^month:(\d{4}-\d{2})$/);
     if (single) return { months: [single[1]], label: periodLabel(single[1]) };
     if (spec === 'custom') {
       const months = [...new Set(custom)].filter(Boolean).sort();
-      if (!months.length) return { months: null, label: 'All time · choose months below' };
+      if (!months.length) return { months: [], label: 'Choose months below' };
       if (months.length === 1) return { months, label: periodLabel(months[0]) };
       return { months, label: months.length <= 3 ? months.map(shortMonth).join(', ') : `${months.length} selected months (${shortMonth(months[0])} – ${shortMonth(months.at(-1))})` };
     }
@@ -89,6 +91,7 @@
     const select = $(`${prefix}-period`), picker = $(`${prefix}-months`);
     const custom = new Set();
     let available = new Set();
+    if (!select.value) select.value = 'last-3';
     const current = () => window.resolvePeriod(select.value, [...custom]);
     function renderPicker() {
       picker.hidden = select.value !== 'custom';
@@ -114,7 +117,7 @@
       select.value = value;
       renderPicker();
     }
-    function reset() { select.value = ''; custom.clear(); picker.hidden = true; }
+    function reset() { select.value = 'last-3'; custom.clear(); picker.hidden = true; }
     function setMonths(months) { custom.clear(); months.forEach(month => custom.add(month)); select.value = 'custom'; }
     select.onchange = () => { renderPicker(); return onChange(); };
     picker.onchange = event => {
@@ -285,7 +288,7 @@
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
     else if (view === 'transactions') {
       if (sub && !validTransactionId(sub)) { notify('Invalid transaction link. Showing all transactions.'); sub = ''; }
-      if (sub || transactionId) clearTransactionFilters();
+      if (sub || transactionId) { clearTransactionFilters(); $('txn-filter-period').value = ''; }
       transactionId = sub;
     } else if (view !== 'tutorials') sub = '';
     const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : titles[view];
@@ -450,7 +453,7 @@
     }
   };
   // `period` is a month/date string, or a resolved `{ months, label }` from a period control.
-  window.openCategoryTransactions = async (category, period = '') => {
+  window.openCategoryTransactions = async (category, period = window.resolvePeriod('last-3')) => {
     const request = ++detailRequest;
     const resolved = period && typeof period === 'object'
       ? period
@@ -489,7 +492,7 @@
     }
   };
   $('category-dialog-month').onchange = () => window.openCategoryTransactions(detailCategory, $('category-dialog-month').value);
-  $('category-dialog-all').onclick = () => window.openCategoryTransactions(detailCategory);
+  $('category-dialog-all').onclick = () => window.openCategoryTransactions(detailCategory, '');
   $('category-cards').onclick = async event => {
     const card = event.target.closest('[data-open-category]');
     if (!card) return;

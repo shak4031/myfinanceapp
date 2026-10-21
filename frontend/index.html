@@ -491,12 +491,12 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261030a">
+  <link rel="stylesheet" href="refresh.css?v=20261030b">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
-  <link rel="stylesheet" href="analytics.css?v=20261024e">
+  <link rel="stylesheet" href="analytics.css?v=20261030b">
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261017r">
-  <link rel="stylesheet" href="welcome.css?v=20261020d">
+  <link rel="stylesheet" href="welcome.css?v=20261030b">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="marketing.css?v=20261018c">
@@ -675,7 +675,7 @@
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/categories"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the 1-min tour</a><button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button></div>
         </header>
         <div class="filter-panel panel">
-          <label for="category-filter-period">Time period<select id="category-filter-period"><option value="">All time</option></select></label>
+          <label for="category-filter-period">Time period<select id="category-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
           <p id="category-filter-status" class="filter-status" role="status"></p>
           <div id="category-filter-months" class="month-picker" hidden></div>
         </div>
@@ -739,7 +739,7 @@
               <option value="">All Categories</option>
             </select></label>
             <label for="txn-filter-period">Time period
-            <select id="txn-filter-period"><option value="">All time</option></select></label>
+            <select id="txn-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
             <label for="txn-filter-paymode">Pays by
             <select id="txn-filter-paymode" onchange="loadAllTransactions()">
               <option value="">All payments</option>
@@ -757,7 +757,8 @@
             <div id="txn-filter-months" class="month-picker" hidden></div>
           </div>
         <div id="txn-summary" class="metrics-grid" aria-live="polite"></div>
-        <div class="panel transaction-panel">
+        <p class="mobile-scroll-hint">Swipe sideways to see all transaction details.</p>
+        <div class="panel transaction-panel" role="region" aria-label="Transaction details" tabindex="0">
           <table class="transactions-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
               <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;" title="Debits: a fixed monthly bill. Deposits: counts as regular income for payday forecasts.">Fixed / Income</th><th style="padding: 12px;" title="Auto-pay goes out on its own; Manual needs you to pay it">Pays by</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
@@ -1241,11 +1242,11 @@
         if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance + (item.isIncome ? item.amount : -item.amount)) * 100) / 100;
         const isDeficit = !isPaid && !item.isIncome && hasBalance && runningBalance < 0;
         if (item.isIncome) { if (isPaid) incomeReceived += item.amount; else { incomeExpected += item.amount; if (!nextPay) nextPay = { date, item }; } }
-        else if (isPaid) { if (!item.planned) { paidTotal += item.amount; paidCount++; } } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual') manualDueCount++; }
+        else if (isPaid) { if (!item.planned && item.isFixed === true) { paidTotal += item.amount; paidCount++; } } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual') manualDueCount++; }
         if (isOverdue) overdueCount++;
         if (isDeficit) riskCount++;
         const entry = { item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance };
-        if (isPaid) { if (!item.isIncome && !item.planned) history.push(entry); return; }
+        if (isPaid) { if (!item.isIncome && !item.planned && item.isFixed === true) history.push(entry); return; }
         if (!byDay.has(date)) byDay.set(date, []);
         byDay.get(date).push(entry);
       });
@@ -1873,15 +1874,15 @@
 
   </script>
   <script src="ui.js?v=20261030a"></script>
-  <script src="refresh.js?v=20261027a"></script>
+  <script src="refresh.js?v=20261030b"></script>
   <script src="accounts.js?v=20261028a"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261017r"></script>
   <script src="pro-core.js?v=20261020c"></script>
   <script src="pro-dashboard.js?v=20261024b"></script>
   <script src="spending-history.js?v=20261025b"></script>
-  <script src="pro-categories.js?v=20261027a"></script>
-  <script src="analytics.js?v=20261026a"></script>
+  <script src="pro-categories.js?v=20261030b"></script>
+  <script src="analytics.js?v=20261030b"></script>
   <script src="plan.js?v=20261017r"></script>
   <script src="welcome.js?v=20261029b"></script>
   <script src="income-review.js?v=20261020b"></script>

@@ -100,6 +100,27 @@ test('separate accounts do not pay one another even with the same merchant label
   assert.equal(result.find(row => row.status === 'projected').amount, 50);
 });
 
+test('a shared category label cannot turn unrelated card purchases into paid fixed bills', () => {
+  const result = buildUpcomingPayments([
+    tx(1, { description: 'SANTANDER AUTO PAYMENT', category: 'Car Loans', label_id: 7 }),
+    tx(2, { date: '2026-10-10', description: 'SANTANDER AUTO PAYMENT', amount: 450, is_fixed: false, label_id: 7 }),
+    ...['GOFUNDME', 'HUNGRY TIGER', 'CHESS', 'AFTERPAY', 'CAR WASH', 'SCHOOL', 'WAWA'].map((merchant, i) =>
+      tx(i + 3, { date: '2026-10-10', description: `VISA DDA PUR AP 123456 ${merchant}`, category: 'Car Loans', label_id: 7, is_fixed: false }))
+  ], today, { through: new Date(2026, 10, 13) });
+  assert.deepEqual(result.filter(row => row.status === 'processed').map(row => row.id), [2]);
+  assert.equal(result.find(row => row.id === 2).isFixed, true);
+  assert.equal(result.filter(row => row.status === 'projected').length, 0);
+});
+
+test('same merchant on another source account does not settle a fixed bill', () => {
+  const result = buildUpcomingPayments([
+    tx(1, { account_id: 1 }),
+    tx(2, { account_id: 2, date: '2026-10-10', is_fixed: false })
+  ], today);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].status, 'projected');
+});
+
 test('month end clamps correctly across leap years and January rollover', () => {
   assert.equal(buildUpcomingPayments([tx(1, { date: '2026-01-31' })], new Date(2026, 1, 10))[0].dayOfMonth, 28);
   assert.equal(buildUpcomingPayments([tx(1, { date: '2024-01-31' })], new Date(2024, 1, 10))[0].dayOfMonth, 29);

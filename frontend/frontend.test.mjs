@@ -95,6 +95,18 @@ test('shared raised surfaces preserve nested spending cards, target states and r
   for (const surface of ['welcome-pulse-row', 'pro-kpi', 'pay-cal-summary', 'plan-strategy', 'tut-card']) assert.ok(css.includes(`body .view .${surface}`));
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*?\.plan-goal:hover \{ transform: none/);
 });
+test('phone analytics wraps metric labels and contains readable charts and tables', () => {
+  const css = source('analytics.css');
+  assert.match(css, /\.analytics-content > \*, \.pro-card-body > \* \{ min-width: 0/);
+  assert.match(css, /\.pro-kpi > span \{ white-space: normal; overflow: visible/);
+  assert.match(css, /\.pro-chart-scroll \.pro-chart \{ min-width: 560px/);
+  assert.match(css, /\.pro-sankey-wrap \.pro-sankey \{ min-width: 960px/);
+  assert.match(css, /@media \(max-width: 359px\)/);
+  const script = source('analytics.js');
+  assert.match(script, /role="region" aria-label="\$\{label\}" tabindex="0"/);
+  assert.match(script, /Swipe sideways to explore/);
+  assert.match(source('index.html'), /class="panel transaction-panel" role="region" aria-label="Transaction details" tabindex="0"/);
+});
 
 test('all frontend scripts and inline application code parse', () => {
   for (const file of ['session.js','client-errors.js','ui.js','refresh.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
@@ -474,9 +486,12 @@ const activity = [
 ];
 const categoryData = [{ id: 1, name: 'Groceries' }, { id: 2, name: 'Dining' }, { id: 3, name: 'Income' }];
 function activityFixture() {
-  return fixture(async url => response(200, url === '/api/categories' ? categoryData
+  const f = fixture(async url => response(200, url === '/api/categories' ? categoryData
     : url.endsWith('categorization-rules') ? { categories: categoryData, rules: [] }
     : { transactions: activity }));
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 9, 16, 12])); } };
+  return f;
 }
 test('active transaction renderer applies month to rows and all summary amounts', async () => {
   const f = activityFixture(); f.run('refresh.js');
@@ -505,10 +520,10 @@ test('transaction month, category and fixed debit filters compose and reset toge
   await f.context.loadAllTransactions();
   assert.doesNotMatch(f.node('full-txn-table').innerHTML, /October salary/);
   await f.context.resetTransactionFilters();
-  assert.equal(f.node('txn-filter-period').value, '');
+  assert.equal(f.node('txn-filter-period').value, 'last-3');
   assert.equal(f.node('txn-filter-fixed').checked, false);
   assert.match(f.node('full-txn-table').innerHTML, /September market/);
-  assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
+  assert.match(f.node('txn-filter-status').textContent, /Last 3 months · 4 matching/);
 });
 test('empty transaction periods have zero summaries and an explicit empty state', async () => {
   const f = activityFixture(); f.run('refresh.js');
@@ -564,8 +579,34 @@ test('period presets resolve quarters, year to date, full years and multi-month 
   assert.deepEqual(resolve('this-quarter', [], '2026-11-05T12:00:00').months, ['2026-10', '2026-11']);
   assert.equal(resolve('ytd', [], '2026-10-16T12:00:00').months.length, 10);
   assert.equal(resolve('last-12', [], '2026-10-16T12:00:00').months[0], '2025-11');
+  assert.deepEqual(resolve('last-3', [], '2026-01-16T12:00:00').months, ['2025-11', '2025-12', '2026-01']);
+  assert.equal(resolve('last-6', [], '2026-10-16T12:00:00').months.length, 6);
+  assert.equal(resolve('last-24', [], '2026-10-16T12:00:00').months.length, 24);
+  assert.deepEqual(resolve('custom', [], '2026-10-16T12:00:00').months, []);
   assert.deepEqual(resolve('year:2025', [], '2026-10-16T12:00:00').months.slice(0, 2), ['2025-01', '2025-02']);
   assert.deepEqual(resolve('custom', ['2026-10', '2026-08'], '2026-10-16T12:00:00'), { months: ['2026-08', '2026-10'], label: 'Aug 2026, Oct 2026' });
+});
+test('three-month defaults exclude older spending, while All time remains an explicit choice', async () => {
+  const f = activityFixture(); f.run('refresh.js');
+  const old = { ...activity[0], id: 5, date: '2025-01-01', amount: 50000, description: 'Old large purchase' };
+  f.context.fetch = async url => response(200, url === '/api/categories' ? categoryData
+    : url.endsWith('categorization-rules') ? { categories: categoryData, rules: [] }
+    : { transactions: [...activity, old] });
+  await f.context.loadAllTransactions();
+  await f.context.loadCategories();
+  assert.equal(f.node('txn-filter-period').value, 'last-3');
+  assert.equal(f.node('category-filter-period').value, 'last-3');
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /Old large purchase/);
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /\$50,062/);
+  assert.equal(f.node('txn-filter-period').innerHTML, f.node('category-filter-period').innerHTML);
+  for (const n of [3, 6, 12, 24]) assert.match(f.node('txn-filter-period').innerHTML, new RegExp(`value="last-${n}">Last ${n} months`));
+  f.node('txn-filter-period').value = '';
+  await f.node('txn-filter-period').onchange();
+  assert.match(f.node('full-txn-table').innerHTML, /Old large purchase/);
+  f.node('txn-filter-period').value = 'custom';
+  await f.node('txn-filter-period').onchange();
+  assert.match(f.node('full-txn-table').innerHTML, /No transactions match/);
+  assert.equal((f.node('txn-summary').innerHTML.match(/\$0\.00/g) || []).length, 3);
 });
 test('transaction search matches description, category and amount and highlights matches', async () => {
   const f = activityFixture(); f.run('refresh.js');
@@ -575,7 +616,7 @@ test('transaction search matches description, category and amount and highlights
   assert.match(html, /October <mark>market<\/mark>/);
   assert.match(html, /September <mark>market<\/mark>/);
   assert.doesNotMatch(html, /October cafe|October salary/);
-  assert.match(f.node('txn-filter-status').textContent, /All time · “market” · 2 matching/);
+  assert.match(f.node('txn-filter-status').textContent, /Last 3 months · “market” · 2 matching/);
   f.node('txn-filter-search').value = 'october $1,000';
   await f.context.loadAllTransactions();
   html = f.node('full-txn-table').innerHTML;
@@ -586,7 +627,7 @@ test('transaction search matches description, category and amount and highlights
   assert.match(f.node('full-txn-table').innerHTML, /October cafe/);
   await f.context.resetTransactionFilters();
   assert.equal(f.node('txn-filter-search').value, '');
-  assert.match(f.node('txn-filter-status').textContent, /All time · 4 matching/);
+  assert.match(f.node('txn-filter-status').textContent, /Last 3 months · 4 matching/);
 });
 test('similar-payment matcher normalizes statement noise with regex and weighs amount', () => {
   const f = fixture(); f.run('refresh.js');
@@ -782,6 +823,7 @@ test('pay-mode column, filter and similar-payment prompt mark auto-pay and manua
     assert.deepEqual(writes, [{ updates: [{ id: 1, category: 'Dining', expectedCategory: 'Shopping' }], learnRules: false, protectCorrections: false }]);
   });
   f.run('refresh.js');
+  f.node('txn-filter-period').value = '';
   await f.context.loadAllTransactions();
   const html = f.node('full-txn-table').innerHTML;
   assert.equal((html.match(/data-paymode/g) || []).length, 3);
@@ -905,7 +947,8 @@ test('dashboard rolls across months, includes overdue in cash and keeps paid his
   const timeline = [
     { date: '2026-11-19', amount: 50, description: 'End day bill' },
     { date: '2026-10-03', amount: 100, description: 'Overdue bill' },
-    { date: '2026-10-10', amount: 900, description: 'Paid mortgage', status: 'processed', id: 42 },
+    { date: '2026-10-10', amount: 900, description: 'Paid mortgage', status: 'processed', isFixed: true, id: 42 },
+    { date: '2026-10-10', amount: 20, description: 'Unrelated card purchase', status: 'processed', isFixed: false, id: 43 },
     { date: '2026-10-11', amount: 800, description: 'Received paycheck', status: 'processed', isIncome: true },
     { date: '2026-10-12', amount: 100, description: 'Past savings allocation', status: 'processed', planned: true },
     { date: '2026-11-01', amount: 500, description: 'Next month rent' },
@@ -936,7 +979,7 @@ test('dashboard rolls across months, includes overdue in cash and keeps paid his
   assert.match(main, /Earlier this month &middot; still pending/);
   assert.match(history, /href="#transactions\/42">Paid mortgage/);
   assert.match(history, /1 paid bill.*\$900\.00/);
-  assert.doesNotMatch(history, /Received paycheck|Past savings allocation|Planned|Received/);
+  assert.doesNotMatch(history, /Received paycheck|Past savings allocation|Planned|Received|Unrelated card purchase/);
   assert.match(history, /Paid fixed bills this month/);
   assert.match(main, /Next 30 days/);
   assert.match(source('refresh.css'), /#upcoming-section \.pay-history > ol\.pay-list \{ display: block/);
@@ -1426,7 +1469,22 @@ test('transaction CSV exports preserve the exact-ID filter and drop it after res
   assert.match(f.context.location.href, /type=transactions&transactionId=1$/);
   await f.context.resetTransactionFilters();
   f.context.FinanceProCategories.exportTransactions();
-  assert.equal(f.context.location.href, '/api/analytics/export.csv?type=transactions');
+  const months = f.context.resolvePeriod('last-3').months;
+  const [year, month] = months.at(-1).split('-').map(Number);
+  const end = new Date(year, month, 0).getDate();
+  assert.equal(f.context.location.href, `/api/analytics/export.csv?type=transactions&from=${months[0]}-01&to=${months.at(-1)}-${end}`);
+});
+test('empty custom periods do not widen Pro insights or CSV exports to all time', () => {
+  const f = loadPro();
+  assert.deepEqual(Array.from(f.context.FinanceProCategories.periodMonths({ months: [] }, activity)), []);
+  f.context.FinancePro.requirePro = () => true;
+  f.node('txn-filter-period').value = 'custom';
+  const messages = [];
+  f.context.notify = message => messages.push(message);
+  const before = f.context.location.href;
+  f.context.FinanceProCategories.exportTransactions();
+  assert.equal(f.context.location.href, before);
+  assert.match(messages[0], /Choose at least one month/);
 });
 test('Pro chart helpers produce scalable SVG', () => {
   const { ProCharts } = loadPro().context;
@@ -1773,8 +1831,8 @@ test('Compass date ranges offer only four month presets and custom dates, update
   let html = f.node('analytics-content').innerHTML;
   const panel = key => html.split(`data-compass-panel="${key}"`)[1].split('data-compass-panel=')[0];
   assert.match(panel('heatmap'), /6 of 6 completed months available/);
-  assert.match(panel('flow'), /Default calculation/);
-  assert.match(panel('plan'), /Default calculation/);
+  assert.match(panel('flow'), /Last 3 completed months/);
+  assert.match(panel('plan'), /Last 3 completed months/);
   assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, 1);
   values.preset.value = 'custom';
   event.target.value = values.preset.value;
@@ -1796,7 +1854,7 @@ test('Compass date ranges offer only four month presets and custom dates, update
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
   assert.match(panel('heatmap'), /Could not update this panel: Choose valid completed months/);
-  assert.match(panel('flow'), /Default calculation/);
+  assert.match(panel('flow'), /Last 3 completed months/);
 });
 
 test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {
@@ -1942,9 +2000,11 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   await f.context.FinanceWelcome.load();
   assert.doesNotMatch(f.node('welcome-hero').innerHTML, /Take a one-minute tour/);
 });
-test('welcome styling uses quiet neutral surfaces and scoped urgency with reduced motion', () => {
+test('welcome styling uses soft financial accents and scoped urgency with reduced motion', () => {
   const css = source('welcome.css');
-  assert.match(css, /--welcome-accent: #226452/);
+  assert.match(css, /--welcome-accent: #16705b/);
+  assert.match(css, /\.welcome-pulse-row\.is-sky \{[^}]*background: #eff5fb/);
+  assert.match(css, /\.welcome-pulse-row\.is-grape \{[^}]*background: #f4f1f8/);
   assert.match(css, /\.welcome-pulse-row \{[^}]*background: #f8faf7/);
   assert.match(css, /\.welcome-slide\.tone-danger \{ --tone: #a52d40/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[^]*animation: none !important; transition: none !important/);
