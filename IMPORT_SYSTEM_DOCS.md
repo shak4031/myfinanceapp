@@ -2,7 +2,88 @@
 
 ## Overview
 
-This is a **bulletproof transaction import system** for the MyFinanceApp. It can handle TD Bank CSV exports, auto-categorize transactions, and import them into PostgreSQL with robust error handling.
+MyFinanceApp imports account-scoped CSV/OFX/QFX and PDF statements into PostgreSQL.
+
+## Import history and recovery
+
+Open **Import a statement > Import history & recovery**. Review filenames, account names,
+timestamps and transaction counts. Select individual imports or enter a number from 1 to
+100 and choose **Select recent**, then **Undo selected**. Selection skips active imports
+that only skipped duplicates and did not change a statement. **Restore selected** puts
+back undone imports.
+
+- Every successful CSV, PDF, or batch-file import has its own persistent batch ID.
+  Rejected imports leave no transactions, new accounts or batch records.
+- Undo saves the current rows in a private, server-side database backup before removing
+  them, atomically. Restore preserves IDs, original timestamps, manual categories,
+  fixed/payment/income flags and display names. Duplicate rows skipped by the import
+  belong to earlier history and are never removed.
+- Verified PDF statement facts (balance, APR, due date, etc.) are tracked before and
+  after import. Undo/restore checks the account's current statement and rejects
+  conflicting changes. Undo newer statement changes first; restore older ones first.
+  Multi-selection orders operations automatically and is all-or-nothing.
+- Transfer pairing and spending/income classification are recalculated after recovery.
+  Accounts, account identity/type edits, merchant rules and manually entered debt
+  plans are retained; recovery is not a full-workspace rollback.
+- Backups are retained until restored, including across application restarts. A later
+  Undo saves a fresh snapshot. There is no automatic expiry. These backups live in
+  the same database; they do not replace independent database disaster-recovery backups.
+- Restoring an import whose rows were reimported is rejected to prevent double counting.
+  Deleted referenced accounts/labels must be addressed by reimporting the original file.
+- The startup migration recovers older import boundaries only when rows have a saved
+  timestamp and an import-like source. Groups use the exact timestamp, source and
+  account. They are explicitly marked **Older inferred import**: timestamps may not
+  represent an entire original upload, and previous PDF statement facts were not
+  recorded. Such recovery is transaction-only. Rows without a reliable boundary are
+  counted as untracked and left untouched.
+- History and backups use the same tenant row-level security as transactions.
+  Recovery is audited; read-only support sessions cannot undo or restore.
+
+### Current API
+
+- `POST /api/import/import-csv`: `csvData`, `source`, and `accountId` or `newAccount`.
+- `POST /api/import/import-pdf`: `pdfBase64`, `source`, and optional account choice
+  (otherwise the verified PDF identity is used).
+- `POST /api/import/import-batch`: one batch per successfully imported file; the whole
+  request commits atomically.
+- `GET /api/import/history`: batch summaries plus an `untracked` transaction count.
+  No raw backup transaction data is sent with the history list.
+- `POST /api/import/history/undo` and `/restore`: `{ "ids": [123, 124] }`, 1-100
+  distinct batch IDs; returns affected transaction and batch counts. Stale status,
+  statement changes and restore conflicts return HTTP 409.
+
+CSV files containing an account-number column are checked before saving. Mixed-account
+exports are rejected: export or split each account separately. A detected last-four
+ending that disagrees with the selected account's saved ending is also rejected.
+Only last-four endings, never full account numbers, appear in parser metadata.
+
+### Correcting an overlapping or misassigned CSV import
+
+1. Confirm the affected filenames, timestamps and destination accounts in history.
+2. Undo only the problematic imports. Do not delete older imports just because the
+   same filename appears again.
+3. Split mixed-account files; select the correct account and account type for each.
+4. Reimport the corrected exports and review skipped duplicates and totals. Existing
+   deduplication compares account, date, direction, amount and normalized description;
+   differently worded CSV and PDF rows may still require manual duplicate review.
+5. Review **Accounts** for transfer ownership. Card/loan payments on imported accounts
+   should be transfers; purchases, fees and interest remain ordinary transactions.
+   If the result is worse, undo the replacement before restoring the original import.
+
+### Validation
+
+`npm test` includes synthetic HTTP tests covering atomic undo/restore, statement
+conflicts, multi-file boundaries, duplicate protection, legacy migration, row-level
+isolation and UI controls. Optional local-only CSV verification is available through
+`CSV_RECOVERY_TEST_FILES` (a JSON array of `{path, kind, last4, expectedRows}`; add
+`status: 422` for a rejected file), running
+`node --test backend/utils/import-history.test.js`. It uses an isolated PGlite
+database and never writes to the configured live PostgreSQL database.
+
+## Historical import implementation notes
+
+The sections below describe the earlier SQL-fixture importer, not the current UI/API.
+Shared fixture import endpoints are now disabled; use the account-scoped API above.
 
 ## Features
 

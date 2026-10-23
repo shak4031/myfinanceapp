@@ -85,7 +85,7 @@ async function fixture() {
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
-      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE);
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')), account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE, import_batch_id INT);
     CREATE TABLE name_rules (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
       pattern TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(user_id,pattern));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');

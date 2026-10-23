@@ -11,6 +11,7 @@ import { currentUserId } from '../utils/tenant.js';
 import { reconcileTransfers } from '../utils/transfers.js';
 import { resolveImportAccount, resolveStatementAccount } from './accounts.js';
 import { recordAudit, structuredLog } from '../utils/audit.js';
+import { beginImport, finishImport, lockImports, importHistory, changeImports } from '../utils/importHistory.js';
 
 const router = express.Router();
 const db = new Database();
@@ -74,7 +75,7 @@ async function parseFile({ type, data, source, accountType }) {
   throw failure(400, 'File type must be csv or pdf');
 }
 
-export async function importTransactions(client, transactions, config, source, accountId = null, { preserveOccurrences = false } = {}) {
+export async function importTransactions(client, transactions, config, source, accountId = null, { preserveOccurrences = false, batchId = null } = {}) {
   let imported = 0, duplicates = 0;
   const occurrences = new Map();
   // One snapshot of bills with a known pay mode, newest first, so repeat payments inherit it.
@@ -106,11 +107,11 @@ export async function importTransactions(client, transactions, config, source, a
     const payMode = inheritPayMode({ ...transaction, direction, label_id: suggestion.label?.id ?? null }, payHistory);
     const incomeRole = direction === 'CREDIT' ? incomeHistory.find(row => row.key === incomeKey(transaction.description))?.role ?? null : null;
     await client.query(`INSERT INTO transactions
-      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role,account_id,display_name)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      (date,description,amount,direction,balance,source,category,label_id,is_fixed,pay_mode,income_role,account_id,display_name,import_batch_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [transaction.date, transaction.description, transaction.amount, direction, transaction.balance,
       source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed, payMode, incomeRole, accountId,
-      resolveName(transaction.description, nameRules)?.name ?? null]);
+      resolveName(transaction.description, nameRules)?.name ?? null, batchId]);
     imported++;
   }
   return { imported, duplicates, excluded: 0 };
@@ -120,10 +121,19 @@ export async function importTransactions(client, transactions, config, source, a
 async function importInto(client, body, parsed, config, fallbackSource, req) {
   stage(req, 'account-resolution');
   const account = parsed.statement ? await resolveStatementAccount(client, body, parsed.statement) : await resolveImportAccount(client, body);
+  validateCsvAccount(parsed, account);
   stage(req, 'saving');
+  const source = body.source || fallbackSource || 'import';
+  const batchId = await beginImport(client, source, account);
   await saveStatement(client, account, parsed.statement);
-  const result = await importTransactions(client, parsed.transactions, config, body.source || fallbackSource, account.id, { preserveOccurrences: !!parsed.statement });
-  return { ...result, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
+  const result = await importTransactions(client, parsed.transactions, config, source, account.id, { preserveOccurrences: !!parsed.statement, batchId });
+  await finishImport(client, batchId, result);
+  return { ...result, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
+}
+function validateCsvAccount(parsed, account) {
+  if (parsed.format?.accountCount > 1) throw failure(422, 'This CSV contains multiple accounts. Export each account separately and import it into its matching account. Nothing was imported.');
+  const last4 = parsed.format?.accountLast4?.[0];
+  if (last4 && account.last4 && last4 !== account.last4) throw failure(422, `This CSV is for account ending ${last4}, not the selected account. Choose the matching account. Nothing was imported.`);
 }
 async function saveStatement(client, account, statement) {
   if (!statement) return;
@@ -148,22 +158,43 @@ const requireAccountChoice = body => {
   if ((body?.accountId == null || body.accountId === '') && !body?.newAccount) throw failure(400, 'Choose which account this statement is from (accountId or newAccount is required)');
 };
 
+router.get('/history', async (req, res, next) => {
+  try { res.json(await db.transaction(importHistory)); } catch (error) { next(error); }
+});
+router.post('/history/:action', async (req, res, next) => {
+  try {
+    const result = await db.transaction(client => changeImports(client, req.body?.ids, req.params.action));
+    await recordAudit(req, `import.${req.params.action}`, 'success',
+      { detail: { batchCount: result.batches, affectedRows: result.affected } });
+    res.json(result);
+  } catch (error) {
+    await recordAudit(req, 'import.recovery.failed', 'failure',
+      { status: error.status || 500, detail: { action: req.params.action } });
+    next(error);
+  }
+});
+
 router.post('/import-csv', route(async (req, res) => {
   const started = Date.now();
   requireAccountChoice(req.body);
   const accountType = req.body.accountType || req.body.newAccount?.kind;
   const result = await db.transaction(async client => {
+    await lockImports(client);
     stage(req, 'account-resolution');
     const account = await resolveImportAccount(client, req.body);
     stage(req, 'parsing');
     const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source, accountType: PARSER_TYPE[account.kind] || accountType });
+    validateCsvAccount(parsed, account);
     req.importParsedRows = parsed.transactions.length;
     stage(req, 'saving', { parsedRows: parsed.transactions.length, unreadableRows: parsed.errors.length });
     const config = await loadCategorization(client);
-    const imported = await importTransactions(client, parsed.transactions, config, req.body.source || 'csv_import', account.id);
+    const source = req.body.source || 'csv_import';
+    const batchId = await beginImport(client, source, account);
+    const imported = await importTransactions(client, parsed.transactions, config, source, account.id, { batchId });
+    await finishImport(client, batchId, imported);
     stage(req, 'transfer-reconciliation');
     const transfers = await reconcileTransfers(client, currentUserId());
-    return { parsed, imported: { ...imported, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 }, ...summarize(transfers) } };
+    return { parsed, imported: { ...imported, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 }, ...summarize(transfers) } };
   });
   const { parsed } = result;
   stage(req, 'committed');
@@ -177,6 +208,7 @@ router.post('/import-pdf', route(async (req, res) => {
   req.importParsedRows = parsed.transactions.length;
   stage(req, 'parsed', { parsedRows: parsed.transactions.length, statementType: parsed.statement.type, balanced: parsed.reconciliation.status === 'balanced', warningCount: parsed.warnings.length });
   const result = await db.transaction(async client => {
+    await lockImports(client);
     const config = await loadCategorization(client);
     const imported = await importInto(client, req.body, parsed, config, 'pdf_import', req);
     stage(req, 'transfer-reconciliation');
@@ -199,6 +231,7 @@ router.post('/import-batch', route(async (req, res) => {
     req.importParsedRows = (req.importParsedRows || 0) + result.transactions.length;
   }
   const results = await db.transaction(async client => {
+    await lockImports(client);
     // One rule/category snapshot for the entire import, not one query per transaction.
     const config = await loadCategorization(client);
     const results = [];

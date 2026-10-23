@@ -52,6 +52,96 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
+test('import history selects recent imports, confirms recovery and refreshes financial views', async () => {
+  const batches = [
+    { id: 4, source: 'duplicate.csv', status: 'active', active_rows: 0, imported: 0, duplicates: 2, created_at: '2026-10-04' },
+    { id: 3, source: '<card>.csv', account_name: 'Card & bank', status: 'active', active_rows: 2, imported: 2, duplicates: 0, created_at: '2026-10-03', legacy: true },
+    { id: 2, source: 'bank.csv', status: 'active', active_rows: 3, imported: 3, duplicates: 0, created_at: '2026-10-02' },
+    { id: 1, source: 'undone.csv', status: 'undone', backup_rows: 2, created_at: '2026-10-01' }
+  ];
+  const calls = [];
+  const f = fixture(async (url, options) => {
+    calls.push([url, options]);
+    return response(200, options?.method === 'POST' ? { success: true, batches: 2, affected: 5 } : { batches, untracked: 7 });
+  });
+  const inputs = batches.map(batch => ({ dataset: { importId: String(batch.id) }, checked: false }));
+  f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
+  let confirmation = '';
+  let dashboard = 0, transactions = 0, accounts = 0, categories = 0, invalidated = 0;
+  f.context.FinanceUI = { confirm: async message => { confirmation = message; return true; } };
+  f.context.loadDashboard = async () => { dashboard++; };
+  f.context.loadAllTransactions = async () => { transactions++; };
+  f.context.loadCategories = async () => { categories++; };
+  f.context.FinanceAccounts = { loadPage: async () => { accounts++; } };
+  f.context.FinancePlan = { invalidate: () => { invalidated++; } };
+  f.run('import-history.js');
+  await f.context.FinanceImportHistory.load();
+  const html = f.node('import-history-list').innerHTML;
+  assert.match(html, /&lt;card&gt;\.csv/);
+  assert.match(html, /Card &amp; bank/);
+  assert.match(html, /7 transactions have no reliable import boundary/);
+  assert.match(html, /transaction-only recovery/);
+  f.node('import-history-count').value = '2';
+  f.node('import-history-recent').listeners.click();
+  assert.deepEqual(inputs.filter(input => input.checked).map(input => input.dataset.importId), ['3', '2'], 'duplicate-only imports do not consume recent selection');
+  await f.node('import-history-undo').listeners.click();
+  assert.match(confirmation, /2 imports \(5 transactions\)/);
+  assert.match(confirmation, /Older inferred imports/);
+  const post = calls.find(([, options]) => options?.method === 'POST');
+  assert.equal(post[0], '/api/import/history/undo');
+  assert.deepEqual(JSON.parse(post[1].body), { ids: [3, 2] });
+  assert.deepEqual([dashboard, transactions, accounts, categories, invalidated], [1, 1, 1, 1, 1]);
+  assert.match(f.node('import-history-status').textContent, /Undone 2 imports, 5 transactions. Totals refreshed/);
+  assert.equal(f.context.FinanceImportHistory.isBusy(), false);
+  assert.equal(f.node('import-history-undo').disabled, false);
+  f.context.FinanceImportHistory.reset();
+  assert.equal(f.node('import-history-list').textContent, '');
+  assert.equal(f.node('import-history-status').textContent, '');
+});
+
+test('import recovery rejects mixed states, respects cancellation and surfaces request failures', async () => {
+  let posts = 0;
+  const f = fixture(async (url, options) => {
+    if (options?.method === 'POST') { posts++; return response(409, { error: 'Undo newer imports first.' }); }
+    return response(200, { batches: [
+      { id: 1, source: 'one.csv', status: 'active', active_rows: 1, created_at: '2026-10-01' },
+      { id: 2, source: 'two.csv', status: 'undone', backup_rows: 1, created_at: '2026-10-02' }
+    ], untracked: 0 });
+  });
+  const inputs = [{ dataset: { importId: '1' }, checked: true }, { dataset: { importId: '2' }, checked: true }];
+  f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
+  f.context.FinanceUI = { confirm: async () => false };
+  f.run('import-history.js');
+  await f.context.FinanceImportHistory.load();
+  await f.node('import-history-undo').listeners.click();
+  assert.match(f.node('import-history-status').textContent, /only active imports/);
+  assert.equal(posts, 0);
+  inputs[1].checked = false;
+  await f.node('import-history-undo').listeners.click();
+  assert.equal(posts, 0, 'cancelling does not write');
+  f.context.FinanceUI.confirm = async () => true;
+  await f.node('import-history-undo').listeners.click();
+  assert.equal(posts, 1);
+  assert.match(f.node('import-history-status').textContent, /Undo newer imports first/);
+  assert.equal(f.node('import-history-undo').disabled, false);
+  f.context.importIsBusy = () => true;
+  await f.node('import-history-undo').listeners.click();
+  assert.equal(posts, 1);
+  assert.match(f.node('import-history-status').textContent, /Wait for the current import/);
+});
+
+test('an outstanding import history response cannot repopulate a signed-out workspace', async () => {
+  let resolve;
+  const f = fixture(() => new Promise(done => { resolve = done; }));
+  f.run('import-history.js');
+  const pending = f.context.FinanceImportHistory.load();
+  f.context.FinanceImportHistory.reset();
+  resolve(response(200, { batches: [{ id: 1, source: 'private.csv', created_at: '2026-10-01' }], untracked: 0 }));
+  assert.equal(await pending, false);
+  assert.equal(f.node('import-history-list').textContent, '');
+  assert.doesNotMatch(f.node('import-history-list').innerHTML, /private.csv/);
+});
+
 test('account freshness marks only data older than 45 calendar days and keeps import time separate', async () => {
   const accounts = [
     { id: 1, name: 'Fresh checking', kind: 'checking', dataAsOf: '2026-09-04', lastDataAddedAt: '2026-10-19T10:00:00Z' },

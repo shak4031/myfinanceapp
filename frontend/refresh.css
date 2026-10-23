@@ -308,6 +308,13 @@ body #import-modal { width: min(520px,calc(100vw - 24px)); max-width: calc(100vw
 .import-file-list { margin-top: 12px; overflow-wrap: anywhere; }
 .import-file-list:empty { display: none; }
 .import-actions { margin-top: 16px; }
+#import-history { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+#import-history summary { cursor: pointer; font-weight: 600; }
+#import-history .import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#import-modal #import-history .import-actions .btn { width: auto; flex: 1 1 140px; }
+#import-history-list { margin-top: 12px; max-height: 280px; overflow-y: auto; overflow-wrap: anywhere; }
+#import-history-list label { cursor: pointer; font-size: 13px; line-height: 1.5; }
+#import-history-list input { margin-right: 6px; }
 #import-modal .import-actions .btn { width: 100%; min-height: 44px; }
 .import-detected-account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #dce9e1; border-radius: 10px; background: #f6faf8; color: #35584a; font-size: 12px; line-height: 1.5; }
 .import-detected-account button { min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: #226452; font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

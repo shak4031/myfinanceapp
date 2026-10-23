@@ -1,6 +1,6 @@
 import { reconcileTransfers } from './transfers.js';
 
-export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules'];
+export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -230,6 +230,17 @@ export async function migratePrivateSchema(client) {
     );
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS display_name TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS name_override BOOLEAN NOT NULL DEFAULT FALSE;
+    CREATE TABLE IF NOT EXISTS import_batches (
+      id SERIAL PRIMARY KEY, source TEXT NOT NULL, account_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active','undone')),
+      legacy BOOLEAN NOT NULL DEFAULT FALSE, imported INTEGER NOT NULL DEFAULT 0,
+      duplicates INTEGER NOT NULL DEFAULT 0, statement_before JSONB, statement_after JSONB,
+      statement_changed BOOLEAN NOT NULL DEFAULT FALSE,
+      backup JSONB NOT NULL DEFAULT '[]'::jsonb, undone_at TIMESTAMPTZ
+    );
+    ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS restore_guard JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_batch_id INTEGER;
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -264,6 +275,10 @@ export async function migratePrivateSchema(client) {
         ALTER TABLE transactions ADD CONSTRAINT transactions_tenant_account_fk
           FOREIGN KEY (account_id, user_id) REFERENCES accounts (id, user_id);
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transactions_tenant_import_fk') THEN
+        ALTER TABLE transactions ADD CONSTRAINT transactions_tenant_import_fk
+          FOREIGN KEY (import_batch_id, user_id) REFERENCES import_batches (id, user_id);
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'finance_app_runtime') THEN
         CREATE ROLE finance_app_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
       END IF;
@@ -278,6 +293,28 @@ export async function migratePrivateSchema(client) {
   `);
   await normalizeStoredDates(client);
   await backfillTransfers(client);
+  // Old imports shared one transaction timestamp. Never guess boundaries for undated/manual rows.
+  await client.query(`
+    ALTER TABLE import_batches NO FORCE ROW LEVEL SECURITY;
+    WITH batches AS (
+      INSERT INTO import_batches (user_id,source,account_id,created_at,legacy,imported)
+      SELECT user_id,source,account_id,created_at,TRUE,COUNT(*)::int FROM transactions
+      WHERE import_batch_id IS NULL AND created_at IS NOT NULL
+        AND source ~* '(\\.(csv|tsv|ofx|qfx|qbo|pdf)$|import)'
+      GROUP BY user_id,source,account_id,created_at
+      RETURNING id,user_id,source,account_id,created_at
+    )
+    UPDATE transactions t SET import_batch_id=b.id FROM batches b
+    WHERE t.import_batch_id IS NULL AND t.user_id=b.user_id AND t.source=b.source
+      AND t.account_id IS NOT DISTINCT FROM b.account_id AND t.created_at=b.created_at;
+    CREATE INDEX IF NOT EXISTS transactions_import_batch_idx ON transactions (user_id,import_batch_id);
+    -- Undone rows retain their IDs. A restart must not reuse those IDs for new transactions.
+    SELECT setval(pg_get_serial_sequence('transactions','id'),
+      GREATEST((SELECT last_value FROM transactions_id_seq),
+        COALESCE((SELECT MAX((r->>'id')::integer) FROM import_batches b,
+          LATERAL jsonb_array_elements(b.backup) r),1)),TRUE)
+    WHERE EXISTS (SELECT 1 FROM import_batches WHERE jsonb_array_length(backup)>0);
+  `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
       ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;

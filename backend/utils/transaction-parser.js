@@ -181,10 +181,11 @@ class TransactionCSVParser {
     ], [date, amount, debit, credit]);
     const memo = pick([name => /^(memo|notes?|extended description)$/.test(name)], [description]);
     const balance = pick([name => /balance|running bal/.test(name)]);
+    const accountNumber = pick([name => /^(account number|account no\.?|account #|account id|acct number|acct no\.?)$/.test(name)]);
     // Type-like columns are only used for unambiguous debit/credit words.
     const types = columns.map((name, i) => (/^(type|transaction type|trans(action)? type|tran type|details|transaction|debit\/credit|dr\/cr|cr\/dr|credit\/debit|indicator)$/.test(name) ? i : -1))
       .filter(i => i >= 0 && ![date, amount, debit, credit, description, balance].includes(i));
-    return { date, description, memo, amount, debit, credit, balance, types, txnType: types[0] ?? -1, columns };
+    return { date, description, memo, amount, debit, credit, balance, accountNumber, types, txnType: types[0] ?? -1, columns };
   }
 
   isHeader(row) {
@@ -297,6 +298,7 @@ class TransactionCSVParser {
     this.columnMap = map;
 
     const parsed = [];
+    const accountNumbers = new Set();
     for (let i = headerIndex + 1; i < rows.length; i++) {
       const row = rows[i];
       const date = this.parseDate(row[map.date]);
@@ -317,6 +319,10 @@ class TransactionCSVParser {
         this.skipped++; // e.g. "Beginning balance" rows with no amount
         continue;
       }
+      if (map.accountNumber >= 0) {
+        const number = String(row[map.accountNumber] || '').replace(/[\s-]/g, '');
+        if (number) accountNumbers.add(number);
+      }
       const hint = map.types.map(index => this.typeDirection(row[index])).find(Boolean) || null;
       let description = this.cleanString(row[map.description]);
       const memo = map.memo >= 0 ? this.cleanString(row[map.memo]) : '';
@@ -332,6 +338,8 @@ class TransactionCSVParser {
     }
     this.format = {
       kind: 'csv', header: headerIndex >= 0, signConvention: parsed.some(item => item.signedOnly) ? signConvention : 'debit-credit-columns',
+      accountCount: accountNumbers.size,
+      accountLast4: [...new Set([...accountNumbers].map(value => value.match(/(\d{4})$/)?.[1]).filter(Boolean))],
       columns: Object.fromEntries(['date', 'description', 'amount', 'debit', 'credit', 'balance'].filter(key => map[key] >= 0).map(key => [key, map.columns[map[key]] ?? `column ${map[key] + 1}`]))
     };
     return this.finish(parsed, accountType, sourceFile);

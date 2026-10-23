@@ -118,10 +118,11 @@
     return parts.length ? `<div style="font-size: 12px; margin-top: 6px; color: var(--text-secondary);">${parts.join(' ')}</div>` : '';
   }
   async function afterImport(data) {
-    await load().catch(() => null);
+    await load();
     fillPicker(data?.account?.id);
     ['import-new-name', 'import-new-last4', 'import-new-institution'].forEach(id => { if ($(id)) $(id).value = ''; });
     if (document.querySelector('#accounts-view.active')) render();
+    await window.FinanceImportHistory?.load();
   }
 
   // ---------- Accounts page ----------

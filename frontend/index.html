@@ -900,6 +900,22 @@
         </div>
 
         <div id="import-result" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
+        <details id="import-history">
+          <summary>Import history &amp; recovery</summary>
+          <p class="import-hint">Undo removes only transactions added by the selected imports and keeps a server-side backup for Restore. Skipped duplicates are never removed. Accounts and saved rules stay in place.</p>
+          <p class="import-hint">Older imports are inferred from filename, account and saved timestamp. Verify them carefully: previous PDF statement balances cannot be recovered for these older imports.</p>
+          <div class="import-actions">
+            <label>Recent active imports <input id="import-history-count" type="number" min="1" max="100" value="1" style="width: 65px;"></label>
+            <button type="button" class="btn btn-secondary" id="import-history-recent">Select recent</button>
+            <button type="button" class="btn btn-secondary" id="import-history-refresh">Refresh</button>
+          </div>
+          <div id="import-history-list" aria-live="polite"></div>
+          <div class="import-actions">
+            <button type="button" class="btn btn-secondary" id="import-history-undo">Undo selected</button>
+            <button type="button" class="btn btn-secondary" id="import-history-restore">Restore selected</button>
+          </div>
+          <p id="import-history-status" role="status" aria-live="polite"></p>
+        </details>
       </div>
     </div>
   </dialog>
@@ -1543,6 +1559,7 @@
     // ===========================================
     function openImportModal() {
       document.getElementById('import-modal').showModal();
+      window.FinanceImportHistory?.load();
       const result = document.getElementById('import-result');
       if (result.style.display === 'block') result.scrollIntoView({ block: 'nearest' });
     }
@@ -1569,7 +1586,7 @@
       result.scrollIntoView({ block: 'nearest' });
     }
     let csvImportInProgress = false;
-    function importIsBusy() { return csvImportInProgress || pdfImportInProgress; }
+    function importIsBusy() { return csvImportInProgress || pdfImportInProgress || window.FinanceImportHistory?.isBusy(); }
     function importSupportReference(response, data) {
       return data?.requestId || response.headers?.get?.('X-Request-Id') || '';
     }
@@ -1841,7 +1858,8 @@
   </script>
   <script src="ui.js?v=20261030a"></script>
   <script src="refresh.js?v=20261031d"></script>
-  <script src="accounts.js?v=20261028a"></script>
+  <script src="accounts.js?v=20261023b"></script>
+  <script src="import-history.js?v=20261023a"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261020c"></script>
