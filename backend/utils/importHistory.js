@@ -1,8 +1,56 @@
 import { currentUserId } from './tenant.js';
 import { failure } from './categorization.js';
 import { reconcileTransfers } from './transfers.js';
+import { createHash, randomBytes } from 'node:crypto';
 
 const json = value => value == null ? null : JSON.stringify(value);
+const hashToken = token => createHash('sha256').update(token).digest('hex');
+
+async function recoveryState(client) {
+  const state = {};
+  for (const table of ['import_batches', 'accounts', 'transactions', 'transaction_labels', 'categories']) {
+    state[table] = (await client.query(`SELECT * FROM ${table} ORDER BY id FOR UPDATE`)).rows;
+  }
+  return createHash('sha256').update(JSON.stringify(state)).digest('hex');
+}
+
+export async function reviewImports(client, ids, action) {
+  await lockImports(client);
+  const revision = await recoveryState(client);
+  const history = await importHistory(client);
+  // Exercise the exact commit path, including multi-import statement/restore conflicts,
+  // then roll back all simulated writes before returning the review.
+  await client.query('SAVEPOINT import_review');
+  let result;
+  try { result = await changeImports(client, ids, action); }
+  finally { await client.query('ROLLBACK TO SAVEPOINT import_review'); await client.query('RELEASE SAVEPOINT import_review'); }
+  const batches = history.batches.filter(batch => ids.includes(batch.id));
+  const expiresAt = Date.now() + 5 * 60000;
+  const reviewToken = randomBytes(32).toString('hex');
+  await client.query('DELETE FROM import_reviews WHERE expires_at <= NOW()');
+  await client.query('INSERT INTO import_reviews(token_hash,payload,expires_at) VALUES($1,$2::jsonb,$3)',
+    [hashToken(reviewToken), JSON.stringify({ ids: [...ids].sort((a, b) => a - b), action, revision }), new Date(expiresAt)]);
+  return { action, affected: result.affected, batches, remainingTransactions:
+    (await client.query('SELECT COUNT(*)::int AS count FROM transactions')).rows[0].count + (action === 'undo' ? -result.affected : result.affected),
+  expiresAt: new Date(expiresAt).toISOString(), validForMs: Math.max(0, expiresAt - Date.now()),
+  reviewToken };
+}
+
+export async function commitImports(client, ids, action, reviewToken) {
+  if (typeof reviewToken !== 'string' || !/^[a-f0-9]{64}$/.test(reviewToken)) throw failure(400, 'Review and acknowledge the impact before confirming.');
+  await lockImports(client);
+  const review = (await client.query('SELECT payload FROM import_reviews WHERE token_hash=$1 AND expires_at>NOW() FOR UPDATE',
+    [hashToken(reviewToken)])).rows[0];
+  const payload = review?.payload;
+  if (!payload || !Array.isArray(ids) || payload.action !== action ||
+    JSON.stringify(payload.ids) !== JSON.stringify([...ids].sort((a, b) => a - b))) {
+    throw failure(409, 'The selection changed or the review expired. Review the imports again.');
+  }
+  if (payload.revision !== await recoveryState(client)) throw failure(409, 'Your financial data changed since this review. Refresh and review again; nothing was changed.');
+  const result = await changeImports(client, ids, action);
+  await client.query('DELETE FROM import_reviews WHERE token_hash=$1', [hashToken(reviewToken)]);
+  return result;
+}
 
 // Serialise imports and recovery for a user before taking any account/transaction locks.
 export async function lockImports(client) {

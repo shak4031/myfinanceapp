@@ -6,11 +6,19 @@ MyFinanceApp imports account-scoped CSV/OFX/QFX and PDF statements into PostgreS
 
 ## Import history and recovery
 
-Open **Import a statement > Import history & recovery**. Review filenames, account names,
-timestamps and transaction counts. Select individual imports or enter a number from 1 to
-100 and choose **Select recent**, then **Undo selected**. Selection skips active imports
-that only skipped duplicates and did not change a statement. **Restore selected** puts
-back undone imports.
+Open **Import a statement > Import history & recovery**. **Active imports** contains
+Undo candidates; **Undone / Restore backups** contains only Restore candidates.
+An undone import cannot be selected for Undo, and duplicate-only imports without
+statement changes have no selection control.
+
+Review filenames, account names, timestamps and transaction counts. Select individual
+imports or enter a number from 1 to 100 and choose **Select recent**, then **Review undo**.
+Selection and review do not commit financial changes. The server validates the exact
+operation, including restore and statement conflicts, and returns an impact summary:
+affected files/accounts, transaction counts, remaining transaction count and limitations.
+Check **I understand this impact and want to proceed**, then **Confirm undo**.
+Restore follows the same review, acknowledgement and **Confirm restore** flow.
+Cancelling, changing mode, refreshing or changing the selection discards the review.
 
 - Every successful CSV, PDF, or batch-file import has its own persistent batch ID.
   Rejected imports leave no transactions, new accounts or batch records.
@@ -48,9 +56,17 @@ back undone imports.
   request commits atomically.
 - `GET /api/import/history`: batch summaries plus an `untracked` transaction count.
   No raw backup transaction data is sent with the history list.
-- `POST /api/import/history/undo` and `/restore`: `{ "ids": [123, 124] }`, 1-100
-  distinct batch IDs; returns affected transaction and batch counts. Stale status,
-  statement changes and restore conflicts return HTTP 409.
+- `POST /api/import/history/review`: `{ "ids": [123, 124], "action": "undo" }`
+  (or `"restore"`), 1-100 distinct IDs. Runs the exact recovery path inside a
+  savepoint and rolls it back, then saves a private, hashed, single-use review token
+  with a five-minute expiry. Financial state is unchanged by review.
+- `POST /api/import/history/undo` and `/restore` require
+  `{ "ids": [123, 124], "reviewToken": "<from review>", "acknowledged": true }`.
+  The server verifies tenant, selection, action, expiry and a fingerprint of the
+  financial state under row locks, then revalidates and commits atomically.
+  Replayed tokens, intervening edits/imports, stale status, statement changes and
+  restore conflicts return HTTP 409. Missing review/acknowledgement returns HTTP 400.
+  Tokens are database-backed and work across server instances and restarts.
 
 CSV files containing an account-number column are checked before saving. Mixed-account
 exports are rejected: export or split each account separately. A detected last-four
@@ -60,7 +76,7 @@ Only last-four endings, never full account numbers, appear in parser metadata.
 ### Correcting an overlapping or misassigned CSV import
 
 1. Confirm the affected filenames, timestamps and destination accounts in history.
-2. Undo only the problematic imports. Do not delete older imports just because the
+2. Review and confirm Undo only for the problematic imports. Do not delete older imports just because the
    same filename appears again.
 3. Split mixed-account files; select the correct account and account type for each.
 4. Reimport the corrected exports and review skipped duplicates and totals. Existing

@@ -11,7 +11,7 @@ import { currentUserId } from '../utils/tenant.js';
 import { reconcileTransfers } from '../utils/transfers.js';
 import { resolveImportAccount, resolveStatementAccount } from './accounts.js';
 import { recordAudit, structuredLog } from '../utils/audit.js';
-import { beginImport, finishImport, lockImports, importHistory, changeImports } from '../utils/importHistory.js';
+import { beginImport, finishImport, lockImports, importHistory, reviewImports, commitImports } from '../utils/importHistory.js';
 
 const router = express.Router();
 const db = new Database();
@@ -161,9 +161,14 @@ const requireAccountChoice = body => {
 router.get('/history', async (req, res, next) => {
   try { res.json(await db.transaction(importHistory)); } catch (error) { next(error); }
 });
+router.post('/history/review', async (req, res, next) => {
+  try { res.json(await db.transaction(client => reviewImports(client, req.body?.ids, req.body?.action))); }
+  catch (error) { next(error); }
+});
 router.post('/history/:action', async (req, res, next) => {
   try {
-    const result = await db.transaction(client => changeImports(client, req.body?.ids, req.params.action));
+    if (req.body?.acknowledged !== true) throw failure(400, 'Acknowledge the reviewed impact before confirming.');
+    const result = await db.transaction(client => commitImports(client, req.body?.ids, req.params.action, req.body?.reviewToken));
     await recordAudit(req, `import.${req.params.action}`, 'success',
       { detail: { batchCount: result.batches, affectedRows: result.affected } });
     res.json(result);

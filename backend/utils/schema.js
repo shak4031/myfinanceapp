@@ -1,6 +1,6 @@
 import { reconcileTransfers } from './transfers.js';
 
-export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches'];
+export const PRIVATE_TABLES = ['accounts', 'categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews'];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -247,6 +247,10 @@ export async function migratePrivateSchema(client) {
       backup JSONB NOT NULL DEFAULT '[]'::jsonb, undone_at TIMESTAMPTZ
     );
     ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS restore_guard JSONB NOT NULL DEFAULT '[]'::jsonb;
+    CREATE TABLE IF NOT EXISTS import_reviews (
+      id SERIAL PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, payload JSONB NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
+    );
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_batch_id INTEGER;
   `);
   for (const table of PRIVATE_TABLES) {

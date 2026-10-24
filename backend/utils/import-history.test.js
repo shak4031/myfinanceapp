@@ -49,8 +49,14 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
   };
   const rows = async () => (await database.query('SELECT * FROM transactions ORDER BY id')).rows;
   const history = async () => (await call('/api/import/history')).body;
-  const undo = ids => call('/api/import/history/undo', { ids });
-  const restore = ids => call('/api/import/history/restore', { ids });
+  const review = (ids, action = 'undo') => call('/api/import/history/review', { ids, action });
+  const change = async (ids, action) => {
+    const checked = await review(ids, action);
+    if (checked.status !== 200) return checked;
+    return call(`/api/import/history/${action}`, { ids, reviewToken: checked.body.reviewToken, acknowledged: true });
+  };
+  const undo = ids => change(ids, 'undo');
+  const restore = ids => change(ids, 'restore');
   const csvData = 'Date,Account Number,Description,Debit,Credit\n2026-10-01,00001111,SAMPLE SHOP,10,\n2026-10-02,00001111,PAYMENT RECEIVED -- THANK YOU,,20';
   try {
     const owner = await call('/api/auth/setup', { name: 'Test', email: 'recovery@example.test', password: 'test-only-password-123456', setupToken: process.env.OWNER_SETUP_TOKEN });
@@ -66,12 +72,28 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
     assert.equal(firstRows.find(row => row.direction === 'CREDIT').transfer_kind, 'internal', 'card payments are not income');
     assert.ok(firstRows.every(row => row.import_batch_id === first.body.batchId));
     assert.equal((await history()).batches[0].statement_changed, false, 'CSV does not claim a statement metadata change');
+    const checked = await review([first.body.batchId]);
+    assert.equal(checked.status, 200, JSON.stringify(checked.body));
+    assert.equal(checked.body.affected, 2);
+    assert.equal(checked.body.remainingTransactions, 0);
+    assert.deepEqual(await rows(), firstRows, 'validation never commits simulated undo');
+    assert.equal((await history()).batches[0].status, 'active');
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId] })).status, 400, 'direct commits without review/acknowledgement are rejected');
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId], acknowledged: true })).status, 400);
+    await database.query("UPDATE transactions SET display_name='Changed after review' WHERE direction='DEBIT'");
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId], acknowledged: true, reviewToken: checked.body.reviewToken })).status, 409, 'stale financial state requires a new review');
+    await database.query("UPDATE transactions SET display_name=NULL WHERE direction='DEBIT'");
+    const expired = await review([first.body.batchId]);
+    await database.query("UPDATE import_reviews SET expires_at=NOW()-INTERVAL '1 second'");
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId], acknowledged: true, reviewToken: expired.body.reviewToken })).status, 409);
     const repeated = await call('/api/import/import-csv', { csvData, source: 'repeat.csv', accountId });
     assert.equal(repeated.body.imported, 0);
     assert.equal(repeated.body.duplicates, 2);
     assert.equal((await undo([repeated.body.batchId])).body.affected, 0);
     assert.deepEqual(await rows(), firstRows, 'undoing duplicates never removes earlier rows');
     assert.equal((await restore([repeated.body.batchId])).status, 200);
+    const wrongSelection = await review([first.body.batchId]);
+    assert.equal((await call('/api/import/history/undo', { ids: [repeated.body.batchId], acknowledged: true, reviewToken: wrongSelection.body.reviewToken })).status, 409);
 
     const mixed = await call('/api/import/import-csv', { csvData: csvData.replace('00001111,PAYMENT', '00002222,PAYMENT'), source: 'mixed.csv', accountId });
     assert.equal(mixed.status, 422);
@@ -87,12 +109,16 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
 
     await database.query("UPDATE transactions SET category='Gas',category_corrected=TRUE,pay_mode='manual',display_name='My shop',name_override=TRUE WHERE direction='DEBIT'");
     const edited = await rows();
+    const commitFailureReview = await review([first.body.batchId]);
     failReconciliation = true;
-    assert.equal((await undo([first.body.batchId])).status, 500);
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId], acknowledged: true, reviewToken: commitFailureReview.body.reviewToken })).status, 500);
     failReconciliation = false;
     assert.deepEqual(await rows(), edited, 'failed recovery rolls back removals and snapshots');
     assert.equal((await history()).batches.find(batch => batch.id === first.body.batchId).status, 'active');
-    assert.equal((await undo([first.body.batchId])).body.affected, 2);
+    const successfulReview = await review([first.body.batchId]);
+    const confirmedBody = { ids: [first.body.batchId], acknowledged: true, reviewToken: successfulReview.body.reviewToken };
+    assert.equal((await call('/api/import/history/undo', confirmedBody)).body.affected, 2);
+    assert.equal((await call('/api/import/history/undo', confirmedBody)).status, 409, 'review tokens cannot be replayed');
     assert.equal((await rows()).length, 0);
     assert.equal((await history()).batches.find(batch => batch.id === first.body.batchId).backup_rows, 2);
     assert.equal((await undo([first.body.batchId])).status, 409, 'double undo is rejected');
@@ -187,11 +213,13 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
       assert.deepEqual(await rows(), baseline, 'local CSV rows survive recovery exactly');
     }
 
+    const privateReview = await review([first.body.batchId]);
     cookie = '';
     const other = await call('/api/auth/register', { name: 'Other', email: 'other-recovery@example.test', password: 'other-test-password-123456' });
     assert.equal(other.status, 200);
     cookie = other.headers.get('set-cookie').split(';')[0];
     assert.deepEqual((await history()).batches, []);
+    assert.equal((await call('/api/import/history/undo', { ids: [first.body.batchId], acknowledged: true, reviewToken: privateReview.body.reviewToken })).status, 409, 'a review token cannot be used by another tenant');
     assert.equal((await undo([first.body.batchId])).status, 404);
     assert.equal((await restore([first.body.batchId])).status, 404);
     cookie = ownerCookie;

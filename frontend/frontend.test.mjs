@@ -62,13 +62,18 @@ test('import history selects recent imports, confirms recovery and refreshes fin
   const calls = [];
   const f = fixture(async (url, options) => {
     calls.push([url, options]);
-    return response(200, options?.method === 'POST' ? { success: true, batches: 2, affected: 5 } : { batches, untracked: 7 });
+    if (url.endsWith('/review')) return response(200, { action: 'undo', affected: 5, batches: batches.filter(b => [3, 2].includes(b.id)),
+      remainingTransactions: 7, reviewToken: 'verified', validForMs: 300000,
+      expiresAt: new Date(Date.now() - 3600000).toISOString() });
+    if (options?.method === 'POST') {
+      batches.filter(b => [3, 2].includes(b.id)).forEach(b => { b.status = 'undone'; b.backup_rows = b.active_rows; b.active_rows = 0; });
+      return response(200, { success: true, batches: 2, affected: 5 });
+    }
+    return response(200, { batches, untracked: 7 });
   });
   const inputs = batches.map(batch => ({ dataset: { importId: String(batch.id) }, checked: false }));
   f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
-  let confirmation = '';
   let dashboard = 0, transactions = 0, accounts = 0, categories = 0, invalidated = 0;
-  f.context.FinanceUI = { confirm: async message => { confirmation = message; return true; } };
   f.context.loadDashboard = async () => { dashboard++; };
   f.context.loadAllTransactions = async () => { transactions++; };
   f.context.loadCategories = async () => { categories++; };
@@ -81,25 +86,40 @@ test('import history selects recent imports, confirms recovery and refreshes fin
   assert.match(html, /Card &amp; bank/);
   assert.match(html, /7 transactions have no reliable import boundary/);
   assert.match(html, /transaction-only recovery/);
+  assert.doesNotMatch(html, /undone\.csv|data-import-id="1"/, 'undone imports cannot be selected for undo');
+  assert.doesNotMatch(html, /data-import-id="4"/, 'duplicate-only imports are informational, not selectable');
   f.node('import-history-count').value = '2';
   f.node('import-history-recent').listeners.click();
   assert.deepEqual(inputs.filter(input => input.checked).map(input => input.dataset.importId), ['3', '2'], 'duplicate-only imports do not consume recent selection');
   await f.node('import-history-undo').listeners.click();
-  assert.match(confirmation, /2 imports \(5 transactions\)/);
-  assert.match(confirmation, /Older inferred imports/);
+  assert.match(f.node('import-history-impact').innerHTML, /Remove 5 transactions across 2 imports/);
+  assert.match(f.node('import-history-impact').innerHTML, /Older inferred import/);
+  assert.equal(f.node('import-history-commit').disabled, true);
+  await f.node('import-history-commit').listeners.click();
+  assert.equal(calls.filter(([url]) => url.endsWith('/undo')).length, 0, 'reviewing and unacknowledged commit do not change data');
+  f.node('import-history-ack').checked = true;
+  f.node('import-history-ack').listeners.change();
+  assert.equal(f.node('import-history-commit').disabled, false);
+  await f.node('import-history-commit').listeners.click();
   const post = calls.find(([, options]) => options?.method === 'POST');
-  assert.equal(post[0], '/api/import/history/undo');
-  assert.deepEqual(JSON.parse(post[1].body), { ids: [3, 2] });
+  assert.equal(post[0], '/api/import/history/review');
+  assert.deepEqual(JSON.parse(post[1].body), { ids: [3, 2], action: 'undo' });
+  const commit = calls.find(([url]) => url.endsWith('/undo'));
+  assert.deepEqual(JSON.parse(commit[1].body), { ids: [3, 2], reviewToken: 'verified', acknowledged: true });
   assert.deepEqual([dashboard, transactions, accounts, categories, invalidated], [1, 1, 1, 1, 1]);
   assert.match(f.node('import-history-status').textContent, /Undone 2 imports, 5 transactions. Totals refreshed/);
   assert.equal(f.context.FinanceImportHistory.isBusy(), false);
-  assert.equal(f.node('import-history-undo').disabled, false);
+  assert.doesNotMatch(f.node('import-history-list').innerHTML, /data-import-id="3"|data-import-id="2"/, 'completed imports disappear from undo choices');
+  f.node('import-history-backups').listeners.click();
+  assert.match(f.node('import-history-list').innerHTML, /Not available for Undo/);
+  assert.equal(f.node('import-history-undo').hidden, true);
+  assert.equal(f.node('import-history-restore').hidden, false);
   f.context.FinanceImportHistory.reset();
   assert.equal(f.node('import-history-list').textContent, '');
   assert.equal(f.node('import-history-status').textContent, '');
 });
 
-test('import recovery rejects mixed states, respects cancellation and surfaces request failures', async () => {
+test('import recovery rejects mixed states and surfaces validation failures without committing', async () => {
   let posts = 0;
   const f = fixture(async (url, options) => {
     if (options?.method === 'POST') { posts++; return response(409, { error: 'Undo newer imports first.' }); }
@@ -110,16 +130,12 @@ test('import recovery rejects mixed states, respects cancellation and surfaces r
   });
   const inputs = [{ dataset: { importId: '1' }, checked: true }, { dataset: { importId: '2' }, checked: true }];
   f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
-  f.context.FinanceUI = { confirm: async () => false };
   f.run('import-history.js');
   await f.context.FinanceImportHistory.load();
   await f.node('import-history-undo').listeners.click();
   assert.match(f.node('import-history-status').textContent, /only active imports/);
   assert.equal(posts, 0);
   inputs[1].checked = false;
-  await f.node('import-history-undo').listeners.click();
-  assert.equal(posts, 0, 'cancelling does not write');
-  f.context.FinanceUI.confirm = async () => true;
   await f.node('import-history-undo').listeners.click();
   assert.equal(posts, 1);
   assert.match(f.node('import-history-status').textContent, /Undo newer imports first/);
@@ -140,6 +156,42 @@ test('an outstanding import history response cannot repopulate a signed-out work
   assert.equal(await pending, false);
   assert.equal(f.node('import-history-list').textContent, '');
   assert.doesNotMatch(f.node('import-history-list').innerHTML, /private.csv/);
+});
+
+test('recovery review can be cancelled, expires, and restores only through an acknowledged commit', async () => {
+  const calls = [];
+  const batch = { id: 7, status: 'undone', source: 'backup.csv', backup_rows: 4, created_at: '2026-10-01' };
+  let expired = false;
+  const f = fixture(async (url, options) => {
+    calls.push([url, options]);
+    if (url.endsWith('/review')) return response(200, { action: 'restore', affected: 4, batches: [batch], remainingTransactions: 8,
+      reviewToken: 'restore-reviewed', expiresAt: new Date(Date.now() + (expired ? -1000 : 300000)).toISOString() });
+    if (url.endsWith('/restore')) { batch.status = 'active'; batch.active_rows = 4; return response(200, { batches: 1, affected: 4 }); }
+    return response(200, { batches: [batch], untracked: 0 });
+  });
+  const input = { dataset: { importId: '7' }, checked: true };
+  f.node('import-history-list').querySelectorAll = () => [input];
+  f.run('import-history.js');
+  await f.context.FinanceImportHistory.load();
+  f.node('import-history-backups').listeners.click();
+  await f.node('import-history-restore').listeners.click();
+  f.node('import-history-cancel').listeners.click();
+  assert.equal(f.node('import-history-review').hidden, true);
+  await f.node('import-history-commit').listeners.click();
+  assert.equal(calls.filter(([url]) => url.endsWith('/restore')).length, 0);
+  expired = true;
+  await f.node('import-history-restore').listeners.click();
+  f.node('import-history-ack').checked = true;
+  await f.node('import-history-commit').listeners.click();
+  assert.match(f.node('import-history-status').textContent, /Review expired/);
+  assert.equal(calls.filter(([url]) => url.endsWith('/restore')).length, 0);
+  expired = false;
+  await f.node('import-history-restore').listeners.click();
+  f.node('import-history-ack').checked = true;
+  await f.node('import-history-commit').listeners.click();
+  assert.deepEqual(JSON.parse(calls.find(([url]) => url.endsWith('/restore'))[1].body),
+    { ids: [7], reviewToken: 'restore-reviewed', acknowledged: true });
+  assert.doesNotMatch(f.node('import-history-list').innerHTML, /data-import-id="7"/, 'restored imports leave restore choices');
 });
 
 test('account freshness marks only data older than 45 calendar days and keeps import time separate', async () => {

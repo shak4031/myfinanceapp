@@ -903,18 +903,33 @@
         <div id="import-result" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
         <details id="import-history">
           <summary>Import history &amp; recovery</summary>
+          <p class="import-hint"><strong>Selecting a file never changes your data.</strong> Select imports, review the validated impact, acknowledge it, then confirm. Undo is reversible using its retained Restore backup.</p>
           <p class="import-hint">Undo removes only transactions added by the selected imports and keeps a server-side backup for Restore. Skipped duplicates are never removed. Accounts and saved rules stay in place.</p>
           <p class="import-hint">Older imports are inferred from filename, account and saved timestamp. Verify them carefully: previous PDF statement balances cannot be recovered for these older imports.</p>
-          <div class="import-actions">
+          <div class="import-actions" role="group" aria-label="Recovery mode">
+            <button type="button" class="btn btn-secondary" id="import-history-active" aria-pressed="true">Active imports</button>
+            <button type="button" class="btn btn-secondary" id="import-history-backups" aria-pressed="false">Undone / Restore backups</button>
+          </div>
+          <div class="import-actions" id="import-history-recent-controls">
             <label>Recent active imports <input id="import-history-count" type="number" min="1" max="100" value="1" style="width: 65px;"></label>
             <button type="button" class="btn btn-secondary" id="import-history-recent">Select recent</button>
             <button type="button" class="btn btn-secondary" id="import-history-refresh">Refresh</button>
           </div>
           <div id="import-history-list" aria-live="polite"></div>
+          <p id="import-history-selection" role="status">No imports selected.</p>
           <div class="import-actions">
-            <button type="button" class="btn btn-secondary" id="import-history-undo">Undo selected</button>
-            <button type="button" class="btn btn-secondary" id="import-history-restore">Restore selected</button>
+            <button type="button" class="btn btn-primary" id="import-history-undo" disabled>Review undo</button>
+            <button type="button" class="btn btn-primary" id="import-history-restore" disabled hidden>Review restore</button>
           </div>
+          <section id="import-history-review" class="import-recovery-review" aria-labelledby="import-history-review-title" hidden>
+            <h3 id="import-history-review-title">Review before confirming</h3>
+            <div id="import-history-impact"></div>
+            <label><input type="checkbox" id="import-history-ack"> I understand this impact and want to proceed.</label>
+            <div class="import-actions">
+              <button type="button" class="btn btn-secondary" id="import-history-cancel">Cancel review</button>
+              <button type="button" class="btn btn-primary" id="import-history-commit" disabled>Confirm change</button>
+            </div>
+          </section>
           <p id="import-history-status" role="status" aria-live="polite"></p>
         </details>
       </div>
@@ -1860,7 +1875,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="refresh.js?v=20261031d"></script>
   <script src="accounts.js?v=20261023b"></script>
-  <script src="import-history.js?v=20261023a"></script>
+  <script src="import-history.js?v=20261023b"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261020c"></script>
