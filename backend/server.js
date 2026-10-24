@@ -4,6 +4,7 @@ import { log } from './utils/logger.js';
 import { purgeExpiredAuditEvents, structuredLog } from './utils/audit.js';
 import { demoEnabled, resetDemoAccount, startDemoResets } from './utils/demo.js';
 import { startLogStore, purgeExpiredLogs, flushLogStore } from './utils/logStore.js';
+import { startTrialReminders } from './utils/billing.js';
 
 const db = new Database();
 
@@ -29,6 +30,7 @@ process.on('uncaughtException', error => {
 try {
   await db.init();
   startLogStore();
+  startTrialReminders();
   await purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
   if (demoEnabled()) {

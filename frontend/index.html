@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
+  <meta name="description" content="Shared household finances with MyFinance Basic or Pro. Start a 15-day Pro trial with a selected plan and payment details in Stripe Checkout.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261023d"></script>
+  <script src="session.js?v=20261024-household"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -501,7 +501,8 @@
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261023b">
-  <link rel="stylesheet" href="marketing.css?v=20261018c">
+  <link rel="stylesheet" href="marketing.css?v=20261024-household">
+  <link rel="stylesheet" href="household.css?v=20261024a">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
@@ -509,7 +510,7 @@
       <a class="marketing-brand" href="#marketing-top" data-marketing-jump="top" aria-label="MyFinance, back to top"><svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/><path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/><circle class="brand-mark-accent" cx="47" cy="18" r="4"/></svg> MyFinance</a>
       <nav class="marketing-links" aria-label="Page sections">
         <a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Features</a>
-        <a href="#marketing-benefits" data-marketing-jump="marketing-benefits">Free vs Pro</a>
+        <a href="#marketing-benefits" data-marketing-jump="marketing-benefits">Basic vs Pro</a>
         <a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Pricing</a>
       </nav>
       <a class="marketing-nav-cta" href="#marketing-signin" data-marketing-jump="marketing-signin" data-marketing-signin>Sign in <span aria-hidden="true">&rarr;</span></a>
@@ -520,12 +521,12 @@
         <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
         <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
         <div class="marketing-actions"><button class="btn btn-primary" type="button" id="marketing-start">Find my starting point <span aria-hidden="true">&rarr;</span></button><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">See what fits me</a></div>
-        <p class="marketing-reassurance">Start free. No bank connection needed. No perfect budget required.</p>
+        <p class="marketing-reassurance">One plan for your household. No bank connection needed. No perfect budget required.</p>
         <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
           <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
           <div class="marketing-preview-title"><span aria-hidden="true">&#10022;</span><strong>Little by little.<br>Look at you go.</strong><span class="marketing-sticker">a little<br>more possible</span></div>
-          <div class="marketing-preview-steps"><span><b>01</b> Know your spending<small>Free</small></span><span><b>02</b> Spot your patterns<small>Pro</small></span><span><b>03</b> Plan your next chapter<small>Pro Plus</small></span></div>
-          <div class="marketing-goal"><span>Emergency fund <small>Pro Plus</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
+          <div class="marketing-preview-steps"><span><b>01</b> Know your spending<small>Basic</small></span><span><b>02</b> Spot your patterns<small>Pro</small></span><span><b>03</b> Plan your next chapter<small>Pro</small></span></div>
+          <div class="marketing-goal"><span>Emergency fund <small>Pro</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
           <p class="marketing-preview-note">Your own pace. Your own priorities. Estimates, not promises.</p>
         </div>
       </div>
@@ -567,20 +568,19 @@
     <div class="marketing-first-step"><span aria-hidden="true">&#8627;</span><p><strong>Just one small start.</strong><br>Import a statement. Get a clearer picture.<br>Choose your next step when you are ready.</p></div></div>
     </div>
     <section class="marketing-benefits" id="marketing-benefits" aria-labelledby="marketing-benefits-title"><div><p class="marketing-kicker">LESS OVERWHELM. MORE &ldquo;I CAN DO THIS.&rdquo;</p><h2 id="marketing-benefits-title">A clearer today.<br>A more intentional tomorrow.</h2></div>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">FREE</p><h3>Find your money story.</h3><p>Import CSV or OFX/QFX files from any bank or credit card, or PDF statements from TD Bank. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">BASIC</p><h3>Find your money story.</h3><p>Import CSV or OFX/QFX files from any bank or credit card, or PDF statements from TD Bank. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
       <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Notice. Adjust. Repeat.</h3><p>Category budgets, spending trends and forecasts help you spot patterns. Recurring-charge and unusual-charge alerts show what deserves a closer look.</p></article>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO PLUS</p><h3>Make room for what matters.</h3><p>Compare debt payoff plans and set monthly savings targets for an emergency fund, a home, college or a well-earned adventure.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO</p><h3>Make room for what matters.</h3><p>Compare debt payoff plans and set monthly savings targets for an emergency fund, a home, college or a well-earned adventure.</p></article>
     </section>
     <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
-      <p class="marketing-kicker">YOUR PACE. YOUR PLAN.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Choose the plan that fits today. Start Free, or pick Pro or Pro Plus and we will send the request for you.</p>
+      <p class="marketing-kicker">ONE PLAN. YOUR WHOLE HOUSEHOLD.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Choose Basic or Pro. A 15-day trial includes all Pro features after selecting a plan and adding payment details in Stripe hosted Checkout.</p>
       <div class="marketing-plan-grid">
-        <article class="marketing-plan"><p class="marketing-tier">FREE</p><h3>Get your bearings.</h3><p class="marketing-price">$0<span>/ month</span></p><p>For getting to know your money.</p><ul><li>CSV &amp; OFX imports from any bank or card, PDF from TD Bank</li><li>Transactions &amp; category review</li><li>Your everyday dashboard</li><li>Free to keep using</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-choose-plan="free" aria-pressed="false">Choose Free</button></article>
-        <article class="marketing-plan"><p class="marketing-tier">PRO</p><h3>Build better habits.</h3><p class="marketing-price">$4.99<span>/ month</span></p><p>From &ldquo;where did it go?&rdquo; to &ldquo;now I see.&rdquo;</p><ul><li>Everything in Free</li><li>Category budgets &amp; spending insights</li><li>Charts &amp; cash-flow forecasts</li><li>Recurring &amp; unusual charge alerts</li><li>CSV analytics &amp; transaction exports</li></ul><p class="marketing-plan-limit">Debt Free &amp; Savings Goals not included.</p><button class="btn btn-secondary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
-        <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO PLUS</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$9.98<span>/ month total</span></p><p><strong>Pro + $4.99/month.</strong> One combined plan.</p><ul><li>Everything in Pro</li><li><strong>Debt Free page unlocked</strong></li><li>Payoff strategies &amp; estimated finish dates</li><li><strong>Savings Goals page unlocked</strong></li><li>Monthly targets &amp; progress tracking</li><li>Extra-payment &amp; savings what-ifs</li></ul>        <p class="marketing-plan-limit">Want to look around first? An optional 7-day trial is available inside your account.</p><button class="btn btn-primary" type="button" data-choose-plan="pro_plus" aria-pressed="false">Choose Pro Plus</button></article>
+        <article class="marketing-plan"><p class="marketing-tier">BASIC</p><h3>Your everyday finances.</h3><p class="marketing-price">$9.99<span>USD / month per household</span></p><ul><li>CSV &amp; OFX imports from any bank or card, PDF from TD Bank</li><li>Accounts &amp; transactions</li><li>Category review</li><li>Your everyday dashboard</li><li>Shared household editing</li></ul><p class="marketing-plan-limit">Analytics, budgets, debt planning and goals require Pro.</p><button class="btn btn-secondary" type="button" data-choose-plan="basic" aria-pressed="false">Choose Basic</button></article>
+        <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$14.99<span>USD / month per household</span></p><ul><li>Everything in Basic</li><li>All analytics, budgets &amp; forecasts</li><li>Recurring &amp; unusual charge alerts</li><li>Debt payoff strategies &amp; what-if planning</li><li>Savings goals &amp; monthly targets</li></ul><p class="marketing-plan-limit">All Pro features are included during your 15-day trial, whichever plan you select.</p><button class="btn btn-primary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
       </div>
-              <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Choose a plan above</li><li><b>2</b> Sign in or create your account</li><li><b>3</b> Your administrator approves it &middot; nothing is charged here</li></ol>
-              <p class="marketing-billing-note">Prices in USD. Choosing Pro or Pro Plus sends a request to your MyFinance administrator, who turns it on for your account. Paid access is arranged with your administrator, not through online checkout. You stay on Free until it is approved. The optional, one-time 7-day Pro Plus trial is never started for you; you can start it yourself inside your account and it ends automatically with no charge. Pro alone does not unlock Debt Free or Savings Goals.</p>
-            <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="#marketing-signin" data-marketing-jump="marketing-signin" data-marketing-signin>Sign in or start free <span aria-hidden="true">&uarr;</span></a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
+              <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Choose Basic or Pro</li><li><b>2</b> Sign in or create an account when enabled</li><li><b>3</b> Owner confirms payment details in Stripe hosted Checkout</li></ol>
+              <p class="marketing-billing-note">Prices in USD, per household. Your selected plan is automatically charged after the 15-day trial unless cancelled. Only the household owner manages billing and invitations. Cancel in the Stripe billing portal; trial access continues until its end. The owner receives a reminder email 24 hours before the trial ends. Payment details are never entered in this app. Existing paid access is retained.</p>
+            <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="#marketing-signin" data-marketing-jump="marketing-signin" data-marketing-signin>Sign in to continue <span aria-hidden="true">&uarr;</span></a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
           </section>
           <footer class="marketing-footer"><strong>Small steps count. So do you.</strong><p>Planning tools, not financial advice. Forecasts and payoff dates are estimates; results depend on your inputs and actions.</p><a class="marketing-top-link" href="#marketing-top" data-marketing-jump="top">Back to top <span aria-hidden="true">&uarr;</span></a></footer>
   </section>
@@ -607,8 +607,8 @@
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
-        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PLUS</span></a></li>
-        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PLUS</span></a></li>
+        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PRO</span></a></li>
+        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
         <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
@@ -1971,21 +1971,22 @@
   </script>
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261024a"></script>
-  <script src="refresh.js?v=20261031g"></script>
+  <script src="refresh.js?v=20261031-household"></script>
   <script src="accounts.js?v=20261024b"></script>
   <script src="import-history.js?v=20261024a"></script>
-  <script src="account.js?v=20261026a"></script>
+  <script src="account.js?v=20261026-household"></script>
   <script src="pro-charts.js?v=20261031c"></script>
-  <script src="pro-core.js?v=20261020c"></script>
-  <script src="pro-dashboard.js?v=20261024b"></script>
+  <script src="pro-core.js?v=20261024-household"></script>
+  <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261025b"></script>
-  <script src="pro-categories.js?v=20261031c"></script>
-  <script src="analytics.js?v=20261031d"></script>
-  <script src="plan.js?v=20261031a"></script>
+  <script src="pro-categories.js?v=20261031-household"></script>
+  <script src="analytics.js?v=20261031-household"></script>
+  <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261031f"></script>
-  <script src="marketing.js?v=20261020c"></script>
+  <script src="tutorial.js?v=20261031-household"></script>
+  <script src="marketing.js?v=20261024-household"></script>
+  <script src="household.js?v=20261024a"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

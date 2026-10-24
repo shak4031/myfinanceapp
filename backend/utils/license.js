@@ -2,9 +2,9 @@ import { administrativeTransaction } from '../db.js';
 import { isDemoEmail } from './demo.js';
 
 export const OWNER_USER_ID = 1;
-export const TRIAL_DAYS = 7;
-export const PLAN = Object.freeze({ id: 'pro', name: 'MyFinance Pro', price: 4.99, currency: 'USD', interval: 'month' });
-export const PLUS_PLAN = Object.freeze({ id: 'pro_plus', name: 'MyFinance Pro Plus', price: 9.98, additionalPrice: 4.99, currency: 'USD', interval: 'month' });
+export const TRIAL_DAYS = 15;
+export const PLAN = Object.freeze({ id: 'basic', name: 'MyFinance Basic', price: 9.99, currency: 'USD', interval: 'month' });
+export const PLUS_PLAN = Object.freeze({ id: 'pro', name: 'MyFinance Pro', price: 14.99, currency: 'USD', interval: 'month' });
 export const PLUS_FEATURES = Object.freeze([
   { id: 'planning', title: 'Debt-free plan', text: 'Compare payoff strategies, see an estimated debt-free date and explore extra-payment what-ifs.' },
   { id: 'goals', title: 'Savings goals', text: 'Plan for emergencies, a home, a trip or college with monthly targets and progress tracking.' }
@@ -22,16 +22,11 @@ export const PRO_FEATURES = Object.freeze([
 
 const DAY_MS = 86400000;
 
-export const PLAN_IDS = Object.freeze(['pro', 'pro_plus']);
+export const PLAN_IDS = Object.freeze(['basic', 'pro']);
 
 // Pure so it can be tested without a database.
 export function entitlementFromRow(userId, row, now = new Date(), email = row?.email) {
   const entitlement = baseEntitlement(userId, row, now, email);
-  const requested = row?.requested_plan;
-  const owned = entitlement.source === 'license' && entitlement.tier === requested;
-  if (PLAN_IDS.includes(requested) && !owned && !['owner', 'demo'].includes(entitlement.source)) {
-    entitlement.request = { plan: requested, requestedAt: new Date(row.requested_at || now).toISOString() };
-  }
   return entitlement;
 }
 
@@ -40,49 +35,50 @@ function baseEntitlement(userId, row, now, email) {
   if (Number(userId) === OWNER_USER_ID) return { ...base, tier: 'pro', source: 'owner', active: true, plusActive: true, trialAvailable: false };
   if (isDemoEmail(email)) return { ...base, tier: 'pro', source: 'demo', active: true, plusActive: true, trialAvailable: false };
   if (row?.granted_at && !row.revoked_at) {
-    const plusActive = row.plan === 'pro_plus';
-    return { ...base, tier: plusActive ? 'pro_plus' : 'pro', source: 'license', active: true, plusActive, trialAvailable: false, grantedAt: row.granted_at };
+    const plusActive = row.plan === 'pro';
+    return { ...base, tier: plusActive ? 'pro' : 'basic', source: 'license', active: true, plusActive, trialAvailable: false, grantedAt: row.granted_at };
+  }
+  const subscription = row?.subscription;
+  if (subscription?.status === 'trialing' && new Date(subscription.trial_ends_at) > now) {
+    const trialEnds = new Date(subscription.trial_ends_at);
+    return { ...base, tier: 'trial', source: 'trial', active: true, plusActive: true, trialAvailable: false,
+      trialEndsAt: trialEnds.toISOString(), daysLeft: Math.max(1, Math.ceil((trialEnds - now) / DAY_MS)) };
+  }
+  if (subscription?.status === 'active' && new Date(subscription.current_period_end) > now) {
+    return { ...base, tier: subscription.plan, source: 'stripe', active: true, plusActive: subscription.plan === 'pro', trialAvailable: false };
   }
   const trialEnds = row?.trial_ends_at ? new Date(row.trial_ends_at) : null;
-  if (trialEnds && trialEnds > now && !row.revoked_at) {
-    return {
-      ...base, tier: 'trial', source: 'trial', active: true, plusActive: true, trialAvailable: false,
-      trialEndsAt: trialEnds.toISOString(), daysLeft: Math.max(1, Math.ceil((trialEnds - now) / DAY_MS))
-    };
-  }
   return {
-    ...base, tier: 'free', source: trialEnds ? 'trial-expired' : 'none', active: false,
-    trialAvailable: !row?.trial_started_at,
+    ...base, tier: 'none', source: trialEnds || subscription?.trial_used ? 'trial-expired' : 'none', active: false,
+    trialAvailable: !row?.trial_started_at && !subscription?.trial_used,
     ...(trialEnds ? { trialEndsAt: trialEnds.toISOString() } : {})
   };
 }
 
 async function loadRow(client, userId) {
-  return (await client.query(`SELECT l.*, u.email FROM users u LEFT JOIN user_licenses l ON l.user_id = u.id
-    WHERE u.id=$1`, [userId])).rows[0];
+  return (await client.query(`SELECT l.*,u.email,h.owner_user_id AS tenant_id,to_jsonb(s) AS subscription
+    FROM users login JOIN household_members m ON m.user_id=login.id JOIN households h ON h.id=m.household_id
+    JOIN users u ON u.id=h.owner_user_id LEFT JOIN user_licenses l ON l.user_id=u.id
+    LEFT JOIN household_subscriptions s ON s.household_id=h.id WHERE login.id=$1`, [userId])).rows[0];
 }
 
 export async function getEntitlement(userId) {
   if (Number(userId) === OWNER_USER_ID) return entitlementFromRow(userId, null);
-  return administrativeTransaction(async client => entitlementFromRow(userId, await loadRow(client, userId)));
-}
-
-export async function startTrial(userId, now = new Date()) {
   return administrativeTransaction(async client => {
     const row = await loadRow(client, userId);
-    const current = entitlementFromRow(userId, row, now);
-    if (current.active) return { ok: false, status: 409, error: 'MyFinance Pro is already active on this account', entitlement: current };
-    if (row?.trial_started_at) return { ok: false, status: 409, error: 'The free trial has already been used on this account', entitlement: current };
-    const ends = new Date(now.getTime() + TRIAL_DAYS * DAY_MS);
-    const saved = (await client.query(`
-      INSERT INTO user_licenses (user_id, trial_started_at, trial_ends_at, updated_at) VALUES ($1,$2,$3,NOW())
-      ON CONFLICT (user_id) DO UPDATE SET trial_started_at=$2, trial_ends_at=$3, updated_at=NOW()
-      RETURNING *`, [userId, now.toISOString(), ends.toISOString()])).rows[0];
-    return { ok: true, entitlement: entitlementFromRow(userId, saved, now) };
+    return entitlementFromRow(row?.tenant_id || userId, row);
   });
 }
 
+export async function startTrial(userId, now = new Date()) {
+  return { ok: false, status: 409, error: 'Choose a plan and add payment details in Stripe Checkout to start your 15-day Pro trial.', entitlement: await getEntitlement(userId) };
+}
+
 export async function setLicense(client, userId, action, actorId, plan = 'pro') {
+  const membership = (await client.query(`SELECT h.owner_user_id FROM household_members m
+    JOIN households h ON h.id=m.household_id WHERE m.user_id=$1`, [userId])).rows[0];
+  userId = membership?.owner_user_id || userId;
+  if (userId === OWNER_USER_ID) throw Object.assign(new Error('The owner household always includes Pro.'), { status: 400 });
   const row = action === 'grant'
     ? (await client.query(`
         INSERT INTO user_licenses (user_id, plan, granted_at, granted_by, revoked_at, updated_at) VALUES ($1,$3,NOW(),$2,NULL,NOW())
@@ -98,17 +94,7 @@ export async function setLicense(client, userId, action, actorId, plan = 'pro') 
 
 // Records which paid plan the customer chose; an administrator approves it by granting that plan.
 export async function requestPlan(userId, plan, now = new Date()) {
-  return administrativeTransaction(async client => {
-    const row = await loadRow(client, userId);
-    const current = entitlementFromRow(userId, row, now);
-    if (['owner', 'demo'].includes(current.source)) return { ok: false, status: 409, error: 'This account already includes MyFinance Pro Plus', entitlement: current };
-    if (current.source === 'license' && current.tier === plan) return { ok: false, status: 409, error: `${plan === 'pro_plus' ? 'Pro Plus' : 'Pro'} is already active on this account`, entitlement: current };
-    const saved = (await client.query(`
-      INSERT INTO user_licenses (user_id, requested_plan, requested_at, updated_at) VALUES ($1,$2,$3,NOW())
-      ON CONFLICT (user_id) DO UPDATE SET requested_plan=$2, requested_at=$3, updated_at=NOW()
-      RETURNING *`, [userId, plan, now.toISOString()])).rows[0];
-    return { ok: true, entitlement: entitlementFromRow(userId, { ...saved, email: row?.email }, now) };
-  });
+  return { ok: false, status: 409, error: 'Use Stripe Checkout to select Basic or Pro.', entitlement: await getEntitlement(userId) };
 }
 
 export async function cancelPlanRequest(userId) {
@@ -121,7 +107,7 @@ export async function cancelPlanRequest(userId) {
 export function requirePro(req, res, next) {
   getEntitlement(req.user.id).then(entitlement => {
     req.entitlement = entitlement;
-    if (entitlement.active) return next();
+    if (entitlement.plusActive) return next();
     res.status(402).json({ error: 'This feature is part of MyFinance Pro', code: 'PRO_REQUIRED', entitlement });
   }, next);
 }
@@ -130,6 +116,6 @@ export function requireProPlus(req, res, next) {
   getEntitlement(req.user.id).then(entitlement => {
     req.entitlement = entitlement;
     if (entitlement.plusActive) return next();
-    res.status(402).json({ error: 'Debt Free and Savings Goals require MyFinance Pro Plus', code: 'PRO_PLUS_REQUIRED', entitlement });
+    res.status(402).json({ error: 'Debt Free and Savings Goals require MyFinance Pro', code: 'PRO_REQUIRED', entitlement });
   }, next);
 }

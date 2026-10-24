@@ -154,17 +154,18 @@ test('entitlementFromRow covers owner, license, trial, expiry and revocation', (
   assert.equal(entitlementFromRow(1, null, now).tier, 'pro');
   assert.equal(entitlementFromRow(1, null, now).source, 'owner');
   const free = entitlementFromRow(2, null, now);
-  assert.equal(free.tier, 'free');
+  assert.equal(free.tier, 'none');
   assert.equal(free.trialAvailable, true);
-  const trial = entitlementFromRow(2, { trial_started_at: '2026-06-14T12:00:00Z', trial_ends_at: '2026-06-21T12:00:00Z' }, now);
+  const trial = entitlementFromRow(2, { subscription: { status: 'trialing', trial_used: true,
+    trial_started_at: '2026-06-06T12:00:00Z', trial_ends_at: '2026-06-21T12:00:00Z' } }, now);
   assert.equal(trial.tier, 'trial');
   assert.equal(trial.daysLeft, 6);
   const expired = entitlementFromRow(2, { trial_started_at: '2026-06-01T12:00:00Z', trial_ends_at: '2026-06-08T12:00:00Z' }, now);
-  assert.equal(expired.tier, 'free');
+  assert.equal(expired.tier, 'none');
   assert.equal(expired.trialAvailable, false);
   assert.equal(expired.source, 'trial-expired');
-  assert.equal(entitlementFromRow(2, { granted_at: '2026-06-01T00:00:00Z' }, now).tier, 'pro');
-  assert.equal(entitlementFromRow(2, { granted_at: null, revoked_at: '2026-06-02T00:00:00Z', trial_started_at: '2026-01-01T00:00:00Z' }, now).tier, 'free');
+  assert.equal(entitlementFromRow(2, { plan: 'basic', granted_at: '2026-06-01T00:00:00Z' }, now).tier, 'basic');
+  assert.equal(entitlementFromRow(2, { granted_at: null, revoked_at: '2026-06-02T00:00:00Z', trial_started_at: '2026-01-01T00:00:00Z' }, now).tier, 'none');
 });
 
 test('a fixed bill already paid this month is not projected again', () => {

@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { administrativeTransaction } from '../db.js';
 import { recordAudit } from '../utils/audit.js';
+import { ownerOnly } from '../utils/households.js';
 
 const router = Router();
+router.use((req, res, next) => {
+  try { ownerOnly(req); next(); } catch (error) { next(error); }
+});
 const MAX_ACTIVE_GRANTS = 3;
 
 const grantView = row => ({

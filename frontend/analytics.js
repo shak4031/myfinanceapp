@@ -53,7 +53,7 @@
     const actions = $('analytics-actions');
     if (!actions) return;
     const { ICONS } = pro();
-    const lock = pro().isActive() ? '' : ICONS.lock;
+    const lock = pro().isPlusActive() ? '' : ICONS.lock;
     actions.innerHTML = `<button type="button" class="btn btn-secondary" data-analytics-action="budgets">${lock || ICONS.budgets}Budgets</button>
       <button type="button" class="btn btn-secondary" data-analytics-action="export-categories">${lock || ICONS.export}Category report</button>
       <button type="button" class="btn btn-primary" data-analytics-action="export-transactions">${lock || ICONS.export}Export transactions</button>`;
@@ -63,7 +63,7 @@
     const { ICONS, format: { esc } } = pro();
     const { bars, sparkline } = charts();
     const demo = [1820, 2140, 1960, 2310, 2050, 2480, 2290, 2620, 2410, 2380, 2710, 2560];
-    const label = entitlement.trialAvailable ? 'Start your free 7-day trial' : 'See plans';
+    const label = entitlement.trialAvailable ? 'Explore the 15-day Pro trial' : 'See plans';
     const features = (entitlement.features || []).map(f => `<li>${ICONS[f.id] || ICONS.spark}<span><strong>${esc(f.title)}</strong>${esc(f.text)}</span></li>`).join('');
     return `<div class="pro-locked">
       <div class="pro-locked-preview" aria-hidden="true">
@@ -72,8 +72,8 @@
       </div>
       <div class="pro-locked-cta panel">
         <span class="pro-hero-mark">${ICONS.lock}</span>
-        <p class="eyebrow">MYFINANCE PRO &middot; $4.99/MONTH</p>
-        <h2>${entitlement.source === 'trial-expired' ? 'Your Pro trial has ended' : 'Unlock the full picture'}</h2>
+        <p class="eyebrow">MYFINANCE PRO &middot; USD 14.99/MONTH PER HOUSEHOLD</p>
+        <h2>${entitlement.trialEndsAt && !entitlement.active ? 'Your Pro trial has ended' : 'Unlock the full picture'}</h2>
         <p class="muted">Moving averages, budgets, forecasts and signals for every category &mdash; the insights that turn transactions into decisions.</p>
         <ul class="pro-locked-features">${features}</ul>
         <button type="button" class="btn btn-primary" data-analytics-action="upgrade">${label}</button>
@@ -719,7 +719,7 @@
     const entitlement = await pro().ensureEntitlement();
     if (run !== request) return;
     renderActions();
-    if (!entitlement.active) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
+    if (!entitlement.plusActive) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
       current = await pro().getAnalytics(force);
       if (force) {
@@ -735,7 +735,7 @@
       if (run === request) render(current);
     } catch (error) {
       if (run !== request) return;
-      if (error.code === 'PRO_REQUIRED') return globalThis.loadAnalyticsPage();
+      if (['PRO_REQUIRED', 'PRO_PLUS_REQUIRED', 'SUBSCRIPTION_REQUIRED'].includes(error.code)) return globalThis.loadAnalyticsPage();
       content.innerHTML = `<div class="pro-empty panel">Could not load analytics: ${pro().format.esc(error.message)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="retry">Try again</button></div>`;
     }
   };
@@ -841,6 +841,6 @@
     if (tab === 'compass') render(current);
   });
   document.addEventListener('pro:entitlement', event => {
-    if (event.detail && !event.detail.active) { compassRanges.clear(); current = null; stopField(); }
+    if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; stopField(); }
   });
 })();

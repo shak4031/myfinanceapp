@@ -141,7 +141,7 @@
     lastDetail = detail;
     await pro.ensureEntitlement();
     if (run !== token) return;
-    const active = pro.isActive(), on = active && pro.prefs.get('cat.insights', 'on') === 'on';
+    const active = pro.isPlusActive(), on = active && pro.prefs.get('cat.insights', 'on') === 'on';
     renderSwitch(active, on);
     view.querySelectorAll('.pro-added').forEach(node => node.remove());
     view.classList.toggle('has-pro-insights', on);

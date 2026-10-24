@@ -207,6 +207,68 @@ export async function migratePrivateSchema(client) {
     -- A customer's pending plan choice, approved by an administrator (there is no online checkout).
     ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_plan TEXT;
     ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS households (
+      id SERIAL PRIMARY KEY, owner_user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
+      name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS household_members (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('owner','member')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS household_one_owner_idx ON household_members(household_id) WHERE role='owner';
+    CREATE INDEX IF NOT EXISTS household_members_household_idx ON household_members(household_id);
+    CREATE OR REPLACE FUNCTION validate_household_owner() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    DECLARE owner_id INTEGER;
+    BEGIN
+      SELECT owner_user_id INTO owner_id FROM households WHERE id=NEW.household_id;
+      IF (NEW.role='owner') IS DISTINCT FROM (NEW.user_id=owner_id) THEN
+        RAISE EXCEPTION 'Household owner membership must match its owner identity';
+      END IF;
+      RETURN NEW;
+    END $fn$;
+    DROP TRIGGER IF EXISTS household_member_owner ON household_members;
+    CREATE TRIGGER household_member_owner BEFORE INSERT OR UPDATE ON household_members
+      FOR EACH ROW EXECUTE FUNCTION validate_household_owner();
+    INSERT INTO households(owner_user_id,name)
+      SELECT id,name || '''s household' FROM users u WHERE NOT EXISTS (
+        SELECT 1 FROM household_members m WHERE m.user_id=u.id)
+      ON CONFLICT(owner_user_id) DO NOTHING;
+    INSERT INTO household_members(user_id,household_id,role)
+      SELECT owner_user_id,id,'owner' FROM households ON CONFLICT(user_id) DO NOTHING;
+    CREATE TABLE IF NOT EXISTS household_invitations (
+      id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+      email TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
+      invited_by INTEGER NOT NULL REFERENCES users(id), expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS household_invites_household_idx ON household_invitations(household_id);
+    CREATE TABLE IF NOT EXISTS household_subscriptions (
+      household_id INTEGER PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
+      stripe_customer_id TEXT UNIQUE, stripe_subscription_id TEXT UNIQUE,
+      plan TEXT CHECK(plan IN ('basic','pro')), status TEXT NOT NULL DEFAULT 'incomplete',
+      trial_started_at TIMESTAMPTZ, trial_ends_at TIMESTAMPTZ, current_period_end TIMESTAMPTZ,
+      cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE, trial_used BOOLEAN NOT NULL DEFAULT FALSE,
+      checkout_session_id TEXT, checkout_expires_at TIMESTAMPTZ,
+      reminder_sent_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS stripe_events (
+      id TEXT PRIMARY KEY, event_type TEXT NOT NULL, processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS app_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    DO $$ BEGIN
+      IF NOT EXISTS(SELECT 1 FROM app_migrations WHERE id='household-paid-plans-v1') THEN
+        UPDATE users SET email_verified_at=NOW() WHERE password_hash IS NOT NULL;
+        -- Preserve every legacy paid feature; old Pro included analytics, which is now in Pro.
+        UPDATE user_licenses SET plan='pro',requested_plan=NULL,requested_at=NULL;
+        INSERT INTO app_migrations(id) VALUES('household-paid-plans-v1');
+      END IF;
+    END $$;
     CREATE TABLE IF NOT EXISTS category_budgets (
       id SERIAL PRIMARY KEY, category TEXT NOT NULL,
       monthly_amount NUMERIC(14,2) NOT NULL CHECK (monthly_amount > 0),
@@ -299,7 +361,8 @@ export async function migratePrivateSchema(client) {
       EXECUTE format('GRANT finance_app_runtime TO %I', current_user);
     END $$;
     GRANT USAGE ON SCHEMA public TO finance_app_runtime;
-    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses, app_logs
+    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses, app_logs,
+      households,household_members,household_invitations,household_subscriptions,stripe_events,app_migrations,email_verification_tokens
       FROM PUBLIC, finance_app_runtime;
   `);
   await normalizeStoredDates(client);

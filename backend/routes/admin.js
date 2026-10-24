@@ -78,18 +78,22 @@ router.get('/users', async (req, res, next) => {
         (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants,
         l.plan AS license_plan, l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
         l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at,
-        l.requested_plan AS license_requested_plan, l.requested_at AS license_requested_at
+        l.requested_plan AS license_requested_plan, l.requested_at AS license_requested_at,
+        h.owner_user_id AS household_owner_id,to_jsonb(subscription) AS subscription
       FROM users u
-      LEFT JOIN user_licenses l ON l.user_id = u.id
+      LEFT JOIN household_members membership ON membership.user_id=u.id
+      LEFT JOIN households h ON h.id=membership.household_id
+      LEFT JOIN household_subscriptions subscription ON subscription.household_id=h.id
+      LEFT JOIN user_licenses l ON l.user_id = COALESCE(h.owner_user_id,u.id)
       WHERE u.password_hash IS NOT NULL AND ($1 = '' OR lower(u.email) LIKE '%' || $1 || '%' OR lower(u.name) LIKE '%' || $1 || '%')
       ORDER BY (l.requested_plan IS NOT NULL) DESC, u.id LIMIT 200
     `, [q])).rows);
-    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, license_requested_plan, license_requested_at, ...user }) => {
-      const row = license_granted_at || license_revoked_at || license_trial_started_at || license_requested_plan
+    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, license_requested_plan, license_requested_at, subscription, household_owner_id, ...user }) => {
+      const row = license_granted_at || license_revoked_at || license_trial_started_at || license_requested_plan || subscription
         ? { plan: license_plan, granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at,
-            requested_plan: license_requested_plan, requested_at: license_requested_at }
+            requested_plan: license_requested_plan, requested_at: license_requested_at, subscription }
         : null;
-      const { tier, source, daysLeft, trialEndsAt, plusActive, request } = entitlementFromRow(user.id, row, new Date(), user.email);
+      const { tier, source, daysLeft, trialEndsAt, plusActive, request } = entitlementFromRow(household_owner_id || user.id, row, new Date(), user.email);
       return { ...user, license: { tier, source, daysLeft, trialEndsAt, plusActive, request } };
     }));
   } catch (error) { next(error); }
@@ -217,8 +221,8 @@ router.post('/users/:id/license', async (req, res, next) => {
     const action = req.body?.action;
     const plan = req.body?.plan ?? 'pro';
     if (!['grant', 'revoke'].includes(action)) return res.status(400).json({ error: 'action must be grant or revoke' });
-    if (!['pro', 'pro_plus'].includes(plan)) return res.status(400).json({ error: 'plan must be pro or pro_plus' });
-    if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro Plus' });
+    if (!['basic', 'pro'].includes(plan)) return res.status(400).json({ error: 'plan must be basic or pro' });
+    if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro' });
     const entitlement = id && await administrativeTransaction(async client => {
       const user = await loadUser(client, id);
       if (!user) return null;
@@ -226,7 +230,7 @@ router.post('/users/:id/license', async (req, res, next) => {
       return setLicense(client, id, action, req.user.id, plan);
     });
     if (!entitlement) return res.status(404).json({ error: 'User not found' });
-    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro Plus' });
+    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro' });
     await recordAudit(req, `admin.license_${action === 'grant' ? 'granted' : 'revoked'}`, 'success', { subjectUserId: id, status: 200 });
     res.json({ success: true, license: { tier: entitlement.tier, source: entitlement.source, plusActive: entitlement.plusActive } });
   } catch (error) { next(error); }

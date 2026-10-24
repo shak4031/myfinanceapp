@@ -24,7 +24,7 @@ router.post('/request', async (req, res, next) => {
   try {
     if (req.support) return res.status(403).json({ error: 'Only the account holder can choose a plan' });
     const plan = req.body?.plan;
-    if (!PLAN_IDS.includes(plan)) return res.status(400).json({ error: 'plan must be pro or pro_plus' });
+    if (!PLAN_IDS.includes(plan)) return res.status(400).json({ error: 'plan must be basic or pro' });
     const result = await requestPlan(req.user.id, plan);
     await recordAudit(req, 'license.plan_requested', result.ok ? 'success' : 'denied', { subjectUserId: req.user.id, status: result.ok ? 200 : result.status, detail: { plan } });
     if (!result.ok) return res.status(result.status).json({ error: result.error, entitlement: result.entitlement });

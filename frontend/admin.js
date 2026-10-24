@@ -95,22 +95,22 @@
     openTab('audit');
   });
 
-  const planName = plan => plan === 'pro_plus' ? 'Pro Plus' : 'Pro';
+  const planName = plan => plan === 'basic' ? 'Basic' : 'Pro';
   function planCell(user) {
-    const license = user.license || { tier: 'free' };
-    const detail = license.tier === 'trial' ? `Pro Plus trial · ${license.daysLeft}d left` : license.source === 'owner' ? 'Pro Plus · owner' : license.source === 'demo' ? 'Pro Plus · demo' : license.tier === 'pro_plus' ? 'Pro Plus' : license.tier === 'pro' ? 'Pro' : license.source === 'trial-expired' ? 'Free · trial used' : 'Free';
+    const license = user.license || { tier: 'none' };
+    const detail = license.tier === 'trial' ? `Pro trial${license.daysLeft == null ? '' : ` · ${license.daysLeft}d left`}` : license.active ? `${planName(license.tier)} · ${license.source}` : 'No subscription';
     const request = license.request ? `<br><span class="plan-pill is-requested" title="Requested ${esc(when(license.request.requestedAt))}">Wants ${esc(planName(license.request.plan))}</span>` : '';
     return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>${request}`;
   }
   function planButton(user) {
-    const license = user.license || { tier: 'free' };
+    const license = user.license || { tier: 'none' };
     if (license.source === 'owner' || license.source === 'demo') return '';
     const attrs = `data-id="${esc(user.id)}" data-email="${esc(user.email)}"`;
     const wanted = license.request?.plan;
     const approve = wanted ? `<button class="btn btn-primary" data-action="license-grant" data-plan="${esc(wanted)}" ${attrs}>Approve ${esc(planName(wanted))} request</button>` : '';
-    return `${approve}${license.tier !== 'pro' && wanted !== 'pro' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="pro" ${attrs}>${license.tier === 'pro_plus' ? 'Change to Pro' : 'Grant Pro'}</button>` : ''}
-      ${license.tier !== 'pro_plus' && wanted !== 'pro_plus' ? `<button class="btn ${wanted ? 'btn-secondary' : 'btn-primary'}" data-action="license-grant" data-plan="pro_plus" ${attrs}>Grant Pro Plus</button>` : ''}
-      ${license.tier === 'pro' || license.tier === 'pro_plus' || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
+    return `${approve}${license.tier !== 'basic' && wanted !== 'basic' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="basic" ${attrs}>Grant Basic</button>` : ''}
+      ${license.tier !== 'pro' && wanted !== 'pro' ? `<button class="btn ${wanted ? 'btn-secondary' : 'btn-primary'}" data-action="license-grant" data-plan="pro" ${attrs}>Grant Pro</button>` : ''}
+      ${license.active || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
   }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
@@ -135,10 +135,10 @@
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
       'revoke-sessions': 'Sign this user out of every device?',
       unlock: 'Clear failed sign-in lockouts for this user?',
-      'license-grant': plan === 'pro_plus'
-        ? `Grant MyFinance Pro Plus ($9.98/month total: Pro + $4.99) to ${email}? This includes Pro, Debt Free and Savings Goals. No payment is collected by this action.`
-        : `Set ${email} to MyFinance Pro ($4.99/month)? Analytics, budgets and exports unlock. Debt Free and Savings Goals will be locked, with saved data kept. No payment is collected by this action.`,
-      'license-revoke': `Revoke paid access from ${email}? Budgets, debts and goals are kept, but Pro and Pro Plus features will be locked.`
+      'license-grant': plan === 'pro'
+        ? `Grant MyFinance Pro (USD 14.99/month per household) to ${email}? This includes all analytics, budgets, debt planning and goals. This license action does not collect payment.`
+        : `Set ${email} to MyFinance Basic (USD 9.99/month per household)? Core finances unlock. Analytics, budgets, debt planning and goals will be locked, with saved data kept. This license action does not collect payment.`,
+      'license-revoke': `Revoke paid access from ${email}? Saved financial data is kept. Subscription cancellation must be managed through Stripe.`
     };
     if (!await FinanceUI.confirm(prompts[action])) return;
     try {

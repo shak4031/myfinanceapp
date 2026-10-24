@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
@@ -246,6 +248,7 @@ test('PDF HTTP imports are atomic, account-scoped, repeatable and persist verifi
     }
 
     const second = await call('/api/auth/register', { name: 'Second', email: 'second-pdf@example.test', password: 'test-only-password-123456' });
+    await grantFixtureAccess(database, second.body.user.id);
     cookie = second.headers.get('set-cookie').split(';')[0];
     assert.deepEqual((await call('/api/staging/attention')).body, []);
     assert.equal((await call('/api/staging/force-push', { id: privateQueuedId })).status, 404);

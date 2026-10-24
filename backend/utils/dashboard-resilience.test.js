@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import { test } from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
@@ -105,6 +107,7 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     assert.equal(second.status, 200, JSON.stringify(second.body));
     const freeCookie = second.headers.get('set-cookie').split(';')[0];
     const freeId = (await database.query("SELECT id FROM users WHERE email='history-free@example.test'")).rows[0].id;
+    await grantFixtureAccess(database, freeId, 'basic');
     await database.query(`INSERT INTO transactions(date,description,amount,direction,category,user_id) VALUES ($1,'FREE HISTORY',25,'DEBIT','Free dining',$2)`, [priorDate, freeId]);
     await database.query(`INSERT INTO category_budgets(user_id,category,monthly_amount) VALUES ($1,'Free dining',10)`, [freeId]);
     const freeHistory = await call('/api/dashboard/spending-history', { cookie: freeCookie });

@@ -8,6 +8,10 @@ window.FinanceSession = (() => {
   let registrationEnabled = false;
   let setupRequired = false;
   let cleanAppMarkup = '';
+  let inviteToken = location.hash.startsWith('#invite-token=') ? location.hash.slice('#invite-token='.length) : '';
+  let verifyToken = location.hash.startsWith('#verify-token=') ? location.hash.slice('#verify-token='.length) : '';
+  let verificationNotice = '';
+  if (inviteToken || verifyToken) history.replaceState(null, '', location.pathname);
   const el = id => document.getElementById(id);
   function lock() {
     user = null;
@@ -40,6 +44,10 @@ window.FinanceSession = (() => {
     if (!auth && requestGeneration !== generation) throw new Error('Session changed. Request discarded.');
     if (!auth && !response.ok) {
       const body = await response.json().catch(() => ({}));
+      if (response.status === 402 && body.code === 'SUBSCRIPTION_REQUIRED') {
+        if (body.entitlement) window.FinancePro?.setEntitlement(body.entitlement);
+        window.showView?.('subscription');
+      }
       throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, code: body.code, entitlement: body.entitlement });
     }
     if (!auth) {
@@ -55,40 +63,42 @@ window.FinanceSession = (() => {
   function renderMode() {
     const recovery = mode === 'forgot' || mode === 'reset';
     el('auth-form').hidden = false;
-    el('auth-title').textContent = mode === 'setup' ? 'Your fresh start begins here.' : mode === 'register' ? 'Make room for your next chapter.'
+    el('auth-title').textContent = ['invite', 'accept'].includes(mode) ? 'Join your household.' : mode === 'setup' ? 'Your fresh start begins here.' : mode === 'register' ? 'Make room for your next chapter.'
       : mode === 'forgot' ? 'Reset your password.' : mode === 'reset' ? 'Choose a new password.' : 'Welcome back.';
     el('auth-description').textContent = mode === 'setup' ? 'Create the owner account using the setup token from your server administrator.'
       : mode === 'forgot' ? 'Enter your account email. If it matches an account, we will email a reset link that expires in 30 minutes.'
       : mode === 'reset' ? 'Use at least 12 characters. All existing sessions will be signed out.'
       : 'Sign in to your private financial workspace.';
-    el('auth-name-label').hidden = mode === 'login' || recovery;
-    el('auth-name').required = !['login', 'forgot', 'reset'].includes(mode);
-    el('auth-email-label').hidden = mode === 'reset';
-    el('auth-email').required = mode !== 'reset';
-    el('auth-password-label').hidden = mode === 'forgot';
-    el('auth-password').required = mode !== 'forgot';
+    el('auth-name-label').hidden = ['login', 'accept'].includes(mode) || recovery;
+    el('auth-name').required = !['login', 'accept', 'forgot', 'reset'].includes(mode);
+    el('auth-email-label').hidden = ['reset', 'accept'].includes(mode);
+    el('auth-email').required = !['reset', 'accept'].includes(mode);
+    el('auth-password-label').hidden = ['forgot', 'accept'].includes(mode);
+    el('auth-password').required = !['forgot', 'accept'].includes(mode);
     el('auth-token-label').hidden = mode !== 'setup';
     el('auth-token').required = mode === 'setup';
     el('auth-password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     el('auth-password').minLength = mode === 'login' ? 1 : 12;
-    el('auth-submit').textContent = mode === 'setup' ? 'Create owner account' : mode === 'register' ? 'Create account'
+    el('auth-submit').textContent = mode === 'accept' ? 'Join invited household' : mode === 'invite' ? 'Create login and join household' : mode === 'setup' ? 'Create owner account' : mode === 'register' ? 'Create account'
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
-    el('auth-switch').hidden = recovery || mode === 'setup' ? false : !registrationEnabled;
-    el('auth-switch').textContent = recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
-    if (mode === 'register') el('auth-description').textContent = 'Every account starts on Free. Pick Pro or Pro Plus below and we will send that request to your MyFinance administrator. Nothing is charged here.';
+    el('auth-switch').hidden = inviteToken || recovery || mode === 'setup' ? false : !registrationEnabled;
+    el('auth-switch').textContent = mode === 'accept' ? 'Keep my current household' : mode === 'invite' ? 'Already have an account? Sign in to join' : inviteToken && mode === 'login' ? 'Create a login for this invitation' : recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
+    if (mode === 'register') el('auth-description').textContent = 'Choose Basic (USD 9.99/month) or Pro (USD 14.99/month) per household. Start a 15-day Pro trial after selecting a plan and adding payment details in Stripe Checkout. Your selected plan charges automatically unless cancelled.';
+    if (mode === 'invite') el('auth-description').textContent = 'Create your own login to edit your household’s shared finances. The household owner manages billing and members.';
+    if (mode === 'accept') el('auth-description').textContent = 'Join with your existing login to edit the invited household’s shared finances. You can join only if your current household has no financial data or paid access. The invited household’s owner manages billing and membership.';
     el('auth-forgot').hidden = mode !== 'login';
     // The owner token is only for the very first run, and only once someone asks for it.
     const setupLink = el('auth-setup');
     if (setupLink) setupLink.hidden = !setupRequired || mode !== 'login';
     renderPlanChoice();
+    if (verificationNotice) el('auth-error').textContent = verificationNotice;
   }
 
   // Plan picked on the public pricing cards; survives the post-sign-in reload until it is submitted.
   const PLAN_KEY = 'myfinance.chosenPlan';
   const PLANS = {
-    free: { name: 'Free', price: '$0 / month', note: 'Free to keep using. You can request Pro or Pro Plus any time from inside the app.' },
-    pro: { name: 'Pro', price: '$4.99 / month', note: 'After you sign in, we send this request to your MyFinance administrator to approve. Nothing is charged here.' },
-    pro_plus: { name: 'Pro Plus', price: '$9.98 / month total', note: 'Includes Debt Free and Savings Goals. After you sign in, we send this request to your MyFinance administrator to approve. Nothing is charged here.' }
+    basic: { name: 'Basic', price: 'USD 9.99 / month per household', note: 'Core finances for your household. Continue after sign-in to select your plan and provide payment details in Stripe hosted Checkout.' },
+    pro: { name: 'Pro', price: 'USD 14.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Continue after sign-in to Stripe hosted Checkout. The 15-day trial includes all Pro features and auto-charges your selected plan unless cancelled.' }
   };
   const store = {
     get() { try { const plan = globalThis.localStorage?.getItem(PLAN_KEY); return PLANS[plan] ? plan : ''; } catch { return ''; } },
@@ -104,26 +114,11 @@ window.FinanceSession = (() => {
     });
     const banner = el('auth-plan');
     if (!banner) return;
-    banner.hidden = !chosen || mode === 'forgot' || mode === 'reset';
+    banner.hidden = !chosen || ['forgot', 'reset', 'invite', 'accept'].includes(mode);
     if (!chosen) return;
     el('auth-plan-name').textContent = PLANS[chosen].name;
     el('auth-plan-price').textContent = PLANS[chosen].price;
     el('auth-plan-note').textContent = PLANS[chosen].note;
-  }
-  async function submitPlanChoice() {
-    const plan = store.get();
-    if (!plan || support) return;
-    store.set('');
-    if (plan === 'free') return;
-    try {
-      const response = await fetch('/api/license/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
-      const entitlement = await response.json();
-      globalThis.FinancePro?.setEntitlement?.(entitlement);
-      globalThis.notify?.(`Your ${PLANS[plan].name} request was sent to your MyFinance administrator. Nothing is charged here.`);
-    } catch (error) {
-      // 409 means the account already has this plan (or is the owner/demo account); nothing to request.
-      if (error.status !== 409) globalThis.notify?.(`We could not send your ${PLANS[plan].name} request: ${error.message}`);
-    }
   }
   function showSupportBanner(support) {
     const banner = document.createElement('div');
@@ -156,7 +151,8 @@ window.FinanceSession = (() => {
     }));
     el('auth-plan-clear')?.addEventListener('click', () => { store.set(''); renderPlanChoice(); });
     el('auth-switch').onclick = () => {
-      mode = mode === 'login' ? 'register' : 'login';
+      if (mode === 'accept') { inviteToken = ''; location.reload(); return; }
+      mode = mode === 'login' ? (inviteToken ? 'invite' : registrationEnabled ? 'register' : 'login') : 'login';
       if (location.hash.startsWith('#reset-token=')) history.replaceState(null, '', location.pathname);
       el('auth-error').textContent = '';
       renderMode();
@@ -169,6 +165,18 @@ window.FinanceSession = (() => {
       el('auth-submit').disabled = true;
       el('auth-error').textContent = '';
       try {
+        if (mode === 'accept') {
+          const accepted = await fetch('/api/household/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: inviteToken }) });
+          const result = await accepted.json();
+          if (!accepted.ok) throw new Error(result.error || 'Unable to join the household.');
+          inviteToken = '';
+          if (result.signInRequired) {
+            mode = 'login';
+            lock();
+          }
+          location.reload();
+          return;
+        }
         if (mode === 'forgot' || mode === 'reset') {
           const resetToken = location.hash.slice('#reset-token='.length);
           const response = await fetch(`/api/auth/password-reset/${mode === 'forgot' ? 'request' : 'confirm'}`, {
@@ -184,16 +192,33 @@ window.FinanceSession = (() => {
           el('auth-description').textContent = data.message;
           return;
         }
-        const response = await fetch(`/api/auth/${mode}`, {
+        const response = await fetch(`/api/auth/${mode === 'invite' ? 'accept-invite' : mode}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: el('auth-email').value.trim(), password: el('auth-password').value, name: el('auth-name').value.trim(), setupToken: el('auth-token').value })
+          body: JSON.stringify({ email: el('auth-email').value.trim(), password: el('auth-password').value, name: el('auth-name').value.trim(), setupToken: el('auth-token').value, ...(inviteToken && mode === 'invite' ? { token: inviteToken } : {}) })
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Unable to sign in.');
+        if (inviteToken && mode === 'login') {
+          user = data.user || (await (await fetch('/api/auth/me')).json()).user;
+          if (!user) throw new Error('Unable to verify the signed-in account.');
+          mode = 'accept';
+          renderMode();
+          return;
+        }
+        inviteToken = '';
         location.reload();
       } catch (error) { el('auth-error').textContent = error.message; }
       finally { el('auth-submit').disabled = false; }
     };
+    if (verifyToken) {
+      try {
+        const verification = await fetch('/api/auth/verify-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: verifyToken }) });
+        const result = await verification.json();
+        if (!verification.ok) throw new Error(result.error || 'Unable to verify your email.');
+        verificationNotice = 'Email verified. Sign in to continue to your household.';
+      } catch (error) { verificationNotice = error.message; }
+      finally { verifyToken = ''; }
+    }
     try {
       if (location.hash.startsWith('#reset-token=')) {
         mode = 'reset';
@@ -206,6 +231,11 @@ window.FinanceSession = (() => {
         if (!data.user) throw new Error('Invalid session response.');
         user = data.user;
         support = data.support || null;
+        if (inviteToken) {
+          mode = 'accept';
+          renderMode();
+          return;
+        }
         el('account-name').textContent = user.name || user.email;
         if (support) showSupportBanner(support);
         const admin = user.role === 'admin' && !support;
@@ -214,8 +244,8 @@ window.FinanceSession = (() => {
         if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        showView(['categories','category-admin','transactions','transaction-review','activity','accounts','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
-        await submitPlanChoice();
+        await showView(['categories','category-admin','transactions','transaction-review','activity','accounts','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
+        if (verificationNotice) globalThis.notify?.(verificationNotice);
         return;
       }
       if (response.status !== 401) throw new Error('Unable to check your session.');
@@ -223,7 +253,7 @@ window.FinanceSession = (() => {
       if (!statusResponse.ok) throw new Error('Account service unavailable. Please reload to retry.');
       const status = await statusResponse.json();
       setupRequired = !!status.setupRequired;
-      mode = setupRequired && location.hash === '#owner-setup' ? 'setup' : 'login';
+      mode = inviteToken ? 'invite' : setupRequired && location.hash === '#owner-setup' ? 'setup' : 'login';
       registrationEnabled = !!status.registrationEnabled;
       renderMode();
     } catch (error) { el('auth-description').textContent = error.message; }
@@ -243,5 +273,5 @@ window.FinanceSession = (() => {
     lock();
     el('auth-description').textContent = message;
   });
-  return { start, logout, isAuthenticated: () => !!user, currentUser: () => user, currentSupport: () => support };
+  return { start, logout, isAuthenticated: () => !!user, currentUser: () => user, currentSupport: () => support, chosenPlan: () => store.get() };
 })();

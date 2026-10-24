@@ -54,7 +54,7 @@ export async function recordAudit(req, eventType, outcome, fields = {}) {
     event_type: eventType,
     outcome,
     actor_user_id: fields.actorUserId ?? req?.support?.actorUserId ?? req?.user?.id ?? null,
-    subject_user_id: fields.subjectUserId ?? req?.user?.id ?? null,
+    subject_user_id: fields.subjectUserId ?? req?.household?.owner_user_id ?? req?.user?.id ?? null,
     support_grant_id: fields.supportGrantId ?? req?.support?.grantId ?? null,
     request_id: req?.id || null,
     ip_hash: req ? hashIdentifier(req.ip) : null,

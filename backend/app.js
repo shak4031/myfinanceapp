@@ -25,6 +25,8 @@ import moneyPlan from './routes/plan.js';
 import monitor from './routes/monitor.js';
 import accounts from './routes/accounts.js';
 import activity from './routes/activity.js';
+import billing, { stripeWebhook, requireSubscription } from './routes/billing.js';
+import household from './routes/household.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,6 +80,8 @@ app.use((req, res, next) => {
   });
   requestContext.run({ requestId: req.id, route: `${req.method} ${req.originalUrl.split('?')[0]}` }, next);
 });
+// Stripe must verify the untouched body, before JSON parsing and session/CSRF middleware.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhook);
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
@@ -115,6 +119,11 @@ app.use('/api', requireUser);
 app.use('/api/client-errors', clientErrors);
 app.use('/api/support-access', supportAccess);
 app.use('/api/admin', requireAdmin, admin);
+app.use('/api/license', license);
+app.use('/api/billing', billing);
+app.use('/api/household', household);
+app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
+app.use('/api', requireSubscription);
 app.use('/api/dashboard', dashboard);
 app.use('/api/transactions', transactions);
 app.use('/api/staging', staging);
@@ -127,14 +136,12 @@ app.use('/api/activity', activity);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categories', categories);
 app.use('/api/categorizations', categorizations);
-app.use('/api/license', license);
 app.use('/api/budgets', budgets);
 app.use('/api/analytics', analytics);
 app.use('/api/plan', moneyPlan);
 app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
 // Global application logs are only available to administrators (/api/admin/logs) and monitors (/api/monitor/logs).
 app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Use the admin console App logs tab (/api/admin/logs)' }));
-app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
 // Static files (after API routes)

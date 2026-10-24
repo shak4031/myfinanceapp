@@ -4,6 +4,7 @@ import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
 import { setMailTransportForTests } from './mailer.js';
+import { grantFixtureAccess } from './paidFixture.js';
 import { attemptKeysForEmail } from '../routes/auth.js';
 import application from '../app.js';
 
@@ -65,7 +66,8 @@ test('audit logging, password reset, admin console and consented support access'
     const adminCookie = cookieFrom(owner);
     const customer = await call('/api/auth/register', { body: { name: 'Customer', email: 'customer@example.com', password } });
     let customerCookie = cookieFrom(customer);
-    assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 200);
+    sent.length = 0; // Verification mail is separate from the password-reset assertions below.
+    await grantFixtureAccess(database, customer.body.user.id);
     assert.equal(customer.body.user.role, 'user');
     assert.equal((await call('/api/goals', { body: { name: 'Customer car', target_amount: 30000, target_date: '2027-01-01' }, cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/goals', { body: { name: 'Owner boat', target_amount: 9000, target_date: '2027-01-01' }, cookie: adminCookie })).status, 200);

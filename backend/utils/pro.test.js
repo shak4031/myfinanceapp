@@ -4,6 +4,8 @@ import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
 import application from '../app.js';
+import { configureTestMail } from './paidFixture.js';
+configureTestMail();
 
 test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, budgets and analytics', async t => {
   const database = new PGlite();
@@ -63,7 +65,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     for (const [path, method, body] of planningRequests) {
       const result = await call(path, { method, body, cookie });
       assert.equal(result.status, 402, `${method || 'GET'} ${path}`);
-      assert.equal(result.body.code, 'PRO_PLUS_REQUIRED');
+      assert.ok(['PRO_REQUIRED', 'SUBSCRIPTION_REQUIRED'].includes(result.body.code));
       assert.equal(result.body.entitlement.plusActive, false);
     }
   }
@@ -78,83 +80,50 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     const ownerLicense = await call('/api/license', { cookie: ownerCookie });
     assert.equal(ownerLicense.body.tier, 'pro');
     assert.equal(ownerLicense.body.source, 'owner');
-    assert.equal(ownerLicense.body.plan.price, 4.99);
+    assert.equal(ownerLicense.body.plan.price, 9.99);
     assert.equal(ownerLicense.body.plusActive, true);
-    assert.equal(ownerLicense.body.plusPlan.price, 9.98);
-    assert.equal(ownerLicense.body.plusPlan.additionalPrice, 4.99);
+    assert.equal(ownerLicense.body.plusPlan.price, 14.99);
     assert.equal(ownerLicense.body.features.some(feature => feature.id === 'planning'), false);
     const initialAnalytics = await call('/api/analytics', { cookie: ownerCookie });
     assert.equal(initialAnalytics.status, 200);
     assert.equal(initialAnalytics.body.moneyFlow.range.months, 3);
     assert.equal(initialAnalytics.body.moneyFlow.monthsAnalyzed, 0);
 
-    // Free accounts see the plan but cannot use Pro endpoints.
+    // Unsubscribed households cannot access any financial endpoints.
     const free = await call('/api/license', { cookie: customerCookie });
-    assert.equal(free.body.tier, 'free');
+    assert.equal(free.body.tier, 'none');
     assert.equal(free.body.trialAvailable, true);
     const blocked = await call('/api/analytics', { cookie: customerCookie });
     assert.equal(blocked.status, 402);
-    assert.equal(blocked.body.code, 'PRO_REQUIRED');
+    assert.equal(blocked.body.code, 'SUBSCRIPTION_REQUIRED');
     assert.equal((await call('/api/budgets', { cookie: customerCookie })).status, 402);
     assert.equal((await call('/api/analytics/export.csv', { cookie: customerCookie })).status, 402);
     assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 402);
     await assertPlanningLocked(customerCookie);
 
-    // The 7-day trial can be started exactly once.
+    // Trials require Stripe payment setup and cannot be started via the legacy route.
     const trial = await call('/api/license/trial', { body: {}, cookie: customerCookie });
-    assert.equal(trial.status, 200);
-    assert.equal(trial.body.tier, 'trial');
-    assert.equal(trial.body.daysLeft, 7);
-    assert.equal(trial.body.plusActive, true);
-    const trialPlan = await call('/api/plan', { cookie: customerCookie });
-    assert.equal(trialPlan.status, 200);
-    assert.equal(trialPlan.body.debtPlan.coaching.status, 'needs-history');
-    assert.equal(trialPlan.body.debtPlan.coaching.supportedExtra, 0);
-    assert.deepEqual(trialPlan.body.debtPlan.coaching.opportunities, []);
-    assert.equal((await call('/api/debts', { cookie: customerCookie })).status, 200);
-    assert.equal((await call('/api/goals', { cookie: customerCookie })).status, 200);
-    assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 409);
-    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 200);
-
-    // An expired trial locks the features again and cannot be restarted.
-    await database.query("UPDATE user_licenses SET trial_ends_at = NOW() - INTERVAL '1 hour' WHERE user_id=$1", [customerId]);
-    const expired = await call('/api/license', { cookie: customerCookie });
-    assert.equal(expired.body.tier, 'free');
-    assert.equal(expired.body.trialAvailable, false);
-    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402);
-    assert.equal((await call('/api/license/trial', { body: {}, cookie: customerCookie })).status, 409);
-
-    // Customers choose a paid plan; nothing unlocks until an administrator approves it.
+    assert.equal(trial.status, 409);
+    assert.match(trial.body.error, /Stripe Checkout/);
     assert.equal((await call('/api/license/request', { body: { plan: 'gold' }, cookie: customerCookie })).status, 400);
-    assert.equal((await call('/api/license/request', { body: { plan: 'pro_plus' }, cookie: ownerCookie })).status, 409);
-    const chosen = await call('/api/license/request', { body: { plan: 'pro_plus' }, cookie: customerCookie });
-    assert.equal(chosen.status, 200);
-    assert.equal(chosen.body.tier, 'free');
-    assert.equal(chosen.body.request.plan, 'pro_plus');
-    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402);
-    assert.equal((await call('/api/license', { cookie: customerCookie })).body.request.plan, 'pro_plus');
-    assert.equal((await call('/api/admin/overview', { cookie: ownerCookie })).body.stats.pending_plan_requests, 1);
-    const requestedUsers = (await call('/api/admin/users', { cookie: ownerCookie })).body;
-    assert.equal(requestedUsers[0].id, customerId, 'pending requests are listed first');
-    assert.equal(requestedUsers[0].license.request.plan, 'pro_plus');
-    const cancelled = await call('/api/license/request', { method: 'DELETE', cookie: customerCookie });
-    assert.equal(cancelled.status, 200);
-    assert.equal(cancelled.body.request, undefined);
-    assert.equal((await call('/api/license/request', { body: { plan: 'pro' }, cookie: customerCookie })).body.request.plan, 'pro');
+    assert.equal((await call('/api/license/request', { body: { plan: 'pro' }, cookie: customerCookie })).status, 409);
     await assertPlanningLocked(customerCookie);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant' }, cookie: customerCookie })).status, 403);
     assert.equal((await call('/api/admin/users/1/license', { body: { action: 'revoke' }, cookie: ownerCookie })).status, 400);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'bogus' }, cookie: ownerCookie })).status, 400);
     assert.equal((await call('/api/admin/users/999/license', { body: { action: 'grant' }, cookie: ownerCookie })).status, 404);
-    const granted = await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant' }, cookie: ownerCookie });
+    const granted = await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'basic' }, cookie: ownerCookie });
     assert.equal(granted.status, 200);
-    assert.equal(granted.body.license.tier, 'pro');
+    assert.equal(granted.body.license.tier, 'basic');
     assert.equal(granted.body.license.plusActive, false);
     assert.equal((await call('/api/license', { cookie: customerCookie })).body.request, undefined, 'granting the chosen plan clears the request');
     assert.equal((await call('/api/license/request', { body: { plan: 'pro' }, cookie: customerCookie })).status, 409);
     await assertPlanningLocked(customerCookie);
+    assert.equal((await call('/api/dashboard/summary', { body: {}, cookie: customerCookie })).status, 200);
+    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402, 'Basic does not include analytics');
+    assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie })).status, 200);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'invalid' }, cookie: ownerCookie })).status, 400);
-    assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: customerCookie })).status, 403);
+    assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: customerCookie })).status, 403);
     assert.equal((await call('/api/license', { cookie: customerCookie })).body.source, 'license');
     const users = (await call('/api/admin/users', { cookie: ownerCookie })).body;
     assert.equal(users.find(user => user.id === 1).license.source, 'owner');
@@ -237,11 +206,11 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.doesNotMatch(privateCsv.body, /OWNER SECRET|SHOPRITE 12/);
     assert.equal((await call('/api/analytics/export.csv?transactionId=bad', { cookie: customerCookie })).status, 400);
 
-    const plusGrant = await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: ownerCookie });
-    assert.equal(plusGrant.body.license.tier, 'pro_plus');
+    const plusGrant = await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie });
+    assert.equal(plusGrant.body.license.tier, 'pro');
     assert.equal(plusGrant.body.license.plusActive, true);
     const plusUsers = (await call('/api/admin/users', { cookie: ownerCookie })).body;
-    assert.equal(plusUsers.find(user => user.id === customerId).license.tier, 'pro_plus');
+    assert.equal(plusUsers.find(user => user.id === customerId).license.tier, 'pro');
     const goal = await call('/api/goals', { body: { name: 'Emergency fund', target_amount: 1000, monthly_contribution: 100, contribution_day: 15 }, cookie: customerCookie });
     assert.equal(goal.status, 200);
     const debt = await call('/api/debts', { body: { name: 'My card', balance: 500, apr: 20, min_payment: 25 }, cookie: customerCookie });
@@ -260,15 +229,15 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     }
 
     // Downgrades lock planning immediately without deleting the saved data.
-    await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie });
+    await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'basic' }, cookie: ownerCookie });
     await assertPlanningLocked(customerCookie);
-    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 200);
+    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402);
     const proTimeline = (await call('/api/dashboard/upcoming-payments', { body: {}, cookie: customerCookie })).body;
     assert.equal(proTimeline.some(item => item.planned), false);
     const proPulse = (await call('/api/dashboard/insights', { cookie: customerCookie })).body;
     assert.equal(proPulse.pulse.debtFreeDate, null);
     assert.ok('safeToSpend' in proPulse.pulse && 'lastImport' in proPulse.pulse);
-    await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro_plus' }, cookie: ownerCookie });
+    await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie });
     assert.equal((await call('/api/goals', { cookie: customerCookie })).body[0].name, 'Emergency fund');
     assert.equal((await call('/api/debts', { cookie: customerCookie })).body[0].name, 'My card');
 

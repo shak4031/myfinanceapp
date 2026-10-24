@@ -20,7 +20,7 @@ async function render(category, { insights = 'on', active = true } = {}) {
     querySelectorAll: selector => selector === '.pro-added' ? [{ remove() { removed++; } }] : [card]
   };
   const pro = {
-    ensureEntitlement: async () => {}, isActive: () => active,
+    ensureEntitlement: async () => {}, isActive: () => active, isPlusActive: () => active,
     prefs: { get: key => key === 'dash.insights' ? insights : 'cards' },
     format: { money, esc }, proSwitch: () => '', ICONS: { lock: '' },
     getAnalytics: async () => ({
@@ -71,7 +71,7 @@ test('unbudgeted categories do not acquire a misleading empty meter', async () =
   }
 });
 
-test('turning analytics off or using a free plan removes enhancements without budget fetches', async () => {
+test('turning analytics off or using Basic removes enhancements without budget fetches', async () => {
   for (const settings of [{ insights: 'off' }, { active: false }]) {
     const result = await render({ name: 'Travel', mtd: 25, budget: 100 }, settings);
     assert.equal(result.card, '');

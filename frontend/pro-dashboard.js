@@ -58,7 +58,7 @@
     lastDetail = detail;
     await pro.ensureEntitlement();
     if (run !== token || !section.isConnected) return;
-    const active = pro.isActive();
+    const active = pro.isPlusActive();
     const insights = active && pro.prefs.get('dash.insights', 'on') === 'on';
     const view = active ? pro.prefs.get('dash.view', 'cards') : 'cards';
     const head = section.querySelector('.section-head'), grid = section.querySelector('.mtd-grid');

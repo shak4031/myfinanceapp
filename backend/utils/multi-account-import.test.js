@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import test from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
@@ -155,6 +157,7 @@ test('CSV account detection, reviewed mappings, atomic imports and per-account r
     })).status, 422, 'distinct account numbers may not be collapsed into a single account');
 
     const other = await call('/api/auth/register', { name: 'Other', email: 'multi-other@example.test', password: 'other-test-password-123456' });
+    await grantFixtureAccess(database, other.body.user.id);
     assert.equal(other.status, 200);
     cookie = other.headers.get('set-cookie').split(';')[0];
     const privatePreview = (await call('/api/import/inspect-csv', { csvData })).body;

@@ -1,4 +1,4 @@
-/* Settings & support: customers control exactly when support may view their account. */
+/* Household settings and owner-managed operator support access. */
 (() => {
   const $ = id => document.getElementById(id);
   const { escape } = window.FinanceTools;
@@ -7,11 +7,11 @@
   view.id = 'settings-view';
   view.className = 'view';
   view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h1>Settings &amp; support</h1>
-      <p class="muted">You decide if and when support can look at your account. Nobody can see your data without a grant from you.</p></div></header>
+      <p class="muted">Household members share and can edit financial records. Only the household owner manages support access. Operators can access operational information and audit metadata; support access to financial records requires an owner grant.</p></div></header>
     <div class="panel plan-card">
       <div><p class="eyebrow">SUPPORT ACCESS</p><h2>Let support help with a problem</h2>
-        <p class="muted">Support never needs your password. A grant lets an administrator view your account for a limited time. Every page they open is logged below, and you can revoke access instantly.</p></div>
-      <form id="support-grant-form" class="toolbar">
+        <p class="muted">Support never needs your password. The household owner can grant an administrator time-limited access to shared financial records. Support requests are logged below, and the owner can revoke access at any time.</p></div>
+      <form id="support-grant-form" class="toolbar" hidden>
         <label>What do you need help with?<input id="support-reason" required minlength="5" maxlength="300" placeholder="e.g. Upcoming payments show the wrong amount"></label>
         <label>Access<select id="support-level"><option value="read">View only (recommended)</option><option value="write">View and make changes</option></select></label>
         <label>Duration<select id="support-hours"><option value="1">1 hour</option><option value="4">4 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option></select></label>
@@ -42,6 +42,7 @@
       </form>
       <p id="password-status" role="status"></p></div>`;
   document.querySelector('.main-content').appendChild(view);
+  const canManageSupport = () => !FinanceSession.currentSupport() && FinanceSession.currentUser?.()?.household?.role === 'owner';
 
   function renderPasswordCard() {
     const user = FinanceSession.currentUser?.() || {};
@@ -72,9 +73,10 @@
     renderPerformance();
     renderPasswordCard();
     const status = $('support-status');
-    if (FinanceSession.currentSupport()) {
-      $('support-grant-form').hidden = true;
-      status.textContent = 'Access-sharing settings are hidden during a support session.';
+    $('support-grant-form').hidden = !canManageSupport();
+    if (!canManageSupport()) {
+      status.textContent = FinanceSession.currentSupport() ? 'Access-sharing settings are hidden during a support session.'
+        : 'Only the household owner can grant or revoke operator support access and review support activity. Household members already share access to household finances.';
       $('support-grants').innerHTML = '';
       $('support-activity').innerHTML = '';
       return;
@@ -96,6 +98,7 @@
     if (event.target.id === 'password-form') { event.preventDefault(); await changePassword(); return; }
     if (event.target.id !== 'support-grant-form') return;
     event.preventDefault();
+    if (!canManageSupport()) return;
     const level = $('support-level').value;
     if (level === 'write' && !await FinanceUI.confirm('Allow support to make changes to your data? Changes are logged, and you can revoke access at any time.')) return;
     try {
@@ -115,6 +118,7 @@
     }
     const id = event.target.dataset?.revoke;
     if (!id) return;
+    if (!canManageSupport()) return;
     try {
       await fetch(`/api/support-access/${encodeURIComponent(id)}`, { method: 'DELETE' });
       $('support-status').textContent = 'Access revoked. Any active support session has ended.';

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
@@ -217,6 +219,7 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
     const privateReview = await review([first.body.batchId]);
     cookie = '';
     const other = await call('/api/auth/register', { name: 'Other', email: 'other-recovery@example.test', password: 'other-test-password-123456' });
+    await grantFixtureAccess(database, other.body.user.id);
     assert.equal(other.status, 200);
     cookie = other.headers.get('set-cookie').split(';')[0];
     assert.deepEqual((await history()).batches, []);

@@ -45,7 +45,7 @@ test('demo data covers about 16 months with a consistent running balance and rea
 test('demo email is always Pro, even without a license row', () => {
   assert.equal(entitlementFromRow(5, null, new Date(), DEMO_EMAIL).source, 'demo');
   assert.equal(entitlementFromRow(5, { email: 'Demo@MyFinance.app', revoked_at: new Date() }).tier, 'pro');
-  assert.equal(entitlementFromRow(5, { email: 'someone@example.com' }).tier, 'free');
+  assert.equal(entitlementFromRow(5, { email: 'someone@example.com' }).tier, 'none');
 });
 
 test('demo account resets cleanly, signs in with the published password and unlocks every page', async t => {

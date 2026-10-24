@@ -6,8 +6,9 @@ import { hashPassword, verifyPassword, tokenHash, validCredentials } from '../ut
 import { withUser } from '../utils/tenant.js';
 import { log } from '../utils/logger.js';
 import { recordAudit } from '../utils/audit.js';
-import { sendPasswordResetEmail, sendSecurityNotice } from '../utils/mailer.js';
+import { sendPasswordResetEmail, sendSecurityNotice, mailConfigured, appOrigin } from '../utils/mailer.js';
 import { isDemoEmail } from '../utils/demo.js';
+import { ensureHousehold, invitedHousehold, joinHousehold } from '../utils/households.js';
 
 const router = Router();
 const sessionHours = 12;
@@ -16,7 +17,7 @@ export const cookieName = 'finance_session';
 export const supportCookieName = 'finance_support';
 const production = process.env.NODE_ENV === 'production';
 export const cookieOptions = { httpOnly: true, secure: production, sameSite: 'strict', path: '/' };
-const publicUser = row => ({ id: row.id, name: row.name, email: row.email, role: row.role === 'admin' ? 'admin' : 'user' });
+const publicUser = row => ({ id: row.id, name: row.name, email: row.email, role: row.role === 'admin' ? 'admin' : 'user', emailVerified: !!row.email_verified_at });
 const genericResetMessage = 'If that email belongs to an account, a password reset link has been sent.';
 let dummyHash;
 
@@ -50,7 +51,7 @@ async function loadSession(req, { activity = false } = {}) {
   if (!token) return null;
   return administrativeTransaction(async client => {
     const owner = (await client.query(`
-      SELECT u.id, u.name, u.email, u.role, s.expires_at,
+      SELECT u.id, u.name, u.email, u.role, u.email_verified_at, s.expires_at,
         LEAST(s.last_activity_at + INTERVAL '10 minutes',s.expires_at) AS idle_expires_at
       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > NOW() AND s.last_activity_at > NOW() - INTERVAL '10 minutes'
@@ -67,7 +68,7 @@ async function loadSession(req, { activity = false } = {}) {
     const supportToken = readCookie(req, supportCookieName);
     if (!supportToken || owner.role !== 'admin') return { owner };
     const support = (await client.query(`
-      SELECT u.id, u.name, u.email, u.role, g.id AS grant_id, g.access_level, g.expires_at
+      SELECT u.id, u.name, u.email, u.role, u.email_verified_at, g.id AS grant_id, g.access_level, g.expires_at
       FROM sessions s JOIN support_grants g ON g.id = s.support_grant_id JOIN users u ON u.id = g.user_id
       WHERE s.token_hash = $1 AND s.actor_user_id = $2 AND s.user_id = g.user_id AND s.expires_at > NOW()
         AND g.revoked_at IS NULL AND g.expires_at > NOW()
@@ -89,9 +90,13 @@ async function authenticate(req, res, next, activity = false) {
     res.set('X-Session-Expires', new Date(session.owner.expires_at).toISOString());
     res.set('X-Session-Server-Time', new Date().toISOString());
     if (session.staleSupport) res.clearCookie(supportCookieName, cookieOptions);
+    const subject = session.support || session.owner;
+    const household = await administrativeTransaction(client => ensureHousehold(client, subject.id));
+    req.household = household;
     if (!session.support) {
       req.user = publicUser(session.owner);
-      return withUser(session.owner.id, next);
+      req.user.household = { id: household.id, name: household.name, role: household.role };
+      return withUser(household.owner_user_id, next, { loginId: session.owner.id });
     }
     const { support, owner } = session;
     req.user = publicUser(support);
@@ -101,7 +106,7 @@ async function authenticate(req, res, next, activity = false) {
       recordAudit(req, 'support.request', res.statusCode < 400 ? 'success' : 'failure', { status: res.statusCode });
     });
     const path = String(req.originalUrl || '').split('?')[0].replace(/\/+$/, '');
-    if (path.startsWith('/api/admin') || path.startsWith('/api/support-access')) {
+    if (path.startsWith('/api/admin') || path.startsWith('/api/support-access') || path.startsWith('/api/billing') || path.startsWith('/api/household')) {
       return res.status(403).json({ error: 'End the support session to use administration or access-sharing tools' });
     }
     const readOnly = support.access_level !== 'write';
@@ -110,7 +115,7 @@ async function authenticate(req, res, next, activity = false) {
     if (readOnly && !isRead) {
       return res.status(403).json({ error: 'This support session is read-only. The customer must grant edit access for changes.' });
     }
-    withUser(support.id, next, { readOnly });
+    withUser(household.owner_user_id, next, { readOnly, loginId: support.id });
   } catch (error) {
     next(error);
   }
@@ -167,6 +172,41 @@ function sendSession(res, session) {
 
 const normalizeEmail = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
 
+async function sendVerification(client, req, user) {
+  if (!mailConfigured()) throw Object.assign(new Error('Email verification delivery is not configured.'), { status: 503 });
+  const token = randomBytes(32).toString('hex');
+  await client.query('DELETE FROM email_verification_tokens WHERE user_id=$1', [user.id]);
+  await client.query("INSERT INTO email_verification_tokens(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '24 hours')",
+    [tokenHash(token), user.id]);
+  const sent = await sendSecurityNotice(user, 'Verify your MyFinance email',
+    `Hi ${user.name},\n\nVerify your email within 24 hours before starting your subscription:\n${appOrigin(req)}/#verify-token=${token}\n\nIf you did not create this login, do not follow the link.`);
+  if (!sent) throw Object.assign(new Error('Verification email could not be delivered.'), { status: 503 });
+}
+
+router.post('/verify-email', async (req, res, next) => {
+  try {
+    const token = req.body?.token;
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({ error: 'A valid verification link is required.' });
+    if (!await rateLimit(req, tokenHash(token), 'verify')) return res.status(429).json({ error: 'Too many attempts. Try again later.' });
+    await administrativeTransaction(async client => {
+      const row = (await client.query('SELECT user_id FROM email_verification_tokens WHERE token_hash=$1 AND expires_at>NOW() FOR UPDATE',
+        [tokenHash(token)])).rows[0];
+      if (!row) throw Object.assign(new Error('This verification link expired or was already used.'), { status: 409 });
+      await client.query('UPDATE users SET email_verified_at=NOW() WHERE id=$1', [row.user_id]);
+      await client.query('DELETE FROM email_verification_tokens WHERE user_id=$1', [row.user_id]);
+    });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
+router.post('/resend-verification', requireUser, async (req, res, next) => {
+  try {
+    if (req.support) return res.status(403).json({ error: 'End support access to verify your email.' });
+    if (!await rateLimit(req, req.user.email, 'verification-email')) return res.status(429).json({ error: 'Too many requests. Try again later.' });
+    if (!req.user.emailVerified) await administrativeTransaction(client => sendVerification(client, req, req.user));
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
+
 router.get('/status', async (req, res, next) => {
   try {
     const result = await administrativeTransaction(client => client.query('SELECT password_hash IS NULL AS needed FROM users WHERE id = 1'));
@@ -196,6 +236,7 @@ for (const action of ['setup', 'register']) {
       if (!validCredentials(email, password) || typeof name !== 'string' || !name.trim() || name.length > 100) {
         return res.status(400).json({ error: 'Provide a name, valid email, and a password of 12 to 128 characters' });
       }
+      if (isDemoEmail(email)) return res.status(403).json({ error: 'This email is reserved for the public demo.' });
       if (!await rateLimit(req, email)) {
         await recordAudit(req, 'auth.locked', 'denied', { email, status: 429, detail: { action } });
         return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
@@ -204,6 +245,7 @@ for (const action of ['setup', 'register']) {
         await recordAudit(req, 'auth.register', 'denied', { email, status: 403, detail: { reason: 'registration_closed' } });
         return res.status(403).json({ error: 'Registration is currently closed' });
       }
+      if (action === 'register' && !mailConfigured()) return res.status(503).json({ error: 'Registration requires configured verification email delivery.' });
       if (action === 'setup') {
         const expected = process.env.OWNER_SETUP_TOKEN;
         if (!expected || expected.length < 32 || typeof setupToken !== 'string'
@@ -226,6 +268,11 @@ for (const action of ['setup', 'register']) {
           ? "UPDATE users SET name=$1, email=$2, password_hash=$3, role='admin', password_changed_at=NOW() WHERE id=1 RETURNING id,name,email,role"
           : "INSERT INTO users (name,email,password_hash,role,password_changed_at) VALUES ($1,$2,$3,'user',NOW()) RETURNING id,name,email,role";
         const user = (await client.query(query, [name.trim(), email, encoded])).rows[0];
+        if (action === 'setup') {
+          await client.query('UPDATE users SET email_verified_at=NOW() WHERE id=$1', [user.id]);
+          user.email_verified_at = new Date();
+        } else await sendVerification(client, req, user);
+        await ensureHousehold(client, user.id);
         const issued = await issueSession(client, req, res, user);
         await client.query('SET LOCAL ROLE finance_app_runtime');
         await client.query("SELECT set_config('app.user_id', $1, true)", [String(user.id)]);
@@ -244,6 +291,32 @@ for (const action of ['setup', 'register']) {
   });
 }
 
+router.post('/accept-invite', async (req, res, next) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const { password, name, token } = req.body || {};
+    if (isDemoEmail(email)) return res.status(403).json({ error: 'This email is reserved for the public demo.' });
+    if (!validCredentials(email, password) || typeof name !== 'string' || !name.trim() || name.length > 100) {
+      return res.status(400).json({ error: 'Provide a name, valid email and a password of 12 to 128 characters.' });
+    }
+    if (!await rateLimit(req, email, 'invite')) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+    const encoded = await hashPassword(password);
+    const session = await administrativeTransaction(async client => {
+      const invitation = await invitedHousehold(client, token, email);
+      const existing = (await client.query('SELECT id FROM users WHERE lower(email)=$1', [email])).rows[0];
+      if (existing) throw Object.assign(new Error('Sign in with your existing login to accept this invitation.'), { status: 409 });
+      const user = (await client.query(`INSERT INTO users(name,email,password_hash,role,password_changed_at)
+        VALUES($1,$2,$3,'user',NOW()) RETURNING id,name,email,role`, [name.trim(), email, encoded])).rows[0];
+      await client.query('UPDATE users SET email_verified_at=NOW() WHERE id=$1', [user.id]);
+      user.email_verified_at = new Date();
+      await joinHousehold(client, invitation, user.id);
+      return issueSession(client, req, res, user);
+    });
+    await recordAudit(req, 'household.invite_accepted', 'success', { actorUserId: session.user.id, subjectUserId: session.user.id });
+    sendSession(res, session);
+  } catch (error) { next(error); }
+});
+
 router.post('/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -257,7 +330,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
     }
     const row = await administrativeTransaction(async client =>
-      (await client.query('SELECT id,name,email,role,password_hash FROM users WHERE lower(email)=$1', [email])).rows[0]);
+      (await client.query('SELECT id,name,email,role,password_hash,email_verified_at FROM users WHERE lower(email)=$1', [email])).rows[0]);
     dummyHash ||= await hashPassword('not-a-real-account-password');
     const valid = await verifyPassword(password, row?.password_hash || dummyHash);
     if (!valid || !row?.password_hash) {

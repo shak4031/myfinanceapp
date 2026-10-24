@@ -21,6 +21,12 @@ APP_ORIGIN=https://<your-app-domain>
 OWNER_SETUP_TOKEN=<cryptographically-random-token-at-least-32-characters>
 ALLOW_REGISTRATION=false
 
+# Stripe: USD recurring monthly prices, one subscription per household
+STRIPE_SECRET_KEY=<Stripe secret key from the same test/live environment as the prices>
+STRIPE_WEBHOOK_SECRET=<signing secret for this deployment's webhook endpoint>
+STRIPE_BASIC_PRICE_ID=<active USD 9.99 monthly recurring price>
+STRIPE_PRO_PRICE_ID=<active USD 14.99 monthly recurring price>
+
 # Password-reset and security-notice email (required for self-service reset)
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
@@ -64,7 +70,9 @@ be `NOLOGIN NOSUPERUSER NOBYPASSRLS`. Each financial database operation starts a
 transaction, sets that restricted role, and sets the verified user ID locally.
 The role cannot read authentication/session tables or truncate financial tables.
 The application fails startup if these protections cannot be installed. The
-administrative connection is used only by schema setup and authentication.
+administrative connection is used by schema setup, authentication, membership,
+billing/webhooks and audited administration. Financial queries continue to use
+the restricted role and household tenant context.
 
 ## Start and claim the owner account
 
@@ -84,7 +92,12 @@ serialized with registration. Remove `OWNER_SETUP_TOKEN` after setup and restart
 
 Leave registration closed until staging isolation tests and an independent
 production security review are complete. Set `ALLOW_REGISTRATION=true` only when
-ready. New users receive independent empty budgets and category lists.
+ready. The current runtime dependency audit reports 17 advisories, including two
+critical advisories. Review and remediate these before public launch; the billing
+implementation and passing application tests do not constitute dependency
+security clearance. Run `npm audit --omit=dev` against the installed lockfile;
+some available fixes require major-version upgrades and separate regression
+testing. New users receive independent empty budgets and category lists.
 Passwords use salted scrypt; session tokens are random, stored hashed, expire
 after 10 minutes of inactivity or 12 hours absolutely and are revoked on logout.
 Only explicit user interaction (`POST /api/auth/activity`) renews inactivity;
@@ -100,8 +113,68 @@ claimed once through Owner setup. Other people register with **Create an
 account** only while `ALLOW_REGISTRATION=true`; each starts with an empty,
 isolated workspace.
 
-There is not yet email verification, MFA or self-service account deletion. Do not
-advertise these capabilities.
+New public registrations receive single-use email verification links, valid for
+24 hours. Checkout is blocked until verification completes. SMTP is required for
+registration, invitations and reminders; existing logins are grandfathered
+verified. SMTP connection, greeting and socket timeouts are bounded so an
+unresponsive mail server does not hold registration or reminder transactions
+indefinitely. MFA and self-service account deletion are not implemented.
+
+## Household subscriptions and Stripe rollout
+
+Keep `ALLOW_REGISTRATION=false` throughout staging. This migration creates a
+household and owner membership for every existing independent user, without
+moving financial records. Both legacy paid tiers become new Pro licenses to
+preserve their features. They are not charged or automatically subscribed in
+Stripe. Unpaid households must select a plan, verify email and complete Checkout;
+old no-card trials do not grant financial access. A previously used trial is
+not restarted. Back up the database before migration; do not roll back application
+code without a compatible schema/plan migration.
+
+1. Create Stripe test-mode recurring monthly prices: Basic **USD 9.99** and Pro
+   **USD 14.99**, quantity one per household. Configure the environment variables
+   above. Checkout verifies currency, amount, interval and active status.
+2. Register **POST `/api/billing/webhook`** with Stripe for
+   `checkout.session.completed`, `checkout.session.expired`,
+   `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `customer.subscription.trial_will_end`,
+   `invoice.paid` and `invoice.payment_failed`. The endpoint verifies the raw
+   body and Stripe signature; do not proxy-transform it. It does not use browser
+   sessions or browser CSRF rules. Events are idempotent, fetch authoritative
+   subscription state and fail/retry on processing errors.
+3. Test real Stripe **test mode** end to end: hosted Checkout collecting a card,
+   Basic-selected trial with Pro access, successful paid conversion to Basic,
+   Pro conversion, declined payment, cancellation during trial, cancellation
+   at paid-period end, webhook duplicate/reordering, and return from the portal.
+   Confirm there is only one subscription/customer per household. No live
+   Stripe requests are made by the automated test suite.
+4. The app creates a Stripe portal configuration with cancellation at period end,
+   payment-method updates and invoices. No card information is stored locally.
+   Test your Stripe account's cancellation settings and hosted disclosures before
+   launch. Subscription price changes through the portal are not enabled.
+5. Keep at least one server instance always running. The startup worker checks
+   every minute for trial reminders due within 24 hours, using database locks
+   across instances. Configure/test SMTP and monitor `billing.reminder_failed`.
+   Reminders go to the household owner's app email, not every member or a
+   separately edited Stripe receipt email. Downtime can delay reminders; mail
+   delivery failures are retried and logged, not treated as success.
+6. Verify household invitations and removal with two separate browser profiles,
+   plus a third unrelated household for negative isolation tests. Invite links
+   expire after 48 hours and membership is capped at ten. Owner removal,
+   household transfer and automatic merging of financial data are not supported.
+7. Switch to live-mode keys/prices/webhook secret only after staging succeeds
+   and billing disclosures, tax obligations, refund/cancellation policies and
+   processor requirements have been reviewed. Do not reuse test IDs in live mode.
+   Then explicitly enable registration when ready.
+
+Trial duration is 15 days and all trial access is Pro, regardless of selected
+post-trial plan. Checkout requires renewal consent and a payment method. A
+subscription automatically charges the selected monthly plan unless cancelled.
+Cancellation keeps access until trial/paid-period end. Expired, unpaid, paused
+or incomplete subscriptions cannot access financial routes, but billing,
+membership and authentication remain available. Basic includes core accounts,
+imports, transactions and dashboards; Pro adds analytics, budgets, debt planning
+and savings goals. Existing manual licenses remain an operator-managed exception.
 
 ## Password reset
 

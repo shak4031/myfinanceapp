@@ -1,4 +1,4 @@
-// MyFinance Pro: plan state, upgrade/trial dialog, lock badges and the budget editor.
+/* Shared entitlement and Pro feature helpers. Billing is handled by Stripe. */
 (() => {
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,222 +23,85 @@
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>'
   };
   const state = { entitlement: null, entitlementPromise: null, analytics: null, analyticsAt: 0, analyticsPromise: null };
-
   async function request(url, options = {}) {
     const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
-    let data = null;
-    try { data = await response.json(); } catch { data = null; }
-    if (response.status === 402) {
+    const data = await response.json();
+    if (!response.ok) {
       if (data?.entitlement) setEntitlement(data.entitlement);
-      const error = new Error(data?.error || 'This feature is part of MyFinance Pro');
-      error.code = data?.code || 'PRO_REQUIRED';
-      throw error;
+      throw Object.assign(new Error(data?.error || `Request failed (${response.status})`), { code: data?.code, status: response.status, entitlement: data?.entitlement });
     }
-    if (!response.ok) throw new Error(data?.error || `Request failed (${response.status})`);
     return data;
   }
-
+  const isActive = () => !!state.entitlement?.active;
+  const isPlusActive = () => !!state.entitlement?.plusActive;
+  function planLabel(entitlement = state.entitlement) {
+    if (!entitlement) return { tone: 'free', title: 'Choose a household plan', detail: 'Basic or Pro' };
+    if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro trial', detail: entitlement.daysLeft == null ? '15-day trial' : `${entitlement.daysLeft} days left` };
+    if (entitlement.active) return { tone: 'pro', title: entitlement.plusActive ? 'MyFinance Pro' : 'MyFinance Basic', detail: 'Household access active' };
+    return { tone: 'free', title: 'Choose a household plan', detail: 'Basic or Pro' };
+  }
   function setEntitlement(entitlement) {
     state.entitlement = entitlement;
-    document.body?.classList?.toggle('has-pro', !!entitlement?.active);
+    document.body?.classList?.toggle('has-pro', !!entitlement?.plusActive);
     document.body?.classList?.toggle('has-pro-plus', !!entitlement?.plusActive);
-    renderPlanChrome();
+    const label = planLabel();
+    document.querySelectorAll?.('.plus-nav-badge').forEach(node => { node.textContent = isPlusActive() ? 'PRO' : 'PRO · LOCKED'; });
+    const badge = $('pro-nav-badge');
+    if (badge) badge.textContent = entitlement?.tier === 'trial' ? 'TRIAL' : isPlusActive() ? 'PRO' : 'PRO · LOCKED';
+    const bottom = document.querySelector?.('.sidebar-bottom');
+    if (bottom && typeof bottom.insertBefore === 'function') {
+      let chip = $('plan-chip');
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.id = 'plan-chip';
+        chip.type = 'button';
+        chip.addEventListener('click', () => openUpgrade());
+        bottom.insertBefore(chip, bottom.firstChild);
+      }
+      chip.className = `plan-chip is-${label.tone}`;
+      chip.innerHTML = `<span><strong>${esc(label.title)}</strong><small>${esc(label.detail)}</small></span>`;
+    }
     globalThis.emitFinanceEvent?.('pro:entitlement', entitlement);
   }
   function ensureEntitlement(force = false) {
     if (!force && state.entitlement) return Promise.resolve(state.entitlement);
     if (!force && state.entitlementPromise) return state.entitlementPromise;
-    state.entitlementPromise = request('/api/license')
-      .then(entitlement => { setEntitlement(entitlement); return entitlement; })
-      .finally(() => { state.entitlementPromise = null; });
+    state.entitlementPromise = request('/api/license').then(data => { setEntitlement(data); return data; }).finally(() => { state.entitlementPromise = null; });
     return state.entitlementPromise;
   }
-  const isActive = () => !!state.entitlement?.active;
-  const isPlusActive = () => !!state.entitlement?.plusActive;
-
   function getAnalytics(force = false) {
+    if (!isPlusActive()) return Promise.reject(new Error('Analytics requires household Pro access.'));
     if (!force && state.analytics && Date.now() - state.analyticsAt < 15000) return Promise.resolve(state.analytics);
     if (!force && state.analyticsPromise) return state.analyticsPromise;
-    state.analyticsPromise = request('/api/analytics')
-      .then(data => { state.analytics = data; state.analyticsAt = Date.now(); return data; })
-      .finally(() => { state.analyticsPromise = null; });
+    state.analyticsPromise = request('/api/analytics').then(data => { state.analytics = data; state.analyticsAt = Date.now(); return data; }).finally(() => { state.analyticsPromise = null; });
     return state.analyticsPromise;
   }
   const invalidateAnalytics = () => { state.analytics = null; state.analyticsAt = 0; };
-
-  function planLabel(entitlement = state.entitlement) {
-    if (!entitlement) return { tone: 'free', title: 'Free plan', detail: 'Unlock Pro' };
-    if (entitlement.tier === 'trial') return { tone: 'trial', title: 'Pro Plus trial', detail: `${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left` };
-    if (entitlement.plusActive) return { tone: 'pro', title: 'MyFinance Pro Plus', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : 'Active' };
-    const requested = entitlement.request?.plan ? `${entitlement.request.plan === 'pro_plus' ? 'Pro Plus' : 'Pro'} requested` : '';
-    if (entitlement.tier === 'pro') return { tone: 'pro', title: 'MyFinance Pro', detail: entitlement.source === 'owner' ? 'Owner license' : entitlement.source === 'demo' ? 'Demo license' : requested || 'Active' };
-    return { tone: 'free', title: 'Free plan', detail: requested || (entitlement.trialAvailable ? 'Try Pro Plus free for 7 days' : 'Choose a plan') };
-  }
-
-  function renderPlanChrome() {
-    const label = planLabel();
-    document.querySelectorAll?.('.nav-btn[data-view="payoff"], .nav-btn[data-view="goals"]').forEach(node => {
-      const badge = node.querySelector('.plus-nav-badge');
-      if (badge) badge.textContent = isPlusActive() ? 'PLUS' : 'PLUS · LOCKED';
-    });
-    const badge = $('pro-nav-badge');
-    if (badge) {
-      badge.className = `pro-nav-badge is-${label.tone}`;
-      badge.innerHTML = label.tone === 'free' ? `${ICONS.lock}PRO` : label.tone === 'trial' ? `TRIAL &middot; ${state.entitlement.daysLeft}D` : 'PRO';
-    }
-    const bottom = document.querySelector?.('.sidebar-bottom');
-    if (!bottom || typeof bottom.insertBefore !== 'function') return;
-    let chip = $('plan-chip');
-    if (!chip) {
-      chip = document.createElement('button');
-      chip.id = 'plan-chip';
-      chip.type = 'button';
-      chip.addEventListener('click', () => openUpgrade());
-      bottom.insertBefore(chip, bottom.firstChild);
-    }
-    chip.className = `plan-chip is-${label.tone}`;
-    chip.innerHTML = `<span class="plan-chip-icon">${label.tone === 'free' ? ICONS.lock : ICONS.spark}</span><span><strong>${esc(label.title)}</strong><small>${esc(label.detail)}</small></span>`;
-  }
-
-  // A small "PRO"/lock tag for controls that need the paid plan.
-  const proTag = () => isActive() ? '<span class="pro-tag">PRO</span>' : `<span class="pro-tag is-locked">${ICONS.lock}PRO</span>`;
-  const proSwitch = (id, label, on) => `<button type="button" class="pro-switch${isActive() ? '' : ' is-locked'}" role="switch" aria-checked="${on && isActive() ? 'true' : 'false'}" data-pro-switch="${esc(id)}"><span class="pro-switch-track" aria-hidden="true"><span></span></span><span>${esc(label)}</span>${proTag()}</button>`;
-
-  function dialogShell(id, className, labelledBy) {
-    let dialog = $(id);
-    if (dialog && dialog.tagName) return dialog;
-    dialog = document.createElement('dialog');
-    dialog.id = id;
-    dialog.className = `editor ${className}`;
-    dialog.setAttribute('aria-labelledby', labelledBy);
-    document.body.appendChild(dialog);
-    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-    return dialog;
-  }
-
-  function openUpgrade(reason = '', requiredPlan = 'pro', picked = '') {
-    const entitlement = state.entitlement || {};
-    const dialog = dialogShell('pro-dialog', 'pro-dialog', 'pro-dialog-title');
-    const plusRequired = requiredPlan === 'pro_plus';
-    const plan = entitlement.plan || { name: 'MyFinance Pro', price: 4.99 };
-    const plusPlan = entitlement.plusPlan || { price: 9.98, additionalPrice: 4.99 };
-    const supportSession = !!globalThis.FinanceSession?.currentSupport?.();
-    const paid = entitlement.active && entitlement.tier !== 'trial';
-    const current = paid ? (entitlement.plusActive ? 'pro_plus' : 'pro') : '';
-    const pending = entitlement.request?.plan || '';
-    const preferred = [picked, pending].find(id => (id === 'pro' || id === 'pro_plus') && id !== current);
-    const choice = current === 'pro_plus' ? 'pro_plus' : preferred || (current === 'pro' || plusRequired ? 'pro_plus' : 'pro');
-    const names = { pro: 'Pro', pro_plus: 'Pro Plus' };
-    const canRequest = !supportSession && current !== 'pro_plus';
-    const requestedOn = entitlement.request?.requestedAt ? ` on ${new Date(entitlement.request.requestedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : '';
-    let status = '';
-    if (current === 'pro_plus') {
-      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro Plus is active. Insights, Debt Free and Savings Goals are unlocked.</span></p>`;
-    } else if (pending && choice === pending) {
-      status = `<p class="pro-status is-trial">${ICONS.spark}<span>You requested <strong>${names[pending]}</strong>${esc(requestedOn)}. Ask your MyFinance administrator if you need it sooner. Nothing is charged here. <button type="button" class="pro-request-link" data-pro-cancel>Cancel request</button></span></p>`;
-    } else if (current === 'pro') {
-      status = `<p class="pro-status is-pro">${ICONS.check}<span>Pro is active: analytics, budgets and exports are unlocked. Debt Free and Savings Goals need Pro Plus ($4.99 more per month, $9.98 total). Ask your MyFinance administrator, or send a request below.</span></p>`;
-    } else if (entitlement.tier === 'trial') {
-      status = `<p class="pro-status is-trial">${ICONS.spark}<span>Your Pro Plus trial is active &middot; <strong>${entitlement.daysLeft} day${entitlement.daysLeft === 1 ? '' : 's'} left</strong>. To keep a plan after it ends, choose one and send the request. Your MyFinance administrator approves it; nothing is charged here.</span></p>`;
-    } else if (supportSession) {
-      status = `<p class="pro-status is-locked">${ICONS.lock}<span>Plan requests are made by the account holder. Ask your MyFinance administrator for Pro or Pro Plus.</span></p>`;
-    } else {
-      const ended = entitlement.trialEndsAt ? ` on ${new Date(entitlement.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : '';
-      status = `<p class="pro-status">${entitlement.source === 'trial-expired' ? `Your free trial ended${esc(ended)}. ` : ''}Pick a plan, then send the request. Your MyFinance administrator turns it on. Ask your MyFinance administrator if you have questions. There is no checkout and nothing is charged here.</p>`;
-    }
-    const trial = entitlement.trialAvailable && !supportSession && !paid
-      ? '<button type="button" class="btn btn-secondary" data-pro-trial title="One-time, ends on its own, no charge">Start 7-day free trial</button>' : '';
-    const sent = pending && pending === choice;
-    const action = !canRequest ? `<button type="button" class="btn btn-primary" data-pro-close>${current === 'pro_plus' ? 'Explore analytics' : 'Got it'}</button>`
-      : `<button type="button" class="btn btn-primary" data-pro-request${sent ? ' disabled' : ''}>${sent ? `${names[choice]} requested \u2713` : `Request ${names[choice]}`}</button>`;
-    const option = (id, title, price, per, text, note) => {
-      const isCurrent = current === id || (id === 'pro' && current === 'pro_plus');
-      const tag = isCurrent ? '<span class="upgrade-tag">Your plan</span>' : pending === id ? '<span class="upgrade-tag is-requested">Requested</span>' : '';
-      return `<label class="upgrade-option${id === 'pro_plus' ? ' upgrade-plus' : ''}${isCurrent ? ' is-current' : ''}">
-        <input type="radio" name="pro-plan-choice" value="${id}"${choice === id ? ' checked' : ''}${isCurrent || !canRequest ? ' disabled' : ''}>
-        <span class="upgrade-option-head"><span class="upgrade-radio" aria-hidden="true"></span><strong>${title}</strong>${tag}</span>
-        <span class="pro-price"><strong>$${Number(price).toFixed(2)}</strong><span>${per}</span></span>
-        <p>${text}</p><small>${note}</small></label>`;
-    };
-    const features = (entitlement.features?.length ? entitlement.features : []).map(feature =>
-      `<li><span class="pro-feature-icon">${ICONS[feature.id] || ICONS.spark}</span><span><strong>${esc(feature.title)}</strong><small>${esc(feature.text)}</small></span></li>`).join('');
-    dialog.innerHTML = `<div class="pro-hero"><span class="pro-hero-mark">${ICONS.spark}</span><p class="eyebrow">MYFINANCE / CHOOSE YOUR PLAN</p>
-      <h2 id="pro-dialog-title">${plusRequired ? 'A plan for less debt. More life.' : 'Turn money insights into better habits.'}</h2>
-      ${reason ? `<p class="pro-reason">${esc(reason)}</p>` : ''}
-      <div class="upgrade-plans" role="radiogroup" aria-label="Choose a plan">
-      ${option('pro', 'Pro', plan.price, '/ month', 'Understand your patterns: budgets, spending insights, forecasts, recurring-charge alerts and CSV exports.', 'Does not unlock Debt Free or Savings Goals.')}
-      ${option('pro_plus', 'Pro Plus', plusPlan.price, '/ month total', 'Everything in Pro, plus Debt Free and Savings Goals: payoff strategies, monthly targets and what-if planning.', `Pro + $${Number(plusPlan.additionalPrice).toFixed(2)}/month. Not a second $9.98 charge.`)}</div></div>
-      <ul class="pro-feature-grid">${features}</ul>
-      <div class="pro-dialog-foot">${status}<div class="pro-actions"><button type="button" class="btn btn-secondary" data-pro-close>Not now</button>${trial}${action}</div></div>`;
-    dialog.querySelectorAll('[data-pro-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
-    dialog.querySelectorAll('input[name="pro-plan-choice"]').forEach(input => input.addEventListener('change', () => openUpgrade(reason, requiredPlan, input.value)));
-    dialog.querySelector('[data-pro-request]')?.addEventListener('click', async event => {
-      event.target.disabled = true;
-      try {
-        setEntitlement(await request('/api/license/request', { method: 'POST', body: JSON.stringify({ plan: choice }) }));
-        globalThis.notify?.(`Your ${names[choice]} request was sent to your MyFinance administrator. Nothing is charged here.`);
-      } catch (error) {
-        globalThis.notify?.(error.message);
-        await ensureEntitlement(true).catch(() => {});
-      }
-      openUpgrade(reason, requiredPlan, choice);
-    });
-    dialog.querySelector('[data-pro-cancel]')?.addEventListener('click', async event => {
-      event.target.disabled = true;
-      try {
-        setEntitlement(await request('/api/license/request', { method: 'DELETE' }));
-        globalThis.notify?.('Your plan request was cancelled.');
-      } catch (error) {
-        globalThis.notify?.(error.message);
-        await ensureEntitlement(true).catch(() => {});
-      }
-      openUpgrade(reason, requiredPlan);
-    });
-    dialog.querySelector('[data-pro-trial]')?.addEventListener('click', async event => {
-      event.target.disabled = true;
-      try {
-        setEntitlement(await request('/api/license/trial', { method: 'POST', body: '{}' }));
-        invalidateAnalytics();
-        dialog.close();
-        globalThis.notify?.('Your 7-day Pro Plus trial has started. Insights, Debt Free and Savings Goals are unlocked!');
-        refreshCurrentView();
-      } catch (error) {
-        event.target.disabled = false;
-        globalThis.notify?.(error.message);
-        await ensureEntitlement(true);
-        openUpgrade(reason, requiredPlan);
-      }
-    });
-    if (!dialog.open) dialog.showModal();
-    return false;
-  }
-
-  // Returns true when Pro is active; otherwise explains the feature and offers the trial.
+  const openUpgrade = (reason = '', requiredPlan = 'pro', picked = '') => globalThis.FinanceHousehold?.openBilling(reason, picked || requiredPlan);
   function requirePro(reason) {
-    if (isActive()) return true;
+    if (isPlusActive()) return true;
     openUpgrade(reason);
     return false;
   }
-  function requireProPlus(reason) {
-    if (isPlusActive()) return true;
-    openUpgrade(reason, 'pro_plus');
-    return false;
-  }
-
-  function refreshCurrentView() {
-    const view = location.hash.slice(1) || 'dashboard';
-    globalThis.showView?.(view);
-  }
-
+  const proTag = () => `<span class="pro-tag${isPlusActive() ? '' : ' is-locked'}">PRO</span>`;
+  const proSwitch = (id, label, on) => `<button type="button" class="pro-switch${isPlusActive() ? '' : ' is-locked'}" role="switch" aria-checked="${!!on && isPlusActive()}" data-pro-switch="${esc(id)}"><span class="pro-switch-track" aria-hidden="true"><span></span></span><span>${esc(label)}</span>${proTag()}</button>`;
+  function refreshCurrentView() { globalThis.showView?.(location.hash.slice(1) || 'dashboard'); }
   async function openBudgets() {
-    if (!requirePro('Budgets are part of MyFinance Pro.')) return;
-    const dialog = dialogShell('budget-dialog', 'budget-dialog', 'budget-dialog-title');
-    dialog.innerHTML = '<div class="budget-loading">Loading your categories&hellip;</div>';
+    if (!requirePro('Budgets are included in Pro.')) return;
+    let dialog = $('budget-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog');
+      dialog.id = 'budget-dialog';
+      dialog.className = 'editor budget-dialog';
+      dialog.setAttribute('aria-labelledby', 'budget-dialog-title');
+      document.body.appendChild(dialog);
+    }
+    dialog.innerHTML = '<p>Loading budgets…</p>';
     if (!dialog.open) dialog.showModal();
     try {
-      const [analytics, categoryList] = await Promise.all([getAnalytics(), request('/api/categories').catch(() => [])]);
+      const [analytics, categories] = await Promise.all([getAnalytics(), request('/api/categories')]);
       const stats = new Map(analytics.categories.map(category => [category.name, category]));
-      const names = [...new Set([...analytics.categories.filter(c => !c.transfer).map(c => c.name), ...(Array.isArray(categoryList) ? categoryList : []).map(c => c.name)])]
+      const names = [...new Set([...analytics.categories.filter(c => !c.transfer).map(c => c.name), ...(Array.isArray(categories) ? categories : []).map(c => c.name)])]
         .filter(name => name && !/^(?:income|salary|transfers?|savings)$/i.test(name))
         .sort((a, b) => (stats.get(b)?.sma3 || 0) - (stats.get(a)?.sma3 || 0) || a.localeCompare(b));
       const rows = names.map(name => {
@@ -261,8 +124,8 @@
         button.closest('.budget-row').querySelector('input').value = button.dataset.useAverage;
         updateTotal();
       }));
-      dialog.querySelector('[data-budget-cancel]').addEventListener('click', () => dialog.close());
-      dialog.querySelector('form').addEventListener('submit', async event => {
+      dialog.querySelector('[data-budget-cancel]').onclick = () => dialog.close();
+      dialog.querySelector('form').onsubmit = async event => {
         event.preventDefault();
         const submit = event.target.querySelector('[type=submit]');
         submit.disabled = true;
@@ -273,28 +136,14 @@
           dialog.close();
           globalThis.notify?.(`Saved ${budgets.length} budget${budgets.length === 1 ? '' : 's'}.`);
           refreshCurrentView();
-        } catch (error) {
-          $('budget-error').textContent = error.message;
-          submit.disabled = false;
-        }
-      });
+        } catch (error) { $('budget-error').textContent = error.message; }
+        finally { submit.disabled = false; }
+      };
     } catch (error) {
-      dialog.innerHTML = `<div class="budget-loading">${esc(error.message)}</div>`;
+      dialog.innerHTML = `<p role="alert">${esc(error.message)}</p><button type="button" data-budget-close class="btn btn-secondary">Close</button>`;
+      dialog.querySelector('[data-budget-close]').onclick = () => dialog.close();
     }
   }
-
-  // Start loading the plan as soon as the signed-in workspace appears.
-  const baseShowView = globalThis.showView;
-  if (typeof baseShowView === 'function') {
-    globalThis.showView = function(view) {
-      baseShowView(view);
-      if (globalThis.FinanceSession?.isAuthenticated?.() && !state.entitlement) ensureEntitlement().catch(error => globalThis.notify?.(error.message));
-    };
-  }
-
-  globalThis.FinancePro = {
-    ensureEntitlement, isActive, isPlusActive, entitlement: () => state.entitlement, setEntitlement, getAnalytics, invalidateAnalytics,
-    openUpgrade, requirePro, requireProPlus, openBudgets, proTag, proSwitch, prefs, request, refreshCurrentView,
-    format: { esc, money, pct }, ICONS, planLabel
-  };
+  globalThis.FinancePro = { ensureEntitlement, isActive, isPlusActive, entitlement: () => state.entitlement, setEntitlement, getAnalytics, invalidateAnalytics,
+    openUpgrade, requirePro, requireProPlus: requirePro, openBudgets, proTag, proSwitch, prefs, request, refreshCurrentView, format: { esc, money, pct }, ICONS, planLabel };
 })();

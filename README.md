@@ -79,7 +79,7 @@ tests and HTTP account/session flows. Tests do not connect to your live database
 The server creates a showcase account on start-up: `demo@myfinance.app` /
 `password1234`. It holds a year of generated sample data (income, fixed bills
 with auto-pay/manual modes, budgets, goals, debts and categorization rules) and
-always includes MyFinance Pro Plus. Its data is rebuilt on every deploy and nightly
+always includes MyFinance Pro. Its data is rebuilt on every deploy and nightly
 at 08:00 UTC, so changes made during a demo never persist. Admins cannot grant
 or revoke its license, and password-reset emails are never sent for it. Set
 `DEMO_ACCOUNT=false` to disable it.
@@ -208,7 +208,7 @@ amounts or counts. Hover lift respects reduced-motion preferences.
 Pro adds the highest/lowest month, change from the preceding month, period
 transaction count, and months above the **current** monthly budget. This is a
 comparison against today's budget, not a claim that historical budget settings
-were recorded. Free includes the basic history with a Pro upgrade option.
+were recorded. Basic includes the basic history with a Pro upgrade option.
 History loads only on demand, refreshes with the dashboard, and clears on logout.
 
 With Pro
@@ -446,68 +446,56 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 ### Plans and the public login page
 
 The signed-out login page doubles as the public marketing page: a benefit-led
-introduction, illustrative progress preview, Free / Pro / Pro Plus comparison,
+introduction, illustrative progress preview, Basic / Pro comparison,
 and the existing sign-in, registration and password-recovery forms.
 
 The page scrolls normally while signed out and has a sticky top bar (Features,
-Free vs Pro, Pricing, Sign in) plus links back to sign-in and to the top after
+Basic vs Pro, Pricing, Sign in) plus links back to sign-in and to the top after
 pricing. In-page links scroll without touching the app's hash router. Above the
 sign-in card, a "7 quick wins" feature spotlight (`frontend/marketing.js`)
-rotates through Free, Pro and Pro Plus capabilities with varied entrance
+rotates through Basic and Pro capabilities with varied entrance
 effects. It has dots, arrows and a pause button, pauses on hover or focus and
 in background tabs, and does not auto-rotate when reduced motion is preferred.
 
-Prices are USD per month:
-- **Free ($0):** imports, transactions, category review and the everyday dashboard.
-- **Pro ($4.99):** Free plus budgets, analytics, charts, forecasts, subscription
-  radar, unusual-charge signals and CSV exports. Does **not** unlock Debt Free
-  or Savings Goals.
-- **Pro Plus ($9.98 total):** Pro plus $4.99 for Debt Free and Savings Goals,
-  including all strategies and what-if tools.
+Prices are USD per month **per household**:
+- **Basic ($9.99):** imports, accounts, transactions, category review and the everyday dashboard.
+- **Pro ($14.99):** Basic plus budgets, analytics, charts, forecasts, recurring-charge
+  radar, unusual-charge signals, CSV exports, Debt Free and Savings Goals.
 
-The optional, one-time seven-day trial includes **Pro Plus**, ends automatically
-and never charges. It is never started for you: account holders start it
-themselves from the in-app plan dialog. Owner and demo accounts retain full Pro
-Plus access. Existing Pro grants remain Pro-only; there is no automatic upgrade.
-Paid access is administrator-managed, not a payment subscription integration or
-online checkout.
+There is no free financial-access tier. Eligible households select a paid plan,
+verify email and add a payment method through Stripe-hosted Checkout to start a
+one-time **15-day Pro trial**. Stripe automatically bills the selected plan after
+the trial unless the owner cancels. The owner receives an email when 24 hours
+remain. Cancelling preserves trial access through its end. Existing paid
+licenses retain Pro access without an automatic charge or Stripe subscription.
+The primary operator and public synthetic demo retain full access.
 
 #### Choosing a plan
 
-Each pricing card has a **Choose Free / Choose Pro / Choose Pro Plus** button.
-The selected card is highlighted, the choice is remembered in the browser
-(`localStorage` key `myfinance.chosenPlan`), and the sign-in card shows a
-"Your plan" summary with options to change or clear it. After the visitor signs
-in or creates an account, a Pro or Pro Plus choice is sent once as a plan
-request; Free just clears the choice. The account stays on its current plan
-until an administrator approves the request.
+Choose Basic or Pro, then sign in/create an account. Unpaid households see
+subscription onboarding instead of financial pages. Only the owner can consent
+to billing and open Stripe Checkout or the cancellation/payment-method portal.
+Success redirects never grant access by themselves; verified Stripe webhooks
+update household entitlements. Legacy no-card trial/plan-request endpoints no
+longer activate access.
 
-Signed-in users pick Pro or Pro Plus in the plan dialog (sidebar plan chip or any
-locked feature), then select **Request Pro** / **Request Pro Plus**. A pending
-request is shown on the chip and in the dialog, where it can be cancelled.
-Support sessions cannot request plans.
+The entitlement response uses `active` for any paid/trial financial access and
+`plusActive` for Pro capabilities. Financial routes require an active household
+subscription or preserved manual license. Analytics, budgets, debt/goal planning
+require Pro. Losing access locks features but preserves financial records.
 
-- `POST /api/license/request` with `{ "plan": "pro" | "pro_plus" }` saves the
-  request (409 if the account already has that plan or is the owner/demo account).
-- `DELETE /api/license/request` cancels it.
-- Both return the entitlement; a pending request appears as
-  `request: { plan, requestedAt }`.
+#### Separate logins for a shared household
 
-Admins see a "Plan requests to review" count on the overview, and requesting
-users are listed first on the users page with a "Wants Pro Plus" tag and an
-**Approve … request** button. Granting any plan clears the request. The users
-page also offers Grant Pro, Grant Pro Plus, Change to Pro and Revoke paid access.
-The license API accepts `action: "grant"` with `plan: "pro"` (default) or
-`"pro_plus"`; revocation uses `action: "revoke"`.
+The owner emails invitations from household settings. Each person has their own
+password and session but shares household financial records and subscription.
+Members can edit finances; only the owner manages membership/billing/support
+grants. Invitations are single-use, email-bound and expire after 48 hours.
+Removing a member revokes their sessions. Existing households containing financial
+history or paid access cannot automatically merge; no records are silently moved.
+See [privacy and isolation](ACCOUNT_DATA_PRIVACY.md) and
+[Stripe deployment checklist](DEPLOYMENT.md).
 
-The entitlement response uses `active` for Pro access and `plusActive` for
-planning access. All debt, goal and plan API operations enforce Pro Plus on the
-server and return HTTP 402 with `PRO_PLUS_REQUIRED` otherwise. The corresponding
-pages show a locked explanation and plan comparison. Losing access preserves
-saved budgets, debts, goals and settings, but removes planning extras from the
-dashboard calendar until access returns. Base income/bill tracking stays available.
-
-### Debt-free plan tab (Pro Plus only)
+### Debt-free plan tab (Pro only)
 - Include or exclude any loan, card or other debt; star one as your focus
 - Strategies: **Avalanche** (highest APR first), **Snowball** (smallest balance first),
   **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
@@ -542,7 +530,7 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
   and [credit counseling](https://www.consumerfinance.gov/ask-cfpb/what-is-credit-counseling-en-1451/).
   It avoids guaranteed-return or credit-score promises; rates, lender terms and
   future behavior can change results.
-- Pro Plus what-if simulator (extra per month and lump sums)
+- Pro what-if simulator (extra per month and lump sums)
 - Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
 - **How the strategy dates work:** every strategy is simulated month by month at your
   current monthly debt budget. Each card shows the resulting debt-free month, the total
@@ -576,7 +564,7 @@ dashboard calendar until access returns. Base income/bill tracking stays availab
 - Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
   size and need no video hosting. Edit them in `frontend/tutorial.js`.
 
-### Goals tab (Pro Plus only)
+### Goals tab (Pro only)
 - Money-flow view: income streams, monthly surplus, debt extra, goal budget, unassigned
 - Priority order, nearest deadline, balanced funding and what-ifs
 - Per-goal monthly contribution, contribution day, include toggle, status and timeline

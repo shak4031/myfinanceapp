@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import { test } from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
@@ -70,7 +72,8 @@ test('HTTP account setup, registration, sessions, CSRF and private records work 
     const secondResponse = await request('/auth/register', account('second@example.com'));
     assert.equal(secondResponse.status, 200);
     const secondCookie = secondResponse.headers.get('set-cookie').split(';')[0];
-    assert.equal((await request('/app/api/license/trial', {}, secondCookie)).status, 200);
+    await grantFixtureAccess(database, 2);
+    assert.equal((await request('/app/api/license/trial', {}, secondCookie)).status, 409);
     assert.equal((await request('/private/records', undefined, secondCookie)).status, 200);
     assert.deepEqual(await (await request('/private/records', undefined, secondCookie)).json(), []);
     await request('/private/records', { description: 'Second private bill' }, secondCookie);

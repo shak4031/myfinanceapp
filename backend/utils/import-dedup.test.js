@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail, grantFixtureAccess } from './paidFixture.js';
+configureTestMail();
 import test from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
@@ -233,6 +235,7 @@ test('CSV overlaps are reviewed atomically, preserving edits and isolating accou
     });
     assert.equal(otherUser.status, 200);
     cookie = otherUser.headers.get('set-cookie').split(';')[0];
+    await grantFixtureAccess(database, otherUser.body.user.id);
     const stolenReview = await call('/api/import/import-csv', { ...privateBody,
       overlapReview: { reviewToken: privateReview.reviewToken, decisions: [], acknowledged: true } });
     assert.equal(stolenReview.status, 409, 'review tokens are bound to the signed-in user');

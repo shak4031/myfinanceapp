@@ -324,7 +324,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { subscription: 'Household subscription', dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
@@ -1068,8 +1068,8 @@
         <p class="muted">Local, deterministic guidance—not a generative AI integration, investment recommendation, or professional financial advice. No financial data is sent to third-party AI services.</p>`;
     } catch (error) {
       if (error.code === 'PRO_PLUS_REQUIRED') {
-        $('insights-container').innerHTML = '<div class="coach-note"><h3>Put your goals in the bigger picture.</h3><p>This coach combines your spending, debt and savings targets, so it is included with Pro Plus ($9.98/month total). Pro spending insights are available on the Analytics page.</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro Plus</button></div>';
-        $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Combined debt and savings coaching requires Pro Plus.', 'pro_plus');
+        $('insights-container').innerHTML = '<div class="coach-note"><h3>Put your goals in the bigger picture.</h3><p>All analytics, budgets, debt planning and savings goals are included with Pro (USD 14.99/month per household).</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro</button></div>';
+        $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Combined debt and savings coaching requires Pro.', 'pro');
       } else $('insights-container').textContent = error.message;
     }
     finally { button.disabled = false; }

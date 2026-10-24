@@ -1,0 +1,15 @@
+.household-card { max-width: 960px; padding: clamp(18px, 3vw, 32px); }
+.household-card h2 { margin-top: 0; }
+.household-card fieldset, #household-billing-dialog fieldset { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
+.household-card legend, #household-billing-dialog legend { margin-bottom: 12px; font-weight: 700; }
+.household-consent { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; }
+.household-consent input { flex: 0 0 auto; margin-top: 6px; }
+.household-members { padding: 0; list-style: none; }
+.household-members li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border, #d9dfe5); overflow-wrap: anywhere; }
+.household-error { color: var(--danger, #ae2020); }
+#household-billing-dialog { padding: clamp(18px, 4vw, 36px); max-height: 90vh; overflow: auto; }
+#household-billing-dialog:focus-visible, .household-card :focus-visible { outline: 3px solid #126cd3; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .household-members li { align-items: flex-start; flex-direction: column; }
+  .household-card .upgrade-plans, #household-billing-dialog .upgrade-plans { grid-template-columns: 1fr; }
+}

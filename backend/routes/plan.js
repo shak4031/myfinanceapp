@@ -62,7 +62,7 @@ router.put('/settings', async (req, res, next) => {
     if (!Object.keys(changes).length) throw badRequest('No settings to update');
     if (proOnly.length) {
       const entitlement = await getEntitlement(req.user.id);
-      if (!entitlement.active) return res.status(402).json({ error: 'This strategy is part of MyFinance Pro', code: 'PRO_REQUIRED', entitlement });
+      if (!entitlement.plusActive) return res.status(402).json({ error: 'This strategy is part of MyFinance Pro', code: 'PRO_REQUIRED', entitlement });
     }
     await saveSettings(changes);
     const { plan, pro, now } = await currentPlan(req);

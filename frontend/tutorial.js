@@ -44,7 +44,7 @@
   const switchEl = (on = true, flipAt = null, id = '') => `<span class="tm-switch${on ? ' is-on' : ''}${flipAt != null ? ' tm-flip-off' : ''}" ${flipAt != null ? at(flipAt) : ''} ${id ? `data-id="${id}"` : ''}><i></i></span>`;
   const strat = (name, tag, date, interest, target, { active = false, reco = false, pro = false, id = '', ringOut = null, ringIn = null, unit = ' interest' } = {}) => `<div class="tm-strat${pro ? ' is-locked' : ''}" ${id ? `data-id="${id}"` : ''}>
     ${active ? `<span class="tm-ring${ringOut != null ? ' tut-off' : ''}" ${ringOut != null ? at(ringOut) : ''}></span>` : ''}${ringIn != null ? `<span class="tm-ring tut-on" ${at(ringIn)}></span>` : ''}
-    <div class="tm-strat-head"><b>${esc(name)}</b>${pro ? '<span class="tm-pro">PRO PLUS</span>' : reco ? '<span class="tm-reco">Recommended</span>' : ''}</div>
+    <div class="tm-strat-head"><b>${esc(name)}</b>${pro ? '<span class="tm-pro">PRO</span>' : reco ? '<span class="tm-reco">Recommended</span>' : ''}</div>
     <small>${esc(tag)}</small>
     ${pro ? '<em class="tm-strat-meta">Unlock to compare</em>' : `<em class="tm-strat-meta"><b data-id="${id}-date">${date}</b><i data-id="${id}-int">${interest}${unit}</i></em><span class="tm-first">Extra goes to <b>${esc(target)}</b> first</span>`}
   </div>`;
@@ -75,7 +75,7 @@
   // ---------- tutorials ----------
   const TUTORIALS = [
     {
-      id: 'debt', title: 'Your debt-free plan', blurb: 'Pro Plus: assess breathing room, test spending changes and choose a sustainable payoff strategy.', emoji: '🏁',
+      id: 'debt', title: 'Your debt-free plan', blurb: 'Pro: assess breathing room, test spending changes and choose a sustainable payoff strategy.', emoji: '🏁',
       cta: { label: 'Open my debt-free plan', view: 'payoff' },
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Your debt-free plan gathers cards and loans, evaluates recorded cash flow and compares projected paths to zero. These are estimates, not payments or guaranteed savings.',
@@ -169,8 +169,8 @@
               <span class="tm-btn tm-btn-primary">Save for this month</span>
             </div>
             ${cursor('extra', 0.5)}` },
-        { id: 'pro', title: 'What-if and your own order', caption: 'With MyFinance Pro Plus you can test a raise, a bonus or a lump sum before you commit, and set your own payoff order. All debt and savings planning tools require Pro Plus. Open your plan and take the first step.',
-          render: () => `${chip(8, 'Go further with Pro Plus')}
+        { id: 'pro', title: 'What-if and your own order', caption: 'With MyFinance Pro you can test a raise, a bonus or a lump sum before you commit, and set your own payoff order. All debt and savings planning tools require Pro. Open your plan and take the first step.',
+          render: () => `${chip(8, 'Go further with Pro')}
             <div class="tm-split">
               <div class="tm-panel tm-panel-pro tut-in" ${at(0.4)}>
                 <small><span class="tm-pro">PRO</span> WHAT-IF</small>
@@ -191,7 +191,7 @@
       id: 'goals', title: 'Savings goals', blurb: 'Create goals, see where your surplus goes and keep every goal on track.', emoji: '🎯',
       cta: { label: 'Open my goals', view: 'goals' },
       scenes: [
-        { id: 'intro', title: 'Welcome', caption: 'With Pro Plus, savings goals give every dollar of surplus a job, next to your bills and your debt-free plan.',
+        { id: 'intro', title: 'Welcome', caption: 'With Pro, savings goals give every dollar of surplus a job, next to your bills and your debt-free plan.',
           render: () => intro('TUTORIAL', 'Savings goals', 'Make room for what matters.', ['🛡️', '✈️', '💻', '🎯']) },
         { id: 'create', title: 'Create a goal', caption: 'Create a goal with an icon, a target amount and an optional date. Add anything you have already saved so progress starts in the right place.',
           render: () => `${chip(1, 'Create a goal')}
@@ -210,7 +210,7 @@
               <div class="tm-flow-bar"><span class="is-debt tut-grow" ${at(1, '--w:20%')}></span><span class="is-goal tut-grow" ${at(2, '--w:57%')}></span><span class="is-free tut-grow" ${at(3, '--w:23%')}></span></div>
               <div class="tm-legend"><span class="is-debt tut-in" ${at(1.2)}><i></i>Debt extra <b>$210</b></span><span class="is-goal tut-in" ${at(2.2)}><i></i>Goals <b>$600</b></span><span class="is-free tut-in" ${at(3.2)}><i></i>Still free <b>$240</b></span></div>
             </div>` },
-        { id: 'strategy', title: 'Choose how goals are funded', caption: 'Choose how the goal budget is shared. Priority order funds your most important goal first. Nearest deadline protects the soonest date. Balanced moves everything together. All are included in Pro Plus.',
+        { id: 'strategy', title: 'Choose how goals are funded', caption: 'Choose how the goal budget is shared. Priority order funds your most important goal first. Nearest deadline protects the soonest date. Balanced moves everything together. All are included in Pro.',
           render: () => `${chip(3, 'Choose how goals are funded')}
             <div class="tm-strats tm-strats-3">
               ${strat('Priority order', 'Most important first', 'Emergency', 'funded first', 'Emergency fund', { active: true, reco: false, id: 'prio', ringOut: 2, unit: '' })}

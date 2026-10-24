@@ -212,7 +212,7 @@ async function loadUpcoming(req, today = new Date()) {
   let extras = [], plan = null, pro = false, streams = [];
   try {
     const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
-    pro = !!entitlement.active;
+    pro = !!entitlement.plusActive;
     const computed = computePlan(inputs, { pro: !!entitlement.plusActive, now: today });
     plan = entitlement.plusActive ? computed : null;
     streams = computed.income?.streams || [];
@@ -334,12 +334,12 @@ router.get('/spending-history', async (req, res, next) => {
     const entitlement = await getEntitlement(currentUserId());
     const inputs = await db.transaction(async client => {
       const transactions = (await client.query('SELECT date,amount,direction,category,transfer_kind FROM transactions WHERE user_id=$1', [currentUserId()])).rows;
-      const budgets = entitlement.active
+      const budgets = entitlement.plusActive
         ? (await client.query('SELECT category,monthly_amount FROM category_budgets WHERE user_id=$1', [currentUserId()])).rows.map(row => ({ category: row.category, amount: Number(row.monthly_amount) }))
         : [];
       return { transactions, budgets };
     });
-    res.json(buildSpendingHistory({ ...inputs, pro: entitlement.active }));
+    res.json(buildSpendingHistory({ ...inputs, pro: entitlement.plusActive }));
   } catch (error) { next(error); }
 });
 

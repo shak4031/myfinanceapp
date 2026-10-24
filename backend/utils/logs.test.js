@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { configureTestMail } from './paidFixture.js';
+configureTestMail();
 import { test } from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';

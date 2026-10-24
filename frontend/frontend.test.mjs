@@ -52,6 +52,387 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
+function householdFixture(billing = {}, handler) {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (handler) {
+      const handled = handler(url, options);
+      if (handled) return handled;
+    }
+    if (url === '/api/billing') return response(200, { owner: true, configured: true, entitlement: { tier: 'none', active: false, plusActive: false, trialAvailable: true }, subscription: null, ...billing });
+    if (url === '/api/license') return response(200, billing.entitlement || { tier: 'none', active: false, plusActive: false });
+    return response(200, {});
+  });
+  f.context.FinanceSession = { isAuthenticated: () => true, currentUser: () => ({ emailVerified: true }), currentSupport: () => null };
+  const redirects = [];
+  f.context.location.assign = url => redirects.push(url);
+  f.run('pro-core.js');
+  f.run('household.js');
+  return { ...f, calls, redirects };
+}
+
+test('household billing clearly discloses both plans, trial payment consent and cancellation retention', () => {
+  const f = householdFixture();
+  const html = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { tier: 'trial', active: true, plusActive: true, trialEndsAt: '2026-11-01', trialAvailable: false }, subscription: { status: 'trialing', plan: 'basic', cancel_at_period_end: true, trial_ends_at: '2026-11-01' } });
+  assert.match(html, /Basic · USD 9\.99\/month/);
+  assert.match(html, /Pro · USD 14\.99\/month/);
+  assert.match(html, /Cancellation scheduled. Access continues until/);
+  assert.match(html, /Selected renewal plan: <strong>Basic/);
+  assert.match(html, /Manage plan or cancel in Stripe/);
+  assert.doesNotMatch(html, /card-number|cardNumber|Pro Plus|7-day|no charge/);
+  const trial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { trialAvailable: true }, subscription: null }, '<script>oops</script>', 'basic');
+  assert.match(trial, /value="basic" checked/);
+  assert.match(trial, /15-day trial/);
+  assert.match(trial, /selected plan is charged automatically unless cancelled/);
+  assert.match(trial, /trial access continues to its end/);
+  assert.match(trial, /reminder email 24 hours/);
+  assert.match(trial, /&lt;script&gt;oops&lt;\/script&gt;/);
+});
+
+test('household checkout needs explicit consent and posts only selected plan before external navigation', async () => {
+  const f = householdFixture({}, url => url === '/api/billing/checkout' ? response(200, { url: 'https://checkout.stripe.com/session' }) : null);
+  await f.context.FinanceHousehold.openBilling('', 'basic');
+  const root = f.node('household-dialog-content');
+  const form = root.querySelector('#household-checkout-form');
+  root.querySelector('input[name="household-plan"]:checked').value = 'basic';
+  root.querySelector('#household-consent').checked = false;
+  await form.listeners.submit({ preventDefault() {}, target: form });
+  assert.equal(f.calls.some(call => call.url.includes('/checkout')), false);
+  assert.match(root.querySelector('.household-error').textContent, /agree/);
+  root.querySelector('#household-consent').checked = true;
+  await form.listeners.submit({ preventDefault() {}, target: form });
+  const sent = f.calls.find(call => call.url === '/api/billing/checkout');
+  assert.deepEqual(JSON.parse(sent.options.body), { plan: 'basic', consent: true });
+  assert.equal(sent.options.method, 'POST');
+  assert.deepEqual(f.redirects, ['https://checkout.stripe.com/session']);
+  assert.equal(f.calls.some(call => call.url.startsWith('https:')), false, 'Stripe is navigated to, never fetched');
+});
+
+test('members and support sessions cannot start checkout or manage billing', async () => {
+  for (const support of [false, true]) {
+    const f = householdFixture({ owner: support });
+    f.context.FinanceSession.currentSupport = () => support ? { id: 1 } : null;
+    await f.context.FinanceHousehold.openBilling();
+    const root = f.node('household-dialog-content');
+    assert.match(root.innerHTML, /Ask your household owner/);
+    assert.doesNotMatch(root.innerHTML, /household-checkout-form|data-household-portal|data-resend-verification/);
+    const form = root.querySelector('#household-checkout-form');
+    await form.listeners.submit({ preventDefault() {}, target: form });
+    assert.equal(f.calls.some(call => call.options.method === 'POST'), false);
+  }
+});
+
+test('billing portal handles cancellation without app payment details and rejects unsafe redirects', async () => {
+  const f = householdFixture({ entitlement: { tier: 'trial', active: true, plusActive: true }, subscription: { status: 'trialing', plan: 'pro' } },
+    url => url === '/api/billing/portal' ? response(200, { url: 'https://billing.stripe.com/session' }) : null);
+  await f.context.FinanceHousehold.openBilling();
+  const button = f.node('household-dialog-content').querySelector('[data-household-portal]');
+  await button.listeners.click({ target: button });
+  assert.deepEqual(f.redirects, ['https://billing.stripe.com/session']);
+  assert.deepEqual(JSON.parse(f.calls.find(call => call.url === '/api/billing/portal').options.body), {});
+  assert.throws(() => f.context.FinanceHousehold.external('javascript:alert(1)'), /invalid secure redirect/);
+  assert.throws(() => f.context.FinanceHousehold.external('http://billing.stripe.com'), /invalid secure redirect/);
+});
+
+test('unverified owners receive verification controls and checkout remains blocked', async () => {
+  const f = householdFixture();
+  f.context.FinanceSession.currentUser = () => ({ emailVerified: false });
+  await f.context.FinanceHousehold.openBilling();
+  const root = f.node('household-dialog-content');
+  assert.match(root.innerHTML, /Verify your email before checkout/);
+  assert.match(root.innerHTML, /data-resend-verification/);
+  const resend = root.querySelector('[data-resend-verification]');
+  await resend.listeners.click({ target: resend });
+  assert.equal(f.calls.find(call => call.url === '/api/auth/resend-verification').options.body, '{}');
+  assert.match(root.querySelector('.verification-status').textContent, /Verification email sent/);
+  const form = root.querySelector('#household-checkout-form');
+  root.querySelector('#household-consent').checked = true;
+  root.querySelector('input[name="household-plan"]:checked').value = 'pro';
+  await form.listeners.submit({ preventDefault() {}, target: form });
+  assert.equal(f.calls.some(call => call.url.includes('/checkout')), false);
+});
+
+test('subscription routing waits for entitlement and never opens financial pages without access', async () => {
+  const f = householdFixture();
+  await f.context.showView('dashboard');
+  assert.equal(f.context.lastView, 'subscription');
+  assert.match(f.node('subscription-view').innerHTML, /Choose a subscription before opening/);
+  assert.deepEqual(f.calls.map(call => call.url), ['/api/license', '/api/billing']);
+  const basic = householdFixture({ entitlement: { tier: 'basic', active: true, plusActive: false } });
+  await basic.context.showView('dashboard');
+  assert.equal(basic.context.lastView, 'dashboard');
+  await basic.context.showView('goals');
+  assert.equal(basic.context.lastView, 'subscription');
+  assert.match(basic.node('subscription-view').innerHTML, /included in household Pro/);
+  assert.equal(basic.calls.some(call => call.url === '/api/plan'), false);
+  const paid = householdFixture({ entitlement: { tier: 'pro', source: 'license', active: true, plusActive: true } });
+  await paid.context.showView('goals');
+  assert.equal(paid.context.lastView, 'goals');
+  assert.equal(paid.calls.length, 1, 'existing paid access does not require billing checkout');
+});
+
+test('billing failures and checkout errors remain explicit and retryable', async () => {
+  const failed = householdFixture({}, url => url === '/api/billing' ? response(503, { error: 'Billing unavailable' }) : null);
+  await failed.context.FinanceHousehold.openBilling();
+  assert.match(failed.node('household-dialog-content').innerHTML, /Billing unavailable/);
+  assert.match(failed.node('household-dialog-content').innerHTML, /Retry billing/);
+  const f = householdFixture({}, url => url === '/api/billing/checkout' ? response(403, { code: 'EMAIL_VERIFICATION_REQUIRED', error: 'Verify your email to continue' }) : null);
+  await f.context.FinanceHousehold.openBilling();
+  const root = f.node('household-dialog-content'), form = root.querySelector('#household-checkout-form');
+  root.querySelector('#household-consent').checked = true;
+  root.querySelector('input[name="household-plan"]:checked').value = 'pro';
+  await form.listeners.submit({ preventDefault() {}, target: form });
+  assert.match(root.querySelector('.household-error').textContent, /Verify your email/);
+  assert.equal(form.querySelector('button').disabled, false);
+  assert.equal(f.redirects.length, 0);
+});
+
+test('verification fragments are cleared before requests and verified without an existing session', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/auth/me') return response(401, {});
+    return response(200, { success: true, registrationEnabled: false });
+  });
+  f.context.location.hash = '#verify-token=email-secret';
+  f.context.location.pathname = '/';
+  f.context.history.replaceState = () => { f.context.location.hash = ''; };
+  f.run('session.js');
+  assert.equal(f.context.location.hash, '');
+  await f.context.FinanceSession.start();
+  const verified = calls.find(call => call.url === '/api/auth/verify-email');
+  assert.deepEqual(JSON.parse(verified.options.body), { token: 'email-secret' });
+  assert.match(f.node('auth-error').textContent, /Email verified/);
+  assert.equal(f.node('auth-switch').hidden, true, 'verification never enables public registration');
+  assert.equal(calls.some(call => call.url.includes('email-secret')), false);
+});
+
+test('invite fragments allow invited registration while public registration is disabled', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    return url === '/api/auth/me' ? response(401, {}) : response(200, { registrationEnabled: false, success: true });
+  });
+  f.context.location.hash = '#invite-token=invitation-secret';
+  f.context.location.pathname = '/';
+  f.context.history.replaceState = () => { f.context.location.hash = ''; };
+  f.run('session.js');
+  assert.equal(f.context.location.hash, '');
+  await f.context.FinanceSession.start();
+  assert.equal(f.node('auth-title').textContent, 'Join your household.');
+  f.node('auth-email').value = 'member@example.test';
+  f.node('auth-name').value = 'New member';
+  f.node('auth-password').value = 'secure-password';
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  const accepted = calls.find(call => call.url === '/api/auth/accept-invite');
+  assert.equal(JSON.parse(accepted.options.body).token, 'invitation-secret');
+  assert.equal(f.context.reloaded, true);
+  assert.equal(calls.some(call => call.url.includes('invitation-secret') || call.url === '/api/auth/register'), false);
+});
+
+test('household members are escaped and only owners receive membership management controls', async () => {
+  for (const owner of [true, false]) {
+    const f = householdFixture({}, url => url === '/api/household' ? response(200, { id: 1, name: '<Shared>', owner, members: [
+      { id: 1, name: 'Owner', email: 'owner@example.test', role: 'owner' },
+      { id: 2, name: '<Member>', email: 'member@example.test', role: 'member' }
+    ], invitations: [{ id: 3, email: '<invite>@example.test', expires_at: '2026-11-01' }] }) : null);
+    await f.context.FinanceHousehold.loadSettings();
+    const html = f.node('household-members').innerHTML;
+    assert.match(html, /&lt;Shared&gt;/);
+    assert.match(html, /&lt;Member&gt;/);
+    assert.match(html, /10 members.*48 hours/);
+    if (owner) {
+      assert.match(html, /household-invite-form/);
+      assert.match(html, /data-remove-member="2"/);
+      assert.doesNotMatch(html, /data-remove-member="1"/);
+      assert.match(html, /data-revoke-invite="3"/);
+      const form = f.node('household-members').querySelector('#household-invite-form');
+      form.querySelector('input').value = 'new@example.test';
+      form.listeners.submit({ preventDefault() {}, target: form });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.deepEqual(JSON.parse(f.calls.find(call => call.url === '/api/household/invitations').options.body), { email: 'new@example.test' });
+    } else assert.doesNotMatch(html, /household-invite-form|data-remove-member|data-revoke-invite/);
+  }
+});
+
+test('existing users explicitly accept invitations and see data or paid-access rejections', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/auth/me') return response(200, { user: { id: 1, emailVerified: true } });
+    return response(409, { error: 'Your existing household has financial data or paid access.' });
+  });
+  f.context.location.hash = '#invite-token=existing-invite';
+  f.context.history.replaceState = () => { f.context.location.hash = ''; };
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  assert.equal(f.node('auth-submit').textContent, 'Join invited household');
+  assert.match(f.node('auth-description').textContent, /no financial data or paid access/);
+  assert.equal(calls.some(call => call.url === '/api/household/accept'), false, 'joining needs an explicit action');
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  const accepted = calls.find(call => call.url === '/api/household/accept');
+  assert.deepEqual(JSON.parse(accepted.options.body), { token: 'existing-invite' });
+  assert.match(f.node('auth-error').textContent, /financial data or paid access/);
+  assert.equal(f.context.reloaded, undefined);
+  f.node('auth-switch').onclick();
+  assert.equal(f.context.reloaded, true, 'a rejected invite does not trap the existing account');
+});
+
+test('household owner removes members and revokes invitations via the contracted endpoints', async () => {
+  const data = { id: 1, name: 'Home', owner: true, members: [{ id: 1, role: 'owner' }, { id: 2, role: 'member' }], invitations: [{ id: 3, email: 'invite@example.test' }] };
+  const f = householdFixture({}, (url, options) => url === '/api/household' ? response(200, data) : null);
+  f.context.confirm = () => true;
+  const member = f.node('remove-member'), invite = f.node('revoke-invite');
+  member.dataset = { removeMember: '2' };
+  invite.dataset = { revokeInvite: '3' };
+  f.node('household-members').querySelectorAll = selector => selector.includes('data-remove-member') ? [member, invite] : [];
+  await f.context.FinanceHousehold.loadSettings();
+  member.listeners.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  invite.listeners.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.calls.find(call => call.url === '/api/household/members/2').options.method, 'DELETE');
+  assert.equal(f.calls.find(call => call.url === '/api/household/invitations/3').options.method, 'DELETE');
+});
+
+test('entitlement service failures block finances and surface a retry rather than suggesting a free plan', async () => {
+  const f = householdFixture({}, url => url === '/api/license' ? response(503, { error: '<License unavailable>' }) : null);
+  await f.context.showView('dashboard');
+  assert.equal(f.context.lastView, 'subscription');
+  assert.match(f.node('subscription-view').innerHTML, /&lt;License unavailable&gt;/);
+  assert.match(f.node('subscription-view').innerHTML, /data-access-retry/);
+  assert.equal(f.calls.some(call => call.url === '/api/billing'), false);
+});
+
+test('invalid verification tokens remain explicit errors without unlocking registration', async () => {
+  const f = fixture(async url => url === '/api/auth/verify-email' ? response(400, { error: 'Verification link expired. Request a new email.' })
+    : url === '/api/auth/me' ? response(401, {}) : response(200, { registrationEnabled: false }));
+  f.context.location.hash = '#verify-token=expired-token';
+  f.context.history.replaceState = () => { f.context.location.hash = ''; };
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  assert.match(f.node('auth-error').textContent, /Verification link expired/);
+  assert.equal(f.node('auth-switch').hidden, true);
+  assert.equal(f.context.location.hash, '');
+});
+
+test('successful existing-user invite acceptance drops revoked sessions and requires sign-in', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/auth/me') return response(200, { user: { id: 3, emailVerified: true } });
+    return response(200, { success: true, signInRequired: true });
+  });
+  f.context.location.hash = '#invite-token=existing-member-token';
+  f.context.history.replaceState = () => { f.context.location.hash = ''; };
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  assert.equal(f.context.FinanceSession.isAuthenticated(), true);
+  assert.equal(f.context.lastView, undefined, 'invite fragment is handled before workspace routing');
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.context.FinanceSession.isAuthenticated(), false);
+  assert.equal(f.node('body').classList.contains('auth-pending'), true);
+  assert.equal(f.context.reloaded, true);
+  assert.equal(f.node('auth-submit').textContent, 'Sign in');
+  assert.equal(calls.some(call => call.url === '/api/license' || call.url === '/api/billing'), false);
+});
+
+test('register reloads and refreshes /me before unpaid onboarding, ignoring incomplete immediate users', async () => {
+  const calls = [];
+  let registered = false;
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/auth/me') return registered ? response(200, { user: { id: 4, emailVerified: false, household: { id: 8, role: 'owner', name: 'New home' } } }) : response(401, {});
+    if (url === '/api/auth/status') return response(200, { registrationEnabled: true });
+    if (url === '/api/auth/register') { registered = true; return response(201, { user: { id: 4, emailVerified: false } }); }
+    if (url === '/api/license') return response(200, { tier: 'none', active: false, plusActive: false, trialAvailable: true });
+    if (url === '/api/billing') return response(200, { owner: true, configured: true, entitlement: { tier: 'none', active: false, trialAvailable: true }, subscription: null });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  f.node('auth-switch').onclick();
+  f.node('auth-email').value = 'new@example.test';
+  f.node('auth-name').value = 'New owner';
+  f.node('auth-password').value = 'secure-password-123';
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.context.reloaded, true);
+  assert.equal(f.context.FinanceSession.currentUser(), null, 'incomplete registration user is never used for routing');
+  f.run('pro-core.js');
+  f.run('household.js');
+  await f.context.FinanceSession.start();
+  assert.equal(f.context.FinanceSession.currentUser().household.role, 'owner');
+  assert.equal(f.context.lastView, 'subscription');
+  assert.match(f.node('subscription-view').innerHTML, /Verify your email before checkout/);
+  assert.deepEqual(calls.slice(-3).map(call => call.url), ['/api/auth/me', '/api/license', '/api/billing']);
+});
+
+test('signed-in checkout wrapper throws verification errors with code and status intact', async () => {
+  const f = fixture(async url => url === '/api/auth/me'
+    ? response(200, { user: { id: 4, emailVerified: false, household: { role: 'owner' } } })
+    : response(403, { code: 'EMAIL_VERIFICATION_REQUIRED', error: 'Verify your email before checkout.' }));
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  await assert.rejects(f.context.fetch('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan: 'basic', consent: true }) }),
+    error => error.status === 403 && error.code === 'EMAIL_VERIFICATION_REQUIRED' && /Verify your email/.test(error.message));
+  f.run('pro-core.js');
+  await assert.rejects(f.context.FinancePro.request('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan: 'pro', consent: true }) }),
+    error => error.status === 403 && error.code === 'EMAIL_VERIFICATION_REQUIRED');
+});
+
+test('migrated legacy paid licenses retain all advanced features under new Pro', async () => {
+  for (const legacy of ['Pro', 'Pro Plus']) {
+    const f = householdFixture({ entitlement: { tier: 'pro', source: 'license', active: true, plusActive: true, trialAvailable: false } });
+    await f.context.showView('analytics');
+    assert.equal(f.context.lastView, 'analytics', legacy);
+    assert.equal(f.context.FinancePro.requirePro('Budgets'), true, legacy);
+    assert.equal(f.context.FinancePro.requireProPlus('Goals'), true, legacy);
+    assert.equal(f.calls.some(call => call.url === '/api/billing'), false, legacy);
+  }
+});
+
+test('member Settings hides support grants, explains household sharing and skips support requests', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); throw new Error('Members must not request support access.'); });
+  f.context.FinanceTools = { escape: String };
+  f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => null, currentUser: () => ({ household: { role: 'member' } }) };
+  f.run('account.js');
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('support-grant-form').hidden, true);
+  assert.match(f.node('support-status').textContent, /Only the household owner/);
+  assert.match(f.node('support-status').textContent, /members already share access/);
+  assert.equal(f.node('support-grants').innerHTML, '');
+  assert.equal(f.node('support-activity').innerHTML, '');
+  assert.equal(calls.length, 0);
+  const actual = [...new Set([...f.context.document.querySelector('.main-content').options])].find(node => node.id === 'settings-view');
+  await actual.listeners.submit({ target: { id: 'support-grant-form' }, preventDefault() {} });
+  await actual.listeners.click({ target: { dataset: { revoke: '1' } } });
+  assert.equal(calls.length, 0, 'hidden support controls also reject synthetic member actions');
+  assert.match(actual.innerHTML, /Operators can access operational information and audit metadata/);
+  assert.doesNotMatch(actual.innerHTML, /Nobody can see your data without a grant from you/);
+});
+
+test('owner Settings retains support access while support sessions cannot manage grants', async () => {
+  const calls = [];
+  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); return response(200, { grants: [], activity: [] }); });
+  let support = null;
+  f.context.FinanceTools = { escape: String };
+  f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => support, currentUser: () => ({ household: { role: 'owner' } }) };
+  f.run('account.js');
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('support-grant-form').hidden, false);
+  assert.deepEqual(calls.map(call => call.url), ['/api/support-access']);
+  support = { id: 1 };
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('support-grant-form').hidden, true);
+  assert.match(f.node('support-status').textContent, /hidden during a support session/);
+  assert.equal(calls.length, 1);
+});
+
 test('import history selects recent imports, confirms recovery and refreshes financial views', async () => {
   const batches = [
     { id: 4, source: 'duplicate.csv', status: 'active', active_rows: 0, imported: 0, duplicates: 2, created_at: '2026-10-04' },
@@ -2095,6 +2476,7 @@ test('Pro category insights render as an opt-in disclosure, skip inactive cards,
   let enabled = true, removed = 0, analyticsRequests = 0;
   pro.ensureEntitlement = async () => {};
   pro.isActive = () => true;
+  pro.isPlusActive = () => true;
   pro.prefs.get = () => enabled ? 'on' : 'off';
   pro.getAnalytics = async () => { analyticsRequests++; return { categories: [] }; };
   const markup = [], activeExtras = [], inactiveExtras = [];
@@ -2132,36 +2514,34 @@ test('Pro category insights render as an opt-in disclosure, skip inactive cards,
   assert.equal(analyticsRequests, 0);
   assert.equal(f.node('categories-view').classList.contains('has-pro-insights'), false);
 });
-test('Pro gating opens the upgrade dialog for free accounts and offers the one-time trial', async () => {
+test('Pro gating delegates billing to household checkout and trials unlock advanced features', async () => {
   const f = loadPro(async url => url === '/api/license'
-    ? response(200, { tier: 'free', source: 'none', active: false, trialAvailable: true, plan: { name: 'MyFinance Pro', price: 4.99 }, features: [{ id: 'insights', title: 'Insights', text: 'x' }] })
+    ? response(200, { tier: 'none', source: 'none', active: false, trialAvailable: true })
     : response(200, {}));
   const { FinancePro } = f.context;
-  f.node('pro-dialog').tagName = 'DIALOG';
+  const opened = [];
+  f.context.FinanceHousehold = { openBilling: reason => opened.push(reason) };
   await FinancePro.ensureEntitlement();
   assert.equal(FinancePro.isActive(), false);
-  assert.match(f.node('pro-nav-badge').innerHTML, /pro-lock/);
+  assert.match(f.node('pro-nav-badge').textContent, /LOCKED/);
   assert.equal(FinancePro.requirePro('Budgets are Pro'), false);
-  const dialog = f.node('pro-dialog');
-  assert.equal(dialog.open, true);
-  assert.match(dialog.innerHTML, /Start 7-day free trial/);
-  assert.match(dialog.innerHTML, /\$4\.99/);
-  FinancePro.setEntitlement({ tier: 'trial', source: 'trial', active: true, daysLeft: 3, features: [] });
+  assert.deepEqual(opened, ['Budgets are Pro']);
+  FinancePro.setEntitlement({ tier: 'trial', source: 'trial', active: true, plusActive: true, daysLeft: 3, features: [] });
   assert.equal(FinancePro.requirePro('x'), true);
-  assert.match(f.node('pro-nav-badge').innerHTML, /TRIAL/);
+  assert.match(f.node('pro-nav-badge').textContent, /TRIAL/);
 });
-test('marketing page explains the app, all prices and exclusive Pro Plus access', () => {
+test('marketing page explains household pricing, Stripe and trial renewal clearly', () => {
   const html = source('index.html');
   assert.match(html, /your personal money workspace/);
   assert.match(html, /Illustrative preview/);
   assert.match(html, /id="marketing-pricing"/);
-  assert.match(html, /\$0<span>\/ month/);
-  assert.match(html, /\$4\.99<span>\/ month/);
-  assert.match(html, /\$9\.98<span>\/ month total/);
-  assert.equal((html.match(/Debt Free &amp; Savings Goals not included/g) || []).length, 2);
-  assert.match(html, /Pro alone does not unlock Debt Free or Savings Goals/);
-  assert.match(html, /not through online checkout/);
-  assert.match(html, /ends automatically with no charge/);
+  assert.match(html, /\$9\.99<span>USD \/ month per household/);
+  assert.match(html, /\$14\.99<span>USD \/ month per household/);
+  assert.match(html, /15-day trial/);
+  assert.match(html, /Stripe hosted Checkout/);
+  assert.match(html, /automatically charged.*unless cancelled/);
+  assert.match(html, /trial access continues until its end/);
+  assert.doesNotMatch(html, /Pro Plus|PRO PLUS|Start free|data-choose-plan="free"|\$4\.99|\$9\.98/);
   assert.match(source('marketing.css'), /prefers-reduced-motion/);
 });
 test('marketing page scrolls, has section navigation and a feature spotlight', () => {
@@ -2178,14 +2558,14 @@ test('marketing page scrolls, has section navigation and a feature spotlight', (
   assert.match(html, /<script src="marketing\.js/);
   assert.doesNotMatch(html, /<a href="#marketing-pricing">/, 'every in-page link is handled without the app router');
 });
-test('feature spotlight rotates through Free, Pro and Pro Plus features', () => {
+test('feature spotlight rotates through Basic and Pro features', () => {
   const f = fixture();
   browserBits(f, { reduced: false });
   f.context.document.hidden = false;
   f.run('marketing.js');
   const tour = f.context.FinanceMarketing;
   assert.equal(tour.slides.length, 7);
-  assert.deepEqual([...new Set(tour.slides.map(slide => slide.tier))], ['FREE', 'PRO', 'PRO PLUS']);
+  assert.deepEqual([...new Set(tour.slides.map(slide => slide.tier))], ['BASIC', 'PRO']);
   assert.ok(new Set(tour.slides.map(slide => slide.effect)).size >= 5, 'slides use varied transitions');
   const stage = f.node('marketing-spotlight-stage');
   assert.match(stage.innerHTML, /mk-fx-rise[\s\S]*Drop<\/span>[\s\S]*Get the story/);
@@ -2194,7 +2574,7 @@ test('feature spotlight rotates through Free, Pro and Pro Plus features', () => 
   const click = target => f.node('marketing-spotlight').listeners.click({ target: { closest: () => target } });
   click({ id: '', dataset: { mkStep: '-1' } });
   assert.equal(tour.current(), 6);
-  assert.match(stage.innerHTML, /PRO PLUS[\s\S]*a deadline/);
+  assert.match(stage.innerHTML, /PRO[\s\S]*a deadline/);
   click({ id: '', dataset: { mkGo: '3' } });
   assert.match(stage.innerHTML, /mk-fx-flip[\s\S]*repeat charges/);
   assert.doesNotMatch(stage.innerHTML, /subscription/i);
@@ -2222,9 +2602,9 @@ test('marketing start opens registration only when registration is enabled', asy
     assert.equal(f.node('auth-switch').hidden, !registrationEnabled);
   }
 });
-test('pricing cards let visitors choose a plan that is requested after sign-in', async () => {
+test('pricing cards preserve a plan for explicit hosted checkout after sign-in', async () => {
   const html = source('index.html');
-  for (const plan of ['free', 'pro', 'pro_plus']) assert.match(html, new RegExp(`data-choose-plan="${plan}" aria-pressed="false"`));
+  for (const plan of ['basic', 'pro']) assert.match(html, new RegExp(`data-choose-plan="${plan}" aria-pressed="false"`));
   assert.doesNotMatch(html, /Find my next step|>Explore Pro<|Start with Free/);
   assert.match(html, /<a class="marketing-brand"[^>]*><svg class="brand-mark"/, 'the nav uses the same logo as the app');
   assert.match(html, /id="auth-plan"/);
@@ -2235,11 +2615,10 @@ test('pricing cards let visitors choose a plan that is requested after sign-in',
     const f = fixture(async (url, options = {}) => {
       calls.push({ url, options });
       if (url.endsWith('/me')) return signedIn ? response(200, { user: { id: 3, name: 'Sam' } }) : response(401, {});
-      if (url === '/api/license/request') return response(200, { tier: 'free', request: { plan: 'pro_plus' } });
       return response(200, { setupRequired: false, registrationEnabled: true });
     });
     f.context.localStorage = localStorage;
-    const buttons = ['free', 'pro', 'pro_plus'].map(plan => Object.assign(f.node(`choose-${plan}`), { dataset: { choosePlan: plan }, attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } }));
+    const buttons = ['basic', 'pro'].map(plan => Object.assign(f.node(`choose-${plan}`), { dataset: { choosePlan: plan }, attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } }));
     const all = f.context.document.querySelectorAll;
     f.context.document.querySelectorAll = selector => selector === '[data-choose-plan]' ? buttons : all(selector);
     f.run('session.js');
@@ -2248,15 +2627,15 @@ test('pricing cards let visitors choose a plan that is requested after sign-in',
   const out = visit(false);
   await out.f.context.FinanceSession.start();
   assert.equal(out.f.node('auth-plan').hidden, true, 'no banner until a plan is chosen');
-  out.buttons[2].listeners.click();
-  assert.equal(storage.get('myfinance.chosenPlan'), 'pro_plus');
-  assert.equal(out.buttons[2].attrs['aria-pressed'], 'true');
-  assert.equal(out.buttons[1].attrs['aria-pressed'], 'false');
-  assert.match(out.buttons[2].textContent, /Pro Plus selected/);
-  assert.equal(out.buttons[1].textContent, 'Choose Pro');
+  out.buttons[1].listeners.click();
+  assert.equal(storage.get('myfinance.chosenPlan'), 'pro');
+  assert.equal(out.buttons[1].attrs['aria-pressed'], 'true');
+  assert.equal(out.buttons[0].attrs['aria-pressed'], 'false');
+  assert.match(out.buttons[1].textContent, /Pro selected/);
+  assert.equal(out.buttons[0].textContent, 'Choose Basic');
   assert.equal(out.f.node('auth-plan').hidden, false);
-  assert.equal(out.f.node('auth-plan-name').textContent, 'Pro Plus');
-  assert.match(out.f.node('auth-plan-note').textContent, /administrator to approve\. Nothing is charged here/);
+  assert.equal(out.f.node('auth-plan-name').textContent, 'Pro');
+  assert.match(out.f.node('auth-plan-note').textContent, /Stripe hosted Checkout/);
   assert.equal(out.f.node('auth-title').textContent, 'Make room for your next chapter.', 'choosing a plan opens account creation');
   assert.equal(out.calls.some(call => call.url === '/api/license/request'), false, 'nothing is requested while signed out');
 
@@ -2264,78 +2643,42 @@ test('pricing cards let visitors choose a plan that is requested after sign-in',
   const back = visit(true);
   back.f.context.notify = message => notes.push(message);
   await back.f.context.FinanceSession.start();
-  const sent = back.calls.find(call => call.url === '/api/license/request');
-  assert.equal(sent.options.method, 'POST');
-  assert.deepEqual(JSON.parse(sent.options.body), { plan: 'pro_plus' });
-  assert.match(notes[0], /Pro Plus request was sent to your MyFinance administrator/);
-  assert.equal(storage.has('myfinance.chosenPlan'), false, 'the choice is only sent once');
+  assert.equal(back.calls.some(call => call.options.method === 'POST'), false, 'sign-in never silently starts a subscription');
+  assert.equal(back.f.context.FinanceSession.chosenPlan(), 'pro');
+  assert.equal(notes.length, 0);
 });
-test('the upgrade dialog is a plan picker that requests and cancels plans', async () => {
-  const calls = [];
-  const f = loadPro(async (url, options = {}) => {
-    calls.push({ url, method: options.method });
-    if (url === '/api/license/request' && options.method === 'POST') return response(200, { tier: 'free', active: false, request: { plan: JSON.parse(options.body).plan, requestedAt: '2026-10-18T12:00:00Z' }, features: [] });
-    if (url === '/api/license/request') return response(200, { tier: 'free', active: false, features: [] });
-    return response(200, {});
-  });
-  const pro = f.context.FinancePro;
-  const dialog = f.node('pro-dialog');
-  dialog.tagName = 'DIALOG';
-  pro.setEntitlement({ tier: 'free', active: false, trialAvailable: false, features: [] });
-  pro.requireProPlus('Savings goals');
-  assert.match(dialog.innerHTML, /role="radiogroup"/);
-  assert.match(dialog.innerHTML, /value="pro_plus" checked/, 'the plan the page needs is preselected');
-  assert.match(dialog.innerHTML, /Request Pro Plus/);
-  assert.doesNotMatch(dialog.innerHTML, /Start 7-day free trial/, 'the trial is only offered while available');
-  pro.openUpgrade('', 'pro', 'pro');
-  assert.match(dialog.innerHTML, /value="pro" checked/);
-  assert.match(dialog.innerHTML, /Request Pro</);
-  await dialog.querySelector('[data-pro-request]').listeners.click({ target: {} });
-  assert.deepEqual(calls.at(-1), { url: '/api/license/request', method: 'POST' });
-  assert.equal(pro.entitlement().request.plan, 'pro');
-  assert.match(pro.planLabel().detail, /Pro requested/);
-  assert.match(dialog.innerHTML, /Pro requested \u2713/);
-  assert.match(dialog.innerHTML, /Cancel request/);
-  await dialog.querySelector('[data-pro-cancel]').listeners.click({ target: {} });
-  assert.deepEqual(calls.at(-1), { url: '/api/license/request', method: 'DELETE' });
-  assert.equal(pro.entitlement().request, undefined);
-  pro.setEntitlement({ tier: 'pro', active: true, plusActive: false, features: [] });
-  pro.openUpgrade();
-  assert.match(dialog.innerHTML, /value="pro"[^>]*disabled/, 'the current plan cannot be requested again');
-  assert.match(dialog.innerHTML, /Your plan/);
-  assert.match(dialog.innerHTML, /value="pro_plus" checked/);
-});
-test('Pro does not unlock Pro Plus; trials and full-access accounts do', () => {
+test('Basic unlocks core finances only; Pro and trials unlock advanced features', () => {
   const f = loadPro();
   const pro = f.context.FinancePro;
-  f.node('pro-dialog').tagName = 'DIALOG';
-  pro.setEntitlement({ tier: 'pro', active: true, plusActive: false, features: [] });
-  assert.equal(pro.requirePro('Budgets'), true);
+  let opened = 0;
+  f.context.FinanceHousehold = { openBilling: () => opened++ };
+  pro.setEntitlement({ tier: 'basic', active: true, plusActive: false, features: [] });
+  assert.equal(pro.isActive(), true);
+  assert.equal(pro.requirePro('Budgets'), false);
   assert.equal(pro.requireProPlus('Savings goals'), false);
-  assert.equal(f.node('pro-dialog').open, true);
-  assert.match(f.node('pro-dialog').innerHTML, /\$9\.98/);
-  assert.match(f.node('pro-dialog').innerHTML, /Does not unlock Debt Free or Savings Goals/);
-  assert.match(f.node('pro-dialog').innerHTML, /Ask your MyFinance administrator/);
-  for (const tier of ['pro_plus', 'trial', 'pro']) {
-    pro.setEntitlement({ tier, active: true, plusActive: true, daysLeft: 7, features: [] });
+  assert.equal(opened, 2);
+  assert.equal(pro.planLabel().title, 'MyFinance Basic');
+  for (const tier of ['trial', 'pro']) {
+    pro.setEntitlement({ tier, active: true, plusActive: true, daysLeft: 15, features: [] });
     assert.equal(pro.requireProPlus('Debt free'), true);
-    assert.match(pro.planLabel().title, /Pro Plus/);
+    assert.equal(pro.requirePro('Budgets'), true);
+    assert.match(pro.planLabel().title, /Pro/);
   }
 });
-test('direct debt and goals loads show a full-page Pro Plus lock for Free and Pro', async () => {
-  for (const tier of ['free', 'pro']) {
-    const f = loadPlan(async () => response(402, { code: 'PRO_PLUS_REQUIRED', error: 'Pro Plus required', entitlement: { tier, active: tier === 'pro', plusActive: false } }));
+test('direct debt and goals loads show a full-page Pro lock for none and Basic', async () => {
+  for (const tier of ['none', 'basic']) {
+    const f = loadPlan(async () => response(402, { code: 'PRO_PLUS_REQUIRED', error: 'Pro required', entitlement: { tier, active: tier === 'basic', plusActive: false } }));
     await f.context.loadPayoffPlan();
     await f.context.loadGoals();
     for (const id of ['plan-debt-root', 'plan-goals-root']) {
       const html = f.node(id).innerHTML;
       assert.match(html, /plus-page-lock/);
-      assert.match(html, /\$9\.98\/month total/);
-      assert.match(html, /Explore Pro Plus/);
+      assert.match(html, /USD 14\.99\/month per household/);
+      assert.match(html, /Explore Pro/);
       assert.doesNotMatch(html, /data-act="add-(debt|goal)"/);
     }
     assert.equal(f.context.FinancePlan.state.plan, null);
-    assert.equal(f.context.FinancePro.isActive(), tier === 'pro');
+    assert.equal(f.context.FinancePro.isActive(), tier === 'basic');
     assert.equal(f.context.FinancePro.isPlusActive(), false);
   }
 });
@@ -2354,7 +2697,7 @@ test('entitlement lookup failures remain errors rather than pretending Free is a
 });
 test('analytics page shows a locked preview without Pro', async () => {
   const f = loadPro(async url => url === '/api/license'
-    ? response(200, { tier: 'free', source: 'trial-expired', active: false, trialAvailable: false, features: [] })
+    ? response(200, { tier: 'none', source: 'none', active: false, plusActive: false, trialEndsAt: '2026-10-01', trialAvailable: false, features: [] })
     : response(402, { error: 'Pro required', code: 'PRO_REQUIRED' }));
   await f.context.loadAnalyticsPage();
   assert.match(f.node('analytics-content').innerHTML, /Your Pro trial has ended/);
@@ -2369,7 +2712,7 @@ test('Compass date ranges offer only four month presets and custom dates, update
   const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, today: now }) };
   const f = loadPro(async url => {
     calls.push(url);
-    if (url === '/api/license') return response(200, { active: true, features: [] });
+    if (url === '/api/license') return response(200, { active: true, plusActive: true, features: [] });
     if (url.startsWith('/api/analytics/compass?')) {
       const params = new URL(url, 'http://local').searchParams;
       if (params.get('from') === 'bad') return response(400, { error: 'Choose valid completed months' });
@@ -2447,7 +2790,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
     moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, profile: demo.household, today: now })
   }));
   const f = loadPro(async url => url === '/api/license'
-    ? response(200, { tier: 'pro', source: 'owner', active: true, features: [] })
+    ? response(200, { tier: 'pro', source: 'owner', active: true, plusActive: true, features: [] })
     : response(200, payload));
   await f.context.loadAnalyticsPage(true, '');
   const overview = f.node('analytics-content').innerHTML;
