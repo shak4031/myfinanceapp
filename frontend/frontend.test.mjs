@@ -149,7 +149,13 @@ test('import recovery rejects mixed states and surfaces validation failures with
 });
 
 test('transaction review clearly marks excluded rows and renders activity safely', async () => {
+  const calls = [];
   const f = fixture(async url => {
+    calls.push(url);
+    if (url.startsWith('/api/transactions/transfer-review/imports')) return response(200, {
+      batches: [{ id: 4, source: '<checking>.csv', account_name: 'Checking', created_at: '2026-10-22', imported: 12, duplicates: 2, status: 'active' }],
+      nextBefore: null
+    });
     if (url.startsWith('/api/transactions/transfer-review')) return response(200, {
       rows: [{ id: 17, date: '2026-10-22', description: 'TRANSFER <review>', amount: '125.00', direction: 'DEBIT',
         category: 'Transfer', transfer_kind: 'unknown', source: 'checking.csv', account_name: 'Checking', transfer_account_name: null }],
@@ -163,6 +169,13 @@ test('transaction review clearly marks excluded rows and renders activity safely
   });
   f.run('review-tools.js');
   await f.context.FinanceReviewTools.loadTransfers();
+  assert.equal(calls.length, 1, 'opening diagnostics fetches metadata, not workspace transactions');
+  assert.match(f.node('transfer-review-rows').innerHTML, /Choose an import/);
+  assert.match(f.node('transfer-review-import').innerHTML, /&lt;checking&gt;\.csv/);
+  f.node('transfer-review-import').value = '4';
+  await f.context.FinanceReviewTools.loadTransfers();
+  assert.match(calls.at(-1), /importId=4&status=&limit=50&offset=0/);
+  assert.match(f.node('transfer-review-import-summary').textContent, /12 rows originally imported · 2 duplicates skipped/);
   assert.match(f.node('transfer-review-rows').innerHTML, /Needs review · excluded/);
   assert.match(f.node('transfer-review-rows').innerHTML, /&lt;review&gt;/);
   assert.match(f.node('transfer-review-count').textContent, /1 of 1 transactions/);
@@ -170,6 +183,92 @@ test('transaction review clearly marks excluded rows and renders activity safely
   assert.match(f.node('activity-events').innerHTML, /Statement imported/);
   assert.match(f.node('activity-events').innerHTML, /File: checking\.csv/);
   assert.match(f.node('activity-events').innerHTML, /&lt;User&gt;/);
+});
+
+test('advanced diagnostics are separate from everyday navigation', () => {
+  const html = source('index.html');
+  const main = html.match(/<nav aria-label="Main navigation">([\s\S]*?)<\/nav>/)?.[1];
+  const advanced = html.match(/<details[^>]*id="advanced-diagnostics-nav"[^>]*>([\s\S]*?)<\/details>/)?.[1];
+  assert.ok(main);
+  assert.ok(advanced);
+  assert.doesNotMatch(main, /data-view="(?:transaction-review|activity)"/);
+  assert.match(advanced, /data-view="transaction-review"/);
+  assert.match(advanced, /data-view="activity"/);
+  assert.match(html, /id="transfer-review-import"/);
+  assert.match(html, /id="transfer-review-import-summary"/);
+});
+
+test('review import paging is bounded, preserves selection and surfaces failures', async () => {
+  const calls = [];
+  let fail = false;
+  const f = fixture(async url => {
+    calls.push(url);
+    if (fail) return response(503, { error: 'Unavailable' });
+    if (url.endsWith('/imports')) return response(200, {
+      batches: [{ id: 32, source: 'latest.csv', created_at: '2026-10-22', imported: 0, duplicates: 8 }], nextBefore: 3
+    });
+    if (url.includes('/imports?before=3')) return response(200, {
+      batches: [{ id: 2, source: 'older.csv', created_at: '2026-10-01', imported: 60, duplicates: 0 }], nextBefore: null
+    });
+    return response(200, { rows: [], total: 60, limit: 50, offset: url.includes('offset=50') ? 50 : 0, categories: [] });
+  });
+  f.run('review-tools.js');
+  await f.context.FinanceReviewTools.loadTransfers();
+  f.node('transfer-review-import').value = '32';
+  await f.node('transfer-review-import-more').listeners.click();
+  assert.match(f.node('transfer-review-import').innerHTML, /older.csv/);
+  assert.equal(f.node('transfer-review-import').value, '32');
+  assert.equal(f.node('transfer-review-import-more').hidden, true);
+  f.node('transfer-review-import').value = '2';
+  await f.context.FinanceReviewTools.loadTransfers();
+  f.node('transfer-review-pagination').listeners.click({ target: { closest: () => ({ dataset: { transferPage: '1' } }) } });
+  await new Promise(setImmediate);
+  assert.match(calls.at(-1), /importId=2.*limit=50&offset=50/);
+  f.node('transfer-review-filter').value = 'excluded';
+  f.node('transfer-review-filter').listeners.change();
+  await new Promise(setImmediate);
+  assert.match(calls.at(-1), /importId=2&status=excluded&limit=50&offset=0/);
+  fail = true;
+  await f.context.FinanceReviewTools.loadTransfers();
+  assert.match(f.node('transfer-review-error').textContent, /Unavailable/);
+  assert.equal(f.node('transfer-review-pagination').innerHTML, '');
+});
+
+test('late review responses cannot overwrite a newer filter or a signed-out workspace', async () => {
+  const pending = [];
+  const f = fixture(url => url.endsWith('/imports')
+    ? Promise.resolve(response(200, { batches: [], nextBefore: null }))
+    : new Promise(resolve => pending.push(resolve)));
+  f.run('review-tools.js');
+  await f.context.FinanceReviewTools.loadTransfers();
+  f.node('transfer-review-import').value = 'untracked';
+  const first = f.context.FinanceReviewTools.loadTransfers();
+  const second = f.context.FinanceReviewTools.loadTransfers();
+  pending[1](response(200, { rows: [], total: 2, offset: 0, limit: 50, categories: [] }));
+  await second;
+  pending[0](response(200, { rows: [], total: 99, offset: 0, limit: 50, categories: [] }));
+  await first;
+  assert.match(f.node('transfer-review-count').textContent, /of 2 transactions/);
+  const last = f.context.FinanceReviewTools.loadTransfers();
+  f.context.FinanceReviewTools.reset();
+  f.node('transfer-review-rows').innerHTML = '';
+  pending[2](response(200, { rows: [{ id: 1, description: 'PRIVATE' }], total: 1, offset: 0, limit: 50, categories: [] }));
+  await last;
+  assert.equal(f.node('transfer-review-rows').innerHTML, '');
+});
+
+test('late import metadata cannot repopulate diagnostics after session lock', async () => {
+  let resolve;
+  const f = fixture(() => new Promise(done => { resolve = done; }));
+  f.run('review-tools.js');
+  const pending = f.context.FinanceReviewTools.loadTransfers();
+  f.context.FinanceReviewTools.reset();
+  f.node('transfer-review-import').innerHTML = '';
+  f.node('transfer-review-rows').innerHTML = '';
+  resolve(response(200, { batches: [{ id: 1, source: 'PRIVATE.csv' }], nextBefore: null }));
+  await pending;
+  assert.equal(f.node('transfer-review-import').innerHTML, '');
+  assert.equal(f.node('transfer-review-rows').innerHTML, '');
 });
 
 test('an outstanding import history response cannot repopulate a signed-out workspace', async () => {

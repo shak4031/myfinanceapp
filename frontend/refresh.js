@@ -336,6 +336,10 @@
     const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : titles[view];
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
+    if (['transaction-review', 'activity'].includes(view)) {
+      const diagnostics = $('advanced-diagnostics-nav');
+      if (diagnostics) diagnostics.open = true;
+    }
     document.querySelectorAll('.nav-btn').forEach(node => {
       const active = node.dataset.view === navView;
       node.classList.toggle('active', active);

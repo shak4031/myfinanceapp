@@ -31,25 +31,55 @@ router.post('/', route(async (req, res) => {
     ${category ? 'AND category=$3' : ''} ORDER BY date DESC, id DESC`, category ? [start, end, category] : [start, end]));
 }));
 
+function reviewImportId(value, field) {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw failure(400, `A valid ${field} is required`);
+  }
+  return Number(value);
+}
+
+router.get('/transfer-review/imports', route(async (req, res) => {
+  const before = req.query.before === undefined ? null : reviewImportId(req.query.before, 'import cursor');
+  const limit = 30;
+  const batches = await db.all(`SELECT b.id,b.source,b.created_at,b.status,b.legacy,b.imported,b.duplicates,
+    a.name AS account_name
+    FROM import_batches b LEFT JOIN accounts a ON a.id=b.account_id AND a.user_id=b.user_id
+    WHERE b.user_id=current_setting('app.user_id')::integer ${before === null ? '' : 'AND b.id < $2'}
+    ORDER BY b.id DESC LIMIT $1`, before === null ? [limit + 1] : [limit + 1, before]);
+  const hasMore = batches.length > limit;
+  const rows = batches.slice(0, limit);
+  res.json({ batches: rows, nextBefore: hasMore ? rows[rows.length - 1].id : null });
+}));
+
 router.get('/transfer-review', route(async (req, res) => {
   const status = ['all', 'excluded', 'counted'].includes(req.query.status) ? req.query.status : 'all';
   const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
   const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+  const importId = req.query.importId === undefined ? null
+    : req.query.importId === 'untracked' ? 'untracked' : reviewImportId(req.query.importId, 'import id');
   const result = await db.transaction(async client => {
-    const filter = status === 'excluded' ? 'AND t.transfer_kind IS NOT NULL'
+    if (typeof importId === 'number' && !(await client.query(
+      `SELECT id FROM import_batches WHERE id=$1 AND ${TENANT}`, [importId])).rows.length) {
+      throw failure(404, 'Import not found');
+    }
+    const statusFilter = status === 'excluded' ? 'AND t.transfer_kind IS NOT NULL'
       : status === 'counted' ? 'AND t.transfer_kind IS NULL' : '';
-    const total = Number((await client.query(`SELECT COUNT(*)::int AS count FROM transactions t WHERE ${TENANT} ${filter}`)).rows[0].count);
+    const filter = `${statusFilter} ${importId === 'untracked' ? 'AND t.import_batch_id IS NULL'
+      : importId === null ? '' : 'AND t.import_batch_id=$1'}`;
+    const params = typeof importId === 'number' ? [importId] : [];
+    const total = Number((await client.query(`SELECT COUNT(*)::int AS count FROM transactions t
+      WHERE t.user_id=current_setting('app.user_id')::integer ${filter}`, params)).rows[0].count);
     const rows = (await client.query(`SELECT t.id,t.date,t.description,t.amount,t.direction,t.category,t.transfer_kind,
       t.source,t.created_at,a.name AS account_name,other.name AS transfer_account_name
       FROM transactions t
       LEFT JOIN accounts a ON a.id=t.account_id AND a.user_id=t.user_id
       LEFT JOIN accounts other ON other.id=t.transfer_account_id AND other.user_id=t.user_id
       WHERE t.user_id=current_setting('app.user_id')::integer ${filter}
-      ORDER BY t.date DESC,t.id DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows;
+      ORDER BY t.date DESC,t.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, limit, offset])).rows;
     const categories = (await client.query(`SELECT name FROM categories WHERE ${TENANT} ORDER BY name`)).rows.map(row => row.name);
     return { rows, total, categories };
   });
-  res.json({ ...result, limit, offset, status });
+  res.json({ ...result, limit, offset, status, importId });
 }));
 
 router.post('/:id/transfer-review', route(async (req, res) => {

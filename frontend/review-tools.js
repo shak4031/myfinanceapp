@@ -6,6 +6,13 @@
   const PAGE_SIZE = 50;
   let transferOffset = 0;
   let auditOffset = 0;
+  let transferRequest = 0;
+  let activityRequest = 0;
+  let generation = 0;
+  let importsLoaded = false;
+  let importsRequest;
+  let nextImportBefore = null;
+  const imports = new Map();
 
   async function json(url, method = 'GET', body) {
     const response = await fetch(url, {
@@ -62,14 +69,59 @@
     save.disabled = same || handling.value === 'unknown';
   }
 
-  async function loadTransfers() {
+  async function loadImports(append = false) {
+    if (importsRequest) return importsRequest;
+    const requestGeneration = generation;
+    const more = $('transfer-review-import-more');
+    more.disabled = true;
+    importsRequest = (async () => {
+      const data = await json(`/api/transactions/transfer-review/imports${append ? `?before=${nextImportBefore}` : ''}`);
+      if (requestGeneration !== generation) return;
+      for (const batch of data.batches) imports.set(String(batch.id), batch);
+      const select = $('transfer-review-import');
+      const selected = select.value;
+      select.innerHTML = '<option value="">Choose an import</option>'
+        + [...imports.values()].sort((a, b) => b.id - a.id).map(batch => {
+          const date = new Date(batch.created_at).toLocaleDateString();
+          const label = `${batch.source || 'Statement'} · ${batch.account_name || 'Account not set'} · ${date}${batch.status === 'undone' ? ' · Undone' : ''}`;
+          return `<option value="${batch.id}">${escape(label)}</option>`;
+        }).join('')
+        + '<option value="untracked">Older transactions without an import</option>';
+      select.value = selected;
+      nextImportBefore = data.nextBefore;
+      more.hidden = nextImportBefore === null;
+      importsLoaded = true;
+    })();
+    try { await importsRequest; }
+    finally { importsRequest = null; if (requestGeneration === generation) more.disabled = false; }
+  }
+
+  async function loadTransfers({ refreshImports = false } = {}) {
     const rows = $('transfer-review-rows');
     if (!rows) return;
+    const request = ++transferRequest;
     $('transfer-review-error').textContent = '';
-    rows.innerHTML = '<tr><td colspan="7">Loading transactions…</td></tr>';
-    const status = $('transfer-review-filter').value;
+    $('transfer-review-pagination').innerHTML = '';
+    $('transfer-review-count').textContent = '';
+    rows.innerHTML = '<tr><td colspan="7">Loading import choices...</td></tr>';
+    rows.setAttribute('aria-busy', 'true');
     try {
-      const data = await json(`/api/transactions/transfer-review?status=${encodeURIComponent(status)}&limit=${PAGE_SIZE}&offset=${transferOffset}`);
+      if (!importsLoaded || refreshImports) await loadImports();
+      if (request !== transferRequest) return;
+      const importId = $('transfer-review-import').value;
+      const status = $('transfer-review-filter').value;
+      const batch = imports.get(importId);
+      $('transfer-review-import-summary').textContent = batch
+        ? `${batch.source} · ${batch.account_name || 'Account not set'} · ${Number(batch.imported).toLocaleString()} rows originally imported · ${Number(batch.duplicates).toLocaleString()} duplicates skipped${batch.status === 'undone' ? ' · This import was undone; its transactions are not active.' : ''}${batch.legacy ? ' · Older inferred import; original processing details may be unavailable.' : ''}`
+        : importId === 'untracked' ? 'These older transactions have no reliable import boundary. Original import counts are unavailable.'
+          : 'Choose a statement to inspect its transactions. No transaction data is loaded until you choose.';
+      if (!importId) {
+        rows.innerHTML = '<tr><td colspan="7" class="review-empty">Choose an import above to see how its transactions were handled.</td></tr>';
+        return;
+      }
+      rows.innerHTML = '<tr><td colspan="7">Loading transactions...</td></tr>';
+      const data = await json(`/api/transactions/transfer-review?importId=${encodeURIComponent(importId)}&status=${encodeURIComponent(status)}&limit=${PAGE_SIZE}&offset=${transferOffset}`);
+      if (request !== transferRequest) return;
       rows.innerHTML = data.rows.length ? data.rows.map(row => rowMarkup(row, data.categories)).join('')
         : '<tr><td colspan="7">No transactions match this filter.</td></tr>';
       rows.querySelectorAll('[data-review-row]').forEach(updateSaveState);
@@ -79,10 +131,13 @@
       $('transfer-review-pagination').innerHTML = `<button type="button" class="btn btn-secondary btn-compact" data-transfer-page="-1" ${data.offset <= 0 ? 'disabled' : ''}>Previous</button>
         <button type="button" class="btn btn-secondary btn-compact" data-transfer-page="1" ${data.offset + data.limit >= data.total ? 'disabled' : ''}>Next</button>`;
     } catch (error) {
+      if (request !== transferRequest) return;
       rows.innerHTML = '';
       $('transfer-review-error').textContent = `Transactions could not be loaded: ${error.message}`;
       $('transfer-review-count').textContent = '';
       $('transfer-review-pagination').innerHTML = '';
+    } finally {
+      if (request === transferRequest) rows.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -135,12 +190,14 @@
   }
 
   async function loadActivity() {
+    const request = ++activityRequest;
     const root = $('activity-events');
     if (!root) return;
     $('activity-error').textContent = '';
     root.innerHTML = '<p class="muted">Loading activity…</p>';
     try {
       const data = await json(`/api/activity?limit=${PAGE_SIZE}&offset=${auditOffset}`);
+      if (request !== activityRequest) return;
       root.innerHTML = data.events.length ? data.events.map(event => {
         const timestamp = new Date(event.created_at);
         const when = Number.isNaN(timestamp.getTime()) ? event.created_at : timestamp.toLocaleString();
@@ -155,6 +212,7 @@
       $('activity-pagination').innerHTML = `<button type="button" class="btn btn-secondary btn-compact" data-activity-page="-1" ${data.offset <= 0 ? 'disabled' : ''}>Previous</button>
         <button type="button" class="btn btn-secondary btn-compact" data-activity-page="1" ${data.offset + data.limit >= data.total ? 'disabled' : ''}>Next</button>`;
     } catch (error) {
+      if (request !== activityRequest) return;
       root.innerHTML = '';
       $('activity-error').textContent = `Activity could not be loaded: ${error.message}`;
       $('activity-count').textContent = '';
@@ -162,9 +220,29 @@
     }
   }
 
-  window.FinanceReviewTools = { loadTransfers, loadActivity };
+  function reset() {
+    generation++;
+    transferRequest++;
+    activityRequest++;
+    importsLoaded = false;
+    imports.clear();
+    nextImportBefore = null;
+    transferOffset = 0;
+    auditOffset = 0;
+  }
+
+  window.FinanceReviewTools = { loadTransfers, loadActivity, reset };
+  $('transfer-review-import')?.addEventListener('change', () => { transferOffset = 0; loadTransfers(); });
+  $('transfer-review-import-more')?.addEventListener('click', async () => {
+    const requestGeneration = generation;
+    $('transfer-review-error').textContent = '';
+    try { await loadImports(true); }
+    catch (error) {
+      if (requestGeneration === generation) $('transfer-review-error').textContent = `Import choices could not be loaded: ${error.message}`;
+    }
+  });
   $('transfer-review-filter')?.addEventListener('change', () => { transferOffset = 0; loadTransfers(); });
-  $('transfer-review-refresh')?.addEventListener('click', loadTransfers);
+  $('transfer-review-refresh')?.addEventListener('click', () => { transferOffset = 0; loadTransfers({ refreshImports: true }); });
   $('activity-refresh')?.addEventListener('click', loadActivity);
   $('transfer-review-rows')?.addEventListener('change', event => {
     const row = event.target.closest('[data-review-row]');
@@ -173,6 +251,7 @@
   $('transfer-review-rows')?.addEventListener('click', async event => {
     const button = event.target.closest('[data-review-save]');
     if (!button) return;
+    const requestGeneration = generation;
     const row = button.closest('[data-review-row]');
     const handling = row.querySelector('[data-review-handling]').value;
     button.disabled = true;
@@ -182,8 +261,10 @@
         handling,
         ...(handling === 'counted' ? { category: row.querySelector('[data-review-category]').value } : {})
       });
+      if (requestGeneration !== generation) return;
       await loadTransfers();
     } catch (error) {
+      if (requestGeneration !== generation) return;
       $('transfer-review-error').textContent = `Could not update transaction #${row.dataset.reviewRow}: ${error.message}`;
       button.disabled = false;
     }

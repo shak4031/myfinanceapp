@@ -319,6 +319,8 @@ export async function migratePrivateSchema(client) {
     WHERE t.import_batch_id IS NULL AND t.user_id=b.user_id AND t.source=b.source
       AND t.account_id IS NOT DISTINCT FROM b.account_id AND t.created_at=b.created_at;
     CREATE INDEX IF NOT EXISTS transactions_import_batch_idx ON transactions (user_id,import_batch_id);
+    CREATE INDEX IF NOT EXISTS transactions_import_review_idx ON transactions (user_id,import_batch_id,date DESC,id DESC);
+    CREATE INDEX IF NOT EXISTS import_batches_review_idx ON import_batches (user_id,id DESC);
     -- Undone rows retain their IDs. A restart must not reuse those IDs for new transactions.
     SELECT setval(pg_get_serial_sequence('transactions','id'),
       GREATEST((SELECT last_value FROM transactions_id_seq),

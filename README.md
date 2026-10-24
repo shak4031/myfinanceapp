@@ -9,6 +9,10 @@ categories, debts, and goals; account identity never comes from a request body.
 Existing records remain assigned to owner account **1**. New users receive
 categories only, never the owner's transactions, debts, rules, or goals.
 
+See [Account data privacy and isolation](ACCOUNT_DATA_PRIVACY.md) for the
+implemented guard rails, support/operator access boundaries, encryption and
+retention limitations, and the import-focused advanced diagnostics workflow.
+
 Sessions expire after **10 minutes without user interaction**, enforced by the
 server as well as the browser, with a separate **12-hour absolute lifetime**.
 Background polling, page loads, and session checks do not renew inactivity.
@@ -57,7 +61,9 @@ Failed logins, lockouts, admin actions and server errors are written to an
 append-only audit log with request IDs. Admins use `/admin.html` for health,
 user support, audit/error search and an API explorer. Customers can grant
 time-limited, revocable support access (read-only by default) in **Settings &
-support**; admins never see customer data otherwise. See
+support**. Normal admin financial requests stay in the admin's own workspace;
+operational audit metadata and privileged infrastructure access have separate
+trust boundaries, as explained in the privacy documentation. See
 [DEPLOYMENT.md](./DEPLOYMENT.md) for required environment variables.
 
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation

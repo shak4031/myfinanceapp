@@ -174,6 +174,23 @@ test('imports require an account and transfers between own accounts never count 
     const reviewPage = await call('/api/transactions/transfer-review?status=excluded');
     assert.equal(reviewPage.body.total, 2);
     assert.ok(reviewPage.body.rows.every(row => row.transfer_kind === 'unknown'));
+    const choices = await call('/api/transactions/transfer-review/imports');
+    assert.equal(choices.status, 200);
+    const checkingImport = choices.body.batches.find(batch => batch.source === 'checking.csv');
+    assert.ok(checkingImport);
+    assert.equal(checkingImport.imported, 6);
+    assert.equal(checkingImport.account_name, 'Everyday checking');
+    assert.equal('backup' in checkingImport, false, 'import choices never load recovery transaction payloads');
+    assert.equal('rows' in checkingImport, false, 'import choices are metadata only');
+    const scopedPage = await call(`/api/transactions/transfer-review?importId=${checkingImport.id}&status=counted&limit=2&offset=1`);
+    assert.equal(scopedPage.status, 200);
+    assert.equal(scopedPage.body.total, 4);
+    assert.equal(scopedPage.body.rows.length, 2);
+    assert.ok(scopedPage.body.rows.every(row => row.source === 'checking.csv' && row.transfer_kind === null));
+    for (const invalid of ['0', '-1', '1x', '1.5', '9007199254740992', '']) {
+      assert.equal((await call(`/api/transactions/transfer-review?importId=${invalid}`)).status, 400);
+      assert.equal((await call(`/api/transactions/transfer-review/imports?before=${invalid}`)).status, 400);
+    }
     const zelleRow = (await call('/api/dashboard/all-transactions')).body.transactions.find(row => row.description.startsWith('ZELLE'));
     const madeInternal = await call(`/api/transactions/${zelleRow.id}/transfer-review`, { body: { handling: 'internal' } });
     assert.equal(madeInternal.status, 200);
@@ -210,6 +227,9 @@ test('imports require an account and transfers between own accounts never count 
     const savingsCsv = ['Date,Description,Amount,Balance', `${day(1)},TRANSFER FROM CHK XXXXXX1180,500.00,9500.00`, `${day(1)},INTEREST PAYMENT,12.34,9512.34`].join('\n');
     const second = await call('/api/import/import-csv', { body: { csvData: savingsCsv, source: 'savings.csv', accountId: savingsId } });
     assert.equal(second.status, 200, JSON.stringify(second.body));
+    const checkingOnly = await call(`/api/transactions/transfer-review?importId=${checkingImport.id}`);
+    assert.equal(checkingOnly.body.total, 6, 'other imports do not change this import count');
+    assert.ok(checkingOnly.body.rows.every(row => row.source === 'checking.csv'));
     const after = await kinds();
     assert.equal(after['TRANSFER FROM CHK XXXXXX1180'], 'internal');
     assert.equal(after['ONLINE TRANSFER TO SAV XXXXXX4821'], 'savings');
@@ -232,6 +252,35 @@ test('imports require an account and transfers between own accounts never count 
     const zelle = (await call('/api/dashboard/all-transactions')).body.transactions.find(row => row.description.startsWith('ZELLE'));
     assert.equal((await call('/api/dashboard/update-category', { body: { transaction_id: zelle.id, new_category: 'Transfer' } })).status, 200);
     assert.equal((await kinds())['ZELLE TO JORDAN LEE'], 'internal');
+    // Large import histories stay bounded; other tenants' metadata/rows are never exposed.
+    await database.query("INSERT INTO users(id,name,email) VALUES (2,'Other user','other@example.com')");
+    const foreign = (await database.query("INSERT INTO import_batches(user_id,source) VALUES(2,'private.csv') RETURNING id")).rows[0].id;
+    await database.query(`INSERT INTO import_batches(user_id,source)
+      SELECT 1,'older-' || n || '.csv' FROM generate_series(1,35) n`);
+    const large = (await database.query(`INSERT INTO import_batches(user_id,source,imported)
+      VALUES(1,'large.csv',105) RETURNING id`)).rows[0].id;
+    await database.query(`INSERT INTO transactions(user_id,import_batch_id,date,description,amount,direction,category)
+      SELECT 1,$1,'2026-10-22','Large import row ' || n,1,'DEBIT','Other' FROM generate_series(1,105) n`, [large]);
+    const bounded = (await call(`/api/transactions/transfer-review?importId=${large}`)).body;
+    assert.equal(bounded.rows.length, 50);
+    assert.equal(bounded.total, 105);
+    const tail = (await call(`/api/transactions/transfer-review?importId=${large}&offset=100`)).body;
+    assert.equal(tail.rows.length, 5);
+    assert.ok(tail.rows.every(row => !bounded.rows.some(first => first.id === row.id)));
+    assert.equal((await call(`/api/transactions/transfer-review?importId=${large}&limit=1000`)).body.rows.length, 100);
+    const undone = (await database.query(`INSERT INTO import_batches(user_id,source,status,imported)
+      VALUES(1,'undone.csv','undone',5) RETURNING id`)).rows[0].id;
+    assert.equal((await call(`/api/transactions/transfer-review?importId=${undone}`)).body.total, 0);
+    const firstChoices = (await call('/api/transactions/transfer-review/imports')).body;
+    assert.equal(firstChoices.batches.length, 30);
+    assert.ok(firstChoices.nextBefore);
+    const olderChoices = (await call(`/api/transactions/transfer-review/imports?before=${firstChoices.nextBefore}`)).body;
+    assert.ok(olderChoices.batches.length > 0);
+    assert.equal(olderChoices.nextBefore, null);
+    assert.ok(olderChoices.batches.every(batch => batch.id < firstChoices.nextBefore));
+    assert.ok(![...firstChoices.batches, ...olderChoices.batches].some(batch => batch.id === foreign));
+    assert.equal((await call(`/api/transactions/transfer-review?importId=${foreign}`)).status, 404);
+    assert.equal((await call('/api/transactions/transfer-review?importId=untracked')).body.total, 0);
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const [key, value] of Object.entries(saved)) {
