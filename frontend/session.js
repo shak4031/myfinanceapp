@@ -227,12 +227,19 @@ window.FinanceSession = (() => {
     } catch (error) { el('auth-description').textContent = error.message; }
   }
   async function logout() {
+    if (window.FinanceSessionGuard) window.FinanceSessionGuard.end();
+    else lock();
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST' });
-      if (!response.ok) throw new Error('Sign out failed. Please retry.');
-      lock();
+      if (!response.ok) throw new Error('Your financial data is hidden, but server sign-out failed. Reconnect and sign out again.');
       location.reload();
-    } catch (error) { if (window.notify) notify(error.message); }
+    } catch (error) {
+      el('auth-description').textContent = `Your financial data is hidden. Server sign-out could not be confirmed: ${error.message}`;
+    }
   }
+  window.FinanceSessionGuard?.configure(message => {
+    lock();
+    el('auth-description').textContent = message;
+  });
   return { start, logout, isAuthenticated: () => !!user, currentUser: () => user, currentSupport: () => support };
 })();

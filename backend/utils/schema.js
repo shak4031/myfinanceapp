@@ -30,6 +30,13 @@ export async function migratePrivateSchema(client) {
       token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+        AND table_name='sessions' AND column_name='last_activity_at') THEN
+        DELETE FROM sessions;
+        ALTER TABLE sessions ADD COLUMN last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      END IF;
+    END $$;
     CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions (expires_at);
     CREATE TABLE IF NOT EXISTS auth_attempts (
       key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, reset_at TIMESTAMPTZ NOT NULL

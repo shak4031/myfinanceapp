@@ -10,7 +10,7 @@ import { sendPasswordResetEmail, sendSecurityNotice } from '../utils/mailer.js';
 import { isDemoEmail } from '../utils/demo.js';
 
 const router = Router();
-const sessionDays = 7;
+const sessionHours = 12;
 const resetMinutes = 30;
 export const cookieName = 'finance_session';
 export const supportCookieName = 'finance_support';
@@ -44,15 +44,25 @@ export function enforceSameOrigin(req, res, next) {
   next();
 }
 
-async function loadSession(req) {
+async function loadSession(req, { activity = false } = {}) {
   const token = cookieToken(req);
   if (!token) return null;
   return administrativeTransaction(async client => {
     const owner = (await client.query(`
-      SELECT u.id, u.name, u.email, u.role FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > NOW() AND s.support_grant_id IS NULL AND u.password_hash IS NOT NULL
+      SELECT u.id, u.name, u.email, u.role, s.expires_at,
+        LEAST(s.last_activity_at + INTERVAL '10 minutes',s.expires_at) AS idle_expires_at
+      FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.token_hash = $1 AND s.expires_at > NOW() AND s.last_activity_at > NOW() - INTERVAL '10 minutes'
+        AND s.support_grant_id IS NULL AND u.password_hash IS NOT NULL FOR UPDATE OF s
     `, [tokenHash(token)])).rows[0];
     if (!owner) return null;
+    if (activity) {
+      const updated = (await client.query(`UPDATE sessions
+        SET last_activity_at=GREATEST(last_activity_at,NOW()-($2 * INTERVAL '1 millisecond')) WHERE token_hash=$1
+        RETURNING LEAST(last_activity_at + INTERVAL '10 minutes',expires_at) AS idle_expires_at`,
+      [tokenHash(token), req.body?.idleMs ?? 0])).rows[0];
+      owner.idle_expires_at = updated.idle_expires_at;
+    }
     const supportToken = readCookie(req, supportCookieName);
     if (!supportToken || owner.role !== 'admin') return { owner };
     const support = (await client.query(`
@@ -66,14 +76,17 @@ async function loadSession(req) {
   });
 }
 
-export async function requireUser(req, res, next) {
+async function authenticate(req, res, next, activity = false) {
   try {
-    const session = await loadSession(req);
+    const session = await loadSession(req, { activity });
     if (!session) {
       res.clearCookie(cookieName, cookieOptions);
       res.clearCookie(supportCookieName, cookieOptions);
       return res.status(401).json({ error: cookieToken(req) ? 'Your session expired. Please sign in again.' : 'Please sign in' });
     }
+    res.set('X-Session-Idle-Expires', new Date(session.owner.idle_expires_at).toISOString());
+    res.set('X-Session-Expires', new Date(session.owner.expires_at).toISOString());
+    res.set('X-Session-Server-Time', new Date().toISOString());
     if (session.staleSupport) res.clearCookie(supportCookieName, cookieOptions);
     if (!session.support) {
       req.user = publicUser(session.owner);
@@ -91,7 +104,7 @@ export async function requireUser(req, res, next) {
       return res.status(403).json({ error: 'End the support session to use administration or access-sharing tools' });
     }
     const readOnly = support.access_level !== 'write';
-    const isRead = ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || (req.method === 'POST' && (READ_ONLY_POSTS.has(path)
+    const isRead = ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || (req.method === 'POST' && (path === '/api/auth/activity' || READ_ONLY_POSTS.has(path)
       || (path === '/api/debts' && !Object.keys(req.body || {}).length)));
     if (readOnly && !isRead) {
       return res.status(403).json({ error: 'This support session is read-only. The customer must grant edit access for changes.' });
@@ -100,6 +113,10 @@ export async function requireUser(req, res, next) {
   } catch (error) {
     next(error);
   }
+}
+
+export function requireUser(req, res, next) {
+  return authenticate(req, res, next);
 }
 
 export function requireAdmin(req, res, next) {
@@ -132,17 +149,17 @@ export function attemptKeysForEmail(email) {
 async function issueSession(client, req, res, user) {
   const previous = cookieToken(req);
   if (previous) await client.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash(previous)]);
-  await client.query('DELETE FROM sessions WHERE expires_at <= NOW()');
+  await client.query("DELETE FROM sessions WHERE expires_at <= NOW() OR last_activity_at <= NOW() - INTERVAL '10 minutes'");
   const token = randomBytes(32).toString('hex');
   await client.query(
-    "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '7 days')",
+    `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '${sessionHours} hours')`,
     [tokenHash(token), user.id]
   );
   return { token, user: publicUser(user) };
 }
 
 function sendSession(res, session) {
-  res.cookie(cookieName, session.token, { ...cookieOptions, maxAge: sessionDays * 86400000 });
+  res.cookie(cookieName, session.token, cookieOptions);
   res.clearCookie(supportCookieName, cookieOptions);
   res.json({ success: true, user: session.user });
 }
@@ -160,6 +177,15 @@ router.get('/me', requireUser, (req, res) => res.json({
   user: req.user,
   support: req.support ? { actor: req.actor, accessLevel: req.support.accessLevel, expiresAt: req.support.expiresAt } : null
 }));
+// Only explicit user interaction renews inactivity; ordinary requests and polling never do.
+router.post('/activity', (req, res, next) => {
+  const idleMs = req.body?.idleMs ?? 0;
+  if (!Number.isInteger(idleMs) || idleMs < 0 || idleMs > 15000) {
+    return res.status(400).json({ error: 'Activity delay must be between 0 and 15000 milliseconds.' });
+  }
+  return authenticate(req, res, next, true);
+},
+  (req, res) => res.json({ success: true }));
 
 for (const action of ['setup', 'register']) {
   router.post(`/${action}`, async (req, res, next) => {

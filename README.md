@@ -9,6 +9,15 @@ categories, debts, and goals; account identity never comes from a request body.
 Existing records remain assigned to owner account **1**. New users receive
 categories only, never the owner's transactions, debts, rules, or goals.
 
+Sessions expire after **10 minutes without user interaction**, enforced by the
+server as well as the browser, with a separate **12-hour absolute lifetime**.
+Background polling, page loads, and session checks do not renew inactivity.
+Logout clears confidential views across open tabs. Hidden/restored pages are
+revalidated before revealing protected content. Session cookies are HttpOnly,
+SameSite=Strict, Secure in production, and are no longer persisted for seven days.
+The first deployment of this policy revokes existing sessions; later restarts do
+not sign out valid sessions. The admin console uses the same timeout.
+
 Before deploying, back up the database and follow the private-account setup in
 [DEPLOYMENT.md](./DEPLOYMENT.md). Public registration is off by default. Startup
 requires a migration-capable PostgreSQL connection; migration fails rather than

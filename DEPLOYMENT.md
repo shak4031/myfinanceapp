@@ -86,7 +86,13 @@ Leave registration closed until staging isolation tests and an independent
 production security review are complete. Set `ALLOW_REGISTRATION=true` only when
 ready. New users receive independent empty budgets and category lists.
 Passwords use salted scrypt; session tokens are random, stored hashed, expire
-after seven days and are revoked on logout. Authentication attempts are limited
+after 10 minutes of inactivity or 12 hours absolutely and are revoked on logout.
+Only explicit user interaction (`POST /api/auth/activity`) renews inactivity;
+background API requests and `GET /api/auth/me` do not. Browser locking also clears
+protected content on idle expiry and synchronizes sign-out across tabs, including
+the admin console. Session cookies are nonpersistent. The first migration adding
+`sessions.last_activity_at` deletes existing sessions, requiring everyone to sign
+in again; subsequent migrations preserve valid sessions. Authentication attempts are limited
 in PostgreSQL across processes.
 
 The owner does not register: account 1 already holds the existing data and is

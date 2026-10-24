@@ -33,7 +33,7 @@ router.get('/overview', async (req, res, next) => {
     const stats = await administrativeTransaction(async client => (await client.query(`
       SELECT
         (SELECT COUNT(*)::int FROM users WHERE password_hash IS NOT NULL) AS users,
-        (SELECT COUNT(*)::int FROM sessions WHERE expires_at > NOW() AND support_grant_id IS NULL) AS active_sessions,
+        (SELECT COUNT(*)::int FROM sessions WHERE expires_at > NOW() AND last_activity_at > NOW() - INTERVAL '10 minutes' AND support_grant_id IS NULL) AS active_sessions,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
            AND event_type = 'auth.login' AND outcome = 'failure') AS failed_logins_24h,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
@@ -74,7 +74,7 @@ router.get('/users', async (req, res, next) => {
         (SELECT MAX(created_at) FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login' AND a.outcome='success') AS last_login,
         (SELECT COUNT(*)::int FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login'
            AND a.outcome='failure' AND a.created_at > NOW() - INTERVAL '24 hours') AS failed_logins_24h,
-        (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.support_grant_id IS NULL) AS active_sessions,
+        (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.last_activity_at > NOW() - INTERVAL '10 minutes' AND s.support_grant_id IS NULL) AS active_sessions,
         (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants,
         l.plan AS license_plan, l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
         l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at,

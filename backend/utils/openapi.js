@@ -16,6 +16,7 @@ export function openApiSpec() {
       '/api/health': { get: op('System', 'Liveness check') },
       '/api/auth/status': { get: op('Auth', 'Setup and registration status') },
       '/api/auth/me': { get: op('Auth', 'Current user and active support session, if any') },
+      '/api/auth/activity': { post: op('Auth', 'Renew a still-valid session on user interaction; ten-minute idle and twelve-hour absolute expiry', body({ idleMs: 0 })) },
       '/api/auth/login': { post: op('Auth', 'Sign in', body({ email: 'you@example.com', password: '************' })) },
       '/api/auth/logout': { post: op('Auth', 'Sign out and end any support session') },
       '/api/auth/register': { post: op('Auth', 'Create an account (only when ALLOW_REGISTRATION=true)', body({ name: 'Name', email: 'you@example.com', password: '************' })) },
