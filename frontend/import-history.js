@@ -143,6 +143,7 @@
       status('Committing the confirmed recovery...');
       const result = await request(`/${action}`, { ids: pending.ids, reviewToken: pending.reviewToken, acknowledged: true });
       if (current !== generation) return;
+      window.FinanceReviewTools?.invalidateImports();
       clearReview();
       batches = batches.map(batch => pending.ids.includes(batch.id) ? { ...batch, status: action === 'undo' ? 'undone' : 'active' } : batch);
       render(untracked);

@@ -122,6 +122,7 @@
     return parts.length ? `<div style="font-size: 12px; margin-top: 6px; color: var(--text-secondary);">${parts.join(' ')}</div>` : '';
   }
   async function afterImport(data) {
+    window.FinanceReviewTools?.invalidateImports();
     await load();
     fillPicker(data?.account?.id);
     ['import-new-name', 'import-new-last4', 'import-new-institution'].forEach(id => { if ($(id)) $(id).value = ''; });

@@ -29,13 +29,14 @@ const route = handler => async (req, res) => {
   } catch (error) {
     failed = error;
     res.status(error.status || 500).json({ success: false, error: error.message,
-      ...(error.code === 'ACCOUNT_REVIEW_REQUIRED' ? { code: error.code, detectedAccount: error.detectedAccount, detectedAccounts: error.detectedAccounts } : {}) });
+      ...(error.code === 'ACCOUNT_REVIEW_REQUIRED' ? { code: error.code, detectedAccount: error.detectedAccount, detectedAccounts: error.detectedAccounts } : {}),
+      ...(error.code === 'UNASSIGNED_OVERLAP' ? { code: error.code } : {}) });
   }
   const status = res.statusCode;
   const rows = result?.results || (result?.success ? [result] : []);
   const detail = {
     ...diagnostic, stage: req.importStage, durationMs: Date.now() - started,
-    reason: failed ? ['ACCOUNT_REVIEW_REQUIRED', 'PDF_REVIEW_REQUIRED'].includes(failed.code) ? failed.code : status < 500 ? 'INPUT_REJECTED' : 'PROCESSING_FAILED' : null,
+    reason: failed ? ['ACCOUNT_REVIEW_REQUIRED', 'PDF_REVIEW_REQUIRED', 'UNASSIGNED_OVERLAP'].includes(failed.code) ? failed.code : status < 500 ? 'INPUT_REJECTED' : 'PROCESSING_FAILED' : null,
     parsedRows: rows.length ? rows.reduce((sum, row) => sum + (row.totalInFile || 0), 0) : req.importParsedRows || 0,
     importedRows: rows.reduce((sum, row) => sum + (row.imported || 0), 0),
     duplicateRows: rows.reduce((sum, row) => sum + (row.duplicates || 0), 0),
@@ -98,10 +99,17 @@ export async function importTransactions(client, transactions, config, source, a
     const key = JSON.stringify([transaction.date, description, transaction.amount, direction]);
     const occurrence = preserveOccurrences ? occurrences.get(key) || 0 : 0;
     occurrences.set(key, occurrence + 1);
-    const existing = (await client.query(`SELECT id FROM transactions WHERE date::date=$1::date
-      AND UPPER(BTRIM(regexp_replace(description,'[[:space:]]+',' ','g')))=$2 AND amount=$3 AND direction=$4
-      AND account_id IS NOT DISTINCT FROM $5 AND ${TENANT} ORDER BY id LIMIT 1 OFFSET $6`,
+    const existing = (await client.query(`SELECT id,account_id FROM transactions WHERE date::date=$1::date
+      AND UPPER(BTRIM(regexp_replace(description,'[[:space:]]+',' ','g')))=$2
+      AND ROUND(amount::numeric,2)=$3::numeric AND UPPER(BTRIM(direction))=$4
+      AND (account_id IS NOT DISTINCT FROM $5::integer OR ($5::integer IS NOT NULL AND account_id IS NULL))
+      AND ${TENANT} ORDER BY (account_id IS NULL),id LIMIT 1 OFFSET $6`,
     [transaction.date, description, transaction.amount, direction, accountId, occurrence])).rows[0];
+    if (existing && existing.account_id === null && accountId !== null) {
+      // Unassigned history may belong to this account or another one. Never insert or merge by guessing.
+      throw Object.assign(failure(409, `An existing transaction (#${existing.id}) without an account matches a row in this file. Nothing was imported. Review the older unassigned import in Accounts and assign it only if all its rows belong to the correct account, then retry. Do not create a second account or reimport to resolve this overlap.`),
+      { code: 'UNASSIGNED_OVERLAP' });
+    }
     if (existing) { duplicates++; continue; }
     const classified = classify({ ...transaction, direction }, config.compiled, config.names);
     // Parser hints (e.g. a card payment is a transfer) apply unless the user has a rule for this merchant.

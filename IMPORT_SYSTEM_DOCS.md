@@ -116,6 +116,35 @@ Single-account OFX/QFX uses its `ACCTID` for mapping. Multi-account OFX is rejec
 instead of merging accounts; export separate OFX files or a multi-account CSV.
 PDF matching and statement validation retain their existing behavior.
 
+### Overlap protection for older unassigned history
+
+Repeated rows are matched within the signed-in user's destination account by
+date, normalized original description (case and whitespace), direction and amount
+at cent precision, including older floating-point amount columns. Existing rows
+and their saved edits are retained. Identical transactions in two different
+assigned accounts remain independent.
+
+If a row has no same-account match but matches an older transaction with no
+account, the upload returns **409 `UNASSIGNED_OVERLAP`**. Nothing in that upload
+is committed, including earlier rows, newly created accounts and import batches.
+The importer does not guess ownership, silently merge rows or count an ambiguous
+match as a successfully skipped duplicate.
+
+Review the older unassigned source in **Accounts**. Source-level assignment is
+appropriate only when **every unassigned row from that source belongs to that
+account**. Do not bulk-assign a mixed-account export. Resolve its mapping first,
+then retry; correctly assigned matching rows will be reported as duplicates.
+This safeguard prevents new repeats but does not remove existing duplicates.
+
+### Import-focused troubleshooting
+
+Open **Advanced diagnostics > Transaction troubleshooting**. Import choices
+refresh on entry and are invalidated after a successful upload, undo or restore.
+Import metadata loads in pages of 30; no transaction rows load until an import
+is selected, and its transactions load in pages of 50. Older history without a
+reliable import boundary remains available separately. Loading errors are shown
+explicitly; use **Refresh** to retry.
+
 ### Correcting an overlapping or misassigned CSV import
 
 1. Confirm the affected filenames, timestamps and destination accounts in history.

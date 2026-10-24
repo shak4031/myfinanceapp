@@ -352,7 +352,7 @@
     const hash = `#${view}${sub ? `/${sub}` : ''}`;
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, 'transaction-review': () => window.FinanceReviewTools?.loadTransfers(), activity: () => window.FinanceReviewTools?.loadActivity(), accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, 'transaction-review': () => window.FinanceReviewTools?.loadTransfers({ refreshImports: true }), activity: () => window.FinanceReviewTools?.loadActivity(), accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     const finish = window.FinancePerformance?.begin('page', view === 'analytics' && sub === 'compass' ? 'compass' : view);
     Promise.resolve(loaders[view]?.()).then(() => finish?.(), error => { finish?.('error'); reportError(error); });
   };

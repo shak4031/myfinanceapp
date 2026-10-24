@@ -271,6 +271,67 @@ test('late import metadata cannot repopulate diagnostics after session lock', as
   assert.equal(f.node('transfer-review-rows').innerHTML, '');
 });
 
+test('entering troubleshooting refreshes import choices and shows newly completed uploads', async () => {
+  let batches = [];
+  const f = fixture(async url => response(200, url.includes('/transfer-review/imports')
+    ? { batches, nextBefore: null } : { rows: [], total: 0, offset: 0, limit: 50, categories: [] }));
+  f.run('review-tools.js');
+  f.run('refresh.js');
+  f.context.showView('transaction-review');
+  await new Promise(setImmediate);
+  assert.doesNotMatch(f.node('transfer-review-import').innerHTML, /new-upload/);
+  batches = [{ id: 8, source: 'new-upload.csv', account_name: 'Checking', created_at: '2026-10-23', imported: 1, duplicates: 2 }];
+  f.context.showView('transactions');
+  f.context.showView('transaction-review');
+  await new Promise(setImmediate);
+  assert.match(f.node('transfer-review-import').innerHTML, /new-upload.csv/);
+});
+
+test('troubleshooting import loading failures are explicit and Refresh retries', async () => {
+  let fail = true;
+  const f = fixture(async () => fail ? response(503, { error: 'Import history unavailable' })
+    : response(200, { batches: [{ id: 8, source: 'recovered.csv', created_at: '2026-10-23' }], nextBefore: null }));
+  f.run('review-tools.js');
+  await f.context.FinanceReviewTools.loadTransfers();
+  assert.match(f.node('transfer-review-error').textContent, /Import history unavailable/);
+  fail = false;
+  f.node('transfer-review-refresh').listeners.click();
+  await new Promise(setImmediate);
+  assert.match(f.node('transfer-review-import').innerHTML, /recovered.csv/);
+  assert.equal(f.node('transfer-review-error').textContent, '');
+});
+
+test('completed imports invalidate troubleshooting metadata even when account refresh fails', async () => {
+  const f = fixture(async () => response(503, { error: 'Account refresh unavailable' }));
+  let invalidated = 0;
+  f.context.FinanceReviewTools = { invalidateImports: () => { invalidated++; } };
+  f.run('accounts.js');
+  await assert.rejects(f.context.FinanceAccounts.afterImport({ imported: 1 }), /Account refresh unavailable/);
+  assert.equal(invalidated, 1);
+});
+
+test('an old metadata request cannot hide a newly completed upload after invalidation', async () => {
+  const pending = [];
+  const f = fixture(() => new Promise(resolve => pending.push(resolve)));
+  f.run('review-tools.js');
+  const old = f.context.FinanceReviewTools.loadTransfers();
+  f.context.FinanceReviewTools.invalidateImports();
+  const fresh = f.context.FinanceReviewTools.loadTransfers();
+  assert.equal(pending.length, 2, 'invalidation starts a fresh metadata request');
+  pending[1](response(200, { batches: [{ id: 9, source: 'fresh.csv', created_at: '2026-10-23' }], nextBefore: null }));
+  await fresh;
+  pending[0](response(200, { batches: [], nextBefore: null }));
+  await old;
+  assert.match(f.node('transfer-review-import').innerHTML, /fresh.csv/);
+});
+
+test('malformed import-list responses are errors, not an empty success', async () => {
+  const f = fixture(async () => response(200, { rows: [] }));
+  f.run('review-tools.js');
+  await f.context.FinanceReviewTools.loadTransfers();
+  assert.match(f.node('transfer-review-error').textContent, /invalid import list/);
+});
+
 test('an outstanding import history response cannot repopulate a signed-out workspace', async () => {
   let resolve;
   const f = fixture(() => new Promise(done => { resolve = done; }));

@@ -74,9 +74,12 @@
     const requestGeneration = generation;
     const more = $('transfer-review-import-more');
     more.disabled = true;
-    importsRequest = (async () => {
+    const pending = (async () => {
       const data = await json(`/api/transactions/transfer-review/imports${append ? `?before=${nextImportBefore}` : ''}`);
       if (requestGeneration !== generation) return;
+      if (!Array.isArray(data.batches) || (data.nextBefore !== null && !Number.isSafeInteger(data.nextBefore))) {
+        throw new Error('The server returned an invalid import list. Reload the page and retry.');
+      }
       for (const batch of data.batches) imports.set(String(batch.id), batch);
       const select = $('transfer-review-import');
       const selected = select.value;
@@ -92,8 +95,12 @@
       more.hidden = nextImportBefore === null;
       importsLoaded = true;
     })();
-    try { await importsRequest; }
-    finally { importsRequest = null; if (requestGeneration === generation) more.disabled = false; }
+    importsRequest = pending;
+    try { await pending; }
+    finally {
+      if (importsRequest === pending) importsRequest = null;
+      if (requestGeneration === generation) more.disabled = false;
+    }
   }
 
   async function loadTransfers({ refreshImports = false } = {}) {
@@ -225,13 +232,14 @@
     transferRequest++;
     activityRequest++;
     importsLoaded = false;
+    importsRequest = null;
     imports.clear();
     nextImportBefore = null;
     transferOffset = 0;
     auditOffset = 0;
   }
 
-  window.FinanceReviewTools = { loadTransfers, loadActivity, reset };
+  window.FinanceReviewTools = { loadTransfers, loadActivity, reset, invalidateImports: reset };
   $('transfer-review-import')?.addEventListener('change', () => { transferOffset = 0; loadTransfers(); });
   $('transfer-review-import-more')?.addEventListener('click', async () => {
     const requestGeneration = generation;
