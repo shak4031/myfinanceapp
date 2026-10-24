@@ -321,6 +321,11 @@ body #import-modal { width: min(520px,calc(100vw - 24px)); max-width: calc(100vw
 #import-history-selection { font-size: 13px; font-weight: 600; }
 #import-history .import-actions { position: relative; }
 #import-history button[aria-pressed="true"] { border-color: var(--primary); font-weight: 700; }
+.csv-account-mapping { min-width: 0; margin: 12px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); }
+.csv-account-mapping legend { padding: 0 6px; font-weight: 700; color: var(--text-primary); }
+.csv-account-mapping > label { display: block; margin: 10px 0 6px; font-size: 13px; font-weight: 600; }
+.csv-account-mapping select { width: 100%; min-width: 0; }
+#csv-account-review { margin: 16px 0; }
 #import-modal .import-actions .btn { width: 100%; min-height: 44px; }
 .import-detected-account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #dce9e1; border-radius: 10px; background: #f6faf8; color: #35584a; font-size: 12px; line-height: 1.5; }
 .import-detected-account button { min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: #226452; font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

@@ -149,7 +149,8 @@ test('imports require an account and transfers between own accounts never count 
       `${day(1)},CHASE CARD ONLINE PAYMENT,-400.00,6690.00`].join('\n');
 
     const missing = await call('/api/import/import-csv', { body: { csvData: checkingCsv, source: 'checking.csv' } });
-    assert.equal(missing.status, 400, 'an account must be chosen');
+    assert.equal(missing.status, 422, 'a file without account information needs a fallback mapping');
+    assert.equal(missing.body.code, 'ACCOUNT_REVIEW_REQUIRED');
 
     const imported = await call('/api/import/import-csv', { body: { csvData: checkingCsv, source: 'checking.csv',
       newAccount: { name: 'Everyday checking', kind: 'checking', last4: '1180', institution: 'Demo Bank' } } });

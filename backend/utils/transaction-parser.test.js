@@ -122,3 +122,50 @@ test('files without transactions produce nothing instead of guessing', () => {
   const r = parse('hello world\nthis is not a statement', 'checking');
   assert.equal(r.transactions.length, 0);
 });
+
+test('multi-account TD CSV retains account identity and never deduplicates across accounts', () => {
+  const result = parse(`Date,Bank RTN,Account Number,Description,Debit,Credit
+10/14/2026,031201360,00001111,SAME PURCHASE,15.49,
+10/14/2026,031201360,00002222,SAME PURCHASE,15.49,
+10/14/2026,031201360,00001111,SAME PURCHASE,15.49,
+10/15/2026,031201360,,UNIDENTIFIED PURCHASE,3,`, 'checking');
+  assert.equal(result.transactions.length, 3);
+  assert.equal(result.duplicates, 1);
+  assert.equal(result.format.accountCount, 2);
+  assert.deepEqual(result.format.accounts.map(account => account.last4), ['1111', '2222', null]);
+  assert.notEqual(result.transactions[0].accountKey, result.transactions[1].accountKey);
+  assert.equal(result.transactions[2].accountKey, 'unidentified');
+  assert.doesNotMatch(JSON.stringify(result), /00001111|00002222/, 'full account numbers are not returned');
+});
+
+test('sign conventions and card hints are resolved separately for each mapped account', () => {
+  const csv = `Date,Account Number,Description,Amount
+2026-10-14,00001111,DEPOSIT,100
+2026-10-15,00001111,DEPOSIT,200
+2026-10-14,00002222,SHOP ONE,10
+2026-10-15,00002222,SHOP TWO,20`;
+  const preliminary = parse(csv);
+  const [bank, card] = preliminary.format.accounts;
+  const result = new TransactionCSVParser().parse(csv, 'mixed.csv', {
+    accountTypes: { [bank.key]: 'savings', [card.key]: 'credit_card' }
+  });
+  assert.deepEqual(result.transactions.map(row => row.direction), ['CREDIT', 'CREDIT', 'DEBIT', 'DEBIT']);
+  assert.equal(result.format.signConvention, 'per-account');
+});
+
+test('different full account numbers with the same ending retain separate mapping keys', () => {
+  const result = parse('Date,Account Number,Description,Debit\n2026-10-14,10001111,SHOP,10\n2026-10-14,20001111,SHOP,10');
+  assert.equal(result.transactions.length, 2);
+  assert.equal(result.format.accounts.length, 2);
+  assert.notEqual(result.format.accounts[0].key, result.format.accounts[1].key);
+});
+
+test('OFX uses its account identity and rejects multi-account files instead of merging them', () => {
+  const statement = '<STMTRS><BANKACCTFROM><ACCTID>00001111</BANKACCTFROM><BANKTRANLIST><STMTTRN><DTPOSTED>20261014<TRNAMT>-15<NAME>SHOP</STMTTRN></BANKTRANLIST></STMTRS>';
+  const result = parse(`<OFX>${statement}</OFX>`);
+  assert.equal(result.format.accounts[0].last4, '1111');
+  assert.equal(result.transactions[0].accountKey, result.format.accounts[0].key);
+  const multi = parse(`<OFX>${statement}${statement.replace('00001111', '00002222')}</OFX>`);
+  assert.equal(multi.transactions.length, 0);
+  assert.match(multi.errors[0], /Multi-account OFX/);
+});

@@ -298,7 +298,7 @@
       window.setImportStatus('progress', 'An import is already running. Import one file at a time; wait for its result before choosing another file.');
       return;
     }
-    if (kind === 'csv') pendingCsvFile = file;
+    if (kind === 'csv') { pendingCsvFile = file; window.FinanceAccounts?.resetCsv(); }
     else pendingPdfFile = file;
     $(`${kind}-file-list`).textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;
     $(`${kind}-import-btn`).disabled = false;
@@ -311,12 +311,12 @@
     }
     return files[0];
   }
-  window.onCsvSelected = event => { const file = singleImportFile(event.target.files); if (selectImportFile('csv', file)) window.FinanceAccounts?.suggestFromFile(file); };
+  window.onCsvSelected = event => { const file = singleImportFile(event.target.files); selectImportFile('csv', file); };
   window.onPdfSelected = event => { const file = singleImportFile(event.target.files); if (selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
   window.handleCsvDrop = event => {
     event.preventDefault();
     const file = singleImportFile(event.dataTransfer.files);
-    if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv') && selectImportFile('csv', file)) window.FinanceAccounts?.suggestFromFile(file);
+    if (file && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(file.name) || file.type === 'text/csv')) selectImportFile('csv', file);
   };
   window.handlePdfDrop = event => { event.preventDefault(); const file = singleImportFile(event.dataTransfer.files); if (file?.type === 'application/pdf' && selectImportFile('pdf', file)) window.FinanceAccounts?.suggestFromFile(file); };
 

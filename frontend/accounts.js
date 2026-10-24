@@ -24,6 +24,8 @@
   };
   let state = null;
   let kinds = [];
+  let csvInspection = null;
+  let csvGeneration = 0;
   const kindLabel = kind => kinds.find(item => item.value === kind)?.label || kind;
   const kindOptions = (selected, allowed = kinds.map(item => item.value)) => allowed
     .map(kind => `<option value="${kind}"${kind === selected ? ' selected' : ''}>${escape(kindLabel(kind))}</option>`).join('');
@@ -47,11 +49,10 @@
     if (!select || !state) return;
     const usable = state.accounts.filter(account => IMPORTABLE.includes(account.kind));
     const current = selectId ?? select.value;
-    select.innerHTML = `<option value="">Choose the account this file is from…</option>`
+    select.innerHTML = `<option value="">Detect accounts from the file (recommended)</option>`
       + usable.map(account => `<option value="${account.id}">${escape(describe(account))} · ${escape(kindLabel(account.kind))}</option>`).join('')
       + '<option value="new">+ New account…</option>';
     if (current && [...select.options].some(option => option.value === String(current))) select.value = String(current);
-    else if (!usable.length) select.value = 'new';
     syncNewFields();
   }
   function syncNewFields() {
@@ -64,7 +65,7 @@
   }
   async function loadPicker() {
     try {
-      await load();
+      await loadImportOptions();
       fillPicker();
     } catch (error) {
       const select = $('import-account-select');
@@ -113,6 +114,9 @@
   }
   function resultNote(data) {
     const parts = [];
+    if (data.accounts?.length > 1) {
+      parts.push(data.accounts.map(result => `<strong>${escape(describe(result.account))}</strong>: ${Number(result.imported)} imported, ${Number(result.duplicates)} duplicates skipped`).join('<br>'));
+    }
     if (data.account) parts.push(`Saved to <strong>${escape(describe(data.account))}</strong>.`);
     if (data.accountsDiscovered) parts.push(`Found ${data.accountsDiscovered} account reference${data.accountsDiscovered === 1 ? '' : 's'} in your transfers. <a href="#accounts" data-view="accounts">Review account ownership</a> so we can distinguish your own transfers from payments to other people.`);
     return parts.length ? `<div style="font-size: 12px; margin-top: 6px; color: var(--text-secondary);">${parts.join(' ')}</div>` : '';
@@ -124,6 +128,86 @@
     if (document.querySelector('#accounts-view.active')) render();
     await window.FinanceImportHistory?.load();
   }
+
+  async function loadImportOptions() {
+    state = await json('/api/accounts/import-options');
+    kinds = state.kinds || [];
+  }
+
+  function resetCsv() {
+    csvGeneration++;
+    csvInspection = null;
+    const root = $('csv-account-review');
+    if (root) { root.innerHTML = ''; root.hidden = true; }
+  }
+
+  function renderCsvReview(accounts) {
+    const root = $('csv-account-review');
+    root.hidden = false;
+    root.innerHTML = '<h3>Review account mapping</h3><p class="import-hint">Saved accounts are matched from the account numbers in this file. Choose or create each unmatched account once. Nothing has been imported yet.</p>'
+      + accounts.map((group, index) => {
+        const label = group.last4 ? `Account ending ${group.last4}` : 'Transactions without an account number';
+        if (!group.needsReview) return `<div class="csv-account-mapping"><strong>${escape(label)}</strong><p>Matched to ${escape(group.matchedAccountName)}</p></div>`;
+        const usable = state.accounts.filter(account => IMPORTABLE.includes(account.kind) && (!group.last4 || !account.last4 || account.last4 === group.last4));
+        return `<fieldset class="csv-account-mapping" data-csv-account="${escape(group.key)}"><legend>${escape(label)} (${Number(group.rows)} row${Number(group.rows) === 1 ? '' : 's'})</legend>
+          <p class="import-hint">${escape(group.reason)}</p>
+          <label for="csv-map-${index}">Save transactions to</label>
+          <select id="csv-map-${index}" data-csv-choice><option value="">Choose an account...</option>
+            ${usable.map(account => `<option value="${account.id}">${escape(describe(account))} · ${escape(kindLabel(account.kind))}</option>`).join('')}
+            <option value="new">+ Create an account...</option></select>
+          <div data-csv-new hidden class="import-new-account">
+            <label>Name<input data-csv-name maxlength="80" placeholder="e.g. TD checking"></label>
+            <label>Type<select data-csv-kind>${kindOptions('checking', IMPORTABLE)}</select></label>
+            <label>Bank<input data-csv-bank maxlength="80" placeholder="e.g. TD Bank"></label>
+          </div></fieldset>`;
+      }).join('');
+  }
+
+  async function prepareCsv(csvData, source) {
+    const generation = csvGeneration;
+    if (!csvInspection || csvInspection.csvData !== csvData || csvInspection.source !== source) {
+      await loadImportOptions();
+      if (generation !== csvGeneration) return null;
+      const data = await json('/api/import/inspect-csv', 'POST', { csvData, source });
+      if (generation !== csvGeneration) return null;
+      csvInspection = { csvData, source, accounts: data.accounts };
+      if (data.accounts.some(account => account.needsReview)) {
+        renderCsvReview(data.accounts);
+        window.setImportStatus?.('review', 'Review the account mapping, then choose Import transactions again. Nothing has been imported.');
+        $('csv-account-review').scrollIntoView({ block: 'nearest' });
+        return null;
+      }
+      $('csv-account-review').hidden = true;
+    }
+    const accountMappings = {};
+    for (const group of csvInspection.accounts.filter(account => account.needsReview)) {
+      const row = $('csv-account-review').querySelector(`[data-csv-account="${group.key}"]`);
+      const selected = row.querySelector('[data-csv-choice]');
+      if (!selected.value) {
+        window.setImportStatus?.('error', 'Choose or create an account for each unmatched group before importing.');
+        selected.focus();
+        return null;
+      }
+      if (selected.value === 'new') {
+        const name = row.querySelector('[data-csv-name]').value.trim();
+        if (!name) {
+          window.setImportStatus?.('error', 'Give each new account a name before importing.');
+          row.querySelector('[data-csv-name]').focus();
+          return null;
+        }
+        accountMappings[group.key] = { newAccount: { name, kind: row.querySelector('[data-csv-kind]').value,
+          last4: group.last4, institution: row.querySelector('[data-csv-bank]').value.trim() || null } };
+      } else accountMappings[group.key] = { accountId: Number(selected.value) };
+    }
+    return { accountMappings };
+  }
+
+  document.addEventListener('change', event => {
+    if (event.target.matches?.('[data-csv-choice]')) {
+      const row = event.target.closest('[data-csv-account]');
+      row.querySelector('[data-csv-new]').hidden = event.target.value !== 'new';
+    }
+  });
 
   // ---------- Accounts page ----------
   function freshness(account) {
@@ -304,5 +388,6 @@
       return result;
     };
   }
-  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, reset: () => { state = null; } };
+  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, prepareCsv, resetCsv,
+    reset: () => { state = null; resetCsv(); } };
 })();

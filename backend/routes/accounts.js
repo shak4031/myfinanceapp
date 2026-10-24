@@ -42,7 +42,7 @@ export function accountInput(body, { partial = false } = {}) {
 
 // Every import names the account it came from: an existing account id, or a new account to create.
 // A new account whose last four digits match one discovered from transfer wording adopts that account.
-export async function resolveImportAccount(client, body) {
+export async function resolveImportAccount(client, body, { reuseByLast4 = true } = {}) {
   const userId = currentUserId();
   if (body?.accountId != null && body.accountId !== '') {
     const id = Number(body.accountId);
@@ -54,7 +54,7 @@ export async function resolveImportAccount(client, body) {
   if (body?.newAccount) {
     const input = accountInput(body.newAccount);
     if (['unknown', 'external'].includes(input.kind)) throw failure(400, 'Choose the type of account this statement is from');
-    if (input.last4) {
+    if (input.last4 && reuseByLast4) {
       const existing = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id = $1 AND last4 = $2 ORDER BY (kind = 'unknown') DESC, id LIMIT 1`, [userId, input.last4])).rows[0];
       if (existing && (existing.kind === 'unknown' || existing.kind === input.kind)) {
         return (await client.query(`UPDATE accounts SET name = $1, kind = $2, institution = COALESCE($3, institution), status = 'active', updated_at = NOW()
@@ -99,6 +99,63 @@ export async function resolveStatementAccount(client, body, statement) {
   return (await client.query(`INSERT INTO accounts (user_id,name,kind,institution,last4,status) VALUES ($1,$2,$3,$4,$5,'active') RETURNING ${COLUMNS}`,
     [userId, name, statement.accountKind, statement.institution, statement.last4])).rows[0];
 }
+
+export async function inspectCsvAccounts(client, groups) {
+  const accounts = (await client.query('SELECT id,name,kind,last4 FROM accounts WHERE user_id=$1 ORDER BY id', [currentUserId()])).rows;
+  return groups.map(group => {
+    const sameEnding = groups.filter(other => other.last4 && other.last4 === group.last4);
+    const matches = group.last4 ? accounts.filter(account => account.last4 === group.last4) : [];
+    const match = sameEnding.length === 1 && matches.length === 1 && !['unknown', 'external'].includes(matches[0].kind)
+      ? matches[0] : null;
+    return { ...group, matchedAccountId: match?.id ?? null, matchedAccountName: match?.name ?? null,
+      ambiguous: sameEnding.length > 1 || matches.length > 1,
+      needsReview: !match, reason: !group.last4 ? 'No usable account number was found.'
+        : sameEnding.length > 1 ? 'Different account numbers share these last four digits. Map each separately.'
+          : matches.length > 1 ? 'Several saved accounts share these last four digits.'
+            : matches.length === 1 ? 'Confirm the account type and ownership before importing.'
+              : 'This account has not been saved yet.' };
+  });
+}
+
+export async function resolveCsvAccounts(client, body, groups) {
+  const detected = await inspectCsvAccounts(client, groups);
+  const resolved = new Map();
+  for (const group of detected) {
+    const explicit = body?.accountMappings?.[group.key];
+    const fallback = groups.length === 1 || group.key === 'unidentified' ? body : null;
+    const choice = explicit || (fallback?.accountId || fallback?.newAccount ? fallback : null);
+    if (!choice && group.needsReview) {
+      throw Object.assign(failure(422, 'Review the detected accounts before importing. Nothing was imported.'), {
+        code: 'ACCOUNT_REVIEW_REQUIRED', detectedAccounts: detected
+      });
+    }
+    const selected = choice || { accountId: group.matchedAccountId };
+    const account = await resolveImportAccount(client, {
+      ...selected,
+      ...(selected.newAccount ? { newAccount: { ...selected.newAccount, last4: selected.newAccount.last4 || group.last4 } } : {})
+    }, { reuseByLast4: !group.ambiguous });
+    if (account.kind === 'unknown') throw failure(422, 'Choose the account type before importing. Nothing was imported.');
+    if (choice && group.last4 && !account.last4) {
+      await client.query('UPDATE accounts SET last4=$1,updated_at=NOW() WHERE id=$2 AND user_id=$3',
+        [group.last4, account.id, currentUserId()]);
+      account.last4 = group.last4;
+    }
+    if (group.last4 && account.last4 !== group.last4) {
+      throw failure(422, `The file identifies account ending ${group.last4}, not the selected account. Choose or create its matching account. Nothing was imported.`);
+    }
+    if (group.last4 && [...resolved].some(([key, existing]) => key !== 'unidentified' && existing.id === account.id)) {
+      throw failure(422, 'Different detected account numbers cannot be mapped to the same account. Nothing was imported.');
+    }
+    resolved.set(group.key, account);
+  }
+  return resolved;
+}
+
+router.get('/import-options', route(async (req, res) => {
+  const accounts = (await db.all(`SELECT id,name,kind,institution,last4,status FROM accounts
+    WHERE user_id=$1 ORDER BY name,id`, [currentUserId()]));
+  res.json({ accounts, kinds: ACCOUNT_KINDS.map(value => ({ value, label: ACCOUNT_KIND_LABELS[value] })) });
+}));
 
 router.get('/', route(async (req, res) => {
   const userId = currentUserId();

@@ -29,6 +29,11 @@ starting with isolation disabled. Production requires HTTPS and `APP_ORIGIN`.
 
 The main application retains bill projections, debt payoff, goals, CSV/PDF
 imports, and category drill-downs, with an original light sidebar/card layout.
+CSV imports use account numbers in the file first, including TD multi-account
+exports. New, ambiguous, or unidentified accounts get a mapping review before
+anything saves; later uploads match saved accounts automatically when possible.
+Each account receives its own import-history batch. See
+[import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
 Spending coaching uses local, evidence-based calculations: no financial records
 are sent to an external AI service. It is budgeting guidance, not a licensed
 adviser's financial, tax, or investment advice.

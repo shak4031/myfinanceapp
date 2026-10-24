@@ -20,7 +20,9 @@ Check **I understand this impact and want to proceed**, then **Confirm undo**.
 Restore follows the same review, acknowledgement and **Confirm restore** flow.
 Cancelling, changing mode, refreshing or changing the selection discards the review.
 
-- Every successful CSV, PDF, or batch-file import has its own persistent batch ID.
+- Every successful account group in a CSV, PDF, or batch-file import has its own
+  persistent batch ID. A multi-account CSV produces one batch per destination
+  account, so its accounts can be diagnosed or undone independently.
   Rejected imports leave no transactions, new accounts or batch records.
 - Undo saves the current rows in a private, server-side database backup before removing
   them, atomically. Restore preserves IDs, original timestamps, manual categories,
@@ -49,11 +51,25 @@ Cancelling, changing mode, refreshing or changing the selection discards the rev
 
 ### Current API
 
-- `POST /api/import/import-csv`: `csvData`, `source`, and `accountId` or `newAccount`.
+- `POST /api/import/inspect-csv`: `csvData` and `source`. Returns masked account
+  groups, opaque mapping keys, row counts, and unique saved-account matches.
+  This read-only step creates no accounts, transactions, or import batches.
+- `GET /api/accounts/import-options`: lightweight account identity/type choices
+  for the import UI. Unlike the Accounts overview, it does not read transaction
+  history or calculate balances.
+- `POST /api/import/import-csv`: `csvData`, `source`, and optional `accountMappings`.
+  Accounts detected from the file are matched to saved accounts first. Unmatched,
+  ambiguous, or unidentified groups return `422 ACCOUNT_REVIEW_REQUIRED` with
+  `detectedAccounts`; nothing is imported. Map each unresolved group by its
+  inspection `key` to `{accountId: 123}` or
+  `{newAccount: {name: "TD savings", kind: "savings", institution: "TD Bank"}}`.
+  The detected last four digits are applied to a new account automatically.
+  Legacy `accountId`/`newAccount` are supported for single-account files and
+  unidentified rows, but cannot collapse a multi-account file into one account.
 - `POST /api/import/import-pdf`: `pdfBase64`, `source`, and optional account choice
   (otherwise the verified PDF identity is used).
-- `POST /api/import/import-batch`: one batch per successfully imported file; the whole
-  request commits atomically.
+- `POST /api/import/import-batch`: per-file account detection/mappings and one batch
+  per destination group; the whole request commits atomically.
 - `GET /api/import/history`: batch summaries plus an `untracked` transaction count.
   No raw backup transaction data is sent with the history list.
 - `POST /api/import/history/review`: `{ "ids": [123, 124], "action": "undo" }`
@@ -68,17 +84,44 @@ Cancelling, changing mode, refreshing or changing the selection discards the rev
   restore conflicts return HTTP 409. Missing review/acknowledgement returns HTTP 400.
   Tokens are database-backed and work across server instances and restarts.
 
-CSV files containing an account-number column are checked before saving. Mixed-account
-exports are rejected: export or split each account separately. A detected last-four
-ending that disagrees with the selected account's saved ending is also rejected.
-Only last-four endings, never full account numbers, appear in parser metadata.
+### Automatic account mapping (including TD multi-account CSVs)
+
+Choose a CSV and click **Import transactions**. The importer reads the account-number
+column (for example TD's `Account Number`) and separates the rows by account.
+When every group uniquely matches a saved account ending, the import proceeds
+without a global account picker. Otherwise **Review account mapping** lets you
+choose an existing account or name and create each new account, including its
+type. Click **Import transactions** again to confirm. Later imports use those
+saved accounts automatically when the endings are unambiguous.
+
+An account's type controls sign interpretation, so each group is parsed using its
+own mapped account type. Identical transactions in different accounts are not
+deduplicated against each other. All groups save in one database transaction:
+invalid mappings or a failed group roll back the whole upload, including new
+accounts. Results show imported/duplicate counts per account.
+
+Missing account numbers require an explicit fallback choice; they are never
+copied from adjacent rows or inferred from transfer descriptions. Filenames are
+not authoritative for CSV mapping. A selected account with a different saved
+ending is rejected. Explicitly selecting an existing account without a saved
+ending records the detected ending for future matching.
+
+Only last-four endings and opaque grouping keys, never full account numbers,
+appear in parser/inspection metadata. Saved identities currently use last-four
+digits: multiple saved accounts with the same ending, or different full numbers
+in one file with the same ending, require explicit mapping rather than a guess.
+Such ambiguities must be reviewed again on later uploads.
+
+Single-account OFX/QFX uses its `ACCTID` for mapping. Multi-account OFX is rejected
+instead of merging accounts; export separate OFX files or a multi-account CSV.
+PDF matching and statement validation retain their existing behavior.
 
 ### Correcting an overlapping or misassigned CSV import
 
 1. Confirm the affected filenames, timestamps and destination accounts in history.
 2. Review and confirm Undo only for the problematic imports. Do not delete older imports just because the
    same filename appears again.
-3. Split mixed-account files; select the correct account and account type for each.
+3. Review detected account mappings; correct the account and type for each group.
 4. Reimport the corrected exports and review skipped duplicates and totals. Existing
    deduplication compares account, date, direction, amount and normalized description;
    differently worded CSV and PDF rows may still require manual duplicate review.

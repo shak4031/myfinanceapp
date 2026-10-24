@@ -4,6 +4,13 @@
  */
 
 import { log } from './logger.js';
+import { createHash } from 'node:crypto';
+
+const accountIdentity = value => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  if (!normalized) return { accountKey: 'unidentified', accountLast4: null };
+  return { accountKey: createHash('sha256').update(normalized).digest('hex'), accountLast4: normalized.match(/(\d{4})$/)?.[1] || null };
+};
 
 /**
  * Category matching patterns for intelligent auto-categorization
@@ -181,7 +188,7 @@ class TransactionCSVParser {
     ], [date, amount, debit, credit]);
     const memo = pick([name => /^(memo|notes?|extended description)$/.test(name)], [description]);
     const balance = pick([name => /balance|running bal/.test(name)]);
-    const accountNumber = pick([name => /^(account number|account no\.?|account #|account id|acct number|acct no\.?)$/.test(name)]);
+    const accountNumber = pick([name => /^(account|account number|account no\.?|account #|account id|acct number|acct no\.?)$/.test(name)]);
     // Type-like columns are only used for unambiguous debit/credit words.
     const types = columns.map((name, i) => (/^(type|transaction type|trans(action)? type|tran type|details|transaction|debit\/credit|dr\/cr|cr\/dr|credit\/debit|indicator)$/.test(name) ? i : -1))
       .filter(i => i >= 0 && ![date, amount, debit, credit, description, balance].includes(i));
@@ -272,10 +279,10 @@ class TransactionCSVParser {
     return { date, description, memo: -1, amount, debit: -1, credit: -1, balance: -1, types: [], txnType: -1, columns: [] };
   }
 
-  parse(content, sourceFile = 'Unknown', { accountType = null } = {}) {
+  parse(content, sourceFile = 'Unknown', { accountType = null, accountTypes = {} } = {}) {
     this.reset();
     const text = String(content || '').replace(/^\uFEFF/, '');
-    if (/<OFX>|OFXHEADER:/i.test(text.slice(0, 4000))) return this.parseOfx(text, accountType);
+    if (/<OFX>|OFXHEADER:/i.test(text.slice(0, 4000))) return this.parseOfx(text, accountType, accountTypes);
 
     const rows = this.splitRecords(text, this.detectDelimiter(text));
     if (rows.length < 1) {
@@ -328,18 +335,30 @@ class TransactionCSVParser {
       const memo = map.memo >= 0 ? this.cleanString(row[map.memo]) : '';
       if (!description) description = memo;
       else if (memo && !/download|usbank|^\d+$/i.test(memo) && !description.toUpperCase().includes(memo.toUpperCase())) description = this.cleanString(`${description} ${memo}`);
-      parsed.push({ row: i + 1, date, description: description || 'Unknown', amount: Math.round(amount * 100) / 100, direction, signed, signedOnly, hint,
+      parsed.push({ ...accountIdentity(map.accountNumber >= 0 ? row[map.accountNumber] : null), row: i + 1, date, description: description || 'Unknown', amount: Math.round(amount * 100) / 100, direction, signed, signedOnly, hint,
         balance: map.balance >= 0 ? this.parseAmount(row[map.balance]) : null });
     }
 
-    const signConvention = this.resolveSigns(parsed, accountType);
+    const groups = new Map();
     for (const item of parsed) {
-      if (item.signedOnly) item.direction = item.hint || ((item.signed < 0) === (signConvention === 'negative-is-spending') ? 'DEBIT' : 'CREDIT');
+      if (!groups.has(item.accountKey)) groups.set(item.accountKey, []);
+      groups.get(item.accountKey).push(item);
+    }
+    const conventions = new Set();
+    for (const [key, items] of groups) {
+      const kind = accountTypes[key] || accountType;
+      const convention = this.resolveSigns(items, kind);
+      conventions.add(convention);
+      for (const item of items) {
+        item.accountType = kind;
+        if (item.signedOnly) item.direction = item.hint || ((item.signed < 0) === (convention === 'negative-is-spending') ? 'DEBIT' : 'CREDIT');
+      }
     }
     this.format = {
-      kind: 'csv', header: headerIndex >= 0, signConvention: parsed.some(item => item.signedOnly) ? signConvention : 'debit-credit-columns',
+      kind: 'csv', header: headerIndex >= 0, signConvention: parsed.some(item => item.signedOnly) ? conventions.size > 1 ? 'per-account' : [...conventions][0] : 'debit-credit-columns',
       accountCount: accountNumbers.size,
       accountLast4: [...new Set([...accountNumbers].map(value => value.match(/(\d{4})$/)?.[1]).filter(Boolean))],
+      accounts: [...groups].map(([key, items]) => ({ key, last4: items[0].accountLast4, rows: items.length })),
       columns: Object.fromEntries(['date', 'description', 'amount', 'debit', 'credit', 'balance'].filter(key => map[key] >= 0).map(key => [key, map.columns[map[key]] ?? `column ${map[key] + 1}`]))
     };
     return this.finish(parsed, accountType, sourceFile);
@@ -370,9 +389,9 @@ class TransactionCSVParser {
   finish(parsed, accountType, sourceFile) {
     const seen = new Set();
     let duplicates = 0;
-    const card = accountType === 'credit_card';
     for (const item of parsed) {
-      const key = `${item.date}|${item.description}|${item.amount}|${item.direction}`;
+      const card = (item.accountType || accountType) === 'credit_card';
+      const key = JSON.stringify([item.accountKey, item.date, item.description, item.amount, item.direction]);
       if (seen.has(key)) { duplicates++; continue; }
       seen.add(key);
       // A payment received on a card account moves money between your own accounts; it is not income.
@@ -380,7 +399,8 @@ class TransactionCSVParser {
       this.transactions.push({
         date: item.date, description: item.description, category: cardPayment ? 'Transfer' : categorizeTransaction(item.description, item.direction),
         amount: item.amount, direction: item.direction, balance: item.balance ?? null, source: sourceFile, type: item.direction,
-        ...(cardPayment ? { categoryHint: 'Transfer' } : {})
+        ...(cardPayment ? { categoryHint: 'Transfer' } : {}),
+        accountKey: item.accountKey, accountLast4: item.accountLast4
       });
     }
     log('PARSER', `Parsed ${this.transactions.length} transactions from ${sourceFile} (${this.format?.kind || 'csv'}, ${this.format?.signConvention || 'n/a'}), ${duplicates} duplicates, ${this.skipped} skipped, ${this.errors.length} errors`);
@@ -393,9 +413,15 @@ class TransactionCSVParser {
 
   // OFX/QFX/QBO (Quicken/QuickBooks downloads): a standard format with signed TRNAMT (negative = money out)
   // for bank and credit card accounts alike.
-  parseOfx(text, accountType) {
+  parseOfx(text, accountType, accountTypes = {}) {
     const tag = (block, name) => (block.match(new RegExp(`<${name}>([^<\\r\\n]*)`, 'i'))?.[1] || '').trim();
     const decode = value => value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+    const identity = accountIdentity(tag(text, 'ACCTID'));
+    if ((text.match(/<ACCTID>/gi) || []).length > 1) {
+      this.errors.push('Multi-account OFX files are not supported. Export each account as a separate OFX file, or use a multi-account CSV.');
+      return this.result();
+    }
+    accountType = accountTypes[identity.accountKey] || accountType;
     const isCard = /<CCSTMTRS>/i.test(text) || accountType === 'credit_card';
     const balance = this.parseAmount(tag(text.match(/<LEDGERBAL>[\s\S]*?(?:<\/LEDGERBAL>|$)/i)?.[0] || '', 'BALAMT'));
     const parsed = [];
@@ -407,11 +433,13 @@ class TransactionCSVParser {
       const name = decode(tag(block, 'NAME') || tag(block, 'PAYEE'));
       const memo = decode(tag(block, 'MEMO'));
       const description = this.cleanString(name && memo && !name.toUpperCase().includes(memo.toUpperCase()) && memo.length < 80 ? `${name} ${memo}` : name || memo) || 'Unknown';
-      parsed.push({ date, description, amount: Math.round(Math.abs(signed) * 100) / 100, direction: signed < 0 ? 'DEBIT' : 'CREDIT', balance: null });
+      parsed.push({ ...identity, date, description, amount: Math.round(Math.abs(signed) * 100) / 100, direction: signed < 0 ? 'DEBIT' : 'CREDIT', balance: null });
     });
     if (!blocks.length) this.errors.push('No transactions were found in this OFX/QFX file');
     if (parsed.length && balance !== null) parsed.at(-1).balance = balance;
-    this.format = { kind: 'ofx', header: true, signConvention: 'negative-is-spending', columns: {} };
+    this.format = { kind: 'ofx', header: true, signConvention: 'negative-is-spending', columns: {},
+      accountCount: identity.accountKey === 'unidentified' ? 0 : 1, accountLast4: identity.accountLast4 ? [identity.accountLast4] : [],
+      accounts: [{ key: identity.accountKey, last4: identity.accountLast4, rows: parsed.length }] };
     return this.finish(parsed, isCard ? 'credit_card' : accountType, 'OFX Import');
   }
 }

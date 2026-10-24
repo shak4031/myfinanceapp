@@ -16,6 +16,7 @@ window.FinanceSession = (() => {
     window.FinanceSpendingHistory?.reset();
     window.FinanceImportHistory?.reset();
     window.FinanceReviewTools?.reset();
+    window.FinanceAccounts?.reset();
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');
     if (cleanAppMarkup) document.querySelector('.app-container').innerHTML = cleanAppMarkup;

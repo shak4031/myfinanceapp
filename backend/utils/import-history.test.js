@@ -97,7 +97,8 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
 
     const mixed = await call('/api/import/import-csv', { csvData: csvData.replace('00001111,PAYMENT', '00002222,PAYMENT'), source: 'mixed.csv', accountId });
     assert.equal(mixed.status, 422);
-    assert.match(mixed.body.error, /multiple accounts/);
+    assert.equal(mixed.body.code, 'ACCOUNT_REVIEW_REQUIRED');
+    assert.equal(mixed.body.detectedAccounts.length, 2, 'multi-account files need mapping, not separate exports');
     const mismatch = await call('/api/import/import-csv', { csvData: csvData.replaceAll('00001111', '00003333'), accountId });
     assert.equal(mismatch.status, 422);
     assert.match(mismatch.body.error, /not the selected account/);

@@ -22,6 +22,7 @@ let dummyHash;
 
 // POST endpoints that only read data and are therefore allowed during read-only support access.
 const READ_ONLY_POSTS = new Set([
+  '/api/import/inspect-csv',
   '/api/transactions', '/api/transactions/categorization-preview',
   '/api/dashboard/summary', '/api/dashboard/upcoming-payments', '/api/dashboard/category-spending',
   '/api/dashboard/category-transactions', '/api/dashboard/category-trends',

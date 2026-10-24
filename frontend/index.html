@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="See where your money goes, build better spending habits, and plan for less debt and life's big moments. Start free with MyFinance.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261023c"></script>
+  <script src="session.js?v=20261023d"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -492,7 +492,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261030b">
+  <link rel="stylesheet" href="refresh.css?v=20261030c">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261031c">
   <link rel="stylesheet" href="categories.css?v=20261027a">
@@ -922,8 +922,8 @@
 
       <div class="import-content">
         <p class="import-hint" id="import-limit-note">Import one file at a time. Wait for its result before starting another CSV, OFX or PDF import. Multiple-file drops are not supported.</p>
-        <div id="import-account-picker" class="import-account">
-          <label for="import-account-select">Account <span class="muted">(required)</span></label>
+        <div id="import-account-picker" class="import-account" hidden>
+          <label for="import-account-select">Account <span class="muted">(PDF fallback)</span></label>
           <select id="import-account-select" aria-describedby="import-account-help"><option value="">Loading accounts…</option></select>
           <div id="import-new-account" class="import-new-account" hidden>
             <label>Name<input id="import-new-name" maxlength="80" placeholder="e.g. Chase checking"></label>
@@ -937,6 +937,7 @@
         <div id="import-csv-panel">
           <p class="import-description">
             Use a CSV, OFX or QFX bank export. Dates, columns and amounts are detected automatically.
+            Accounts are matched from the file, including multi-account CSVs. New or unidentified accounts are reviewed before anything is imported.
           </p>
           <input type="file" id="csv-input" accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo" style="display: none;" onchange="onCsvSelected(event)">
           <button type="button" id="csv-dropzone" class="import-dropzone" onclick="document.getElementById('csv-input').click()"
@@ -948,6 +949,7 @@
             <span>or drag it here · CSV, OFX, QFX</span>
           </button>
           <div id="csv-file-list" class="import-file-list" aria-live="polite"></div>
+          <section id="csv-account-review" aria-label="Review detected accounts" hidden></section>
           <div class="import-actions">
             <button type="button" class="btn btn-primary" onclick="importCSV()" disabled id="csv-import-btn">Import transactions</button>
           </div>
@@ -1658,13 +1660,14 @@
       document.getElementById('import-modal').close();
     }
     document.getElementById('import-modal').addEventListener('close', () => {
-      if (pdfImportInProgress) return;
+      if (pdfImportInProgress || csvImportInProgress) return;
       pendingPdfFile = null;
       document.getElementById('pdf-input').value = '';
       document.getElementById('pdf-file-list').textContent = '';
       document.getElementById('pdf-import-btn').disabled = true;
       pdfManualAccount = false;
-      if (document.getElementById('import-pdf-panel').style.display === 'block') document.getElementById('import-account-picker').hidden = true;
+      document.getElementById('import-account-picker').hidden = true;
+      FinanceAccounts.resetCsv();
     });
 
     function setImportStatus(kind, message) {
@@ -1687,7 +1690,7 @@
     }
 
     function switchImportTab(tab) {
-      document.getElementById('import-account-picker').hidden = tab === 'pdf' && !pdfManualAccount;
+      document.getElementById('import-account-picker').hidden = tab !== 'pdf' || !pdfManualAccount;
       document.getElementById('import-csv-panel').style.display = tab === 'csv' ? 'block' : 'none';
       document.getElementById('import-pdf-panel').style.display = tab === 'pdf' ? 'block' : 'none';
       document.getElementById('tab-csv').style.background = tab === 'csv' ? 'var(--primary)' : 'var(--bg-tertiary)';
@@ -1718,8 +1721,6 @@
     async function importCSV() {
       if (importIsBusy()) return;
       if (!pendingCsvFile) { setImportStatus('error', 'Select a bank export first.'); return; }
-      const account = FinanceAccounts.choice();
-      if (!account) return;
       const file = pendingCsvFile;
       csvImportInProgress = true;
       const button = document.getElementById('csv-import-btn');
@@ -1739,6 +1740,8 @@
           reader.readAsText(file);
         });
 
+        const account = await FinanceAccounts.prepareCsv(csvData, file.name);
+        if (!account) return;
         setImportStatus('progress', 'Processing transactions... Please wait for the result before importing another file.');
 
         reference = crypto.randomUUID();
@@ -1760,6 +1763,7 @@
             ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
             ${FinanceAccounts.resultNote(data)}
           `;
+          FinanceAccounts.resetCsv();
           FinanceAccounts.afterImport(data).catch(error => {
             resultDiv.innerHTML += `<p role="alert">Imported, but account refresh failed: ${escapeHtml(error.message)}. Reload to refresh.</p>`;
           });
@@ -1769,6 +1773,7 @@
           document.getElementById('csv-import-btn').disabled = true;
           loadDashboard();
         } else {
+          if (data.code === 'ACCOUNT_REVIEW_REQUIRED') FinanceAccounts.resetCsv();
           setImportStatus('error', data.error || `Import failed (${res.status}).`);
         }
       } catch (err) {
@@ -1949,8 +1954,8 @@
   </script>
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261023a"></script>
-  <script src="refresh.js?v=20261031e"></script>
-  <script src="accounts.js?v=20261023b"></script>
+  <script src="refresh.js?v=20261031f"></script>
+  <script src="accounts.js?v=20261023c"></script>
   <script src="import-history.js?v=20261023b"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261031c"></script>
@@ -1962,7 +1967,7 @@
   <script src="plan.js?v=20261031a"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261031e"></script>
+  <script src="tutorial.js?v=20261031f"></script>
   <script src="marketing.js?v=20261020c"></script>
   <script>FinanceSession.start();</script>
 </body>

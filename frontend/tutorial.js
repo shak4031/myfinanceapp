@@ -414,10 +414,10 @@
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Transactions is your complete history, every charge and deposit, one search away.',
           render: () => intro('TUTORIAL', 'Your transactions', 'Every detail, one search away.', ['📥', '🔍', '🧾', '✅']) },
-        { id: 'import', title: 'Bring in a statement', caption: 'Import a supported CSV, OFX or QFX file, or a supported PDF statement. Confirm the source account; PDF account details may be detected, but ambiguous matches need your choice. Valid new rows save directly to history. Review imported counts, duplicates, warnings and errors in the result. No bank login is needed.',
+        { id: 'import', title: 'Bring in a statement', caption: 'Import a supported CSV, OFX or QFX file, or a supported PDF statement. Accounts are matched from the file first, including multi-account CSVs. Review mappings for new, ambiguous or unidentified accounts before anything saves. Valid new rows save directly to history after any required mapping review, with a separate entry for each account. Review imported counts, duplicates, warnings and errors in the result. No bank login is needed.',
           render: () => `${chip(1, 'Bring in a statement')}
             <div class="tm-dialog tm-dialog-center tut-pop" ${at(0.3)}>
-              <b>Import statements</b><small>Supported CSV, OFX/QFX or PDF &middot; confirm the source account</small>
+              <b>Import statements</b><small>Supported CSV, OFX/QFX or PDF &middot; detect accounts, review unmatched groups</small>
               <div class="tm-drop"><span class="tut-off" ${at(1.6)}>Drop a file here</span><span class="tut-on tm-file" ${at(1.6)}>📊 checking-october.csv <small>38 KB</small></span></div>
               <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import</span>
             </div>${cursor('import', 2.4)}${toast('Example result: 84 imported; duplicates reported separately', 3.8)}` },
@@ -493,9 +493,9 @@
               { e: '1', title: 'Data as of', when: 'How recent is the financial picture?', asks: ['Latest transaction or statement coverage.', 'Older than 45 days: stale.', 'No data: import a recent statement.'] },
               { e: '2', title: 'Last data added', when: 'When were records imported?', asks: ['An import can contain old history.', 'Saving a name does not refresh data.', 'External recipients need no statement.'] }
             ])}` },
-        { id: 'refresh', title: 'Update with a statement', caption: 'To update financial data, choose Import a statement and confirm the same saved account. Do not create another account for each month. Review the import result, then check coverage and balances. Assign older imports without an account to the correct saved account. If no valid new rows are added, check whether the file contains newer dates.',
+        { id: 'refresh', title: 'Update with a statement', caption: 'To update financial data, choose Import a statement. Account details in the file match the same saved accounts automatically when unambiguous. Review mappings only for new, ambiguous or unidentified groups. Do not create another account for each month. Review the import result, then check coverage and balances. Assign older imports without an account to the correct saved account. If no valid new rows are added, check whether the file contains newer dates.',
           render: () => `${chip(4, 'Refresh records, not just labels')}
-            <div class="tm-panel"><small>AFTER EACH STATEMENT</small><div class="tm-kv"><span>1. Choose saved account</span><b>Check last four</b></div><div class="tm-kv"><span>2. Import recent activity</span><b>Read the result</b></div><div class="tm-kv"><span>3. Check data coverage</span><b>Confirm latest date</b></div><div class="tm-kv"><span>4. Review detected references</span><b>Mine or external?</b></div></div>` },
+            <div class="tm-panel"><small>AFTER EACH STATEMENT</small><div class="tm-kv"><span>1. Match file accounts</span><b>Review unmatched groups</b></div><div class="tm-kv"><span>2. Import recent activity</span><b>Read the result</b></div><div class="tm-kv"><span>3. Check data coverage</span><b>Confirm latest date</b></div><div class="tm-kv"><span>4. Review detected references</span><b>Mine or external?</b></div></div>` },
         { id: 'statements', title: 'Balances and debt are separate', caption: 'Recorded balances and credit-card statement facts come from imports, not a live bank feed. Supported statements may show the closing date, purchase APR, minimum and due date. Check separately entered debt-plan balances and rates yourself; saving account details does not automatically synchronize the debt-free plan.',
           render: () => `${chip(5, 'Statement facts are not a live connection')}
             ${compare([

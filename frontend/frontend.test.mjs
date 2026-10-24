@@ -353,6 +353,79 @@ test('account freshness marks only data older than 45 calendar days and keeps im
   assert.doesNotMatch(card(6), /acct-stale|NaN|Invalid Date/);
 });
 
+test('CSV imports use detected accounts without a required global account picker', async () => {
+  const calls = [];
+  const f = fixture(async (url, options) => {
+    calls.push([url, options]);
+    return response(200, url === '/api/accounts/import-options' ? { accounts: [], kinds: [] } : {
+      accounts: [{ key: 'checking', last4: '1111', needsReview: false, matchedAccountName: 'Checking' },
+        { key: 'savings', last4: '2222', needsReview: false, matchedAccountName: 'Savings' }]
+    });
+  });
+  f.run('accounts.js');
+  const result = await f.context.FinanceAccounts.prepareCsv('CSV DATA', 'td.csv');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { accountMappings: {} });
+  assert.equal(calls.filter(([url]) => url === '/api/import/inspect-csv').length, 1);
+  assert.equal(f.node('csv-account-review').hidden, true);
+  await f.context.FinanceAccounts.prepareCsv('CSV DATA', 'td.csv');
+  assert.equal(calls.length, 2, 'the same file does not need another inspection');
+  const html = source('index.html');
+  assert.match(html, /id="import-account-picker" class="import-account" hidden/);
+  const csv = html.slice(html.indexOf('    async function importCSV()'), html.indexOf('    let pendingPdfFile'));
+  assert.doesNotMatch(csv, /FinanceAccounts\.choice/);
+  assert.match(csv, /await FinanceAccounts\.prepareCsv/);
+});
+
+test('unmatched CSV accounts get a masked one-time review and separate mapping choices', async () => {
+  const f = fixture(async url => response(200, url === '/api/accounts/import-options'
+    ? { accounts: [{ id: 1, name: '<Checking>', kind: 'checking', last4: '1111' }],
+      kinds: [{ value: 'checking', label: 'Checking' }, { value: 'savings', label: 'Savings' }] }
+    : { accounts: [{ key: 'bank', last4: '1111', rows: 2, needsReview: true, reason: 'Confirm <account>' },
+      { key: 'save', last4: '2222', rows: 3, needsReview: true, reason: 'New account' }] }));
+  f.context.setImportStatus = (kind, message) => { f.context.status = [kind, message]; };
+  f.run('accounts.js');
+  assert.equal(await f.context.FinanceAccounts.prepareCsv('DATA', 'td.csv'), null);
+  assert.match(f.node('csv-account-review').innerHTML, /Account ending 1111/);
+  assert.match(f.node('csv-account-review').innerHTML, /Confirm &lt;account&gt;/);
+  assert.match(f.node('csv-account-review').innerHTML, /&lt;Checking&gt;/);
+  assert.equal(await f.context.FinanceAccounts.prepareCsv('DATA', 'td.csv'), null);
+  assert.match(f.context.status[1], /each unmatched group/);
+  const bank = f.node('csv-account-review').querySelector('[data-csv-account="bank"]');
+  bank.querySelector('[data-csv-choice]').value = '1';
+  const savings = f.node('csv-account-review').querySelector('[data-csv-account="save"]');
+  savings.querySelector('[data-csv-choice]').value = 'new';
+  savings.querySelector('[data-csv-name]').value = 'TD savings';
+  savings.querySelector('[data-csv-kind]').value = 'savings';
+  savings.querySelector('[data-csv-bank]').value = 'TD Bank';
+  const result = await f.context.FinanceAccounts.prepareCsv('DATA', 'td.csv');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { accountMappings: {
+    bank: { accountId: 1 }, save: { newAccount: { name: 'TD savings', kind: 'savings', last4: '2222', institution: 'TD Bank' } }
+  } });
+  const note = f.context.FinanceAccounts.resultNote({ accounts: [
+    { account: { name: '<Checking>', last4: '1111' }, imported: 2, duplicates: 0 },
+    { account: { name: 'Savings', last4: '2222' }, imported: 3, duplicates: 1 }
+  ] });
+  assert.match(note, /&lt;Checking&gt;/);
+  assert.match(note, /3 imported, 1 duplicates skipped/);
+});
+
+test('CSV inspection errors are explicit and late inspections cannot survive a session reset', async () => {
+  let resolve;
+  const f = fixture(url => url === '/api/accounts/import-options' ? Promise.resolve(response(200, { accounts: [], kinds: [] }))
+    : new Promise(done => { resolve = done; }));
+  f.run('accounts.js');
+  const pending = f.context.FinanceAccounts.prepareCsv('PRIVATE DATA', 'private.csv');
+  await new Promise(setImmediate);
+  f.context.FinanceAccounts.reset();
+  resolve(response(200, { accounts: [{ key: 'private', needsReview: true, last4: '1111' }] }));
+  assert.equal(await pending, null);
+  assert.equal(f.node('csv-account-review').innerHTML, '');
+  const failed = fixture(async url => response(url === '/api/accounts/import-options' ? 200 : 422,
+    url === '/api/accounts/import-options' ? { accounts: [], kinds: [] } : { error: 'No transactions could be read' }));
+  failed.run('accounts.js');
+  await assert.rejects(failed.context.FinanceAccounts.prepareCsv('BAD DATA', 'bad.csv'), /No transactions could be read/);
+});
+
 test('shared raised surfaces preserve nested spending cards, target states and reduced motion', () => {
   const css = source('refresh.css');
   assert.match(css, /--card-depth: inset 0 1px 0 #fff/);
@@ -558,7 +631,8 @@ test('account review requires an owned type and the not-mine action saves an ext
       pdfManualAccount: true,
       AbortSignal,
       crypto: { randomUUID: () => '1f21b779-639a-4206-a9d0-350f08587dcd' },
-      FinanceAccounts: { choice: () => ({ accountId: 1 }), afterImport: async () => {}, resultNote: () => '' },
+      FinanceAccounts: { choice: () => ({ accountId: 1 }), prepareCsv: async () => ({ accountMappings: {} }),
+        resetCsv() {}, afterImport: async () => {}, resultNote: () => '' },
       FileReader: class { readAsDataURL() { this.result = 'data:application/pdf;base64,JVBERg=='; setTimeout(() => this.onload(), 0); } },
       escapeHtml: f.context.FinanceTools.escape, usd: value => `$${Number(value).toFixed(2)}`,
       notify: message => notices.push(message)
