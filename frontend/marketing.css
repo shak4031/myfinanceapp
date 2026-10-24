@@ -52,6 +52,31 @@ body.auth-pending { height: auto; overflow: visible; }
 .marketing-first-step > span { font-size: 40px; color: var(--leaf); }
 .marketing-first-step p { font-size: 13px; line-height: 1.8; }
 .marketing-first-step strong { color: var(--ink); }
+.marketing-page.is-registering .marketing-hero { grid-template-columns: minmax(0, 1fr); max-width: 720px; margin: 24px auto 32px; gap: 0; }
+.marketing-page.is-registering .marketing-story,
+.marketing-page.is-registering .marketing-spotlight,
+.marketing-page.is-registering .marketing-first-step,
+.marketing-page.is-registering .auth-footnote { display: none; }
+.marketing-page.is-registering .marketing-access { padding: 0; max-width: none; }
+.marketing-page.is-registering .auth-card .brand-mark { width: 36px; height: 36px; margin-bottom: 12px; }
+.auth-signup-steps { display: flex; flex-wrap: wrap; gap: 12px 20px; list-style: none; padding: 0; margin: 20px 0; font-size: 12px; color: var(--muted-ink); }
+.auth-signup-steps[hidden] { display: none; }
+.auth-signup-steps li { display: flex; align-items: center; gap: 6px; }
+.auth-signup-steps li[aria-current] { color: var(--ink); font-weight: 750; }
+.auth-signup-steps li > span { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #e6ecd5; color: var(--ink); }
+.marketing-access .auth-plan-options { min-width: 0; margin: 0 0 10px; padding: 0; border: 0; }
+.auth-plan-options legend { font-size: 16px; font-weight: 750; padding: 0; }
+.auth-plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.marketing-access .auth-plan-option { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 16px; border: 2px solid #d4dece; border-radius: 12px; background: #fff; cursor: pointer; }
+.marketing-access .auth-plan-option:has(input:checked) { border-color: var(--leaf); background: #f0f4e6; }
+.marketing-access .auth-plan-option:has(input:focus-visible) { outline: 3px solid var(--leaf); outline-offset: 3px; }
+.marketing-access .auth-plan-option input { width: 18px; height: 18px; min-height: 0; margin: 2px 0 0; flex: none; accent-color: var(--leaf); }
+.auth-plan-option strong, .auth-plan-option b, .auth-plan-option small { display: block; }
+.auth-plan-option strong { font-size: 17px; }
+.auth-plan-option b { margin: 8px 0; font-size: 18px; color: var(--ink); }
+.auth-plan-option b span { font-size: 12px; font-weight: 500; }
+.auth-plan-option small { font-size: 12px; line-height: 1.6; color: var(--muted-ink); }
+.auth-trial-note { font-size: 12px; line-height: 1.6; color: var(--muted-ink); margin: 10px 0 14px; }
 .marketing-preview { background: #fffdf9; border: 1px solid #d9dfd1; border-radius: 20px; padding: 23px; max-width: 555px; box-shadow: 7px 8px 0 #dfe8ce; transform: rotate(-1deg); }
 .marketing-preview-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 9px; font-weight: 750; letter-spacing: 1px; }
 .marketing-sample { color: var(--muted-ink); letter-spacing: 0; font-weight: 500; }
@@ -211,6 +236,7 @@ body.auth-pending { height: auto; overflow: visible; }
   .marketing-price { font-size: 35px; }
 }
 @media (max-width: 760px) {
+  .auth-plan-grid { grid-template-columns: 1fr; }
   .marketing-nav { padding-block: 10px; gap: 8px; }
   .marketing-brand { font-size: 17px; gap: 8px; }
   .marketing-brand .brand-mark { width: 34px; height: 34px; }

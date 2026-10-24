@@ -48,7 +48,7 @@ export async function findOverlaps(client, transactions, accounts, body) {
     const choice = body.accountMappings?.[row.accountKey] || (accounts.size === 1 || row.accountKey === 'unidentified' ? body : {});
     rows.push({ index: row.index, incoming: { date: row.date, description: row.description, amount: row.amount,
       direction: row.direction, accountName: account.name, accountKind: account.kind, last4: account.last4,
-      accountId: choice.newAccount ? null : account.id },
+      accountId: choice.newAccount || account.autoCreated ? null : account.id },
     candidates: possible.map(candidate => ({ id: candidate.id, date: candidate.date, description: candidate.description,
       amount: candidate.amount, direction: candidate.direction, source: candidate.source,
       accountName: candidate.account_id === null ? null : account.name,

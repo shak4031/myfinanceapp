@@ -85,6 +85,13 @@ and adding a payment method in Stripe-hosted Checkout. Stripe automatically
 bills the selected plan at trial end unless cancelled. The server grants access
 from signed webhooks and current subscription state, never a success redirect.
 
+Trial eligibility is persisted per household. Cancelling and signing in again,
+or resubscribing under the same account, does not grant a second trial. Registering
+the same normalized email again is rejected. This is not person-level anti-abuse:
+the app cannot identify someone creating an unrelated account with a different
+email address, and does not currently prevent that person receiving another
+household trial.
+
 Card details stay with Stripe; this app stores customer/subscription IDs,
 plan/status and timestamps, not PAN/CVC. Billing owner name/email are sent to
 Stripe; financial transactions and bank statements are not. Stripe is an

@@ -97,10 +97,10 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
     const wrongSelection = await review([first.body.batchId]);
     assert.equal((await call('/api/import/history/undo', { ids: [repeated.body.batchId], acknowledged: true, reviewToken: wrongSelection.body.reviewToken })).status, 409);
 
-    const mixed = await call('/api/import/import-csv', { csvData: csvData.replace('00001111,PAYMENT', '00002222,PAYMENT'), source: 'mixed.csv', accountId });
+    const mixed = await call('/api/import/import-csv', { csvData: csvData.replace('00001111,PAYMENT', ',PAYMENT'), source: 'mixed.csv' });
     assert.equal(mixed.status, 422);
     assert.equal(mixed.body.code, 'ACCOUNT_REVIEW_REQUIRED');
-    assert.equal(mixed.body.detectedAccounts.length, 2, 'multi-account files need mapping, not separate exports');
+    assert.equal(mixed.body.detectedAccounts.length, 2, 'rows without account identity need mapping, not separate exports');
     const mismatch = await call('/api/import/import-csv', { csvData: csvData.replaceAll('00001111', '00003333'), accountId });
     assert.equal(mismatch.status, 422);
     assert.match(mismatch.body.error, /not the selected account/);

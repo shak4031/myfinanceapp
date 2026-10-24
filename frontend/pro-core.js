@@ -45,9 +45,21 @@
     document.body?.classList?.toggle('has-pro', !!entitlement?.plusActive);
     document.body?.classList?.toggle('has-pro-plus', !!entitlement?.plusActive);
     const label = planLabel();
-    document.querySelectorAll?.('.plus-nav-badge').forEach(node => { node.textContent = isPlusActive() ? 'PRO' : 'PRO · LOCKED'; });
+    function renderBadge(node) {
+      if (!node) return;
+      node.textContent = isPlusActive() ? 'PRO' : '';
+      if (!isPlusActive()) node.innerHTML = ICONS.lock;
+      node.setAttribute('aria-label', isPlusActive() ? 'Pro feature' : 'Pro feature locked. View upgrade options');
+      node.setAttribute('title', isPlusActive() ? 'Included in Pro' : 'View Pro upgrade options');
+      node.onclick = isPlusActive() ? null : event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openUpgrade();
+      };
+    }
+    document.querySelectorAll?.('.plus-nav-badge').forEach(renderBadge);
     const badge = $('pro-nav-badge');
-    if (badge) badge.textContent = entitlement?.tier === 'trial' ? 'TRIAL' : isPlusActive() ? 'PRO' : 'PRO · LOCKED';
+    renderBadge(badge);
     const bottom = document.querySelector?.('.sidebar-bottom');
     if (bottom && typeof bottom.insertBefore === 'function') {
       let chip = $('plan-chip');
@@ -83,7 +95,8 @@
     openUpgrade(reason);
     return false;
   }
-  const proTag = () => `<span class="pro-tag${isPlusActive() ? '' : ' is-locked'}">PRO</span>`;
+  const proTag = () => isPlusActive() ? '<span class="pro-tag">PRO</span>'
+    : `<span class="pro-tag is-locked" aria-label="Pro feature locked" title="View Pro upgrade options">${ICONS.lock}</span>`;
   const proSwitch = (id, label, on) => `<button type="button" class="pro-switch${isPlusActive() ? '' : ' is-locked'}" role="switch" aria-checked="${!!on && isPlusActive()}" data-pro-switch="${esc(id)}"><span class="pro-switch-track" aria-hidden="true"><span></span></span><span>${esc(label)}</span>${proTag()}</button>`;
   function refreshCurrentView() { globalThis.showView?.(location.hash.slice(1) || 'dashboard'); }
   async function openBudgets() {

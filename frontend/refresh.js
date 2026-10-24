@@ -328,6 +328,7 @@
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
+    else if (view === 'subscription') sub = ['basic', 'pro'].includes(sub) ? sub : '';
     else if (view === 'transactions') {
       if (sub && !validTransactionId(sub)) { notify('Invalid transaction link. Showing all transactions.'); sub = ''; }
       if (sub || transactionId) { clearTransactionFilters(); $('txn-filter-period').value = ''; }

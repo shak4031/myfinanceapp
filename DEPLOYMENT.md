@@ -122,6 +122,13 @@ indefinitely. MFA and self-service account deletion are not implemented.
 
 ## Household subscriptions and Stripe rollout
 
+For a structured, step-by-step checklist covering Stripe Dashboard setup, server
+environment variables, restart instructions and acceptance tests, see
+[the readable HTML guide](./STRIPE_SETUP.html) or
+[STRIPE_SETUP.json](./STRIPE_SETUP.json). These are documentation with placeholders,
+not a configuration file loaded by the application; enter secrets in your host's
+environment settings.
+
 Keep `ALLOW_REGISTRATION=false` throughout staging. This migration creates a
 household and owner membership for every existing independent user, without
 moving financial records. Both legacy paid tiers become new Pro licenses to
@@ -138,7 +145,10 @@ code without a compatible schema/plan migration.
    `checkout.session.completed`, `checkout.session.expired`,
    `customer.subscription.created`, `customer.subscription.updated`,
    `customer.subscription.deleted`, `customer.subscription.trial_will_end`,
-   `invoice.paid` and `invoice.payment_failed`. The endpoint verifies the raw
+   `invoice.paid`, `invoice.payment_failed`, `subscription_schedule.created`,
+   `subscription_schedule.updated`, `subscription_schedule.released`,
+   `subscription_schedule.completed`, `subscription_schedule.canceled` and
+   `subscription_schedule.aborted`. The endpoint verifies the raw
    body and Stripe signature; do not proxy-transform it. It does not use browser
    sessions or browser CSRF rules. Events are idempotent, fetch authoritative
    subscription state and fail/retry on processing errors.
@@ -151,7 +161,25 @@ code without a compatible schema/plan migration.
 4. The app creates a Stripe portal configuration with cancellation at period end,
    payment-method updates and invoices. No card information is stored locally.
    Test your Stripe account's cancellation settings and hosted disclosures before
-   launch. Subscription price changes through the portal are not enabled.
+   launch. Active Basic owners without pending changes or scheduled cancellation
+   can use the app's Upgrade to Pro in Stripe button. This opens a targeted
+   confirmation flow with immediate prorated invoicing and an unchanged renewal
+   date. Pro unlocks only after a verified webhook confirms a paid upgrade
+   invoice. Test successful, declined and authentication-required upgrades in
+   sandbox. Pro owners (including Pro-selected trials) can explicitly consent in
+   app billing to Basic USD 9.99/month starting at the next renewal/trial expiry.
+   This uses Stripe subscription schedules because the products are separate;
+   do not assume the portal's same-product scheduled downgrade applies.
+   Ensure restricted API keys permit schedule create/read/update/release and
+   subscription metadata updates. The current Pro phase and original trial end
+   are retained, followed by one month of Basic and `end_behavior=release`.
+   Neither schedule creation nor phase transition creates prorations.
+   Test next-renewal timing, unchanged Pro access beforehand, trial reminder
+   Basic pricing, retries after lost responses, duplicate confirmation, member
+   rejection, and data preservation at Basic transition. Keep Pro removes the
+   scheduled change before the cancellation portal is available; conflicting
+   external schedules, cancellation, or payment updates are rejected. Schedule
+   events retrieve authoritative live subscription state, not event snapshots.
 5. Keep at least one server instance always running. The startup worker checks
    every minute for trial reminders due within 24 hours, using database locks
    across instances. Configure/test SMTP and monitor `billing.reminder_failed`.

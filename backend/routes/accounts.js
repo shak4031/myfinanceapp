@@ -105,15 +105,19 @@ export async function inspectCsvAccounts(client, groups) {
   return groups.map(group => {
     const sameEnding = groups.filter(other => other.last4 && other.last4 === group.last4);
     const matches = group.last4 ? accounts.filter(account => account.last4 === group.last4) : [];
-    const match = sameEnding.length === 1 && matches.length === 1 && !['unknown', 'external'].includes(matches[0].kind)
+    const typeConflict = group.typeAmbiguous || (group.kind && matches.length === 1 && matches[0].kind !== group.kind);
+    const match = !typeConflict && sameEnding.length === 1 && matches.length === 1 && !['unknown', 'external'].includes(matches[0].kind)
       ? matches[0] : null;
+    const autoCreate = !!group.last4 && !typeConflict && sameEnding.length === 1 && matches.length === 0;
     return { ...group, matchedAccountId: match?.id ?? null, matchedAccountName: match?.name ?? null,
+      autoCreate,
       ambiguous: sameEnding.length > 1 || matches.length > 1,
-      needsReview: !match, reason: !group.last4 ? 'No usable account number was found.'
+      needsReview: !match && !autoCreate, reason: typeConflict ? 'The file account type is ambiguous or conflicts with a saved account. Confirm the correct account type.'
+        : !group.last4 ? 'No usable account number was found.'
         : sameEnding.length > 1 ? 'Different account numbers share these last four digits. Map each separately.'
           : matches.length > 1 ? 'Several saved accounts share these last four digits.'
             : matches.length === 1 ? 'Confirm the account type and ownership before importing.'
-              : 'This account has not been saved yet.' };
+              : 'A new account will be created from the account number in this file.' };
   });
 }
 
@@ -129,12 +133,16 @@ export async function resolveCsvAccounts(client, body, groups) {
         code: 'ACCOUNT_REVIEW_REQUIRED', detectedAccounts: detected
       });
     }
-    const selected = choice || { accountId: group.matchedAccountId };
+    const kind = group.kind || 'other';
+    const selected = choice || (group.autoCreate ? { newAccount: {
+      name: `${ACCOUNT_KIND_LABELS[kind]} ending ${group.last4}`, kind, last4: group.last4
+    } } : { accountId: group.matchedAccountId });
     const account = await resolveImportAccount(client, {
       ...selected,
       ...(selected.newAccount ? { newAccount: { ...selected.newAccount, last4: selected.newAccount.last4 || group.last4 } } : {})
     }, { reuseByLast4: !group.ambiguous });
     if (account.kind === 'unknown') throw failure(422, 'Choose the account type before importing. Nothing was imported.');
+    account.autoCreated = !choice && group.autoCreate;
     if (choice && group.last4 && !account.last4) {
       await client.query('UPDATE accounts SET last4=$1,updated_at=NOW() WHERE id=$2 AND user_id=$3',
         [group.last4, account.id, currentUserId()]);

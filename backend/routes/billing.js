@@ -1,20 +1,37 @@
 import { Router } from 'express';
-import { administrativeTransaction } from '../db.js';
 import { getEntitlement } from '../utils/license.js';
-import { billingConfigured, checkout, billingPortal, stripeClient, handleStripeEvent } from '../utils/billing.js';
+import { billingConfigured, checkout, billingPortal, billingSubscription, scheduleDowngrade, cancelDowngrade, stripeClient, handleStripeEvent } from '../utils/billing.js';
 import { ownerOnly } from '../utils/households.js';
 import { recordAudit, structuredLog } from '../utils/audit.js';
 
 const router = Router();
 router.get('/', async (req, res, next) => {
   try {
-    const subscription = await administrativeTransaction(async client => {
-      const row = (await client.query(`SELECT status,plan,trial_ends_at,current_period_end,cancel_at_period_end
-        FROM household_subscriptions WHERE household_id=$1`, [req.household.id])).rows[0];
-      return row || null;
-    });
+    const subscription = await billingSubscription(req.household);
     res.json({ owner: req.household.role === 'owner', configured: billingConfigured(),
       entitlement: await getEntitlement(req.user.id), subscription });
+  } catch (error) {
+    if (error.status === 503) return res.status(503).json({ error: error.message });
+    next(error);
+  }
+});
+router.post('/downgrade', async (req, res, next) => {
+  try {
+    ownerOnly(req);
+    const result = await scheduleDowngrade(req.household, req.body?.consent, req.body?.effectiveAt);
+    await recordAudit(req, 'billing.downgrade_scheduled', 'success', { detail: result.pending_change });
+    res.json(result);
+  } catch (error) {
+    if (error.status === 503) return res.status(503).json({ error: error.message });
+    next(error);
+  }
+});
+router.post('/downgrade/cancel', async (req, res, next) => {
+  try {
+    ownerOnly(req);
+    const result = await cancelDowngrade(req.household);
+    await recordAudit(req, 'billing.downgrade_removed', 'success');
+    res.json(result);
   } catch (error) { next(error); }
 });
 router.post('/checkout', async (req, res, next) => {
@@ -32,7 +49,9 @@ router.post('/checkout', async (req, res, next) => {
 router.post('/portal', async (req, res, next) => {
   try {
     ownerOnly(req);
-    res.json(await billingPortal(req.household));
+    const result = await billingPortal(req.household, req.body?.plan);
+    if (req.body?.plan) await recordAudit(req, 'billing.upgrade_started', 'success', { detail: { plan: req.body.plan } });
+    res.json(result);
   } catch (error) {
     if (error.status === 503) return res.status(503).json({ error: error.message });
     next(error);

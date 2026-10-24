@@ -1,5 +1,7 @@
 .household-card { max-width: 960px; padding: clamp(18px, 3vw, 32px); }
 .household-card h2 { margin-top: 0; }
+.household-setup-steps { display: flex; flex-wrap: wrap; gap: 10px 24px; list-style: none; padding: 0; margin: 0 0 20px; font-size: 13px; }
+.household-setup-steps li[aria-current] { font-weight: 750; text-decoration: underline; text-underline-offset: 5px; }
 .household-card fieldset, #household-billing-dialog fieldset { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
 .household-card legend, #household-billing-dialog legend { margin-bottom: 12px; font-weight: 700; }
 .household-consent { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; }

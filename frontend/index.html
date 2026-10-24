@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance Basic or Pro. Start a 15-day Pro trial with a selected plan and payment details in Stripe Checkout.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261024-household"></script>
+  <script src="session.js?v=20261024-signup"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -501,8 +501,8 @@
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261023b">
-  <link rel="stylesheet" href="marketing.css?v=20261024-household">
-  <link rel="stylesheet" href="household.css?v=20261024a">
+  <link rel="stylesheet" href="marketing.css?v=20261024-signup">
+  <link rel="stylesheet" href="household.css?v=20261024-signup">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
@@ -546,8 +546,22 @@
       <p class="eyebrow">MYFINANCE / YOUR NEXT CHAPTER</p>
       <h2 id="auth-title">A clearer picture of your money.</h2>
       <p class="muted" id="auth-description">Checking your secure session…</p>
+      <ol class="auth-signup-steps" id="auth-signup-steps" aria-label="Account setup steps" hidden>
+        <li aria-current="step"><span>1</span> Plan &amp; account</li>
+        <li><span>2</span> Verify email</li>
+        <li><span>3</span> Secure checkout</li>
+      </ol>
       <div class="auth-plan" id="auth-plan" role="status" hidden><p class="auth-plan-head"><span>Your plan</span><strong id="auth-plan-name"></strong><b id="auth-plan-price"></b></p><p class="auth-plan-note" id="auth-plan-note"></p><p class="auth-plan-links"><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Change plan</a><button class="link-button" id="auth-plan-clear" type="button">Clear choice</button></p></div>
       <form id="auth-form" hidden>
+        <fieldset class="auth-plan-options" id="auth-plan-options" hidden>
+          <legend>Choose your household plan</legend>
+          <p class="auth-trial-note">Both plans start with 15 days of Pro. Your selection is the plan you pay for after the trial.</p>
+          <div class="auth-plan-grid">
+            <label class="auth-plan-option"><input id="auth-plan-basic" type="radio" name="signup-plan" value="basic" disabled><span><strong>Basic</strong><b>USD $9.99<span> / month</span></b><small>Accounts, statement imports, transactions, categories and everyday dashboard.</small></span></label>
+            <label class="auth-plan-option"><input id="auth-plan-pro" type="radio" name="signup-plan" value="pro" disabled><span><strong>Pro</strong><b>USD $14.99<span> / month</span></b><small>Everything in Basic, plus analytics, budgets, debt planning and savings goals.</small></span></label>
+          </div>
+          <p class="auth-trial-note">One monthly subscription per household. After the trial, Stripe charges your selected plan automatically unless you cancel. Payment details and billing consent are collected in the next steps, not on this form.</p>
+        </fieldset>
         <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="100"></label>
         <label id="auth-email-label">Email<input id="auth-email" type="email" autocomplete="username" required></label>
         <label id="auth-password-label">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="12" required></label>
@@ -937,7 +951,7 @@
         <div id="import-csv-panel">
           <p class="import-description">
             Use a CSV, OFX or QFX bank export. Dates, columns and amounts are detected automatically.
-            Accounts are matched from the file, including multi-account CSVs. New or unidentified accounts are reviewed before anything is imported.
+            Accounts are matched from the file, including multi-account CSVs. Identified new accounts are created automatically; missing or ambiguous account details need your review.
           </p>
           <input type="file" id="csv-input" accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo" style="display: none;" onchange="onCsvSelected(event)">
           <button type="button" id="csv-dropzone" class="import-dropzone" onclick="document.getElementById('csv-input').click()"
@@ -1971,12 +1985,12 @@
   </script>
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261024a"></script>
-  <script src="refresh.js?v=20261031-household"></script>
-  <script src="accounts.js?v=20261024b"></script>
+  <script src="refresh.js?v=20261024-signup"></script>
+  <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261026-household"></script>
   <script src="pro-charts.js?v=20261031c"></script>
-  <script src="pro-core.js?v=20261024-household"></script>
+  <script src="pro-core.js?v=20261024-pro-locks"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
@@ -1984,9 +1998,9 @@
   <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261031-household"></script>
+  <script src="tutorial.js?v=20261024-auto-accounts"></script>
   <script src="marketing.js?v=20261024-household"></script>
-  <script src="household.js?v=20261024a"></script>
+  <script src="household.js?v=20261024-plan-changes"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

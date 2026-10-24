@@ -62,15 +62,12 @@ test('CSV account detection, reviewed mappings, atomic imports and per-account r
     const preview = await call('/api/import/inspect-csv', { csvData, source: 'td.csv' });
     assert.equal(preview.status, 200);
     assert.deepEqual(preview.body.accounts.map(group => group.last4), ['1111', '2222']);
-    assert.ok(preview.body.accounts.every(group => group.needsReview));
+    assert.ok(preview.body.accounts.every(group => !group.needsReview && group.autoCreate));
     assert.equal(await count('accounts'), 0);
     assert.equal(await count('transactions'), 0);
     assert.equal(await count('import_batches'), 0);
     assert.doesNotMatch(JSON.stringify(preview.body), /00001111|00002222/);
     const [checking, savings] = preview.body.accounts;
-    const missing = await call('/api/import/import-csv', { csvData });
-    assert.equal(missing.status, 422);
-    assert.equal(missing.body.code, 'ACCOUNT_REVIEW_REQUIRED');
     const mappings = {
       [checking.key]: { newAccount: { name: 'TD checking', kind: 'checking', institution: 'TD Bank' } },
       [savings.key]: { newAccount: { name: 'TD savings', kind: 'savings', institution: 'TD Bank' } }
@@ -162,11 +159,65 @@ test('CSV account detection, reviewed mappings, atomic imports and per-account r
     cookie = other.headers.get('set-cookie').split(';')[0];
     const privatePreview = (await call('/api/import/inspect-csv', { csvData })).body;
     assert.ok(privatePreview.accounts.every(group => group.matchedAccountId === null), 'other tenants do not see account matches');
+    assert.ok(privatePreview.accounts.every(group => group.autoCreate && !group.needsReview));
     assert.equal((await call('/api/import/import-csv', {
       csvData, accountMappings: {
         [checking.key]: { accountId: bankResult.account.id }, [savings.key]: { accountId: savingsResult.account.id }
       }
     })).status, 400);
+    const beforeFreshImport = await count('transactions');
+    const beforeFreshAccounts = await count('accounts');
+    const incomplete = await call('/api/import/import-csv', { csvData: partialCsv, source: 'fresh-partial.csv' });
+    assert.equal(incomplete.status, 422);
+    assert.equal(incomplete.body.code, 'ACCOUNT_REVIEW_REQUIRED');
+    assert.equal(await count('accounts'), beforeFreshAccounts, 'missing identity rolls back automatically created accounts');
+    assert.equal(await count('transactions'), beforeFreshImport);
+    const fresh = await call('/api/import/import-csv', { csvData, source: 'same-td.csv' });
+    assert.equal(fresh.status, 200, JSON.stringify(fresh.body));
+    assert.equal(fresh.body.imported, 4, 'identical CSV in a new household imports every transaction');
+    assert.equal(fresh.body.duplicates, 0);
+    assert.equal(fresh.body.accounts.length, 2);
+    assert.ok(fresh.body.accounts.every(result => result.account.autoCreated && result.account.kind === 'other'));
+    assert.ok(fresh.body.accounts.every(result => ![bankResult.account.id, savingsResult.account.id].includes(result.account.id)));
+    assert.equal(await count('transactions'), beforeFreshImport + 4);
+    const freshReplay = await call('/api/import/import-csv', { csvData, source: 'same-td-replay.csv' });
+    assert.equal(freshReplay.status, 200);
+    assert.equal(freshReplay.body.imported, 0);
+    assert.equal(freshReplay.body.duplicates, 4, 'duplicates only skip on reimport within the new household');
+    assert.equal(await count('accounts'), beforeFreshAccounts + 2, 'reimport reuses the automatically created accounts');
+    const typedCsv = 'Date,Account Number,Account Type,Description,Debit,Credit\n2026-10-22,00008888,Savings,SAVED,,50';
+    const typed = await call('/api/import/import-csv', { csvData: typedCsv });
+    assert.equal(typed.status, 200, JSON.stringify(typed.body));
+    assert.equal(typed.body.account.kind, 'savings');
+    assert.equal(typed.body.account.last4, '8888');
+    const conflicting = await call('/api/import/inspect-csv', { csvData: typedCsv.replace('Savings', 'Checking') });
+    assert.equal(conflicting.body.accounts[0].needsReview, true, 'type conflicts require review rather than creating another account');
+    const autoOverlapCsv = 'Date,Account Number,Description,Debit\n2026-10-23,00009999,LEGACY PURCHASE,37';
+    await database.query(`INSERT INTO transactions(user_id,date,description,amount,direction,category)
+      VALUES($1,'2026-10-23','LEGACY PURCHASE',37,'DEBIT','Shopping')`, [other.body.user.id]);
+    const autoOverlapBody = { csvData: autoOverlapCsv, source: 'auto-overlap.csv' };
+    const autoOverlap = await call('/api/import/import-csv', autoOverlapBody);
+    assert.equal(autoOverlap.status, 409);
+    assert.equal(autoOverlap.body.code, 'OVERLAP_REVIEW_REQUIRED');
+    const autoReview = await call('/api/import/review-csv-overlaps', autoOverlapBody);
+    assert.equal(autoReview.status, 200);
+    assert.equal(autoReview.body.rows.length, 1);
+    const confirmedAuto = await call('/api/import/import-csv', { ...autoOverlapBody, overlapReview: {
+      reviewToken: autoReview.body.reviewToken, acknowledged: true,
+      decisions: [{ index: autoReview.body.rows[0].index, transactionId: autoReview.body.rows[0].candidates[0].id }]
+    } });
+    assert.equal(confirmedAuto.status, 200, JSON.stringify(confirmedAuto.body));
+    assert.equal(confirmedAuto.body.assigned, 1, 'auto-created account overlap review survives rolled-back preview account IDs');
+    assert.equal(confirmedAuto.body.imported, 0);
+    assert.equal(confirmedAuto.body.duplicates, 1);
+    const concurrentCsv = 'Date,Account Number,Description,Debit\n2026-10-24,00006666,CONCURRENT FIRST IMPORT,19';
+    const beforeConcurrentAccounts = await count('accounts');
+    const concurrent = await Promise.all([call('/api/import/import-csv', { csvData: concurrentCsv }),
+      call('/api/import/import-csv', { csvData: concurrentCsv })]);
+    assert.ok(concurrent.every(result => result.status === 200), JSON.stringify(concurrent.map(result => result.body)));
+    assert.equal(concurrent.reduce((sum, result) => sum + result.body.imported, 0), 1);
+    assert.equal(concurrent.reduce((sum, result) => sum + result.body.duplicates, 0), 1);
+    assert.equal(await count('accounts'), beforeConcurrentAccounts + 1, 'simultaneous first imports create one account, not two');
     cookie = ownerCookie;
   } finally {
     await new Promise(resolve => server.close(resolve));

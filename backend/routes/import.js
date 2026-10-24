@@ -64,7 +64,7 @@ const stage = (req, name, detail = {}) => {
 
 const ACCOUNT_TYPES = new Set(['checking', 'savings', 'credit_card']);
 // Parser sign conventions only distinguish cards from deposit accounts.
-const PARSER_TYPE = { checking: 'checking', savings: 'savings', credit_card: 'credit_card', loan: 'credit_card', investment: 'savings', crypto: 'savings', other: 'checking', unknown: 'checking' };
+const PARSER_TYPE = { checking: 'checking', savings: 'savings', credit_card: 'credit_card', loan: 'credit_card', investment: 'savings', crypto: 'savings', other: null, unknown: 'checking' };
 
 async function parseFile({ type, data, source, accountType, accountTypes }) {
   if (typeof data !== 'string' || !data.trim()) throw failure(400, 'File data is required');
@@ -164,7 +164,8 @@ async function importCsvInto(client, body, parsed, config, fallbackSource, req, 
     const result = await importTransactions(client, transactions, config, source, account.id, { batchId });
     result.duplicates += reviewed.duplicates.get(account.id) || 0;
     await finishImport(client, batchId, result);
-    results.push({ ...result, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } });
+    results.push({ ...result, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4,
+      autoCreated: account.autoCreated } });
   }
   return { imported: results.reduce((sum, result) => sum + result.imported, 0),
     duplicates: results.reduce((sum, result) => sum + result.duplicates, 0), assigned: reviewed.assigned, excluded: 0, accounts: results,

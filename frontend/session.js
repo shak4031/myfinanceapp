@@ -62,6 +62,13 @@ window.FinanceSession = (() => {
   };
   function renderMode() {
     const recovery = mode === 'forgot' || mode === 'reset';
+    el('auth-screen').classList.toggle('is-registering', mode === 'register');
+    el('auth-signup-steps').hidden = mode !== 'register';
+    el('auth-plan-options').hidden = mode !== 'register';
+    for (const plan of ['basic', 'pro']) {
+      el(`auth-plan-${plan}`).disabled = mode !== 'register';
+      el(`auth-plan-${plan}`).required = mode === 'register';
+    }
     el('auth-form').hidden = false;
     el('auth-title').textContent = ['invite', 'accept'].includes(mode) ? 'Join your household.' : mode === 'setup' ? 'Your fresh start begins here.' : mode === 'register' ? 'Make room for your next chapter.'
       : mode === 'forgot' ? 'Reset your password.' : mode === 'reset' ? 'Choose a new password.' : 'Welcome back.';
@@ -79,11 +86,11 @@ window.FinanceSession = (() => {
     el('auth-token').required = mode === 'setup';
     el('auth-password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     el('auth-password').minLength = mode === 'login' ? 1 : 12;
-    el('auth-submit').textContent = mode === 'accept' ? 'Join invited household' : mode === 'invite' ? 'Create login and join household' : mode === 'setup' ? 'Create owner account' : mode === 'register' ? 'Create account'
+    el('auth-submit').textContent = mode === 'accept' ? 'Join invited household' : mode === 'invite' ? 'Create login and join household' : mode === 'setup' ? 'Create owner account' : mode === 'register' ? 'Create account & verify email'
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
     el('auth-switch').hidden = inviteToken || recovery || mode === 'setup' ? false : !registrationEnabled;
     el('auth-switch').textContent = mode === 'accept' ? 'Keep my current household' : mode === 'invite' ? 'Already have an account? Sign in to join' : inviteToken && mode === 'login' ? 'Create a login for this invitation' : recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
-    if (mode === 'register') el('auth-description').textContent = 'Choose Basic (USD 9.99/month) or Pro (USD 14.99/month) per household. Start a 15-day Pro trial after selecting a plan and adding payment details in Stripe Checkout. Your selected plan charges automatically unless cancelled.';
+    if (mode === 'register') el('auth-description').textContent = 'Choose your household plan and create your login below. Next, verify your email and add payment details in Stripe Checkout to start your 15-day Pro trial. No subscription starts when you create this account.';
     if (mode === 'invite') el('auth-description').textContent = 'Create your own login to edit your household’s shared finances. The household owner manages billing and members.';
     if (mode === 'accept') el('auth-description').textContent = 'Join with your existing login to edit the invited household’s shared finances. You can join only if your current household has no financial data or paid access. The invited household’s owner manages billing and membership.';
     el('auth-forgot').hidden = mode !== 'login';
@@ -100,12 +107,14 @@ window.FinanceSession = (() => {
     basic: { name: 'Basic', price: 'USD 9.99 / month per household', note: 'Core finances for your household. Continue after sign-in to select your plan and provide payment details in Stripe hosted Checkout.' },
     pro: { name: 'Pro', price: 'USD 14.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Continue after sign-in to Stripe hosted Checkout. The 15-day trial includes all Pro features and auto-charges your selected plan unless cancelled.' }
   };
+  let chosenPlan = '';
   const store = {
-    get() { try { const plan = globalThis.localStorage?.getItem(PLAN_KEY); return PLANS[plan] ? plan : ''; } catch { return ''; } },
-    set(plan) { try { plan ? globalThis.localStorage?.setItem(PLAN_KEY, plan) : globalThis.localStorage?.removeItem(PLAN_KEY); } catch { /* private mode */ } }
+    get() { try { const plan = globalThis.localStorage?.getItem(PLAN_KEY); return PLANS[plan] ? plan : chosenPlan; } catch { return chosenPlan; } },
+    set(plan) { chosenPlan = PLANS[plan] ? plan : ''; try { chosenPlan ? globalThis.localStorage?.setItem(PLAN_KEY, chosenPlan) : globalThis.localStorage?.removeItem(PLAN_KEY); } catch { /* private mode: the signup redirect retains the plan */ } }
   };
   function renderPlanChoice() {
     const chosen = store.get();
+    for (const plan of ['basic', 'pro']) el(`auth-plan-${plan}`).checked = chosen === plan;
     document.querySelectorAll('[data-choose-plan]').forEach(button => {
       const selected = button.dataset.choosePlan === chosen;
       button.setAttribute('aria-pressed', String(selected));
@@ -114,7 +123,7 @@ window.FinanceSession = (() => {
     });
     const banner = el('auth-plan');
     if (!banner) return;
-    banner.hidden = !chosen || ['forgot', 'reset', 'invite', 'accept'].includes(mode);
+    banner.hidden = !chosen || ['register', 'forgot', 'reset', 'invite', 'accept'].includes(mode);
     if (!chosen) return;
     el('auth-plan-name').textContent = PLANS[chosen].name;
     el('auth-plan-price').textContent = PLANS[chosen].price;
@@ -150,6 +159,11 @@ window.FinanceSession = (() => {
       focusAccess();
     }));
     el('auth-plan-clear')?.addEventListener('click', () => { store.set(''); renderPlanChoice(); });
+    for (const plan of ['basic', 'pro']) {
+      el(`auth-plan-${plan}`).addEventListener('change', event => {
+        if (event.target.checked) { store.set(plan); renderPlanChoice(); }
+      });
+    }
     el('auth-switch').onclick = () => {
       if (mode === 'accept') { inviteToken = ''; location.reload(); return; }
       mode = mode === 'login' ? (inviteToken ? 'invite' : registrationEnabled ? 'register' : 'login') : 'login';
@@ -165,6 +179,9 @@ window.FinanceSession = (() => {
       el('auth-submit').disabled = true;
       el('auth-error').textContent = '';
       try {
+        const signupPlan = mode === 'register' ? ['basic', 'pro'].find(plan => el(`auth-plan-${plan}`).checked) : '';
+        if (mode === 'register' && !signupPlan) throw new Error('Choose Basic or Pro before creating your account.');
+        if (signupPlan) store.set(signupPlan);
         if (mode === 'accept') {
           const accepted = await fetch('/api/household/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: inviteToken }) });
           const result = await accepted.json();
@@ -206,6 +223,7 @@ window.FinanceSession = (() => {
           return;
         }
         inviteToken = '';
+        if (signupPlan) location.hash = `#subscription/${signupPlan}`;
         location.reload();
       } catch (error) { el('auth-error').textContent = error.message; }
       finally { el('auth-submit').disabled = false; }
@@ -215,7 +233,7 @@ window.FinanceSession = (() => {
         const verification = await fetch('/api/auth/verify-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: verifyToken }) });
         const result = await verification.json();
         if (!verification.ok) throw new Error(result.error || 'Unable to verify your email.');
-        verificationNotice = 'Email verified. Sign in to continue to your household.';
+        verificationNotice = 'Email verified. Continue to your household setup.';
       } catch (error) { verificationNotice = error.message; }
       finally { verifyToken = ''; }
     }
@@ -244,7 +262,7 @@ window.FinanceSession = (() => {
         if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        await showView(['categories','category-admin','transactions','transaction-review','activity','accounts','analytics','etl','payoff','goals','insights','tutorials','settings'].includes(target.split('/')[0]) ? target : 'dashboard');
+        await showView(['categories','category-admin','transactions','transaction-review','activity','accounts','analytics','etl','payoff','goals','insights','tutorials','settings','subscription'].includes(target.split('/')[0]) ? target : 'dashboard');
         if (verificationNotice) globalThis.notify?.(verificationNotice);
         return;
       }

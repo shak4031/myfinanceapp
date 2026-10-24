@@ -114,6 +114,9 @@
   }
   function resultNote(data) {
     const parts = [];
+    const created = (data.accounts || (data.account ? [{ account: data.account }] : []))
+      .filter(result => result.account?.autoCreated);
+    if (created.length) parts.push(`Created ${created.length} account${created.length === 1 ? '' : 's'} from the file. <a href="#accounts" data-view="accounts">Review names and account types</a>${created.some(result => result.account.kind === 'other') ? '; accounts without a detected type are saved as Other, not guessed as checking or savings' : ''}.`);
     if (data.accounts?.length > 1) {
       parts.push(data.accounts.map(result => `<strong>${escape(describe(result.account))}</strong>: ${Number(result.imported)} imported, ${Number(result.duplicates)} duplicates skipped`).join('<br>'));
     }
@@ -218,10 +221,10 @@
   function renderCsvReview(accounts) {
     const root = $('csv-account-review');
     root.hidden = false;
-    root.innerHTML = '<h3>Review account mapping</h3><p class="import-hint">Saved accounts are matched from the account numbers in this file. Choose or create each unmatched account once. Nothing has been imported yet.</p>'
+    root.innerHTML = '<h3>Review account mapping</h3><p class="import-hint">Saved accounts are matched from the file. Identified new accounts are created automatically when you import. Only missing or ambiguous account details need your choice. Nothing has been imported yet.</p>'
       + accounts.map((group, index) => {
         const label = group.last4 ? `Account ending ${group.last4}` : 'Transactions without an account number';
-        if (!group.needsReview) return `<div class="csv-account-mapping"><strong>${escape(label)}</strong><p>Matched to ${escape(group.matchedAccountName)}</p></div>`;
+        if (!group.needsReview) return `<div class="csv-account-mapping"><strong>${escape(label)}</strong><p>${group.autoCreate ? 'A new account will be created when you import.' : `Matched to ${escape(group.matchedAccountName)}`}</p></div>`;
         const usable = state.accounts.filter(account => IMPORTABLE.includes(account.kind) && (!group.last4 || !account.last4 || account.last4 === group.last4));
         return `<fieldset class="csv-account-mapping" data-csv-account="${escape(group.key)}"><legend>${escape(label)} (${Number(group.rows)} row${Number(group.rows) === 1 ? '' : 's'})</legend>
           <p class="import-hint">${escape(group.reason)}</p>
@@ -247,7 +250,7 @@
       csvInspection = { csvData, source, accounts: data.accounts };
       if (data.accounts.some(account => account.needsReview)) {
         renderCsvReview(data.accounts);
-        window.setImportStatus?.('review', 'Review the account mapping, then choose Import transactions again. Nothing has been imported.');
+        window.setImportStatus?.('review', 'Some account details are missing or ambiguous. Choose their accounts below, then import again. Identified new accounts will be created automatically. Nothing has been imported.');
         $('csv-account-review').scrollIntoView({ block: 'nearest' });
         return null;
       }

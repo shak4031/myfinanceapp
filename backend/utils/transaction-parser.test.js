@@ -2,6 +2,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TransactionCSVParser } from './transaction-parser.js';
 
+test('account-type metadata is per account and does not guess types from transaction wording', () => {
+  const csv = `Date,Account Number,Account Type,Description,Amount
+2026-10-20,00001111,Checking,PURCHASE,-12
+2026-10-20,00002222,Credit Card,PURCHASE,12
+2026-10-20,00003333,constructor,SAVINGS DEPOSIT,12`;
+  const parsed = new TransactionCSVParser().parse(csv);
+  assert.deepEqual(parsed.format.accounts.map(group => group.kind), ['checking', 'credit_card', null]);
+  assert.deepEqual(parsed.transactions.map(row => row.direction), ['DEBIT', 'DEBIT', 'CREDIT']);
+  const conflicting = new TransactionCSVParser().parse(`${csv}\n2026-10-21,00001111,Savings,INTEREST,2`);
+  assert.equal(conflicting.format.accounts[0].kind, null);
+  assert.equal(conflicting.format.accounts[0].typeAmbiguous, true);
+  assert.doesNotMatch(JSON.stringify(parsed.format), /00001111|00002222|00003333/);
+});
+
 // Layouts follow each institution's published CSV download format.
 const BANKS = {
   'TD Bank checking': ['checking', `Date,Bank RTN,Account Number,Transaction Type,Description,Debit,Credit,Check Number,Balance

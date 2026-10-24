@@ -108,6 +108,53 @@ test('household checkout needs explicit consent and posts only selected plan bef
   assert.deepEqual(f.redirects, ['https://checkout.stripe.com/session']);
   assert.equal(f.calls.some(call => call.url.startsWith('https:')), false, 'Stripe is navigated to, never fetched');
 });
+test('Basic owners review a prorated Pro upgrade in Stripe without creating a second subscription', async () => {
+  const billing = { entitlement: { tier: 'basic', active: true, plusActive: false },
+    subscription: { plan: 'basic', status: 'active', cancel_at_period_end: false } };
+  const f = householdFixture(billing, url => url === '/api/billing/portal'
+    ? response(200, { url: 'https://billing.stripe.com/p/session/upgrade' }) : null);
+  await f.context.FinanceHousehold.openBilling('', 'pro');
+  const root = f.node('household-dialog-content');
+  assert.match(root.innerHTML, /Upgrade to Pro in Stripe/);
+  assert.match(root.innerHTML, /prorated upgrade charge/);
+  const button = root.querySelector('[data-household-upgrade]');
+  await button.listeners.click({ target: button });
+  const sent = f.calls.find(call => call.url === '/api/billing/portal');
+  assert.deepEqual(JSON.parse(sent.options.body), { plan: 'pro' });
+  assert.equal(f.calls.some(call => call.url === '/api/billing/checkout'), false);
+  assert.deepEqual(f.redirects, ['https://billing.stripe.com/p/session/upgrade']);
+  for (const data of [{ ...billing, owner: false }, { ...billing, owner: true, subscription: { ...billing.subscription, cancel_at_period_end: true } },
+    { ...billing, owner: true, subscription: { ...billing.subscription, status: 'trialing' } }]) {
+    assert.doesNotMatch(f.context.FinanceHousehold.billingMarkup(data), /data-household-upgrade/);
+  }
+});
+test('Pro downgrade keeps access until renewal and needs explicit owner consent', async () => {
+  const effectiveAt = new Date(Date.now() + 30 * 86400000).toISOString();
+  const billing = { entitlement: { tier: 'pro', active: true, plusActive: true },
+    subscription: { plan: 'pro', status: 'active', cancel_at_period_end: false, current_period_end: effectiveAt } };
+  let scheduled = false;
+  const f = householdFixture(billing, url => {
+    if (url === '/api/billing/downgrade') { scheduled = true; return response(200, {}); }
+    if (url === '/api/billing') return response(200, { owner: true, configured: true, ...billing,
+      subscription: { ...billing.subscription, ...(scheduled ? { schedule_managed: true, pending_change: { plan: 'basic', effective_at: effectiveAt } } : {}) } });
+    return null;
+  });
+  await f.context.FinanceHousehold.openBilling();
+  const root = f.node('household-dialog-content');
+  assert.match(root.innerHTML, /data-household-downgrade/);
+  assert.match(root.innerHTML, /9\.99/);
+  const button = root.querySelector('[data-household-downgrade]');
+  root.querySelector('#household-downgrade-consent').checked = false;
+  await button.listeners.click({ target: button });
+  assert.equal(f.calls.some(call => call.url === '/api/billing/downgrade'), false);
+  root.querySelector('#household-downgrade-consent').checked = true;
+  await button.listeners.click({ target: button });
+  const sent = f.calls.find(call => call.url === '/api/billing/downgrade');
+  assert.ok(sent);
+  assert.deepEqual(JSON.parse(sent.options.body), { consent: true, effectiveAt });
+  assert.equal(f.context.FinancePro.isPlusActive(), true, 'scheduling does not remove Pro access');
+  assert.match(root.innerHTML, /data-household-keep-pro/);
+});
 
 test('members and support sessions cannot start checkout or manage billing', async () => {
   for (const support of [false, true]) {
@@ -157,7 +204,7 @@ test('subscription routing waits for entitlement and never opens financial pages
   const f = householdFixture();
   await f.context.showView('dashboard');
   assert.equal(f.context.lastView, 'subscription');
-  assert.match(f.node('subscription-view').innerHTML, /Choose a subscription before opening/);
+  assert.match(f.node('subscription-view').innerHTML, /Complete the steps below/);
   assert.deepEqual(f.calls.map(call => call.url), ['/api/license', '/api/billing']);
   const basic = householdFixture({ entitlement: { tier: 'basic', active: true, plusActive: false } });
   await basic.context.showView('dashboard');
@@ -353,18 +400,23 @@ test('register reloads and refreshes /me before unpaid onboarding, ignoring inco
   f.run('session.js');
   await f.context.FinanceSession.start();
   f.node('auth-switch').onclick();
+  f.node('auth-plan-basic').checked = true;
+  f.context.location.hash = '#settings';
   f.node('auth-email').value = 'new@example.test';
   f.node('auth-name').value = 'New owner';
   f.node('auth-password').value = 'secure-password-123';
   await f.node('auth-form').onsubmit({ preventDefault() {} });
   assert.equal(f.context.reloaded, true);
+  assert.equal(f.context.location.hash, '#subscription/basic', 'registration always continues to onboarding, not the previous page');
   assert.equal(f.context.FinanceSession.currentUser(), null, 'incomplete registration user is never used for routing');
   f.run('pro-core.js');
   f.run('household.js');
   await f.context.FinanceSession.start();
   assert.equal(f.context.FinanceSession.currentUser().household.role, 'owner');
-  assert.equal(f.context.lastView, 'subscription');
+  assert.equal(f.context.lastView, 'subscription/basic');
   assert.match(f.node('subscription-view').innerHTML, /Verify your email before checkout/);
+  assert.match(f.node('subscription-view').innerHTML, /value="basic" checked/);
+  assert.match(f.node('subscription-view').innerHTML, /Your selected plan is <strong>Basic/);
   assert.deepEqual(calls.slice(-3).map(call => call.url), ['/api/auth/me', '/api/license', '/api/billing']);
 });
 
@@ -379,6 +431,61 @@ test('signed-in checkout wrapper throws verification errors with code and status
   f.run('pro-core.js');
   await assert.rejects(f.context.FinancePro.request('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan: 'pro', consent: true }) }),
     error => error.status === 403 && error.code === 'EMAIL_VERIFICATION_REQUIRED');
+});
+
+test('signup requires an inline plan and carries either choice without browser storage', async () => {
+  const html = source('index.html');
+  assert.match(html, /<fieldset class="auth-plan-options" id="auth-plan-options" hidden>/);
+  for (const plan of ['basic', 'pro']) {
+    const calls = [];
+    const f = fixture(async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith('/me')) return response(401, {});
+      if (url.endsWith('/status')) return response(200, { registrationEnabled: true });
+      if (url.endsWith('/register')) return response(201, { user: { id: 4 } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    f.context.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+    f.run('session.js');
+    await f.context.FinanceSession.start();
+    assert.equal(f.node('auth-plan-options').hidden, true);
+    assert.equal(f.node('auth-plan-basic').disabled, true);
+    f.node('auth-switch').onclick();
+    assert.equal(f.node('auth-screen').classList.contains('is-registering'), true);
+    assert.equal(f.node('auth-plan-options').hidden, false);
+    assert.equal(f.node('auth-signup-steps').hidden, false);
+    assert.equal(f.node('auth-plan-basic').required, true);
+    assert.equal(f.node('auth-plan-basic').disabled, false);
+    await f.node('auth-form').onsubmit({ preventDefault() {} });
+    assert.match(f.node('auth-error').textContent, /Choose Basic or Pro/);
+    assert.equal(calls.some(call => call.url.endsWith('/register')), false);
+    const input = f.node(`auth-plan-${plan}`);
+    input.checked = true;
+    input.listeners.change({ target: input });
+    assert.equal(f.context.FinanceSession.chosenPlan(), plan);
+    f.node('auth-switch').onclick();
+    assert.equal(f.node('auth-screen').classList.contains('is-registering'), false);
+    assert.equal(input.disabled, true, 'login does not validate hidden plan fields');
+    assert.equal(input.required, false);
+    f.node('auth-switch').onclick();
+    assert.equal(input.checked, true, 'switching between login and signup retains the selection');
+    await f.node('auth-form').onsubmit({ preventDefault() {} });
+    assert.equal(f.context.location.hash, `#subscription/${plan}`);
+    assert.equal(f.context.reloaded, true);
+    assert.equal(calls.some(call => call.url === '/api/billing/checkout'), false, 'signup does not silently authorize billing');
+  }
+});
+
+test('subscription onboarding preserves explicit plan routes and paid households return to finances', async () => {
+  const f = householdFixture();
+  await f.context.showView('subscription/basic');
+  assert.equal(f.context.lastView, 'subscription/basic');
+  assert.match(f.node('subscription-view').innerHTML, /value="basic" checked/);
+  await f.context.showView('subscription/pro');
+  assert.match(f.node('subscription-view').innerHTML, /value="pro" checked/);
+  const paid = householdFixture({ entitlement: { tier: 'pro', active: true, plusActive: true } });
+  await paid.context.showView('subscription/basic');
+  assert.equal(paid.context.lastView, 'dashboard');
 });
 
 test('migrated legacy paid licenses retain all advanced features under new Pro', async () => {
@@ -887,6 +994,34 @@ test('unmatched CSV accounts get a masked one-time review and separate mapping c
   ] });
   assert.match(note, /&lt;Checking&gt;/);
   assert.match(note, /3 imported, 1 duplicates skipped/);
+});
+test('identified new CSV accounts proceed without manual mapping and explain automatic creation', async () => {
+  const f = fixture(async url => response(200, url === '/api/accounts/import-options'
+    ? { accounts: [], kinds: [] }
+    : { accounts: [{ key: 'new-bank', last4: '1111', rows: 2, autoCreate: true, needsReview: false },
+      { key: 'new-save', last4: '2222', rows: 3, autoCreate: true, needsReview: false }] }));
+  f.run('accounts.js');
+  assert.deepEqual(JSON.parse(JSON.stringify(await f.context.FinanceAccounts.prepareCsv('DATA', 'td.csv'))), { accountMappings: {} });
+  assert.equal(f.node('csv-account-review').hidden, true);
+  const note = f.context.FinanceAccounts.resultNote({ accounts: [
+    { account: { name: 'Account 1111', kind: 'other', autoCreated: true }, imported: 2, duplicates: 0 },
+    { account: { name: 'Savings 2222', kind: 'savings', autoCreated: true }, imported: 3, duplicates: 0 }
+  ] });
+  assert.match(note, /Created 2 accounts from the file/);
+  assert.match(note, /without a detected type are saved as Other/);
+});
+test('mixed CSV mapping review distinguishes automatic new accounts from missing identity', async () => {
+  const f = fixture(async url => response(200, url === '/api/accounts/import-options'
+    ? { accounts: [], kinds: [] }
+    : { accounts: [{ key: 'new-bank', last4: '1111', rows: 2, autoCreate: true, needsReview: false },
+      { key: 'unidentified', last4: null, rows: 1, needsReview: true, reason: 'No usable account number was found.' }] }));
+  f.context.setImportStatus = () => {};
+  f.run('accounts.js');
+  assert.equal(await f.context.FinanceAccounts.prepareCsv('DATA', 'td.csv'), null);
+  const markup = f.node('csv-account-review').innerHTML;
+  assert.match(markup, /A new account will be created when you import/);
+  assert.match(markup, /Transactions without an account number/);
+  assert.doesNotMatch(markup, /Matched to null|data-csv-account="new-bank"/);
 });
 
 test('CSV inspection errors are explicit and late inspections cannot survive a session reset', async () => {
@@ -2523,12 +2658,42 @@ test('Pro gating delegates billing to household checkout and trials unlock advan
   f.context.FinanceHousehold = { openBilling: reason => opened.push(reason) };
   await FinancePro.ensureEntitlement();
   assert.equal(FinancePro.isActive(), false);
-  assert.match(f.node('pro-nav-badge').textContent, /LOCKED/);
+  assert.equal(f.node('pro-nav-badge').textContent, '');
+  assert.match(f.node('pro-nav-badge').innerHTML, /class="pro-lock"/);
   assert.equal(FinancePro.requirePro('Budgets are Pro'), false);
   assert.deepEqual(opened, ['Budgets are Pro']);
   FinancePro.setEntitlement({ tier: 'trial', source: 'trial', active: true, plusActive: true, daysLeft: 3, features: [] });
   assert.equal(FinancePro.requirePro('x'), true);
-  assert.match(f.node('pro-nav-badge').textContent, /TRIAL/);
+  assert.equal(f.node('pro-nav-badge').textContent, 'PRO');
+  assert.equal(f.node('pro-nav-badge').onclick, null);
+});
+test('all Pro navigation badges use a clickable lock for Basic and consistent Pro labels during trials', () => {
+  const f = loadPro();
+  const badges = [f.node('debt-pro-badge'), f.node('goals-pro-badge')];
+  f.context.document.querySelectorAll = selector => selector === '.plus-nav-badge' ? badges : [];
+  const opened = [];
+  f.context.FinanceHousehold = { openBilling: (reason, plan) => opened.push({ reason, plan }) };
+  const pro = f.context.FinancePro;
+  pro.setEntitlement({ tier: 'basic', active: true, plusActive: false });
+  for (const badge of [f.node('pro-nav-badge'), ...badges]) {
+    assert.equal(badge.textContent, '');
+    assert.match(badge.innerHTML, /class="pro-lock"/);
+    let prevented = false;
+    let stopped = false;
+    badge.onclick({ preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
+    assert.equal(prevented && stopped, true);
+  }
+  assert.equal(opened.length, 3);
+  assert.ok(opened.every(call => call.plan === 'pro'));
+  assert.match(pro.proTag(), /class="pro-lock"/);
+  for (const tier of ['trial', 'pro']) {
+    pro.setEntitlement({ tier, active: true, plusActive: true, daysLeft: 5 });
+    for (const badge of [f.node('pro-nav-badge'), ...badges]) {
+      assert.equal(badge.textContent, 'PRO');
+      assert.equal(badge.onclick, null);
+    }
+    assert.equal(pro.proTag(), '<span class="pro-tag">PRO</span>');
+  }
 });
 test('marketing page explains household pricing, Stripe and trial renewal clearly', () => {
   const html = source('index.html');
@@ -2633,7 +2798,9 @@ test('pricing cards preserve a plan for explicit hosted checkout after sign-in',
   assert.equal(out.buttons[0].attrs['aria-pressed'], 'false');
   assert.match(out.buttons[1].textContent, /Pro selected/);
   assert.equal(out.buttons[0].textContent, 'Choose Basic');
-  assert.equal(out.f.node('auth-plan').hidden, false);
+  assert.equal(out.f.node('auth-plan').hidden, true, 'signup uses inline plan cards instead of a duplicate banner');
+  assert.equal(out.f.node('auth-plan-pro').checked, true);
+  assert.equal(out.f.node('auth-plan-options').hidden, false);
   assert.equal(out.f.node('auth-plan-name').textContent, 'Pro');
   assert.match(out.f.node('auth-plan-note').textContent, /Stripe hosted Checkout/);
   assert.equal(out.f.node('auth-title').textContent, 'Make room for your next chapter.', 'choosing a plan opens account creation');

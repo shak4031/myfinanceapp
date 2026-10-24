@@ -6,7 +6,30 @@ import { PGlite } from '@electric-sql/pglite';
 import application from '../app.js';
 import { migratePrivateSchema } from './schema.js';
 import { setMailTransportForTests } from './mailer.js';
-import { setStripeForTests, sendDueTrialReminders } from './billing.js';
+import { setStripeForTests, sendDueTrialReminders, syncSubscription } from './billing.js';
+
+test('late canceled subscription events do not block an active paid replacement', async () => {
+  const savedPrice = process.env.STRIPE_PRO_PRICE_ID;
+  process.env.STRIPE_PRO_PRICE_ID = 'price_retired_test';
+  const queries = [], retrieved = [];
+  try {
+    await syncSubscription({ query: async (sql, params) => {
+      queries.push({ sql, params });
+      return { rows: [{ household_id: 2, stripe_subscription_id: 'sub_current_active' }] };
+    } }, { subscriptions: { retrieve: async id => {
+      retrieved.push(id);
+      assert.equal(id, 'sub_retired');
+      return { id, customer: 'cus_existing', status: 'canceled',
+        items: { data: [{ quantity: 1, price: { id: 'price_retired_test' } }] } };
+    } } }, 'sub_retired');
+    assert.deepEqual(retrieved, ['sub_retired']);
+    assert.equal(queries.length, 1);
+    assert.match(queries[0].sql, /SELECT/);
+  } finally {
+    if (savedPrice === undefined) delete process.env.STRIPE_PRO_PRICE_ID;
+    else process.env.STRIPE_PRO_PRICE_ID = savedPrice;
+  }
+});
 
 test('household migration preserves legacy paid access and protects privileged membership tables', async () => {
   const database = new PGlite();
@@ -62,7 +85,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   Object.assign(process.env, { OWNER_SETUP_TOKEN: 'synthetic-household-setup-token-at-least-32-chars', ALLOW_REGISTRATION: 'true',
     STRIPE_BASIC_PRICE_ID: 'price_basic', STRIPE_PRO_PRICE_ID: 'price_pro', STRIPE_WEBHOOK_SECRET: 'whsec_synthetic_only' });
-  const mail = [], checkoutRequests = [], portalRequests = [];
+  const mail = [], checkoutRequests = [], portalRequests = [], portalSessions = [], scheduleCreates = [], scheduleUpdates = [], scheduleReleases = [];
   setMailTransportForTests({ sendMail: async message => { mail.push(message); return { accepted: [message.to] }; } });
   const seconds = () => Math.floor(Date.now() / 1000);
   let subscription = { id: 'sub_household', customer: 'cus_household', status: 'trialing',
@@ -70,12 +93,68 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     cancel_at_period_end: false, items: { data: [{ quantity: 1, price: { id: 'price_basic' } }] } };
   let checkoutSession = null;
   let badPrice = false;
+  let invoiceStatus = 'open';
+  let schedule = null, loseCreateResponse = false, loseUpdateResponse = false;
+  const createdSchedules = new Map();
   const signatures = new Stripe('sk_test_synthetic_only').webhooks;
   setStripeForTests({
-    prices: { retrieve: async id => ({ id, active: true, currency: 'usd', unit_amount: badPrice ? 1 : id === 'price_basic' ? 999 : 1499,
+    prices: { retrieve: async id => ({ id, product: id === 'price_basic' ? 'prod_basic' : 'prod_pro', active: true, currency: 'usd', unit_amount: badPrice ? 1 : id === 'price_basic' ? 999 : 1499,
       recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' } }) },
     customers: { create: async () => ({ id: 'cus_household' }) },
-    subscriptions: { retrieve: async () => subscription },
+    subscriptions: { retrieve: async () => subscription, update: async (id, data) => {
+      assert.equal(id, subscription.id);
+      assert.deepEqual(Object.keys(data), ['metadata'], 'keeping Pro never changes price or invoices');
+      subscription.metadata = { ...subscription.metadata, ...data.metadata };
+      return subscription;
+    } },
+    subscriptionSchedules: {
+      retrieve: async id => { assert.equal(id, schedule.id); return schedule; },
+      create: async (data, options) => {
+        if (createdSchedules.has(options.idempotencyKey)) return createdSchedules.get(options.idempotencyKey);
+        assert.equal(subscription.schedule, undefined, 'never attach a second schedule');
+        assert.deepEqual(data, { from_subscription: subscription.id });
+        scheduleCreates.push([data, options]);
+        schedule = { id: `sub_sched_${scheduleCreates.length}`, subscription: subscription.id, customer: subscription.customer,
+          status: 'active', metadata: {}, current_phase: { start_date: seconds() - 100, end_date: subscription.current_period_end },
+          phases: [{ start_date: seconds() - 100, end_date: subscription.current_period_end,
+            items: [{ price: 'price_pro', quantity: 1 }], default_tax_rates: ['txr_existing'], metadata: { preserved: 'yes' },
+            ...(subscription.status === 'trialing' ? { trial_end: subscription.trial_end } : {}) }] };
+        subscription.schedule = schedule.id;
+        createdSchedules.set(options.idempotencyKey, schedule);
+        if (loseCreateResponse) { loseCreateResponse = false; throw new Error('Synthetic lost schedule create response'); }
+        return schedule;
+      },
+      update: async (id, data, options) => {
+        assert.equal(id, schedule.id);
+        scheduleUpdates.push([data, options]);
+        assert.equal(data.end_behavior, 'release', 'schedule must not cancel Basic later');
+        assert.equal(data.proration_behavior, 'none');
+        assert.equal(data.phases.length, 2);
+        assert.equal(data.phases[0].items[0].price, 'price_pro');
+        assert.equal(data.phases[0].end_date, subscription.current_period_end);
+        assert.deepEqual(data.phases[0].default_tax_rates, ['txr_existing']);
+        assert.deepEqual(data.phases[0].metadata, { preserved: 'yes' });
+        if (subscription.status === 'trialing') assert.equal(data.phases[0].trial_end, subscription.trial_end, 'current Pro trial must not end early');
+        assert.equal(data.phases[1].trial_end, undefined, 'Basic must not restart a trial');
+        assert.deepEqual(data.phases[1].duration, { interval: 'month', interval_count: 1 });
+        assert.equal(data.phases[1].start_date, subscription.current_period_end);
+        assert.equal(data.phases[1].items[0].price, 'price_basic');
+        assert.ok(data.phases.every(phase => phase.proration_behavior === 'none'));
+        Object.assign(schedule, data);
+        if (loseUpdateResponse) { loseUpdateResponse = false; throw new Error('Synthetic lost schedule update response'); }
+        return schedule;
+      },
+      release: async (id, data, options) => {
+        assert.equal(id, schedule.id);
+        scheduleReleases.push([id, options]);
+        schedule.status = 'released';
+        schedule.released_subscription = subscription.id;
+        schedule.subscription = null;
+        delete subscription.schedule;
+        return schedule;
+      }
+    },
+    invoices: { retrieve: async () => ({ status: invoiceStatus }) },
     checkout: { sessions: {
       create: async (data, options) => { checkoutRequests.push([data, options]); checkoutSession = {
         id: `cs_${checkoutRequests.length}`, url: 'https://checkout.stripe.com/c/pay/synthetic', expires_at: seconds() + 1800,
@@ -84,7 +163,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     } },
     billingPortal: {
       configurations: { create: async data => { portalRequests.push(data); return { id: 'bpc_synthetic' }; } },
-      sessions: { create: async () => ({ url: 'https://billing.stripe.com/p/session/synthetic' }) }
+      sessions: { create: async data => { portalSessions.push(data); return { url: 'https://billing.stripe.com/p/session/synthetic' }; } }
     },
     webhooks: signatures
   });
@@ -100,7 +179,10 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
   };
   const credentials = (name, email) => ({ name, email, password: 'synthetic-password-123456' });
   const webhook = async (id, type = 'customer.subscription.updated', signatureValid = true) => {
-    const payload = JSON.stringify({ id, type, data: { object: { id: subscription.id } } });
+    const payload = JSON.stringify({ id, type, data: { object: type.startsWith('subscription_schedule.')
+      ? { id: schedule.id } : type.startsWith('invoice.')
+      ? { id: 'in_upgrade', parent: { subscription_details: { subscription: subscription.id } } }
+      : { id: subscription.id } } });
     const signature = signatures.generateTestHeaderString({ payload, secret: signatureValid ? process.env.STRIPE_WEBHOOK_SECRET : 'wrong' });
     const response = await fetch(base + '/api/billing/webhook', { method: 'POST', headers: {
       'Content-Type': 'application/json', 'stripe-signature': signature }, body: payload });
@@ -133,6 +215,8 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/license', undefined, ownerCookie)).body.active, false, 'redirect does not grant access');
     assert.equal(await webhook('evt_invalid', undefined, false), 400);
     assert.equal(await webhook('evt_trial'), 200);
+    checkoutSession.status = 'complete';
+    checkoutSession.subscription = subscription.id;
     assert.equal(await webhook('evt_trial'), 200, 'webhooks are idempotent');
     assert.equal((await database.query("SELECT COUNT(*)::int AS count FROM stripe_events WHERE id='evt_trial'")).rows[0].count, 1);
     const trial = await call('/api/license', undefined, ownerCookie);
@@ -142,6 +226,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/billing/checkout', { plan: 'pro', consent: true }, ownerCookie)).status, 409);
     assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 200);
     assert.equal(portalRequests[0].features.subscription_cancel.mode, 'at_period_end');
+    assert.equal((await call('/api/billing/portal', { plan: 'pro' }, ownerCookie)).status, 409, 'trial already includes Pro; upgrade must not end it');
 
     await database.query(`INSERT INTO transactions(user_id,date,description,amount,direction,category)
       VALUES($1,'2026-10-15','SHARED BILL',25,'DEBIT','Utilities'),(1,'2026-10-15','PRIVATE ADMIN BILL',200,'DEBIT','Other')`, [ownerId]);
@@ -170,6 +255,12 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
       'member inserts use the household tenant, not login identity');
     assert.equal((await call('/api/accounts', undefined, ownerCookie)).body.accounts[0].name, 'Joint checking');
 
+    subscription.items.data[0].price.id = 'price_pro';
+    assert.equal(await webhook('evt_trial_selected_pro'), 200);
+    const trialDowngrade = { consent: true, effectiveAt: new Date(subscription.trial_end * 1000).toISOString() };
+    assert.equal((await call('/api/billing/downgrade', trialDowngrade, ownerCookie)).status, 200);
+    assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'trial', 'Pro remains included until original trial expiry');
+    assert.equal(subscription.trial_end, subscription.trial_start + 15 * 86400, 'scheduling never extends or truncates a trial');
     const reminderAt = new Date(subscription.trial_end * 1000 - 86400000);
     assert.equal(await sendDueTrialReminders(new Date(reminderAt.getTime() - 1)), 0);
     assert.equal(await sendDueTrialReminders(reminderAt), 1);
@@ -178,6 +269,11 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal(reminders.length, 1);
     assert.equal(reminders[0].to, 'owner@household.test');
     assert.match(reminders[0].text, /Basic \(\$9.99\)/);
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 200);
+    subscription.items.data[0].price.id = 'price_basic';
+    assert.equal(await webhook('evt_trial_back_to_basic'), 200);
+    scheduleCreates.length = 0; scheduleUpdates.length = 0; scheduleReleases.length = 0; createdSchedules.clear();
+    delete subscription.metadata;
     subscription = { ...subscription, cancel_at_period_end: true };
     assert.equal(await webhook('evt_trial_cancel'), 200);
     assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'trial', 'cancel retains trial until its end');
@@ -186,9 +282,97 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'basic');
     assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 402);
     assert.equal((await call('/api/accounts', undefined, spouseCookie)).status, 200);
-    subscription = { ...subscription, items: { data: [{ quantity: 1, price: { id: 'price_pro' } }] } };
-    assert.equal(await webhook('evt_paid_pro'), 200);
+    subscription.items.data[0].id = 'si_household';
+    assert.equal((await call('/api/billing/portal', { plan: 'pro' }, spouseCookie)).status, 403);
+    assert.equal((await call('/api/billing/portal', { plan: 'basic' }, ownerCookie)).status, 400);
+    badPrice = true;
+    assert.equal((await call('/api/billing/portal', { plan: 'pro' }, ownerCookie)).status, 503);
+    badPrice = false;
+    subscription.pending_update = { expires_at: seconds() + 1000 };
+    assert.equal((await call('/api/billing/portal', { plan: 'pro' }, ownerCookie)).status, 409);
+    subscription.pending_update = null;
+    assert.equal((await call('/api/billing/portal', { plan: 'pro' }, ownerCookie)).status, 200);
+    const upgrade = portalRequests.at(-1).features.subscription_update;
+    assert.equal(upgrade.proration_behavior, 'always_invoice');
+    assert.equal(upgrade.billing_cycle_anchor, 'unchanged');
+    assert.deepEqual(upgrade.default_allowed_updates, ['price']);
+    assert.deepEqual(upgrade.products, [{ product: 'prod_pro', prices: ['price_pro'] }]);
+    assert.deepEqual(portalSessions.at(-1).flow_data.subscription_update_confirm,
+      { subscription: subscription.id, items: [{ id: 'si_household', price: 'price_pro', quantity: 1 }] });
+    assert.equal((await call('/api/license', undefined, ownerCookie)).body.tier, 'basic', 'opening portal grants no Pro access');
+    subscription = { ...subscription, latest_invoice: 'in_upgrade', items: { data: [{ quantity: 1, price: { id: 'price_pro' } }] } };
+    assert.equal(await webhook('evt_upgrade_unpaid'), 200);
+    assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 402, 'unpaid upgrade cannot unlock Pro');
+    subscription.status = 'past_due';
+    assert.equal(await webhook('evt_upgrade_failed', 'invoice.payment_failed'), 200);
+    subscription.status = 'active';
+    assert.equal(await webhook('evt_upgrade_still_unpaid'), 200);
+    assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'basic', 'status recovery cannot bypass unpaid upgrade invoice');
+    invoiceStatus = 'paid';
+    assert.equal(await webhook('evt_paid_pro', 'invoice.paid'), 200);
     assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 200);
+    const downgrade = { consent: true, effectiveAt: new Date(subscription.current_period_end * 1000).toISOString() };
+    assert.equal((await call('/api/billing/downgrade', downgrade, spouseCookie)).status, 403);
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, spouseCookie)).status, 403);
+    assert.equal((await call('/api/billing/downgrade', { ...downgrade, consent: false }, ownerCookie)).status, 400);
+    assert.equal((await call('/api/billing/downgrade', { ...downgrade, effectiveAt: '2020-01-01' }, ownerCookie)).status, 409);
+    subscription.cancel_at_period_end = true;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 409);
+    subscription.cancel_at_period_end = false;
+    subscription.cancel_at = subscription.current_period_end;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 409, 'explicit Stripe cancellation conflicts too');
+    delete subscription.cancel_at;
+    subscription.pending_update = { expires_at: seconds() + 1000 };
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 409);
+    subscription.pending_update = null;
+    badPrice = true;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 503);
+    badPrice = false;
+    schedule = { id: 'sub_sched_external', status: 'active', customer: subscription.customer,
+      subscription: subscription.id, metadata: {}, current_phase: { start_date: seconds(), end_date: subscription.current_period_end }, phases: [] };
+    subscription.schedule = schedule.id;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 409, 'external schedules are never overwritten');
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 409, 'external schedules are never released');
+    delete subscription.schedule;
+    loseCreateResponse = true;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 500);
+    loseUpdateResponse = true;
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 500);
+    const scheduled = await call('/api/billing/downgrade', downgrade, ownerCookie);
+    assert.equal(scheduled.status, 200, JSON.stringify(scheduled.body));
+    assert.deepEqual(scheduled.body.pending_change, { plan: 'basic', effective_at: downgrade.effectiveAt });
+    assert.equal(scheduleCreates.length, 1, 'retry reuses the schedule after a lost create response');
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 200);
+    assert.equal(scheduleUpdates.length, 1, 'repeat confirmation does not rewrite phases');
+    const pendingBilling = (await call('/api/billing', undefined, spouseCookie)).body;
+    assert.equal(pendingBilling.owner, false);
+    assert.deepEqual(pendingBilling.subscription.pending_change, scheduled.body.pending_change);
+    assert.equal(pendingBilling.subscription.plan, 'pro');
+    assert.equal(pendingBilling.subscription.schedule_managed, true);
+    assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'pro', 'scheduling never removes Pro');
+    assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 409, 'portal cannot conflict with a pending schedule');
+    assert.equal(await webhook('evt_schedule_updated', 'subscription_schedule.updated'), 200);
+    assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 200, 'schedule webhook retains Pro until actual transition');
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 200);
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 200, 'removing a downgrade is retry-safe');
+    assert.equal(scheduleReleases.length, 1);
+    assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 200, 'cancellation portal is available after keeping Pro');
+    assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'pro');
+    assert.equal((await call('/api/billing/downgrade', downgrade, ownerCookie)).status, 200);
+    assert.equal(scheduleCreates.length, 2, 'a removed downgrade can be scheduled again in the same billing period');
+    subscription.items = { data: [{ quantity: 1, price: { id: 'price_basic' } }] };
+    subscription.current_period_end += 30 * 86400;
+    schedule.current_phase = { start_date: schedule.phases[1].start_date, end_date: subscription.current_period_end };
+    assert.equal(await webhook('evt_schedule_transition', 'subscription_schedule.updated'), 200);
+    assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'basic');
+    assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 402);
+    assert.equal((await call('/api/accounts', undefined, spouseCookie)).status, 200);
+    assert.equal((await call('/api/billing', undefined, ownerCookie)).body.subscription.pending_change, null);
+    assert.equal((await database.query("SELECT COUNT(*)::int AS count FROM transactions WHERE description='SHARED PURCHASE'")).rows[0].count, 1,
+      'transition to Basic preserves saved household data');
+    assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 409, 'cannot keep Pro after Basic has taken effect');
+    assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 200, 'completed Basic phase can open billing without waiting another month');
+    assert.equal(subscription.schedule, undefined, 'completed downgrade schedule is released without changing Basic');
     subscription = { ...subscription, status: 'past_due' };
     assert.equal(await webhook('evt_payment_failed'), 200);
     assert.equal((await call('/api/accounts', undefined, spouseCookie)).status, 402, 'unpaid access is locked server-side');
@@ -199,9 +383,13 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/accounts', undefined, spouseCookie)).status, 401, 'removal revokes every session');
     const relogin = await call('/api/auth/login', credentials('Spouse', 'spouse@household.test'));
     assert.equal((await call('/api/license', undefined, relogin.cookie)).body.active, false, 'removed members do not retain household access');
-    checkoutSession.status = 'expired';
     assert.equal((await call('/api/billing/checkout', { plan: 'pro', consent: true }, ownerCookie)).status, 200);
     assert.equal(checkoutRequests.at(-1)[0].subscription_data.trial_period_days, undefined, 'the household cannot restart its trial');
+    checkoutSession.status = 'complete';
+    checkoutSession.subscription = 'sub_replacement_waiting_for_webhook';
+    const checkoutCount = checkoutRequests.length;
+    assert.equal((await call('/api/billing/checkout', { plan: 'pro', consent: true }, ownerCookie)).status, 409);
+    assert.equal(checkoutRequests.length, checkoutCount, 'a completed replacement awaiting its webhook cannot create another subscription');
   } finally {
     await new Promise(resolve => server.close(resolve));
     setStripeForTests(null);

@@ -30,8 +30,11 @@ starting with isolation disabled. Production requires HTTPS and `APP_ORIGIN`.
 The main application retains bill projections, debt payoff, goals, CSV/PDF
 imports, and category drill-downs, with an original light sidebar/card layout.
 CSV imports use account numbers in the file first, including TD multi-account
-exports. New, ambiguous, or unidentified accounts get a mapping review before
-anything saves; later uploads match saved accounts automatically when possible.
+exports. Identified new CSV/OFX accounts are created automatically during import,
+without mapping prompts; only missing, ambiguous, or conflicting identity/type
+needs review. If type is absent, accounts use Other and parser sign detection.
+Matching is always limited to the current household; later uploads match its
+saved accounts automatically when possible.
 Each account receives its own import-history batch. See
 [import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
 Spending coaching uses local, evidence-based calculations: no financial records
@@ -73,6 +76,35 @@ trust boundaries, as explained in the privacy documentation. See
 
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
+
+For the table dictionary, database constraints, household isolation diagram, and
+bank-account-scoped import matching, see
+[Database architecture and deduplication](./DATABASE_ARCHITECTURE.md) and its
+[standalone architecture diagram](./DATABASE_ARCHITECTURE.svg).
+
+The multi-household regression can also run independently:
+
+```powershell
+node --test backend\utils\household-scale.test.js backend\utils\household-billing.test.js
+```
+
+It creates 24 independent households and eight invited members (32 customer
+logins, plus a setup administrator), 48 bank accounts, and 24,000 transactions
+through real CSV import endpoints. Identical CSVs across households/accounts and
+12,000 reimported rows check tenant-scoped deduplication. Every customer signs out
+and back in; reads, a 32-login concurrent read burst, shared edits, and 1,200
+foreign-ID probes exercise isolation and owner/member permissions. Import
+diagnostics must remain capped at 100 rows per response.
+
+Stripe/SMTP are in-memory fakes: the suite signs webhook requests and exercises
+Basic/Pro trials, owner reminders, cancellation, paid conversion, failed invoices,
+renewal, duplicate/reordered webhooks, and paid resubscription without another
+trial. A completed checkout for an ended subscription must not block its paid
+replacement; pending replacement checkout still cannot create a second subscription.
+No live users, database, cards, charges or email deliveries are involved. PGlite
+serializes database connections, so printed timings are local regression
+observations, **not production PostgreSQL capacity or a real Stripe payment test**.
+Use the staging checklist in [DEPLOYMENT.md](./DEPLOYMENT.md) for those checks.
 
 ## Demo account
 
@@ -472,9 +504,29 @@ The primary operator and public synthetic demo retain full access.
 
 #### Choosing a plan
 
-Choose Basic or Pro, then sign in/create an account. Unpaid households see
-subscription onboarding instead of financial pages. Only the owner can consent
+Account creation includes Basic and Pro plan cards, followed by email verification
+and Stripe Checkout. The chosen plan carries directly into subscription onboarding,
+including when browser storage is unavailable; account creation alone never starts
+a subscription. The signup layout is centered instead of leaving an empty marketing
+column beside a long form. Unpaid households see subscription onboarding instead
+of financial pages. Only the owner can consent
 to billing and open Stripe Checkout or the cancellation/payment-method portal.
+Pro feature badges consistently read PRO, including during a trial. Locked
+features display a lock icon that opens billing options. An active Basic owner
+without scheduled cancellation can upgrade to Pro through a Stripe-hosted
+confirmation showing an immediate prorated charge, with the renewal date unchanged.
+Only Pro is offered in that upgrade flow. Webhooks
+keep Basic access until Stripe confirms the upgrade invoice is paid.
+Pro owners can explicitly confirm Basic at **USD 9.99/month at the next renewal**
+inside app billing. Pro remains available until then, including the full original
+trial if still trialing; no immediate charge, credit, or data deletion occurs.
+The app uses a Stripe subscription schedule (two bounded phases, then release),
+not a general portal downgrade: Basic and Pro are separate Stripe products.
+Billing shows the pending date and a **Keep Pro** option to remove the downgrade.
+Remove a pending downgrade before opening Stripe to cancel; keeping Pro retains
+USD 14.99/month renewal. Members cannot schedule or remove changes. Subscription
+and schedule webhooks fetch current Stripe state; only the actual Basic transition
+changes access, preserving all saved finances.
 Success redirects never grant access by themselves; verified Stripe webhooks
 update household entitlements. Legacy no-card trial/plan-request endpoints no
 longer activate access.
