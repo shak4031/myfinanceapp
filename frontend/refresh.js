@@ -324,7 +324,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', accounts: 'Accounts', analytics: 'Analytics', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
@@ -348,7 +348,7 @@
     const hash = `#${view}${sub ? `/${sub}` : ''}`;
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
+    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, 'transaction-review': () => window.FinanceReviewTools?.loadTransfers(), activity: () => window.FinanceReviewTools?.loadActivity(), accounts: () => window.FinanceAccounts?.loadPage(), analytics: () => window.loadAnalyticsPage?.(false, sub), etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights, tutorials: () => window.FinanceTutorials?.open(sub) };
     const finish = window.FinancePerformance?.begin('page', view === 'analytics' && sub === 'compass' ? 'compass' : view);
     Promise.resolve(loaders[view]?.()).then(() => finish?.(), error => { finish?.('error'); reportError(error); });
   };

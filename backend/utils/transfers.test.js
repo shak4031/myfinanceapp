@@ -52,10 +52,16 @@ test('pairs match opposite sides between different accounts within a few days', 
     credit('TRANSFER FROM CHK XXXX1180', 600, { id: 3, account_id: 3, date: '2026-10-20' }),
     credit('DEPOSIT', 600, { id: 4, account_id: 2, date: '2026-11-20' })
   ];
+  rows.push(
+    debit('ONLINE TRANSFER TO CHECKING 3333', 90, { id: 5, account_id: 1, date: '2026-10-20' }),
+    credit('TRANSFER FROM CHECKING 1180', 90, { id: 6, account_id: 2, date: '2026-10-21', category: 'Dining', category_corrected: true })
+  );
   const pairs = pairTransfers(rows, accounts);
   assert.equal(pairs.get(1).id, 2, 'the masked number picks ••4821 over the closer ••5555 row');
   assert.equal(pairs.has(3), false);
   assert.equal(pairs.has(4), false);
+  assert.equal(pairs.has(5), false, 'a manually marked counted transaction must not be paired as an internal transfer');
+  assert.equal(pairs.has(6), false);
 });
 
 test('saved amounts, cash balance and the shared transfer predicate', () => {
@@ -129,6 +135,8 @@ test('imports require an account and transfers between own accounts never count 
   try {
     const owner = await call('/api/auth/setup', { body: { name: 'Owner', email: 'owner@example.com', password: 'test-only-password-123456', setupToken: process.env.OWNER_SETUP_TOKEN } });
     cookie = owner.headers.get('set-cookie').split(';')[0];
+    const createdCategory = await call('/api/categories', { body: { name: 'Audit fixture' } });
+    assert.equal(createdCategory.status, 201);
 
     const now = new Date();
     const day = d => `${String(now.getMonth() + 1).padStart(2, '0')}/${String(Math.min(d, now.getDate())).padStart(2, '0')}/${now.getFullYear()}`;
@@ -163,6 +171,21 @@ test('imports require an account and transfers between own accounts never count 
       'NORTHWIND PAYROLL DIR DEP': null, 'WHOLE FOODS MARKET': null, 'ONLINE TRANSFER TO SAV XXXXXX4821': 'unknown',
       'ZELLE TO JORDAN LEE': null, 'ONLINE TRANSFER TO CHK ...7702': 'unknown', 'CHASE CARD ONLINE PAYMENT': null
     });
+    const reviewPage = await call('/api/transactions/transfer-review?status=excluded');
+    assert.equal(reviewPage.body.total, 2);
+    assert.ok(reviewPage.body.rows.every(row => row.transfer_kind === 'unknown'));
+    const zelleRow = (await call('/api/dashboard/all-transactions')).body.transactions.find(row => row.description.startsWith('ZELLE'));
+    const madeInternal = await call(`/api/transactions/${zelleRow.id}/transfer-review`, { body: { handling: 'internal' } });
+    assert.equal(madeInternal.status, 200);
+    assert.equal((await kinds())['ZELLE TO JORDAN LEE'], 'internal');
+    const madeCounted = await call(`/api/transactions/${zelleRow.id}/transfer-review`, { body: { handling: 'counted', category: 'Payments to people' } });
+    assert.equal(madeCounted.status, 200);
+    assert.equal((await kinds())['ZELLE TO JORDAN LEE'], null);
+    const activity = await call('/api/activity');
+    assert.ok(activity.body.events.some(event => event.event_type === 'category.created'));
+    assert.ok(activity.body.events.some(event => event.event_type === 'transaction.transfer_reviewed'));
+    const importActivity = activity.body.events.find(event => event.event_type === 'import.completed' && event.detail.fileName === 'checking.csv');
+    assert.ok(importActivity, 'activity shows the source file for imports');
     const insights = (await call('/api/dashboard/insights')).body;
     assert.ok(JSON.stringify(insights).includes('accounts-review'), 'the dashboard asks about the discovered accounts');
 
@@ -175,6 +198,13 @@ test('imports require an account and transfers between own accounts never count 
       'NORTHWIND PAYROLL DIR DEP': null, 'WHOLE FOODS MARKET': null, 'ONLINE TRANSFER TO SAV XXXXXX4821': 'savings',
       'ZELLE TO JORDAN LEE': null, 'ONLINE TRANSFER TO CHK ...7702': 'internal', 'CHASE CARD ONLINE PAYMENT': null
     });
+    const savingsTransfer = (await call('/api/dashboard/all-transactions')).body.transactions.find(row => row.description.startsWith('ONLINE TRANSFER TO SAV'));
+    const countedTransfer = await call(`/api/transactions/${savingsTransfer.id}/transfer-review`, { body: { handling: 'counted', category: 'Groceries' } });
+    assert.equal(countedTransfer.status, 200);
+    assert.equal((await kinds())['ONLINE TRANSFER TO SAV XXXXXX4821'], null, 'a manual counted decision overrides transfer wording');
+    const restoredTransfer = await call(`/api/transactions/${savingsTransfer.id}/transfer-review`, { body: { handling: 'savings' } });
+    assert.equal(restoredTransfer.status, 200);
+    assert.equal((await kinds())['ONLINE TRANSFER TO SAV XXXXXX4821'], 'savings');
 
     // Importing the savings statement pairs both sides; the savings is counted once.
     const savingsCsv = ['Date,Description,Amount,Balance', `${day(1)},TRANSFER FROM CHK XXXXXX1180,500.00,9500.00`, `${day(1)},INTEREST PAYMENT,12.34,9512.34`].join('\n');

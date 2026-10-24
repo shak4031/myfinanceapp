@@ -421,7 +421,7 @@
               <div class="tm-drop"><span class="tut-off" ${at(1.6)}>Drop a file here</span><span class="tut-on tm-file" ${at(1.6)}>📊 checking-october.csv <small>38 KB</small></span></div>
               <span class="tm-btn tm-btn-primary tut-in" ${at(2.2)} data-id="import">Import</span>
             </div>${cursor('import', 2.4)}${toast('Example result: 84 imported; duplicates reported separately', 3.8)}` },
-        { id: 'import-review', title: 'Results, not an approval queue', caption: 'Current imports do not wait in a review queue. Check the result before retrying; duplicate rows are skipped, and rejected files explain the problem. Legacy import review under Transactions is only for older queued records. Add anyway deliberately bypasses duplicate checks, so compare history first. Category suggestions and Review income are separate tools.',
+        { id: 'import-review', title: 'Results, not an approval queue', caption: 'Current imports do not wait in a review queue. Check the result before retrying; duplicate rows are skipped, and rejected files explain the problem. Legacy import review under Transactions is only for older queued records. Add anyway deliberately bypasses duplicate checks, so compare history first. Open Transaction troubleshooting to see which rows count in totals and correct transfer decisions; Activity log records imports and changes. Category suggestions and Review income are separate tools.',
           render: () => `${chip(2, 'Review the result where you import')}
             ${compare([
               { e: '1', title: 'Current imports', when: 'Result in the import dialog', asks: ['Check imported and duplicate counts.', 'Read warnings and errors.', 'Verify the selected account.'] },

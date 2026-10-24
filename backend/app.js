@@ -24,6 +24,7 @@ import analytics from './routes/analytics.js';
 import moneyPlan from './routes/plan.js';
 import monitor from './routes/monitor.js';
 import accounts from './routes/accounts.js';
+import activity from './routes/activity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -122,6 +123,7 @@ app.use('/api/debts', debts);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
 app.use('/api/accounts', accounts);
+app.use('/api/activity', activity);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categories', categories);
 app.use('/api/categorizations', categorizations);

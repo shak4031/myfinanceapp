@@ -229,6 +229,16 @@ and respects reduced-motion preferences.
 **Action needed** and **Heads up** messages include the flagged item's details
 and action within their slides, without a separate badge or duplicate alert list.
 Unknown-transfer badges link to Accounts for review.
+**Transaction troubleshooting** provides a paged table of transactions with their
+current treatment: counted, excluded as an internal transfer, saved, or awaiting
+account review. Use a row's **Correct decision** control to count it normally
+(and choose a non-transfer category), mark it as an internal transfer, or treat
+it as savings. Corrections are saved as manual decisions and immediately refresh
+transfer reconciliation.
+The personal **Activity log** lists retained workspace events with the actor,
+timestamp, and relevant details, including imported file names, category
+creation, account changes, and transaction reclassification. The audit history
+is scoped to the signed-in user's workspace.
 Transaction descriptions in account transfers, category details, income review,
 category suggestions, and unusual-charge alerts link to `#transactions/<id>`.
 Opening one clears conflicting filters and shows only that transaction, including

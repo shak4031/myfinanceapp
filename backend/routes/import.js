@@ -47,7 +47,12 @@ const route = handler => async (req, res) => {
     event: 'import.result', requestId: req.id, status,
     message: `${format} import ${failed ? 'failed' : 'completed'} at ${detail.stage}; reason=${detail.reason || 'OK'}; files=${detail.fileCount}; parsed=${detail.parsedRows}; imported=${detail.importedRows}; duplicates=${detail.duplicateRows}; unreadable=${detail.unreadableRows}; warnings=${detail.warningCount}; committed=${detail.committed}; durationMs=${detail.durationMs}`
   });
-  await recordAudit(req, failed ? 'import.failed' : 'import.completed', failed ? status >= 500 ? 'error' : 'failure' : 'success', { status, detail });
+  const fileNames = Array.isArray(req.body?.files)
+    ? req.body.files.slice(0, 20).map(file => String(file?.source || '').slice(0, 200)).filter(Boolean)
+    : undefined;
+  await recordAudit(req, failed ? 'import.failed' : 'import.completed', failed ? status >= 500 ? 'error' : 'failure' : 'success', {
+    status, detail: { ...detail, fileName: req.body?.source, fileNames }
+  });
 };
 const stage = (req, name, detail = {}) => {
   req.importStage = name;

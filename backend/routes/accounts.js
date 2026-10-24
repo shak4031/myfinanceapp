@@ -4,6 +4,7 @@ import { failure } from '../utils/categorization.js';
 import { currentUserId } from '../utils/tenant.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { ACCOUNT_KINDS, ACCOUNT_KIND_LABELS, accountBalances, reconcileTransfers, savedAmount } from '../utils/transfers.js';
+import { recordAudit } from '../utils/audit.js';
 
 const router = Router();
 const db = new Database();
@@ -177,6 +178,9 @@ router.post('/', route(async (req, res) => {
       [userId, input.name, input.kind, input.institution ?? null, input.last4 ?? null, input.kind === 'unknown' ? 'needs_review' : 'active'])).rows[0];
     return { account, reconcile: await reconcileTransfers(client, userId) };
   });
+  await recordAudit(req, 'account.created', 'success', {
+    detail: { accountId: result.account.id, account: result.account.name, kind: result.account.kind }
+  });
   res.status(201).json(result);
 }));
 
@@ -187,6 +191,7 @@ router.patch('/:id', route(async (req, res) => {
   if (!Object.keys(input).length) throw failure(400, 'Nothing to update');
   const userId = currentUserId();
   const result = await db.transaction(async client => {
+    const previous = (await client.query('SELECT name,kind FROM accounts WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
     const sets = [], params = [];
     for (const [key, value] of Object.entries(input)) { params.push(value); sets.push(`${key} = $${params.length}`); }
     // Choosing a type is the review: the account stops asking for attention.
@@ -195,8 +200,15 @@ router.patch('/:id', route(async (req, res) => {
     const account = (await client.query(`UPDATE accounts SET ${sets.join(', ')}, updated_at = NOW()
       WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING ${COLUMNS}`, params)).rows[0];
     if (!account) throw failure(404, 'Account not found');
-    return { account, reconcile: await reconcileTransfers(client, userId) };
+    return { account, previous, reconcile: await reconcileTransfers(client, userId) };
   });
+  await recordAudit(req, 'account.updated', 'success', {
+    detail: {
+      accountId: result.account.id, previousAccount: result.previous.name, account: result.account.name,
+      previousKind: result.previous.kind, kind: result.account.kind
+    }
+  });
+  delete result.previous;
   res.json(result);
 }));
 
@@ -205,13 +217,16 @@ router.delete('/:id', route(async (req, res) => {
   if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'Invalid account id');
   const userId = currentUserId();
   const result = await db.transaction(async client => {
+    const account = (await client.query('SELECT name FROM accounts WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
     const used = Number((await client.query('SELECT COUNT(*)::int AS n FROM transactions WHERE account_id = $1 AND user_id = $2', [id, userId])).rows[0].n);
     if (used) throw failure(409, `This account has ${used} imported transaction${used === 1 ? '' : 's'}. Delete or move them first.`);
     await client.query('UPDATE transactions SET transfer_account_id = NULL, transfer_checked = FALSE WHERE transfer_account_id = $1 AND user_id = $2', [id, userId]);
     const deleted = await client.query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [id, userId]);
     if (!deleted.rowCount) throw failure(404, 'Account not found');
-    return { success: true, reconcile: await reconcileTransfers(client, userId) };
+    return { success: true, accountName: account?.name, reconcile: await reconcileTransfers(client, userId) };
   });
+  await recordAudit(req, 'account.deleted', 'success', { detail: { accountId: id, account: result.accountName } });
+  delete result.accountName;
   res.json(result);
 }));
 
@@ -222,11 +237,15 @@ router.post('/assign', route(async (req, res) => {
   if (!source || !Number.isSafeInteger(accountId)) throw failure(400, 'source and accountId are required');
   const userId = currentUserId();
   const result = await db.transaction(async client => {
-    const account = (await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])).rows[0];
+    const account = (await client.query('SELECT id,name FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])).rows[0];
     if (!account) throw failure(404, 'Account not found');
     const updated = await client.query('UPDATE transactions SET account_id = $1, transfer_checked = FALSE WHERE source = $2 AND account_id IS NULL AND user_id = $3', [accountId, source, userId]);
-    return { assigned: updated.rowCount, reconcile: await reconcileTransfers(client, userId) };
+    return { assigned: updated.rowCount, accountName: account.name, reconcile: await reconcileTransfers(client, userId) };
   });
+  await recordAudit(req, 'account.import_assigned', 'success', {
+    detail: { source, accountId, account: result.accountName, assigned: result.assigned }
+  });
+  delete result.accountName;
   res.json({ success: true, ...result });
 }));
 

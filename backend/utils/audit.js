@@ -64,9 +64,12 @@ export async function recordAudit(req, eventType, outcome, fields = {}) {
     status: fields.status ?? null,
     detail: sanitizeDetail(fields.detail)
   };
+  const logDetail = { ...event.detail };
+  delete logDetail.fileName;
+  delete logDetail.fileNames;
   structuredLog(outcome === 'error' ? 'error' : outcome === 'failure' || outcome === 'denied' ? 'warn' : 'info', {
     event: eventType, outcome, requestId: event.request_id, actor: event.actor_user_id,
-    subject: event.subject_user_id, grant: event.support_grant_id, status: event.status, detail: event.detail
+    subject: event.subject_user_id, grant: event.support_grant_id, status: event.status, detail: logDetail
   });
   try {
     await administrativeTransaction(client => client.query(`

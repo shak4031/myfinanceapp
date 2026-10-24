@@ -95,6 +95,7 @@ export function pairTransfers(rows, accountsById) {
   const candidates = [];
   for (const row of rows) {
     if (row.account_id == null || isP2P(row)) continue;
+    if (row.category_corrected && !TRANSFER_CATEGORY.test(String(row.category || ''))) continue;
     row._day = dayNumber(row);
     row._amount = cents(Math.abs(Number(row.amount)));
     if (row._day == null || !row._amount) continue;
@@ -202,7 +203,8 @@ export async function reconcileTransfers(client, userId) {
   for (const row of rows) {
     const own = row.account_id != null ? accountsById.get(row.account_id) || null : null;
     const pair = pairs.get(row.id) || null;
-    const transferish = hasTransferWording(row) || hasCardPaymentWording(row);
+    const manuallyCounted = row.category_corrected && !TRANSFER_CATEGORY.test(String(row.category || ''));
+    const transferish = !manuallyCounted && (hasTransferWording(row) || hasCardPaymentWording(row));
     let counterpart = pair ? accountsById.get(pair.account_id) || null : null;
     if (!counterpart && transferish) {
       const last4 = extractLast4(text(row), own?.last4);

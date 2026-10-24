@@ -11,6 +11,7 @@ import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
 import { cashBalance, savedAmount } from '../utils/transfers.js';
 import { buildSpendingHistory } from '../utils/spendingHistory.js';
+import { recordAudit } from '../utils/audit.js';
 
 const router = Router();
 const db = new Database();
@@ -597,7 +598,7 @@ router.post('/update-category', async (req, res) => {
     }
 
     // Get old category before update
-    const oldTxn = await db.get('SELECT id, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, currentUserId()]);
+    const oldTxn = await db.get('SELECT id, date, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, currentUserId()]);
     
     if (!oldTxn) {
       log('CATEGORIZE', `❌ Transaction not found: ID ${transaction_id}`);
@@ -610,6 +611,9 @@ router.post('/update-category', async (req, res) => {
     const validCategory = await db.get('SELECT id FROM categories WHERE name = $1', [new_category]);
     if (!validCategory) return res.status(400).json({ error: 'Choose one of your categories' });
     await db.run('UPDATE transactions SET category = $1, previous_category = category, category_corrected = TRUE, correction_timestamp = NOW() WHERE id = $2 AND user_id = $3', [new_category, transaction_id, currentUserId()]);
+    await recordAudit(req, 'transaction.reclassified', 'success', {
+      detail: { transactionId: Number(transaction_id), date: oldTxn.date, previousCategory: oldCategory, category: new_category }
+    });
 
     log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: ${oldCategory} → ${new_category}`);
 

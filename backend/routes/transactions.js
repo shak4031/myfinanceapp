@@ -5,6 +5,8 @@ import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, app
 import { isPayMode } from '../utils/payMode.js';
 import { isIncomeRole, incomeSources } from '../utils/income.js';
 import { applyNameRules, compileNameRules, currentNameRule, listNameRules, loadNameRules, matchesName, nameKey, previewNameRule, resolveName, suggestNamePattern, validateNameRule } from '../utils/naming.js';
+import { recordAudit } from '../utils/audit.js';
+import { reconcileTransfers } from '../utils/transfers.js';
 
 const router = Router();
 const db = new Database();
@@ -27,6 +29,69 @@ router.post('/', route(async (req, res) => {
   }
   res.json(await db.all(`SELECT * FROM transactions WHERE ${TENANT} AND date >= $1 AND date <= $2
     ${category ? 'AND category=$3' : ''} ORDER BY date DESC, id DESC`, category ? [start, end, category] : [start, end]));
+}));
+
+router.get('/transfer-review', route(async (req, res) => {
+  const status = ['all', 'excluded', 'counted'].includes(req.query.status) ? req.query.status : 'all';
+  const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+  const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+  const result = await db.transaction(async client => {
+    const filter = status === 'excluded' ? 'AND t.transfer_kind IS NOT NULL'
+      : status === 'counted' ? 'AND t.transfer_kind IS NULL' : '';
+    const total = Number((await client.query(`SELECT COUNT(*)::int AS count FROM transactions t WHERE ${TENANT} ${filter}`)).rows[0].count);
+    const rows = (await client.query(`SELECT t.id,t.date,t.description,t.amount,t.direction,t.category,t.transfer_kind,
+      t.source,t.created_at,a.name AS account_name,other.name AS transfer_account_name
+      FROM transactions t
+      LEFT JOIN accounts a ON a.id=t.account_id AND a.user_id=t.user_id
+      LEFT JOIN accounts other ON other.id=t.transfer_account_id AND other.user_id=t.user_id
+      WHERE t.user_id=current_setting('app.user_id')::integer ${filter}
+      ORDER BY t.date DESC,t.id DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows;
+    const categories = (await client.query(`SELECT name FROM categories WHERE ${TENANT} ORDER BY name`)).rows.map(row => row.name);
+    return { rows, total, categories };
+  });
+  res.json({ ...result, limit, offset, status });
+}));
+
+router.post('/:id/transfer-review', route(async (req, res) => {
+  const id = Number(req.params.id);
+  const { handling, category } = req.body || {};
+  if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'A valid transaction id is required');
+  if (!['counted', 'internal', 'savings'].includes(handling)) throw failure(400, 'Choose whether this is counted, an internal transfer, or savings');
+  const result = await db.transaction(async client => {
+    const transaction = (await client.query(`SELECT id,date,category,transfer_kind FROM transactions WHERE id=$1 AND ${TENANT} FOR UPDATE`, [id])).rows[0];
+    if (!transaction) throw failure(404, 'Transaction not found');
+    const targetCategory = handling === 'internal' ? 'Transfer' : handling === 'savings' ? 'Savings' : category;
+    if (typeof targetCategory !== 'string' || !targetCategory.trim()) throw failure(400, 'Choose a category for a counted transaction');
+    let found = (await client.query(`SELECT name FROM categories WHERE name=$1 AND ${TENANT}`, [targetCategory])).rows[0];
+    if (!found && handling !== 'counted') {
+      await reconcileTransfers(client, currentUserId());
+      found = (await client.query(`SELECT name FROM categories WHERE name=$1 AND ${TENANT}`, [targetCategory])).rows[0];
+    }
+    if (!found) throw failure(400, 'Unknown category');
+    if (handling === 'counted' && /^(?:transfers?|internal transfers?|savings|savings transfer)$/i.test(targetCategory)) {
+      throw failure(400, 'Choose a non-transfer category for a transaction counted in totals');
+    }
+    await client.query(`UPDATE transactions SET previous_category=category,category=$1,category_corrected=TRUE,
+      correction_timestamp=NOW(),transfer_account_id=NULL,transfer_pair_id=NULL,transfer_checked=TRUE
+      WHERE id=$2 AND ${TENANT}`, [targetCategory, id]);
+    await reconcileTransfers(client, currentUserId());
+    const saved = (await client.query(`SELECT transfer_kind FROM transactions WHERE id=$1 AND ${TENANT}`, [id])).rows[0];
+    return {
+      transactionId: id,
+      date: transaction.date,
+      previousHandling: transaction.transfer_kind || 'counted',
+      handling: saved.transfer_kind || 'counted',
+      previousCategory: transaction.category,
+      category: targetCategory
+    };
+  });
+  await recordAudit(req, 'transaction.transfer_reviewed', 'success', {
+    detail: {
+      transactionId: result.transactionId, date: result.date, previousHandling: result.previousHandling,
+      handling: result.handling, previousCategory: result.previousCategory, category: result.category
+    }
+  });
+  res.json({ success: true, ...result });
 }));
 
 router.get('/categorization-rules', route(async (req, res) => {
@@ -55,7 +120,16 @@ router.post('/categorization-apply', route(async (req, res) => {
   const protectCorrections = req.body?.protectCorrections ?? true;
   if (typeof learnRules !== 'boolean') throw failure(400, 'learnRules must be a boolean');
   if (typeof protectCorrections !== 'boolean') throw failure(400, 'protectCorrections must be a boolean');
-  res.json(await applyUpdates(db, req.body?.updates, { learnRules, protectCorrections }));
+  const result = await applyUpdates(db, req.body?.updates, { learnRules, protectCorrections });
+  if (result.updated) await recordAudit(req, 'transaction.reclassified', 'success', {
+    detail: {
+      count: result.updated,
+      selectedTransactionIds: req.body.updates.slice(0, 50).map(item => Number(item.id)),
+      moreSelectedTransactions: Math.max(0, req.body.updates.length - 50),
+      categories: [...new Set(req.body.updates.filter(item => item.category).map(item => item.category))]
+    }
+  });
+  res.json(result);
 }));
 router.post('/cleanup-database', (req, res) => res.status(409).json({
   error: 'Automatic cleanup is disabled. Request /api/transactions/categorization-preview and approve selected updates with /api/transactions/categorization-apply. Categories and fixed flags were not changed.'
@@ -77,10 +151,14 @@ router.post('/update-transaction', route(async (req, res) => {
         WHERE ${TENANT} AND match_type='merchant' AND pattern=$1`, [pattern]);
       return { updated: 1, rulesSaved: 0, rulesDisabled: pattern ? 1 : 0 };
     });
+    await recordAudit(req, 'transaction.reclassified', 'success', { detail: { transactionId: Number(id), category: null } });
     return res.json({ success: true, ...result });
   }
   const result = await applyUpdates(db, [{ id, category }], {
     expected: false, protectCorrections: false, learnRules: true
+  });
+  if (result.updated) await recordAudit(req, 'transaction.reclassified', 'success', {
+    detail: { transactionId: Number(id), category }
   });
   res.json({ success: true, ...result });
 }));

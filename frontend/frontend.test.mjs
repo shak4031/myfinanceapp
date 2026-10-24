@@ -25,8 +25,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'accounts', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
-  const nav = ['dashboard', 'categories', 'transactions', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'categories', 'transactions', 'transaction-review', 'activity', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
     return item;
@@ -71,6 +71,7 @@ test('import history selects recent imports, confirms recovery and refreshes fin
     }
     return response(200, { batches, untracked: 7 });
   });
+
   const inputs = batches.map(batch => ({ dataset: { importId: String(batch.id) }, checked: false }));
   f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
   let dashboard = 0, transactions = 0, accounts = 0, categories = 0, invalidated = 0;
@@ -128,6 +129,7 @@ test('import recovery rejects mixed states and surfaces validation failures with
       { id: 2, source: 'two.csv', status: 'undone', backup_rows: 1, created_at: '2026-10-02' }
     ], untracked: 0 });
   });
+
   const inputs = [{ dataset: { importId: '1' }, checked: true }, { dataset: { importId: '2' }, checked: true }];
   f.node('import-history-list').querySelectorAll = selector => selector.includes(':checked') ? inputs.filter(input => input.checked) : inputs;
   f.run('import-history.js');
@@ -144,6 +146,30 @@ test('import recovery rejects mixed states and surfaces validation failures with
   await f.node('import-history-undo').listeners.click();
   assert.equal(posts, 1);
   assert.match(f.node('import-history-status').textContent, /Wait for the current import/);
+});
+
+test('transaction review clearly marks excluded rows and renders activity safely', async () => {
+  const f = fixture(async url => {
+    if (url.startsWith('/api/transactions/transfer-review')) return response(200, {
+      rows: [{ id: 17, date: '2026-10-22', description: 'TRANSFER <review>', amount: '125.00', direction: 'DEBIT',
+        category: 'Transfer', transfer_kind: 'unknown', source: 'checking.csv', account_name: 'Checking', transfer_account_name: null }],
+      total: 1, categories: ['Other', 'Transfer', 'Savings'], limit: 50, offset: 0
+    });
+    return response(200, {
+      total: 1, limit: 50, offset: 0,
+      events: [{ id: 1, created_at: '2026-10-22T14:00:00.000Z', event_type: 'import.completed', outcome: 'success',
+        actor_user_id: 3, actor_name: '<User>', request_id: 'req-123', detail: { fileName: 'checking.csv', importedRows: 12 } }]
+    });
+  });
+  f.run('review-tools.js');
+  await f.context.FinanceReviewTools.loadTransfers();
+  assert.match(f.node('transfer-review-rows').innerHTML, /Needs review · excluded/);
+  assert.match(f.node('transfer-review-rows').innerHTML, /&lt;review&gt;/);
+  assert.match(f.node('transfer-review-count').textContent, /1 of 1 transactions/);
+  await f.context.FinanceReviewTools.loadActivity();
+  assert.match(f.node('activity-events').innerHTML, /Statement imported/);
+  assert.match(f.node('activity-events').innerHTML, /File: checking\.csv/);
+  assert.match(f.node('activity-events').innerHTML, /&lt;User&gt;/);
 });
 
 test('an outstanding import history response cannot repopulate a signed-out workspace', async () => {
@@ -251,7 +277,7 @@ test('phone analytics wraps metric labels and contains readable charts and table
 });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','review-tools.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -262,6 +288,21 @@ test('only one navigation implementation switches to exactly one active view', (
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['category-admin-view']);
   f.context.showView('categories');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['categories-view']);
+});
+test('transaction troubleshooting and activity log routes load their matching pages', () => {
+  const f = fixture(); let transferLoads = 0, activityLoads = 0;
+  f.context.FinanceReviewTools = {
+    loadTransfers: () => { transferLoads++; },
+    loadActivity: () => { activityLoads++; }
+  };
+  f.run('refresh.js');
+  f.context.showView('transaction-review');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['transaction-review-view']);
+  assert.equal(f.node('current-page').textContent, 'Transaction troubleshooting');
+  f.context.showView('activity');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['activity-view']);
+  assert.equal(f.node('current-page').textContent, 'Activity log');
+  assert.deepEqual([transferLoads, activityLoads], [1, 1]);
 });
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'

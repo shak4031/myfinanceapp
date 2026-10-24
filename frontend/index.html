@@ -500,6 +500,7 @@
   <link rel="stylesheet" href="welcome.css?v=20261030c">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
+  <link rel="stylesheet" href="review-tools.css?v=20261023a">
   <link rel="stylesheet" href="marketing.css?v=20261018c">
 </head>
 <body class="auth-pending">
@@ -598,6 +599,8 @@
         <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
         <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
+        <li><a class="nav-btn" data-view="transaction-review" href="#transaction-review"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16.2 16.2 4.3 4.3M8 10.8l1.8 1.8 3.8-4"/></svg>Transaction troubleshooting</a></li>
+        <li><a class="nav-btn" data-view="activity" href="#activity"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>Activity log</a></li>
         <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PLUS</span></a></li>
@@ -818,6 +821,49 @@
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/accounts">How Accounts works</a><button class="btn btn-primary" onclick="openImportModal()">Import a statement</button></div>
         </header>
         <div id="accounts-root"></div>
+      </section>
+
+      <section id="transaction-review-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">CHECK HOW TOTALS ARE BUILT</p><h1>Transaction troubleshooting</h1>
+            <p class="muted">See which transactions count in spending and income, and correct a transfer decision when it is wrong.</p></div>
+        </header>
+        <div class="review-explainer panel">
+          <strong>What the status means</strong>
+          <p><b>Counted</b> transactions affect spending or income. <b>Internal transfer</b> transactions are excluded. <b>Savings transfer</b> transactions are excluded from spending and income and tracked as saved. A transfer marked <b>Needs review</b> is temporarily excluded until you decide.</p>
+        </div>
+        <div class="review-toolbar">
+          <label for="transfer-review-filter">Show
+            <select id="transfer-review-filter">
+              <option value="all">All transactions</option>
+              <option value="excluded">Not counted in totals</option>
+              <option value="counted">Counted in totals</option>
+            </select>
+          </label>
+          <span id="transfer-review-count" role="status"></span>
+          <span class="toolbar-spacer"></span>
+          <button type="button" class="btn btn-secondary" id="transfer-review-refresh">Refresh</button>
+        </div>
+        <p id="transfer-review-error" class="review-error" role="alert"></p>
+        <div class="panel review-table-wrap" role="region" aria-label="Transaction treatment" tabindex="0">
+          <table class="review-audit-table">
+            <thead><tr><th>Date</th><th>Description</th><th>Account / file</th><th>Category</th><th>How handled</th><th>Amount</th><th>Correct decision</th></tr></thead>
+            <tbody id="transfer-review-rows"></tbody>
+          </table>
+        </div>
+        <nav id="transfer-review-pagination" class="toolbar" aria-label="Transaction review pages"></nav>
+      </section>
+
+      <section id="activity-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">YOUR WORKSPACE HISTORY</p><h1>Activity log</h1>
+            <p class="muted">Review imports and changes made in this workspace. Times are shown in your local time zone.</p></div>
+          <button type="button" class="btn btn-secondary" id="activity-refresh">Refresh</button>
+        </header>
+        <p id="activity-count" class="muted" role="status"></p>
+        <p id="activity-error" class="review-error" role="alert"></p>
+        <div id="activity-events" class="activity-list" aria-live="polite"></div>
+        <nav id="activity-pagination" class="toolbar" aria-label="Activity log pages"></nav>
       </section>
 
       <!-- TUTORIALS -->
@@ -1873,7 +1919,8 @@
 
   </script>
   <script src="ui.js?v=20261030a"></script>
-  <script src="refresh.js?v=20261031d"></script>
+  <script src="review-tools.js?v=20261023a"></script>
+  <script src="refresh.js?v=20261031e"></script>
   <script src="accounts.js?v=20261023b"></script>
   <script src="import-history.js?v=20261023b"></script>
   <script src="account.js?v=20261026a"></script>
@@ -1886,7 +1933,7 @@
   <script src="plan.js?v=20261031a"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261031d"></script>
+  <script src="tutorial.js?v=20261031e"></script>
   <script src="marketing.js?v=20261020c"></script>
   <script>FinanceSession.start();</script>
 </body>
