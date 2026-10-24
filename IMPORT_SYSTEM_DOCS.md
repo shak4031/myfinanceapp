@@ -54,6 +54,13 @@ Cancelling, changing mode, refreshing or changing the selection discards the rev
 - `POST /api/import/inspect-csv`: `csvData` and `source`. Returns masked account
   groups, opaque mapping keys, row counts, and unique saved-account matches.
   This read-only step creates no accounts, transactions, or import batches.
+- `POST /api/import/review-csv-overlaps`: the same file and account mappings as
+  the import request. Returns bounded candidate pairs and a tenant-bound,
+  single-use `reviewToken` valid for ten minutes. Preview creates no financial
+  records. Confirm via `/import-csv` with `overlapReview: {reviewToken,
+  acknowledged: true, decisions: [{index, transactionId}]}`. Use a displayed
+  candidate ID to retain it, or `"new"` to explicitly keep the incoming row as
+  a separate transaction.
 - `GET /api/accounts/import-options`: lightweight account identity/type choices
   for the import UI. Unlike the Accounts overview, it does not read transaction
   history or calculate balances.
@@ -124,17 +131,39 @@ at cent precision, including older floating-point amount columns. Existing rows
 and their saved edits are retained. Identical transactions in two different
 assigned accounts remain independent.
 
-If a row has no same-account match but matches an older transaction with no
-account, the upload returns **409 `UNASSIGNED_OVERLAP`**. Nothing in that upload
-is committed, including earlier rows, newly created accounts and import batches.
-The importer does not guess ownership, silently merge rows or count an ambiguous
-match as a successfully skipped duplicate.
+CSV/OFX imports with likely unassigned overlaps or similar same-account
+descriptions return **409 `OVERLAP_REVIEW_REQUIRED`**. Nothing in that upload
+is committed. The import dialog opens a review showing incoming rows, detected
+destination accounts, and the older candidate descriptions, dates, amounts and
+sources. No source-wide assignment is necessary, even for mixed-account history.
 
-Review the older unassigned source in **Accounts**. Source-level assignment is
-appropriate only when **every unassigned row from that source belongs to that
-account**. Do not bulk-assign a mixed-account export. Resolve its mapping first,
-then retry; correctly assigned matching rows will be reported as duplicates.
-This safeguard prevents new repeats but does not remove existing duplicates.
+Choose **Use existing for clear exact matches** to select unique exact matches
+that are not shared with another incoming row. Similar descriptions, multiple
+candidates and candidates shared across account groups require individual
+choices. Candidates must have the same date, amount and debit/credit direction,
+and either no account or the same destination account. Description suggestions
+reuse the existing merchant-description cleanup and compare overlapping word
+tokens; they are not guaranteed matches.
+
+For each candidate, choose to keep an existing transaction or explicitly import
+the incoming row as new. A saved row can match only one incoming row. Acknowledge
+the choices and choose **Import transactions**. Retained rows keep their IDs,
+descriptions, categories, flags, display names and original import provenance.
+Only previously unassigned retained rows receive an account; automatic transfer
+classification is recalculated. Confirmed matches count as skipped duplicates;
+only genuinely new rows enter the new batch. Undoing that batch does not remove
+retained history or reverse its confirmed account assignments.
+
+The confirmation rechecks the exact file, mappings and candidate snapshots under
+locks. Edited/deleted candidates, changed accounts, an expired review, or a reused
+token require a fresh review. Assignment, inserts and token consumption commit
+together or roll back together. Closing/cancelling the review commits nothing.
+Only date/value-matching candidates are read, with hard limits of 2,000 candidate
+records, 500 incoming review rows and 2,000 candidate links; larger reviews require
+a smaller export date range instead of silently truncating.
+
+PDF imports retain the unassigned-overlap safeguard and do not use this CSV review
+screen. Neither workflow automatically removes duplicates already in history.
 
 ### Import-focused troubleshooting
 

@@ -12,6 +12,7 @@ import { reconcileTransfers } from '../utils/transfers.js';
 import { inspectCsvAccounts, resolveCsvAccounts, resolveStatementAccount } from './accounts.js';
 import { recordAudit, structuredLog } from '../utils/audit.js';
 import { beginImport, finishImport, lockImports, importHistory, reviewImports, commitImports } from '../utils/importHistory.js';
+import { findOverlaps, saveOverlapReview, applyOverlapReview } from '../utils/importOverlap.js';
 
 const router = express.Router();
 const db = new Database();
@@ -30,16 +31,17 @@ const route = handler => async (req, res) => {
     failed = error;
     res.status(error.status || 500).json({ success: false, error: error.message,
       ...(error.code === 'ACCOUNT_REVIEW_REQUIRED' ? { code: error.code, detectedAccount: error.detectedAccount, detectedAccounts: error.detectedAccounts } : {}),
-      ...(error.code === 'UNASSIGNED_OVERLAP' ? { code: error.code } : {}) });
+      ...(['UNASSIGNED_OVERLAP', 'OVERLAP_REVIEW_REQUIRED'].includes(error.code) ? { code: error.code } : {}) });
   }
   const status = res.statusCode;
   const rows = result?.results || (result?.success ? [result] : []);
   const detail = {
     ...diagnostic, stage: req.importStage, durationMs: Date.now() - started,
-    reason: failed ? ['ACCOUNT_REVIEW_REQUIRED', 'PDF_REVIEW_REQUIRED', 'UNASSIGNED_OVERLAP'].includes(failed.code) ? failed.code : status < 500 ? 'INPUT_REJECTED' : 'PROCESSING_FAILED' : null,
+    reason: failed ? ['ACCOUNT_REVIEW_REQUIRED', 'PDF_REVIEW_REQUIRED', 'UNASSIGNED_OVERLAP', 'OVERLAP_REVIEW_REQUIRED'].includes(failed.code) ? failed.code : status < 500 ? 'INPUT_REJECTED' : 'PROCESSING_FAILED' : null,
     parsedRows: rows.length ? rows.reduce((sum, row) => sum + (row.totalInFile || 0), 0) : req.importParsedRows || 0,
     importedRows: rows.reduce((sum, row) => sum + (row.imported || 0), 0),
     duplicateRows: rows.reduce((sum, row) => sum + (row.duplicates || 0), 0),
+    assignedRows: rows.reduce((sum, row) => sum + (row.assigned || 0), 0),
     unreadableRows: rows.reduce((sum, row) => sum + (row.errors || 0), 0),
     warningCount: rows.reduce((sum, row) => sum + (row.warnings?.length || 0), 0),
     committed: !failed && !!result?.success
@@ -103,8 +105,8 @@ export async function importTransactions(client, transactions, config, source, a
       AND UPPER(BTRIM(regexp_replace(description,'[[:space:]]+',' ','g')))=$2
       AND ROUND(amount::numeric,2)=$3::numeric AND UPPER(BTRIM(direction))=$4
       AND (account_id IS NOT DISTINCT FROM $5::integer OR ($5::integer IS NOT NULL AND account_id IS NULL))
-      AND ${TENANT} ORDER BY (account_id IS NULL),id LIMIT 1 OFFSET $6`,
-    [transaction.date, description, transaction.amount, direction, accountId, occurrence])).rows[0];
+      AND NOT $7::boolean AND ${TENANT} ORDER BY (account_id IS NULL),id LIMIT 1 OFFSET $6`,
+    [transaction.date, description, transaction.amount, direction, accountId, occurrence, transaction.overlapReviewedNew === true])).rows[0];
     if (existing && existing.account_id === null && accountId !== null) {
       // Unassigned history may belong to this account or another one. Never insert or merge by guessing.
       throw Object.assign(failure(409, `An existing transaction (#${existing.id}) without an account matches a row in this file. Nothing was imported. Review the older unassigned import in Accounts and assign it only if all its rows belong to the correct account, then retry. Do not create a second account or reimport to resolve this overlap.`),
@@ -147,21 +149,25 @@ async function importCsvInto(client, body, parsed, config, fallbackSource, req, 
   const accounts = await resolveCsvAccounts(client, body, parsed.format.accounts);
   const accountTypes = Object.fromEntries([...accounts].map(([key, account]) => [key, PARSER_TYPE[account.kind]]));
   parsed = await parseFile({ ...file, accountTypes });
+  const reviewBody = { ...body, csvData: file.data };
+  const overlaps = await findOverlaps(client, parsed.transactions, accounts, reviewBody);
+  const reviewed = await applyOverlapReview(client, reviewBody, overlaps, accounts, parsed.transactions);
   const source = body.source || fallbackSource || 'csv_import';
   const results = [];
   const grouped = new Map([...accounts.values()].map(account => [account.id, { account, transactions: [] }]));
-  for (const transaction of parsed.transactions) {
+  for (const transaction of reviewed.transactions) {
     grouped.get(accounts.get(transaction.accountKey).id).transactions.push(transaction);
   }
   stage(req, 'saving');
   for (const { account, transactions } of grouped.values()) {
     const batchId = await beginImport(client, source, account);
     const result = await importTransactions(client, transactions, config, source, account.id, { batchId });
+    result.duplicates += reviewed.duplicates.get(account.id) || 0;
     await finishImport(client, batchId, result);
     results.push({ ...result, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } });
   }
   return { imported: results.reduce((sum, result) => sum + result.imported, 0),
-    duplicates: results.reduce((sum, result) => sum + result.duplicates, 0), excluded: 0, accounts: results,
+    duplicates: results.reduce((sum, result) => sum + result.duplicates, 0), assigned: reviewed.assigned, excluded: 0, accounts: results,
     ...(results.length === 1 ? { batchId: results[0].batchId, account: results[0].account } : {}),
     format: parsed.format };
 }
@@ -188,6 +194,29 @@ router.post('/inspect-csv', async (req, res, next) => {
     const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source });
     const accounts = await db.transaction(client => inspectCsvAccounts(client, parsed.format.accounts));
     res.json({ accounts, totalInFile: parsed.transactions.length, errors: parsed.errors.length });
+  } catch (error) { next(error); }
+});
+
+router.post('/review-csv-overlaps', async (req, res, next) => {
+  try {
+    const file = { type: 'csv', data: req.body?.csvData, source: req.body?.source };
+    const parsed = await parseFile(file);
+    const result = await db.transaction(async client => {
+      await lockImports(client);
+      await client.query('SAVEPOINT overlap_preview');
+      let rows;
+      try {
+        const accounts = await resolveCsvAccounts(client, req.body, parsed.format.accounts);
+        const accountTypes = Object.fromEntries([...accounts].map(([key, account]) => [key, PARSER_TYPE[account.kind]]));
+        const resolved = await parseFile({ ...file, accountTypes });
+        rows = await findOverlaps(client, resolved.transactions, accounts, req.body);
+      } finally {
+        await client.query('ROLLBACK TO SAVEPOINT overlap_preview');
+        await client.query('RELEASE SAVEPOINT overlap_preview');
+      }
+      return saveOverlapReview(client, req.body, rows);
+    });
+    res.json(result);
   } catch (error) { next(error); }
 });
 

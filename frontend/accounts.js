@@ -140,6 +140,79 @@
     csvInspection = null;
     const root = $('csv-account-review');
     if (root) { root.innerHTML = ''; root.hidden = true; }
+    overlapReview = null;
+    const overlap = $('csv-overlap-review');
+    if (overlap) { overlap.innerHTML = ''; overlap.hidden = true; }
+  }
+
+  let overlapReview = null;
+  async function reviewCsvOverlaps(csvData, source, account) {
+    const generation = csvGeneration;
+    const body = { csvData, source, ...account };
+    delete body.overlapReview;
+    const review = await json('/api/import/review-csv-overlaps', 'POST', body);
+    if (generation !== csvGeneration) return;
+    overlapReview = { ...review, input: JSON.stringify(body) };
+    const root = $('csv-overlap-review');
+    root.hidden = false;
+    root.innerHTML = `<h3>Review possible duplicates</h3>
+      <p>Nothing has been imported. Compare the incoming rows with your saved transactions. Keeping an existing transaction preserves its edits and assigns its account only when it was unassigned.</p>
+      <p class="import-hint">Same date and amount are required. Similar descriptions are suggestions, not proof. Each saved transaction can be used only once.</p>
+      <button type="button" class="btn btn-secondary" data-overlap-exact ${review.rows.some(row => row.bulkEligible) ? '' : 'disabled'}>Use existing for clear exact matches</button>
+      <div class="csv-overlap-list">${review.rows.map(row => `<fieldset class="csv-account-mapping" data-overlap-index="${row.index}">
+        <legend>${row.bulkEligible ? 'Exact match' : 'Individual review required'}</legend>
+        <div class="csv-overlap-incoming"><strong>Incoming: ${escape(row.incoming.description)}</strong>
+          <p>${escape(row.incoming.date)} · ${escape(money(row.incoming.amount))} · ${escape(row.incoming.direction)}</p>
+          <p>Destination: ${escape(row.incoming.accountName)}${row.incoming.last4 ? ` · ending ${escape(row.incoming.last4)}` : ''}</p></div>
+        ${row.candidates.map(candidate => `<label class="csv-overlap-option"><input type="radio" name="overlap-${row.index}" value="${candidate.id}">
+          <span><strong>Keep existing #${candidate.id}: ${escape(candidate.description)}</strong>
+          <small>${escape(candidate.date)} · ${escape(money(candidate.amount))} · ${escape(candidate.direction)}
+          <br>${escape(candidate.source || 'Source unavailable')} · ${escape(candidate.accountName || 'No account assigned')}
+          ${candidate.accountName ? '' : ' - assign to destination account'}</small></span></label>`).join('')}
+        <label class="csv-overlap-option"><input type="radio" name="overlap-${row.index}" value="new">
+          <span>These are different transactions - import the incoming row as new</span></label>
+        </fieldset>`).join('')}</div>
+      <label class="csv-overlap-option"><input type="checkbox" id="csv-overlap-ack"><span>I reviewed these choices. Keep the selected existing transactions and import only new rows.</span></label>
+      <p class="import-hint">Choose Import transactions to confirm. Closing this dialog cancels the review. Reviews expire after 10 minutes. Undoing the new import removes its new rows, not the account assignments on retained history.</p>
+      <button type="button" class="btn btn-secondary" data-overlap-cancel>Cancel overlap review</button>`;
+    root.querySelector('[data-overlap-exact]').addEventListener('click', () => {
+      for (const row of review.rows.filter(row => row.bulkEligible)) {
+        root.querySelector(`[name="overlap-${row.index}"][value="${row.candidates[0].id}"]`).checked = true;
+      }
+    });
+    root.querySelector('[data-overlap-cancel]').addEventListener('click', () => {
+      overlapReview = null;
+      root.innerHTML = '';
+      root.hidden = true;
+      window.setImportStatus?.('review', 'Overlap review cancelled. Nothing was changed.');
+    });
+    window.setImportStatus?.('review', 'Review possible duplicates in this dialog, acknowledge your choices, then choose Import transactions. Nothing has changed yet.');
+    root.scrollIntoView({ block: 'nearest' });
+  }
+
+  function overlapChoices(csvData, source, account) {
+    if (!overlapReview) return account;
+    if (overlapReview.input !== JSON.stringify({ csvData, source, ...account })) {
+      overlapReview = null;
+      $('csv-overlap-review').hidden = true;
+      return account;
+    }
+    const root = $('csv-overlap-review');
+    const decisions = [], used = new Set();
+    for (const row of overlapReview.rows) {
+      const selected = root.querySelector(`[name="overlap-${row.index}"]:checked`);
+      if (!selected || (selected.value !== 'new' && used.has(selected.value))) {
+        window.setImportStatus?.('error', 'Choose an action for every overlap. Each saved transaction can be kept only once.');
+        return null;
+      }
+      used.add(selected.value);
+      decisions.push({ index: row.index, transactionId: selected.value === 'new' ? 'new' : Number(selected.value) });
+    }
+    if (!$('csv-overlap-ack').checked) {
+      window.setImportStatus?.('error', 'Acknowledge the overlap choices before importing.');
+      return null;
+    }
+    return { ...account, overlapReview: { reviewToken: overlapReview.reviewToken, decisions, acknowledged: true } };
   }
 
   function renderCsvReview(accounts) {
@@ -200,7 +273,7 @@
           last4: group.last4, institution: row.querySelector('[data-csv-bank]').value.trim() || null } };
       } else accountMappings[group.key] = { accountId: Number(selected.value) };
     }
-    return { accountMappings };
+    return overlapChoices(csvData, source, { accountMappings });
   }
 
   document.addEventListener('change', event => {
@@ -389,6 +462,6 @@
       return result;
     };
   }
-  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, prepareCsv, resetCsv,
+  window.FinanceAccounts = { load, loadPage, loadPicker, choice, suggestFromFile, resultNote, afterImport, prepareCsv, resetCsv, reviewCsvOverlaps,
     reset: () => { state = null; resetCsv(); } };
 })();

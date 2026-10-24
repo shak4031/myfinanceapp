@@ -332,6 +332,44 @@ test('malformed import-list responses are errors, not an empty success', async (
   assert.match(f.node('transfer-review-error').textContent, /invalid import list/);
 });
 
+test('CSV overlap review bulk-selects only clear matches and requires complete acknowledged choices', async () => {
+  const rows = [
+    { index: 0, bulkEligible: true, incoming: { description: '<Bank payment>', date: '2026-10-15', amount: 25, direction: 'DEBIT', accountName: 'Checking', last4: '5261' },
+      candidates: [{ id: 10, description: '<Bank payment>', date: '2026-10-15', amount: 25, direction: 'DEBIT', source: '<old>.csv', accountName: null }] },
+    { index: 1, bulkEligible: false, incoming: { description: 'Similar payment', date: '2026-10-16', amount: 30, direction: 'DEBIT', accountName: 'Checking' },
+      candidates: [{ id: 11, description: 'Payment', date: '2026-10-16', amount: 30, direction: 'DEBIT', source: 'old.csv', accountName: null }] }
+  ];
+  const f = fixture(async url => url.endsWith('import-options') ? response(200, { accounts: [], kinds: [] })
+    : url.endsWith('inspect-csv') ? response(200, { accounts: [] })
+      : response(200, { reviewToken: 'review-token', rows }));
+  const messages = [];
+  f.context.setImportStatus = (kind, text) => messages.push([kind, text]);
+  f.run('accounts.js');
+  const account = await f.context.FinanceAccounts.prepareCsv('csv', 'file.csv');
+  await f.context.FinanceAccounts.reviewCsvOverlaps('csv', 'file.csv', account);
+  const root = f.node('csv-overlap-review');
+  assert.match(root.innerHTML, /&lt;Bank payment&gt;/);
+  assert.match(root.innerHTML, /&lt;old&gt;\.csv/);
+  assert.doesNotMatch(root.innerHTML, /<Bank payment>/);
+  root.querySelector('[data-overlap-exact]').listeners.click();
+  assert.equal(root.querySelector('[name="overlap-0"][value="10"]').checked, true);
+  assert.notEqual(root.querySelector('[name="overlap-1"][value="11"]').checked, true);
+  const query = root.querySelector;
+  let second = null;
+  root.querySelector = selector => selector === '[name="overlap-0"]:checked' ? { value: '10' }
+    : selector === '[name="overlap-1"]:checked' ? second : query(selector);
+  assert.equal(await f.context.FinanceAccounts.prepareCsv('csv', 'file.csv'), null);
+  second = { value: 'new' };
+  assert.equal(await f.context.FinanceAccounts.prepareCsv('csv', 'file.csv'), null, 'acknowledgement required');
+  f.node('csv-overlap-ack').checked = true;
+  const confirmed = await f.context.FinanceAccounts.prepareCsv('csv', 'file.csv');
+  assert.deepEqual(JSON.parse(JSON.stringify(confirmed.overlapReview)), { reviewToken: 'review-token',
+    decisions: [{ index: 0, transactionId: 10 }, { index: 1, transactionId: 'new' }], acknowledged: true });
+  root.querySelector('[data-overlap-cancel]').listeners.click();
+  assert.equal(root.hidden, true);
+  assert.equal((await f.context.FinanceAccounts.prepareCsv('csv', 'file.csv')).overlapReview, undefined);
+});
+
 test('an outstanding import history response cannot repopulate a signed-out workspace', async () => {
   let resolve;
   const f = fixture(() => new Promise(done => { resolve = done; }));
@@ -749,6 +787,23 @@ test('account review requires an owned type and the not-mine action saves an ext
     assert.equal(f.requests[0][0], '/api/import/import-csv');
     assert.match(f.node('import-result').innerHTML, /Bad export[^]*csv-support-123/);
     assert.equal(f.node('csv-import-btn').disabled, false);
+  });
+  test('CSV overlap review handles the session fetch wrapper throwing review-required responses', async () => {
+    const f = pdfUploadFixture(409, {});
+    f.context.pendingCsvFile = { name: 'mixed.csv', size: 50 };
+    f.context.FileReader = class {
+      readAsText() { this.result = 'synthetic csv'; setTimeout(() => this.onload(), 0); }
+    };
+    f.context.fetch = async () => { throw Object.assign(new Error('Review overlaps.'), { code: 'OVERLAP_REVIEW_REQUIRED', status: 409 }); };
+    let review;
+    f.context.FinanceAccounts.reviewCsvOverlaps = async (...args) => { review = args; };
+    await f.context.importCSV();
+    assert.deepEqual(JSON.parse(JSON.stringify(review)), ['synthetic csv', 'mixed.csv', { accountMappings: {} }]);
+    assert.equal(f.node('csv-import-btn').disabled, false);
+    assert.equal(f.node('csv-overlap-review').inert, false);
+    f.context.FinanceAccounts.reviewCsvOverlaps = async () => { throw new Error('Preview unavailable'); };
+    await f.context.importCSV();
+    assert.match(f.node('import-result').innerHTML, /Could not load overlap review: Preview unavailable/);
   });
   test('PDF upload prevents double submits and displays detected statement/reconciliation facts', async () => {
     const f = pdfUploadFixture(200, {

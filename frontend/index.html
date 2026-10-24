@@ -492,7 +492,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261030c">
+  <link rel="stylesheet" href="refresh.css?v=20261030d">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261031c">
   <link rel="stylesheet" href="categories.css?v=20261027a">
@@ -950,6 +950,7 @@
           </button>
           <div id="csv-file-list" class="import-file-list" aria-live="polite"></div>
           <section id="csv-account-review" aria-label="Review detected accounts" hidden></section>
+          <section id="csv-overlap-review" aria-label="Review possible duplicate transactions" hidden></section>
           <div class="import-actions">
             <button type="button" class="btn btn-primary" onclick="importCSV()" disabled id="csv-import-btn">Import transactions</button>
           </div>
@@ -1702,6 +1703,7 @@
     let pendingCsvFile = null;
     function onCsvSelected(e) {
       if (e.target.files.length > 0) {
+        FinanceAccounts.resetCsv();
         pendingCsvFile = e.target.files[0];
         document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
@@ -1712,6 +1714,7 @@
       e.currentTarget.style.borderColor = 'var(--border)';
       const files = e.dataTransfer.files;
       if (files.length > 0 && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(files[0].name) || files[0].type === 'text/csv')) {
+        FinanceAccounts.resetCsv();
         pendingCsvFile = files[0];
         document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
@@ -1723,16 +1726,18 @@
       if (!pendingCsvFile) { setImportStatus('error', 'Select a bank export first.'); return; }
       const file = pendingCsvFile;
       csvImportInProgress = true;
+      document.getElementById('csv-overlap-review').inert = true;
       const button = document.getElementById('csv-import-btn');
       button.disabled = true;
       button.textContent = 'Importing...';
       let reference = '';
+      let csvData, account;
 
       const resultDiv = document.getElementById('import-result');
       setImportStatus('progress', 'Reading bank export... Import one file at a time; wait for this result.');
 
       try {
-        const csvData = await new Promise((resolve, reject) => {
+        csvData = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.onerror = () => reject(new Error('The bank export could not be read. Choose the file again.'));
@@ -1740,7 +1745,7 @@
           reader.readAsText(file);
         });
 
-        const account = await FinanceAccounts.prepareCsv(csvData, file.name);
+        account = await FinanceAccounts.prepareCsv(csvData, file.name);
         if (!account) return;
         setImportStatus('progress', 'Processing transactions... Please wait for the result before importing another file.');
 
@@ -1759,6 +1764,7 @@
             <div style="color: var(--success); font-weight: 700;">✅ Import Complete</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
+              ${data.assigned ? `<br>${data.assigned} existing transaction${data.assigned === 1 ? '' : 's'} assigned to confirmed destinations; saved edits retained.` : ''}
             </div>
             ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
             ${FinanceAccounts.resultNote(data)}
@@ -1773,15 +1779,26 @@
           document.getElementById('csv-import-btn').disabled = true;
           loadDashboard();
         } else {
+          if (data.code === 'OVERLAP_REVIEW_REQUIRED') {
+            await FinanceAccounts.reviewCsvOverlaps(csvData, file.name, account);
+            return;
+          }
           if (data.code === 'ACCOUNT_REVIEW_REQUIRED') FinanceAccounts.resetCsv();
           setImportStatus('error', data.error || `Import failed (${res.status}).`);
         }
       } catch (err) {
-        setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
-          ? 'The import request timed out. The server may still be processing it. Check Transactions before retrying.'
-          : err.message);
+        if (err.code === 'OVERLAP_REVIEW_REQUIRED') {
+          try { await FinanceAccounts.reviewCsvOverlaps(csvData, file.name, account); }
+          catch (reviewError) { setImportStatus('error', `Could not load overlap review: ${reviewError.message}`); }
+        } else {
+          if (err.code === 'ACCOUNT_REVIEW_REQUIRED') FinanceAccounts.resetCsv();
+          setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
+            ? 'The import request timed out. The server may still be processing it. Check Transactions before retrying.'
+            : err.message);
+        }
       } finally {
         csvImportInProgress = false;
+        document.getElementById('csv-overlap-review').inert = false;
         button.disabled = !pendingCsvFile;
         button.textContent = 'Import transactions';
         resultDiv.setAttribute('aria-busy', 'false');
@@ -1955,7 +1972,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261024a"></script>
   <script src="refresh.js?v=20261031g"></script>
-  <script src="accounts.js?v=20261024a"></script>
+  <script src="accounts.js?v=20261024b"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261026a"></script>
   <script src="pro-charts.js?v=20261031c"></script>
