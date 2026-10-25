@@ -25,8 +25,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
-  const nav = ['dashboard', 'categories', 'transactions', 'transaction-review', 'activity', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
     return item;
@@ -213,6 +213,9 @@ test('subscription routing waits for entitlement and never opens financial pages
   assert.equal(basic.context.lastView, 'subscription');
   assert.match(basic.node('subscription-view').innerHTML, /included in household Pro/);
   assert.equal(basic.calls.some(call => call.url === '/api/plan'), false);
+  await basic.context.showView('knowledge-base');
+  assert.equal(basic.context.lastView, 'knowledge-base');
+  assert.equal(basic.calls.length, 2, 'Knowledge Base is available without an additional Pro entitlement check');
   const paid = householdFixture({ entitlement: { tier: 'pro', source: 'license', active: true, plusActive: true } });
   await paid.context.showView('goals');
   assert.equal(paid.context.lastView, 'goals');
@@ -1090,6 +1093,17 @@ test('transaction troubleshooting and activity log routes load their matching pa
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['activity-view']);
   assert.equal(f.node('current-page').textContent, 'Activity log');
   assert.deepEqual([transferLoads, activityLoads], [1, 1]);
+});
+test('Knowledge Base has a direct route and explains both analytics offerings', () => {
+  const f = fixture(); f.run('refresh.js');
+  f.context.showView('knowledge-base');
+  assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['knowledge-base-view']);
+  assert.equal(f.node('current-page').textContent, 'Knowledge Base');
+  assert.equal(f.context.location.hash, '#knowledge-base');
+  const html = source('index.html');
+  for (const text of ['Month-end forecast', '6-month cash flow', 'Monthly spend trend', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
+    assert.ok(html.includes(text), `Knowledge Base should explain ${text}`);
+  }
 });
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'

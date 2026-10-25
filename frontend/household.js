@@ -203,7 +203,7 @@
     if (!window.FinanceSession?.isAuthenticated?.()) return;
     const ticket = ++routeGeneration;
     const name = route.split('/')[0];
-    const accessible = ['settings', 'tutorials'];
+    const accessible = ['settings', 'tutorials', 'knowledge-base'];
     if (accessible.includes(name)) {
       baseShowView(route);
       if (name === 'settings') await loadSettings();

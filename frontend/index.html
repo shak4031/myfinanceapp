@@ -495,6 +495,7 @@
   <link rel="stylesheet" href="refresh.css?v=20261030d">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261031c">
+  <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261031a">
   <link rel="stylesheet" href="welcome.css?v=20261030c">
@@ -621,6 +622,7 @@
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
         <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
+        <li><a class="nav-btn" data-view="knowledge-base" href="#knowledge-base"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 5.5v13A2.5 2.5 0 0 1 6.5 16H20M8 7h8m-8 4h8"/></svg>Knowledge Base</a></li>
         <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PRO</span></a></li>
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
@@ -720,6 +722,76 @@
           <div class="pro-header-actions" id="analytics-actions"></div>
         </header>
         <div id="analytics-content" class="analytics-content" aria-live="polite"></div>
+      </section>
+
+      <section id="knowledge-base-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">KNOWLEDGE BASE · FIRST GUIDE</p><h1>Make sense of your analytics</h1><p class="muted">A practical guide to what each view measures, how to use it, and what it can (and cannot) tell you.</p></div>
+        </header>
+        <div class="kb-content">
+          <section class="kb-intro panel">
+            <p>MyFinance has two analytics views with different jobs. <strong>Overview</strong> looks for changes in your own transaction history. <strong>Spending Compass</strong> adds context from published U.S. household spending data and looks for places your own spending could move toward levels you have already reached.</p>
+            <nav class="kb-jump-links" aria-label="Analytics guide sections">
+              <a class="btn btn-primary" href="#analytics" data-view="analytics">Open Analytics</a>
+              <a class="btn btn-secondary" href="#analytics/compass" data-view="analytics/compass">Open Spending Compass</a>
+              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-overview">Overview cards</button>
+              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-compass">Compass panels</button>
+            </nav>
+          </section>
+          <section class="kb-section" aria-labelledby="kb-start-title">
+            <div class="kb-section-heading"><p class="eyebrow">GETTING USEFUL RESULTS</p><h2 id="kb-start-title">Start with complete, well-organized data</h2></div>
+            <div class="kb-grid kb-grid-3">
+              <article class="kb-card"><h3>Import statements regularly</h3><p>Missing statements make totals look lower than they were. At least 3 complete months help the Overview averages; longer histories make trend signals steadier. Compass comparisons use completed months and need at least 3 full months in standard spending categories.</p></article>
+              <article class="kb-card"><h3>Check categories and transfers</h3><p>Correct categories make category comparisons meaningful. Transfers between your own accounts are excluded from spending to avoid counting the same money twice. Review unusual classifications before acting on a signal.</p></article>
+              <article class="kb-card"><h3>Set your household profile</h3><p>In Spending Compass, enter household size, region and rent/own status for a closer comparison. Until you do, it uses the average U.S. household. Comparisons are guideposts, not targets every household should meet.</p></article>
+            </div>
+            <p class="kb-caveat">Forecasts assume recent patterns continue. They are estimates, can change when new transactions arrive, and are not financial advice.</p>
+          </section>
+          <section class="kb-section" id="knowledge-base-overview" aria-labelledby="kb-overview-title">
+            <div class="kb-section-heading"><p class="eyebrow">ANALYTICS · OVERVIEW</p><h2 id="kb-overview-title">Your history, signals and near-term picture</h2><p>Use this view to notice a change, identify where it came from, then decide what to inspect or adjust.</p></div>
+            <article class="kb-feature panel"><h3>At-a-glance measures</h3><p class="kb-purpose">Six quick checks summarize the current month and recent household finances.</p>
+              <div class="kb-metric-list">
+                <div><h4>Spent this month</h4><p>Spending since the first of this month, compared with the same point last month. Useful for spotting a change in pace; partial months should only be compared at the same point in time.</p></div>
+                <div><h4>Projected</h4><p>Estimated month-end spending, including bills still due and typical flexible spending for the remaining days. Treat it as an early warning, not a promise.</p></div>
+                <div><h4>Avg monthly</h4><p>Average monthly spending across the last 3 full months, shown beside average income. A quick baseline for whether the household is generally spending more or less than it brings in.</p></div>
+                <div><h4>Savings rate</h4><p>Average income left after spending, as a share of income over those 3 full months. It cannot be measured without recorded income and may be negative when spending exceeds income.</p></div>
+                <div><h4>Fixed vs flexible</h4><p>The share of average monthly spending marked as fixed bills. It helps distinguish committed costs from more adjustable spending; incorrect fixed-bill labels distort this share.</p></div>
+                <div><h4>Daily burn</h4><p>This month's spending pace per elapsed day, alongside days left in the month. Use it with the projection to see whether the current pace is sustainable, not as a spending target.</p></div>
+              </div>
+            </article>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Month-end forecast</h3><p>Plots this month's spending pace beside last month and estimates the finish, splitting the estimate into bills still due and expected flexible spending. Check it after large purchases or as bills come due; compare like-for-like months and remember that new data can move the estimate.</p></article>
+              <article class="kb-card"><h3>6-month cash flow</h3><p>Projects the recorded balance forward if typical income and spending continue. The starting point comes from your latest recorded account balance; the line highlights the projected balance, lowest point and typical surplus or shortfall. Update balances and fixed bills, and treat the result as a scenario—not a guaranteed runway.</p></article>
+              <article class="kb-card"><h3>Monthly spend trend</h3><p>Shows up to 12 months of spending, a 3-month moving average and income. The average smooths one-off bumps so you can see direction; use the monthly bars to find when a change began. Missing statement months can make the trend misleading.</p></article>
+              <article class="kb-card"><h3>Recurring charges not marked fixed</h3><p>Finds steady, scheduled charges that are not already marked as fixed bills, estimates their monthly/yearly cost and flags detected price increases. Review the merchant, amount and cadence: a repeating charge is not automatically a bill or subscription. Mark genuine bills fixed so they can feed the bill calendar and forecast; review unwanted charges with the provider.</p></article>
+              <article class="kb-card"><h3>Category signals</h3><p>For each spending category, compare this month, the same point last month, 3- and 6-month averages, share of spending, trend and volatility. “Running hot” means the projected month is at least 15% above its 3-month average; “Cooling” is a direction, not proof that spending is healthy. Sort the columns, then open a category to inspect its transactions.</p></article>
+              <article class="kb-card"><h3>Unusual activity</h3><p>Surfaces individual charges or category spending far outside the usual pattern. Use it as a review queue for possible duplicates, miscategorized items or genuine one-offs—not an automatic fraud alert. Confirm against the statement before changing anything.</p></article>
+              <article class="kb-card"><h3>Top merchants</h3><p>Ranks where the last 90 days of spending went, including transaction count, average purchase, share and change. It is useful for finding a concentrated or growing expense; a high total alone does not tell you whether the spending is avoidable.</p></article>
+              <article class="kb-card"><h3>Weekly rhythm</h3><p>Totals recent spending by weekday and weekend, with an average week and quietest day. It can prompt questions about routines, but it does not adjust for how many of each weekday occur or why purchases happened. Treat small differences as descriptive, not behavioral evidence.</p></article>
+            </div>
+          </section>
+          <section class="kb-section" id="knowledge-base-compass" aria-labelledby="kb-compass-title">
+            <div class="kb-section-heading"><p class="eyebrow">SPENDING COMPASS</p><h2 id="kb-compass-title">Your patterns, with outside context</h2><p>Compass is not another forecast. It combines your category history with published Consumer Expenditure Survey benchmarks, adjusted for household size, region and housing. Set a time period for each panel; short or incomplete periods can produce unstable comparisons.</p></div>
+            <article class="kb-feature panel"><h3>Compass plan and headline</h3><p>Start here. It estimates potential monthly savings for categories where spending is at least $10 above a suggested level and is either above a relevant benchmark or showing an upward trend. Suggested levels are based on your own lower-spending months, typical household spending or—when spending is seasonal—the same months last year. The opportunity is a scenario, not a promised saving or a requirement to spend like another household. Review the category evidence before setting a target.</p></article>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Where your money flows</h3><p>Shows how average monthly income is divided among fixed bills, everyday categories, debt minimums and money left over. Use it to see the broad shape of your budget and which category contributes most. It reflects imported and classified activity; it cannot include bills or debt payments that were never recorded.</p></article>
+              <article class="kb-card"><h3>Where the signals overlap</h3><p>Combines three separate checks—above a similar household, trending up and unusually high for your own history. Categories with multiple signals deserve earlier review; one signal alone is a prompt to watch, not a verdict. This adds benchmark and unusual-month context beyond Overview's category trend table.</p></article>
+              <article class="kb-card"><h3>Who gets your money</h3><p>Explores vendors and spending concentration. Select a bubble to see that vendor's story; change the bubble size or color to explore the available measures. It helps move from “which category?” to “which merchant?”—but a large merchant is not necessarily a problem.</p></article>
+              <article class="kb-card"><h3>Hot and cold months</h3><p>A category-by-month view that makes seasonality, recurring peaks and unusually quiet months easier to see. Hover or focus a cell for the exact value. Compare complete months only; a missing statement is not a zero-spending month.</p></article>
+              <article class="kb-card"><h3>Your normal range</h3><p>Compares recent category spending with its historical range and shows how exceptional the latest month is relative to prior months. Use it to distinguish a routine fluctuation from a genuine spike, while checking that the history is complete and relevant.</p></article>
+              <article class="kb-card"><h3>Technical readings</h3><p>An optional detail table for average vs. typical spending, momentum, moving-average crossovers, volatility bands, how many recent months rose, and whether change came from purchase frequency or purchase size. It is for investigating the “why” behind a signal; the headline and plan are enough for a quick review.</p></article>
+            </div>
+            <p class="kb-caveat">Benchmark values come from the cited U.S. Bureau of Labor Statistics Consumer Expenditure Survey, not other MyFinance users. Contracted bills such as mortgage, rent, loans, insurance and internet are not compared. Survey averages are context, not a judgment about what you should spend.</p>
+          </section>
+          <section class="kb-section kb-value-review" aria-labelledby="kb-value-title">
+            <div class="kb-section-heading"><p class="eyebrow">WHAT IS DISTINCTIVE?</p><h2 id="kb-value-title">A candid note on usefulness</h2></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Strongest decision support</h3><p>The month-end forecast, category signals and recurring-charge review each suggest a concrete next step: check the pace, investigate a category, or verify a repeating payment. Compass adds a different lens by combining personal trends with an external household benchmark.</p></article>
+              <article class="kb-card"><h3>Most useful together</h3><p>Overview's “Running hot” signal compares a category with your own recent average; Compass's overlap adds whether it is above a similar household and unusually high for you. These are related but not identical. Use Overview to spot movement, Compass to add context, and transaction details to decide.</p></article>
+              <article class="kb-card"><h3>Worth evaluating</h3><p>Weekly rhythm currently reports weekday totals and a peak day, but gives little context for day-of-week frequency or a practical action. If it does not change a decision, it may be a candidate to simplify or replace with a normalized comparison. Top merchants can also be descriptive unless the user can drill into a specific opportunity. These are product questions, not conclusions from your personal data.</p></article>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="category-admin-view" class="view">
