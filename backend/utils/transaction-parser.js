@@ -241,20 +241,16 @@ class TransactionCSVParser {
    * Validate date format (YYYY-MM-DD or MM/DD/YYYY)
    */
   isValidDate(dateStr) {
-    // Try YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const d = new Date(dateStr);
-      return !isNaN(d.getTime());
+    let year, month, day, match;
+    match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (match) [, year, month, day] = match.map((value, index) => index ? Number(value) : value);
+    else {
+      match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dateStr);
+      if (match) [, month, day, year] = match.map((value, index) => index ? Number(value) : value);
     }
-
-    // Try MM/DD/YYYY
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-      const parts = dateStr.split('/');
-      const d = new Date(parts[2], parts[0] - 1, parts[1]);
-      return !isNaN(d.getTime());
-    }
-
-    return false;
+    if (!match || year < 1900 || year > 2100) return false;
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
   }
 
   /**
@@ -264,14 +260,12 @@ class TransactionCSVParser {
     if (!amountStr || amountStr === '') return null;
 
     // Remove currency symbols and whitespace
-    let cleaned = amountStr
-      .replace(/[$,]/g, '')
-      .replace(/\s/g, '')
-      .trim();
+    let cleaned = amountStr.replace(/\$/g, '').replace(/\s/g, '').trim();
 
     if (cleaned === '' || cleaned === '-') return null;
+    if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(cleaned)) return null;
 
-    const num = parseFloat(cleaned);
+    const num = Number(cleaned.replace(/,/g, ''));
     if (isNaN(num)) return null;
 
     return num;
@@ -306,36 +300,23 @@ class TransactionCSVParser {
     log('PARSER', `Detected columns: ${JSON.stringify(this.columnMap)}`);
     log('PARSER', `Processing ${lines.length - 1} transaction rows from ${sourceFile}`);
 
-    const seenTransactions = new Set();
-    let duplicateCount = 0;
-
     // Parse each row
     for (let i = 1; i < lines.length; i++) {
       const txn = this.parseRow(lines[i], this.columnMap);
 
       if (txn) {
-        // Create a unique key for deduplication
-        const dupKey = `${txn.date}|${txn.description}|${txn.amount}|${txn.direction}`;
-
-        if (seenTransactions.has(dupKey)) {
-          duplicateCount++;
-          log('PARSER', `Duplicate detected: ${txn.description} on ${txn.date}`);
-          continue;
-        }
-
-        seenTransactions.add(dupKey);
         this.transactions.push(txn);
       } else {
         this.errors.push(`Failed to parse row ${i + 1}: ${lines[i].substring(0, 50)}`);
       }
     }
 
-    log('PARSER', `✓ Parsed ${this.transactions.length} transactions, ${duplicateCount} duplicates within file, ${this.errors.length} errors`);
+    log('PARSER', `✓ Parsed ${this.transactions.length} transactions, ${this.errors.length} errors`);
 
     return {
       transactions: this.transactions,
       errors: this.errors,
-      duplicates: duplicateCount
+      duplicates: 0
     };
   }
 }

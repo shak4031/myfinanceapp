@@ -29,6 +29,12 @@ SMTP_USER=<smtp-user>
 SMTP_PASS=<smtp-password>
 SMTP_FROM="MyFinanceApp <no-reply@your-domain>"
 
+# Optional Plaid connection and transaction sync
+PLAID_CLIENT_ID=<Plaid Dashboard client ID>
+PLAID_SECRET=<Sandbox secret>
+PLAID_ENVIRONMENT=sandbox
+PLAID_TOKEN_ENCRYPTION_KEY=<base64-encoded 32-byte key>
+
 # Audit and monitoring
 AUDIT_HASH_SECRET=<random-secret-at-least-32-characters>
 AUDIT_RETENTION_DAYS=365     # 30 to 3650
@@ -40,6 +46,55 @@ Generate a setup token (and `AUDIT_HASH_SECRET`) locally with:
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
+
+Generate the Plaid token-encryption key separately:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Plaid is optional. Configure `PLAID_CLIENT_ID`, the matching environment secret,
+`PLAID_ENVIRONMENT=sandbox` (or `production` after Plaid production approval),
+and the encryption key before enabling bank connections. Never send credentials
+or encryption keys to customers or store them in source control. Changing the
+encryption key without first re-encrypting stored Plaid access tokens will make
+existing connections unusable.
+
+Link tokens specify the public webhook URL
+`<APP_ORIGIN>/api/plaid/webhook`; configure the matching HTTPS origin in Plaid
+and make that endpoint reachable from Plaid. The endpoint verifies Plaid's
+ES256 webhook signature and exact raw request-body hash. Keep the public
+application origin stable. For local development, use a Plaid Sandbox-capable
+public HTTPS test environment rather than disabling webhook verification.
+
+Transactions are requested with up to 365 days of initial history. Webhooks
+trigger cursor-based transaction sync, and the server retries missed updates
+with a daily catch-up sync. Sync applies additions, modifications, removals and
+pending-to-posted replacements atomically with the cursor update. A linked
+checking balance is included in the runway only after the user selects it.
+Plaid account balances can be institution-cached or delayed; the app shows
+their last app-check time and warns users to verify the bank balance before
+relying on projections. It does not call a separate paid real-time balance
+endpoint.
+
+CSV, PDF and Plaid imports share the same server-side validation and overlap
+checks. Possible overlaps with the same amount and direction within three days
+are held in **Import Review**, regardless of description, and are not counted
+in totals or forecasts until the user chooses to keep the existing transaction
+or explicitly add the new one as separate. This conservative window can flag
+legitimate repeated purchases for review. Plaid transaction IDs are unique per
+user and repeated syncs are idempotent. No heuristic can prove two records are
+the same real-world purchase when institutions provide different or incomplete
+details.
+Disconnecting revokes the Plaid Item and removes its encrypted access token and
+account balance settings; already-imported transaction history is retained.
+
+Before production, complete Plaid's production approval and review its current
+product, pricing, privacy, and consent requirements. Update the app's privacy
+notice to explain that users who choose bank connection share account and
+transaction data with Plaid and their institution. Do not enable public
+connections until the Sandbox flow, data-quality review flow, webhook
+reachability, and production environment have been tested end to end.
 
 `DATABASE_SSL=true` enables certificate-verified PostgreSQL TLS when your provider
 requires it. Use the provider's trusted certificate configuration; do not disable

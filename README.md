@@ -9,6 +9,15 @@ categories, debts, and goals; account identity never comes from a request body.
 Existing records remain assigned to owner account **1**. New users receive
 categories only, never the owner's transactions, debts, rules, or goals.
 
+Users can choose either Plaid bank connections with ongoing transaction sync or
+CSV/PDF statement imports, and can use both. Plaid is opt-in and requires
+deployment credentials; connected account tokens are encrypted at rest.
+Potential overlaps across Plaid and file imports are held outside financial
+calculations until the user resolves them in **Import Review**. Eligible USD
+checking balances can be selected for the upcoming-payment projection. Bank
+reported balances may be delayed, so the projection displays the source and
+last app-check time and advises users to verify their bank balance.
+
 Before deploying, back up the database and follow the private-account setup in
 [DEPLOYMENT.md](./DEPLOYMENT.md). Public registration is off by default. Startup
 requires a migration-capable PostgreSQL connection; migration fails rather than
@@ -138,6 +147,8 @@ tests and HTTP account/session flows. Tests do not connect to your live database
 - `/backend/routes/debts.js` - Credit card endpoints
 - `/backend/routes/goals.js` - Savings goals endpoints
 - `/backend/routes/import.js` - CSV/PDF import handling
+- `/backend/routes/plaid.js` - Plaid Link, encrypted connections, webhook-driven and catch-up sync
+- `/backend/routes/import-review.js` - Resolve possible cross-source duplicates
 - `/backend/routes/auth.js` - Authentication (session-based)
 - `/backend/routes/logs.js` - System logging
 - `/backend/utils/logger.js` - Logging utility

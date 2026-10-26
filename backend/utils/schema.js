@@ -1,4 +1,8 @@
-export const PRIVATE_TABLES = ['categories', 'transaction_labels', 'transactions', 'staging_transactions', 'credit_cards', 'savings_goals'];
+export const PRIVATE_TABLES = [
+  'categories', 'transaction_labels', 'transactions', 'staging_transactions',
+  'credit_cards', 'savings_goals', 'plaid_connections', 'plaid_accounts',
+  'transaction_import_reviews'
+];
 
 export const DEFAULT_CATEGORIES = [
   ['Groceries', 'Cart', '#36a38b'], ['Utilities', 'Bolt', '#5885d8'],
@@ -80,6 +84,9 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_corrected BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS previous_category TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMPTZ;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS plaid_transaction_id TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS plaid_account_id TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_pending BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS staging_transactions (
       id SERIAL PRIMARY KEY, date TEXT, description TEXT, amount NUMERIC(14,2), direction TEXT,
       balance NUMERIC(14,2), source TEXT, status TEXT DEFAULT 'pending', error_message TEXT,
@@ -95,6 +102,32 @@ export async function migratePrivateSchema(client) {
       target_date TEXT, priority INTEGER DEFAULT 1, icon TEXT DEFAULT 'Save',
       color TEXT DEFAULT '#369c85', notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS plaid_connections (
+      id SERIAL PRIMARY KEY, item_id TEXT NOT NULL, access_token_ciphertext TEXT NOT NULL,
+      institution_name TEXT, cursor TEXT, status TEXT NOT NULL DEFAULT 'connected',
+      last_sync_at TIMESTAMPTZ, last_sync_attempt_at TIMESTAMPTZ, last_error_code TEXT,
+      user_id INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS plaid_accounts (
+      id SERIAL PRIMARY KEY, connection_id INTEGER NOT NULL, account_id TEXT NOT NULL,
+      name TEXT NOT NULL, official_name TEXT, mask TEXT, type TEXT, subtype TEXT,
+      current_balance NUMERIC(14,2), available_balance NUMERIC(14,2), iso_currency_code TEXT,
+      use_for_cashflow BOOLEAN NOT NULL DEFAULT FALSE, balance_checked_at TIMESTAMPTZ,
+      user_id INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS transaction_import_reviews (
+      id SERIAL PRIMARY KEY, source TEXT NOT NULL, date TEXT NOT NULL, description TEXT NOT NULL,
+      amount NUMERIC(14,2) NOT NULL, direction TEXT NOT NULL, balance NUMERIC(14,2), category TEXT,
+      plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN NOT NULL DEFAULT FALSE,
+      candidate_transaction_ids INTEGER[] NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending', matched_transaction_id INTEGER, resolution_transaction_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), resolved_at TIMESTAMPTZ,
+      user_id INTEGER NOT NULL REFERENCES users(id)
+    );
+    ALTER TABLE plaid_connections ADD COLUMN IF NOT EXISTS last_sync_attempt_at TIMESTAMPTZ;
+    ALTER TABLE plaid_accounts ADD COLUMN IF NOT EXISTS balance_checked_at TIMESTAMPTZ;
+    ALTER TABLE transaction_import_reviews ADD COLUMN IF NOT EXISTS category TEXT;
+    ALTER TABLE transaction_import_reviews ADD COLUMN IF NOT EXISTS matched_transaction_id INTEGER;
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS debt_type TEXT NOT NULL DEFAULT 'credit_card';
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS payment_in_history BOOLEAN NOT NULL DEFAULT TRUE;
     DO $$
@@ -149,6 +182,30 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS labels_user_pattern_key ON transaction_labels (user_id, pattern);
     CREATE INDEX IF NOT EXISTS transactions_user_date_idx ON transactions (user_id, date);
+    CREATE UNIQUE INDEX IF NOT EXISTS transactions_user_plaid_transaction_key
+      ON transactions (user_id, plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS plaid_connections_user_item_key ON plaid_connections (user_id, item_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS plaid_accounts_user_account_key ON plaid_accounts (user_id, account_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS plaid_accounts_id_user_key ON plaid_accounts (id, user_id);
+    CREATE INDEX IF NOT EXISTS plaid_accounts_user_cashflow_idx ON plaid_accounts (user_id, use_for_cashflow);
+    CREATE INDEX IF NOT EXISTS import_reviews_user_status_idx ON transaction_import_reviews (user_id, status, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS import_reviews_user_plaid_transaction_key
+      ON transaction_import_reviews (user_id, plaid_transaction_id)
+      WHERE plaid_transaction_id IS NOT NULL AND status = 'pending';
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plaid_accounts_tenant_connection_fk') THEN
+        ALTER TABLE plaid_accounts ADD CONSTRAINT plaid_accounts_tenant_connection_fk
+          FOREIGN KEY (connection_id, user_id) REFERENCES plaid_connections (id, user_id) ON DELETE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transaction_reviews_tenant_resolution_fk') THEN
+        ALTER TABLE transaction_import_reviews ADD CONSTRAINT transaction_reviews_tenant_resolution_fk
+          FOREIGN KEY (resolution_transaction_id, user_id) REFERENCES transactions (id, user_id);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transaction_reviews_tenant_match_fk') THEN
+        ALTER TABLE transaction_import_reviews ADD CONSTRAINT transaction_reviews_tenant_match_fk
+          FOREIGN KEY (matched_transaction_id, user_id) REFERENCES transactions (id, user_id);
+      END IF;
+    END $$;
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'labels_tenant_category_fk') THEN
         ALTER TABLE transaction_labels ADD CONSTRAINT labels_tenant_category_fk

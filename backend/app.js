@@ -17,6 +17,8 @@ import bulkImport from './routes/bulk-import.js';
 import categories from './routes/categories.js';
 import categorizations from './routes/categorizations.js';
 import clientErrors from './routes/clientErrors.js';
+import plaid, { webhookRouter as plaidWebhook } from './routes/plaid.js';
+import importReview from './routes/import-review.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,7 +71,12 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use(bodyParser.json({ limit: '20mb' }));
+app.use(bodyParser.json({
+  limit: '20mb',
+  verify(req, res, buffer) {
+    if (req.originalUrl?.split('?')[0] === '/api/plaid/webhook') req.rawBody = Buffer.from(buffer);
+  }
+}));
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   res.set('X-Content-Type-Options', 'nosniff');
@@ -96,6 +103,7 @@ import staging from './routes/staging.js';
 
 // Routes BEFORE static files
 app.use('/api/auth', auth);
+app.use('/api/plaid/webhook', plaidWebhook);
 app.use('/api', requireUser);
 app.use('/api/client-errors', clientErrors);
 app.use('/api/support-access', supportAccess);
@@ -107,6 +115,8 @@ app.use('/api/dashboard', transactions); // Alias for update-transaction support
 app.use('/api/debts', debts);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
+app.use('/api/import-review', importReview);
+app.use('/api/plaid', plaid);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categories', categories);
 app.use('/api/categorizations', categorizations);

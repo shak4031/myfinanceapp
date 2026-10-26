@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Database from '../db.js';
 import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
+import { importTransactions } from '../utils/transactionImport.js';
 
 const router = Router();
 const db = new Database();
@@ -102,32 +103,45 @@ router.post('/sync-labels', (req, res) => res.status(409).json({ error: 'Automat
 
 router.post('/delete-by-id', route(async (req, res) => {
   if (!req.body?.id) throw failure(400, 'id is required');
-  const result = await db.run(`DELETE FROM transactions WHERE id=$1 AND ${TENANT}`, [req.body.id]);
+  const result = await db.transaction(async client => {
+    const row = (await client.query(`SELECT id FROM transactions WHERE id=$1 AND ${TENANT} FOR UPDATE`, [req.body.id])).rows[0];
+    if (!row) throw failure(404, 'Transaction not found');
+    await client.query(`UPDATE transaction_import_reviews SET resolution_transaction_id=NULL,matched_transaction_id=NULL
+      WHERE ${TENANT} AND (resolution_transaction_id=$1 OR matched_transaction_id=$1)`, [row.id]);
+    return client.query(`DELETE FROM transactions WHERE id=$1 AND ${TENANT}`, [row.id]);
+  });
   if (!result.rowCount) throw failure(404, 'Transaction not found');
   res.json({ success: true });
 }));
 router.post('/delete-description', route(async (req, res) => {
   if (typeof req.body?.pattern !== 'string' || !req.body.pattern.trim()) throw failure(400, 'pattern is required');
-  const result = await db.run(`DELETE FROM transactions WHERE description=$1 AND ${TENANT}`, [req.body.pattern]);
+  const result = await db.transaction(async client => {
+    const ids = (await client.query(`SELECT id FROM transactions WHERE description=$1 AND ${TENANT} FOR UPDATE`,
+      [req.body.pattern])).rows.map(row => row.id);
+    if (!ids.length) return { rowCount: 0 };
+    await client.query(`UPDATE transaction_import_reviews SET resolution_transaction_id=NULL,matched_transaction_id=NULL
+      WHERE ${TENANT} AND (resolution_transaction_id=ANY($1::integer[]) OR matched_transaction_id=ANY($1::integer[]))`,
+    [ids]);
+    return client.query(`DELETE FROM transactions WHERE id=ANY($1::integer[]) AND ${TENANT}`, [ids]);
+  });
   if (!result.rowCount) throw failure(404, 'Transaction not found');
   res.json({ success: true, deleted: result.rowCount });
 }));
 router.post('/insert-manual', route(async (req, res) => {
   const { date, description, category, amount, direction, balance, source } = req.body || {};
   if (!date || !description || !Number.isFinite(Number(amount)) || !['DEBIT','CREDIT'].includes(direction)) throw failure(400, 'Valid date, description, amount and direction are required');
-  const cat = await db.get(`SELECT id FROM categories WHERE name=$1 AND ${TENANT}`, [category]);
-  if (!cat) throw failure(400, 'Unknown category');
-  await db.run(`INSERT INTO transactions (date,description,category,amount,direction,balance,source,user_id,category_corrected)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)`, [date,description,category,amount,direction,balance,source,currentUserId()]);
-  res.json({ success: true });
+  if (typeof category !== 'string' || !category) throw failure(400, 'A valid category is required');
+  if (source !== undefined && (typeof source !== 'string' || source.length > 100)) throw failure(400, 'Invalid transaction source');
+  const result = await db.transaction(async client => {
+    const config = await loadCategorization(client);
+    return importTransactions(client, [{
+      date, description, category, amount: Number(amount), direction, balance, manualCategory: category
+    }], config, source || 'manual');
+  });
+  res.json({ success: true, ...result });
 }));
-router.post('/dedup', route(async (req, res) => {
-  const result = await db.run(`WITH ranked AS (
-    SELECT id, ROW_NUMBER() OVER (PARTITION BY date,regexp_replace(description,'[[:space:]]+',' ','g'),amount,direction
-      ORDER BY category_corrected DESC,is_fixed DESC,length(description) DESC,id DESC) AS rn
-    FROM transactions WHERE ${TENANT})
-    DELETE FROM transactions WHERE id IN (SELECT id FROM ranked WHERE rn>1) AND ${TENANT}`);
-  res.json({ success: true, removed: result.rowCount });
+router.post('/dedup', (req, res) => res.status(409).json({
+  error: 'Automatic transaction deletion is disabled because identical-looking records can be legitimate separate purchases. Review possible matches in Import Review; no transactions were deleted.'
 }));
 
 export default router;

@@ -38,6 +38,8 @@ const cookieToken = req => readCookie(req, cookieName);
 
 export function enforceSameOrigin(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // Plaid authenticates this server-to-server endpoint with its signed webhook header.
+  if (req.originalUrl?.split('?')[0] === '/api/plaid/webhook') return next();
   const expected = process.env.APP_ORIGIN || (production ? null : `${req.protocol}://${req.get('host')}`);
   if (!expected || req.get('origin') !== expected) return res.status(403).json({ error: 'A same-origin request is required' });
   next();

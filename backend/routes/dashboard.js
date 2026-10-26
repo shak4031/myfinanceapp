@@ -299,7 +299,20 @@ router.post('/summary', async (req, res) => {
        'SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1',
        [currentUserId()]
     );
-    const balance = latestBalance.length > 0 ? Number(latestBalance[0].balance) : null;
+    const plaidBalance = await db.get(`SELECT SUM(COALESCE(available_balance,current_balance)) AS balance,
+        MAX(balance_checked_at) AS updated_at, COUNT(*) AS account_count
+      FROM plaid_accounts WHERE user_id=$1 AND use_for_cashflow=TRUE AND type='depository'
+        AND iso_currency_code='USD' AND COALESCE(available_balance,current_balance) IS NOT NULL`,
+    [currentUserId()]);
+    const hasPlaidBalance = Number(plaidBalance.account_count) > 0 && plaidBalance.balance !== null;
+    const balance = hasPlaidBalance
+      ? Number(plaidBalance.balance)
+      : latestBalance.length > 0 ? Number(latestBalance[0].balance) : null;
+    const balanceSource = hasPlaidBalance ? 'plaid' : latestBalance.length > 0 ? 'statement' : null;
+    const balanceCheckedAt = hasPlaidBalance ? plaidBalance.updated_at : null;
+    const balanceStale = balanceCheckedAt
+      ? Date.now() - new Date(balanceCheckedAt).getTime() > 36 * 60 * 60 * 1000
+      : false;
     if (balance !== null && !Number.isFinite(balance)) throw new Error('Invalid account balance');
 
     // 2. Calculation of ACTUAL totals for the selected period (used for charts / AI analysis)
@@ -323,6 +336,9 @@ router.post('/summary', async (req, res) => {
       expenses: avgExpenses,
       netCashflow: avgIncome - avgExpenses,
       balance: balance,
+      balanceSource,
+      balanceCheckedAt,
+      balanceStale,
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,

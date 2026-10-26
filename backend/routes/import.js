@@ -2,8 +2,8 @@ import express from 'express';
 import Database from '../db.js';
 import { TransactionCSVParser } from '../utils/transaction-parser.js';
 import PDFParser from '../utils/pdfParser.js';
-import { normalizeDescription } from '../utils/normalize.js';
-import { TENANT, classify, loadCategorization, failure } from '../utils/categorization.js';
+import { failure } from '../utils/categorization.js';
+import { importTransactions, loadImportCategorization } from '../utils/transactionImport.js';
 
 const router = express.Router();
 const db = new Database();
@@ -25,33 +25,13 @@ async function parseFile({ type, data, source, statementType }) {
   throw failure(400, 'File type must be csv or pdf');
 }
 
-export async function importTransactions(client, transactions, config, source) {
-  let imported = 0, duplicates = 0;
-  for (const transaction of transactions) {
-    const direction = String(transaction.direction).toUpperCase();
-    if (!['DEBIT', 'CREDIT'].includes(direction)) throw failure(400, 'Invalid transaction direction');
-    const existing = (await client.query(`SELECT id FROM transactions WHERE date=$1
-      AND regexp_replace(description,'[[:space:]]+',' ','g')=$2 AND amount=$3 AND direction=$4 AND ${TENANT}`,
-    [transaction.date, normalizeDescription(transaction.description), transaction.amount, direction])).rows[0];
-    if (existing) { duplicates++; continue; }
-    const suggestion = classify({ ...transaction, direction }, config.compiled, config.names);
-    // New records may inherit a user's explicit label flag. Categorization never infers a fixed flag.
-    const fixed = suggestion.label?.is_fixed === true;
-    await client.query(`INSERT INTO transactions
-      (date,description,amount,direction,balance,source,category,label_id,is_fixed)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [transaction.date, transaction.description, transaction.amount, direction, transaction.balance,
-      source || transaction.source || 'import', suggestion.category, suggestion.label?.id ?? null, fixed]);
-    imported++;
-  }
-  return { imported, duplicates, excluded: 0 };
-}
+export { importTransactions };
 
 router.post('/import-csv', route(async (req, res) => {
   const started = Date.now();
   const parsed = await parseFile({ type: 'csv', data: req.body?.csvData, source: req.body?.source });
   const result = await db.transaction(async client => {
-    const config = await loadCategorization(client);
+    const config = await loadImportCategorization(client);
     return importTransactions(client, parsed.transactions, config, req.body.source || 'csv_import');
   });
   res.json({ success: true, ...result, errors: parsed.errors.length,
@@ -61,7 +41,7 @@ router.post('/import-pdf', route(async (req, res) => {
   const started = Date.now();
   const parsed = await parseFile({ type: 'pdf', data: req.body?.pdfBase64, statementType: req.body?.statementType });
   const result = await db.transaction(async client => {
-    const config = await loadCategorization(client);
+    const config = await loadImportCategorization(client);
     return importTransactions(client, parsed.transactions, config, req.body.source || 'pdf_import');
   });
   res.json({ success: true, ...result, totalInFile: parsed.transactions.length, duration: Date.now() - started });
@@ -73,7 +53,7 @@ router.post('/import-batch', route(async (req, res) => {
   for (const file of files) parsed.push(await parseFile(file));
   const results = await db.transaction(async client => {
     // One rule/category snapshot for the entire import, not one query per transaction.
-    const config = await loadCategorization(client);
+    const config = await loadImportCategorization(client);
     const results = [];
     for (let index = 0; index < files.length; index++) {
       const result = await importTransactions(client, parsed[index].transactions, config, files[index].source);

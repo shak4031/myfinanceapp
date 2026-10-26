@@ -83,7 +83,14 @@ async function fixture() {
     CREATE TABLE transactions (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
-      label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE);
+      label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
+      plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE);
+    CREATE TABLE transaction_import_reviews (id SERIAL PRIMARY KEY, user_id INT, source TEXT, date TEXT,
+      description TEXT, amount NUMERIC, direction TEXT, balance NUMERIC, category TEXT, plaid_transaction_id TEXT,
+      plaid_account_id TEXT, is_pending BOOLEAN, candidate_transaction_ids INTEGER[], status TEXT DEFAULT 'pending');
+    CREATE UNIQUE INDEX import_reviews_user_plaid_transaction_key
+      ON transaction_import_reviews (user_id, plaid_transaction_id)
+      WHERE plaid_transaction_id IS NOT NULL AND status = 'pending';
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
     INSERT INTO categories (user_id,name) VALUES (2,'Foreign');
     INSERT INTO transactions (description,category,is_fixed) VALUES ('MY STORE','Other',TRUE),('MY STORE','Dining',FALSE);
@@ -153,14 +160,15 @@ test('import uses one rule snapshot, user rule category and explicit label flags
     const saved = await saveRule(client, { pattern: 'MY STORE', category: 'Groceries', enabled: true, priority: 123 });
     await client.query('UPDATE transaction_labels SET is_fixed=TRUE WHERE id=$1', [saved.id]);
     const config = await loadCategorization(client);
-    const make = (description, date = '2026-01-01') => ({ date, description, amount: 5, direction: 'debit' });
-    const transactions = [make('MY STORE'), make('UNKNOWN'), make('MY STORE'), make('MY STORE', '2026-01-02')];
+    const make = (description, date = '2026-01-01', amount = 5) => ({ date, description, amount, direction: 'debit' });
+    const transactions = [make('MY STORE'), make('UNKNOWN', '2026-01-01', 12), make('MY STORE'), make('MY STORE', '2026-01-02')];
     let labelQueries = 0;
     const countedClient = { query: (sql, params) => {
       if (/FROM transaction_labels/.test(sql)) labelQueries++;
       return client.query(sql, params);
     } };
-    assert.deepEqual(await importTransactions(countedClient, transactions, config, 'test'), { imported: 3, duplicates: 1, excluded: 0 });
+    assert.deepEqual(await withUser(1, () => importTransactions(countedClient, transactions, config, 'test')),
+      { imported: 2, duplicates: 0, needsReview: 2, excluded: 0 });
     assert.equal(labelQueries, 0);
     const rows = (await client.query('SELECT * FROM transactions ORDER BY id')).rows;
     assert.equal(rows[0].category, 'Other');
@@ -171,7 +179,8 @@ test('import uses one rule snapshot, user rule category and explicit label flags
     assert.equal(rows[3].is_fixed, true);
     assert.equal(rows[4].category, 'Other');
     assert.equal(rows[4].is_fixed, false);
-    assert.equal(rows[5].user_id, 1);
+    assert.equal(rows[4].user_id, 1);
+    assert.equal((await client.query("SELECT COUNT(*) AS count FROM transaction_import_reviews WHERE status='pending'")).rows[0].count, 2);
   } finally { await pg.close(); }
 });
 

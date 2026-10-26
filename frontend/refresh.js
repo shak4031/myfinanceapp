@@ -61,7 +61,12 @@
     document.querySelectorAll('.nav-btn').forEach(node => node.classList.toggle('active', node.getAttribute('onclick') === `showView('${navView}')`));
     closeSidebar();
     location.hash = view;
-    const loaders = { dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories, transactions: loadAllTransactions, etl: loadEtlStaging, payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights };
+    const loaders = {
+      dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories,
+      transactions: loadAllTransactions,
+      etl: async () => { await loadEtlStaging(); await loadTransactionImportReviews(); },
+      payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights
+    };
     Promise.resolve(loaders[view]?.()).catch(reportError);
   };
 

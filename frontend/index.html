@@ -492,7 +492,10 @@
       <section id="dashboard-view" class="view active">
         <header class="header">
           <div><p class="eyebrow">THE BIG PICTURE</p><h1>Your money at a glance</h1><p class="muted">Know where you stand. Choose what comes next.</p></div>
-          <button class="btn btn-primary" onclick="openImportModal()">📥 Import Statements</button>
+          <div class="toolbar" style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="openImportModal('plaid')">🏦 Connect a Bank</button>
+            <button class="btn btn-secondary" onclick="openImportModal('csv')">📥 Import Statements</button>
+          </div>
         </header>
 
         <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
@@ -533,6 +536,7 @@
             </div>
             <div id="cashflow-safety-badge"></div>
           </div>
+          <div id="balance-freshness-note" class="muted" style="font-size:12px;margin:-10px 0 12px;"></div>
           <div id="dashboard-payments"></div>
         </div>
       </section>
@@ -650,9 +654,17 @@
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <h1>⚙️ ETL Staging (Needs Review)</h1>
+          <h1>⚙️ Import Review</h1>
         </header>
+        <div class="panel" style="padding: 24px; margin-bottom: 16px;">
+          <h2>Possible duplicate transactions</h2>
+          <p style="color: var(--text-secondary); margin: 8px 0 16px; font-size: 13px;">
+            These records are not included in totals or projections until you decide.             Matching is intentionally cautious: records with the same amount and direction within three days are held for review, even if the descriptions differ. They may still be two real purchases.
+          </p>
+          <div id="import-reviews" class="table-scroll"></div>
+        </div>
         <div class="panel" style="padding: 24px;">
+          <h2>Import processing issues</h2>
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
             These transactions were skipped or flagged by the ETL process (duplicates, errors, or exclusions). Review them here to prevent data loss.
           </p>
@@ -700,6 +712,7 @@
       <div style="display: flex; border-bottom: 1px solid var(--border);">
         <button id="tab-csv" onclick="switchImportTab('csv')" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600;">CSV Bank Export</button>
         <button id="tab-pdf" onclick="switchImportTab('pdf')" style="flex: 1; padding: 12px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; cursor: pointer; font-weight: 500;">PDF Statement</button>
+        <button id="tab-plaid" onclick="switchImportTab('plaid')" style="flex: 1; padding: 12px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; cursor: pointer; font-weight: 500;">Connect bank</button>
       </div>
 
       <div style="padding: 24px;">
@@ -746,6 +759,18 @@
           <div style="margin-top: 16px;">
             <button class="btn btn-primary" onclick="importPDF()" style="width: 100%;" disabled id="pdf-import-btn">🚀 Import PDF</button>
           </div>
+        </div>
+
+        <div id="import-plaid-panel" style="display: none;">
+          <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 13px;">
+            Connect securely with Plaid to sync transactions and account balances. You can still import CSV or PDF statements; possible overlaps are held for your review and are not included twice.
+          </p>
+          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 12px;">
+            Plaid and your financial institution process connection data. MyFinanceApp stores an encrypted connection token. Bank-reported balances may be delayed; check your bank before relying on a projection.
+          </p>
+          <button class="btn btn-primary" onclick="startPlaidLink()" style="width: 100%;">Connect a bank with Plaid</button>
+          <div id="plaid-status" role="status" style="margin-top: 12px;"></div>
+          <div id="plaid-connections" style="margin-top: 16px;"></div>
         </div>
 
         <div id="import-result" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
@@ -946,6 +971,7 @@
       const paymentsContainer = document.getElementById('dashboard-payments');
       paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
       document.getElementById('cashflow-safety-badge').textContent = '';
+      document.getElementById('balance-freshness-note').textContent = '';
       
       // Remove any previously injected MTD sections to prevent the "repeated sections" bug
       const existingMtd = document.getElementById('mtd-spending-section');
@@ -969,8 +995,17 @@
         <div class="metric-card"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
         <div class="metric-card"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
         <div class="metric-card"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Balance</div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
+        <div class="metric-card"><div class="metric-label">Balance <span style="font-size:10px;opacity:.7">${data.balanceSource === 'plaid' ? '(Plaid reported)' : data.balanceSource === 'statement' ? '(statement)' : ''}</span></div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
       `;
+      const freshnessNote = document.getElementById('balance-freshness-note');
+      if (data.balanceSource === 'plaid') {
+        const checkedAt = data.balanceCheckedAt ? new Date(data.balanceCheckedAt).toLocaleString() : 'unknown';
+        freshnessNote.textContent = `Using Plaid-reported account balances, last checked ${checkedAt}. Bank data can lag; verify with your institution before relying on this projection.${data.balanceStale ? ' The connection has not refreshed recently.' : ''}`;
+      } else if (data.balanceSource === 'statement') {
+        freshnessNote.textContent = 'Using the latest balance from an imported statement. This may not reflect recent activity.';
+      } else {
+        freshnessNote.textContent = 'Connect a checking account or import a statement balance to show the projected runway.';
+      }
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
       let timeline;
@@ -1480,8 +1515,9 @@
     // ===========================================
     // IMPORT MODAL
     // ===========================================
-    function openImportModal() {
+    function openImportModal(tab = 'csv') {
       document.getElementById('import-modal').style.display = 'flex';
+      switchImportTab(tab);
     }
     function closeImportModal() {
       document.getElementById('import-modal').style.display = 'none';
@@ -1491,10 +1527,195 @@
     function switchImportTab(tab) {
       document.getElementById('import-csv-panel').style.display = tab === 'csv' ? 'block' : 'none';
       document.getElementById('import-pdf-panel').style.display = tab === 'pdf' ? 'block' : 'none';
+      document.getElementById('import-plaid-panel').style.display = tab === 'plaid' ? 'block' : 'none';
       document.getElementById('tab-csv').style.background = tab === 'csv' ? 'var(--primary)' : 'var(--bg-tertiary)';
       document.getElementById('tab-csv').style.color = tab === 'csv' ? 'white' : 'var(--text-secondary)';
       document.getElementById('tab-pdf').style.background = tab === 'pdf' ? 'var(--primary)' : 'var(--bg-tertiary)';
       document.getElementById('tab-pdf').style.color = tab === 'pdf' ? 'white' : 'var(--text-secondary)';
+      document.getElementById('tab-plaid').style.background = tab === 'plaid' ? 'var(--primary)' : 'var(--bg-tertiary)';
+      document.getElementById('tab-plaid').style.color = tab === 'plaid' ? 'white' : 'var(--text-secondary)';
+      if (tab === 'plaid') loadPlaidConnections().catch(error => {
+        document.getElementById('plaid-status').textContent = error.message;
+      });
+    }
+
+    async function plaidRequest(url, method = 'GET', body) {
+      const response = await fetch(url, {
+        method,
+        ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+      return data;
+    }
+
+    async function startPlaidLink(connectionId = null) {
+      const status = document.getElementById('plaid-status');
+      try {
+        if (!window.Plaid) throw new Error('Secure bank connection is loading. Please try again in a moment.');
+        status.textContent = 'Preparing secure connection...';
+        const link = await plaidRequest('/api/plaid/link-token', 'POST', connectionId ? { connectionId } : {});
+        const handler = window.Plaid.create({
+          token: link.link_token,
+          onSuccess: async (publicToken, metadata) => {
+            status.textContent = 'Saving connection and checking for transactions...';
+            try {
+              const result = await plaidRequest('/api/plaid/exchange', 'POST', {
+                public_token: publicToken,
+                institutionName: metadata?.institution?.name || null
+              });
+              status.textContent = result.syncWarning || 'Bank connected. Transactions will sync when Plaid reports updates.';
+              await loadPlaidConnections();
+              await loadDashboard();
+            } catch (error) {
+              status.textContent = error.message;
+            }
+          },
+          onExit: error => {
+            status.textContent = error?.display_message || error?.error_message || '';
+          }
+        });
+        status.textContent = '';
+        handler.open();
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    }
+
+    async function loadPlaidConnections() {
+      const target = document.getElementById('plaid-connections');
+      if (!target) return;
+      target.innerHTML = '<p class="muted">Loading connected accounts...</p>';
+      try {
+        const { connections } = await plaidRequest('/api/plaid/connections');
+        if (!connections.length) {
+          target.innerHTML = '<p class="muted">No bank accounts connected. Statement imports remain available in the CSV and PDF tabs.</p>';
+          return;
+        }
+        target.innerHTML = connections.map(connection => `
+          <div class="panel" style="padding:16px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+              <div><strong>${escapeHtml(connection.institutionName || 'Connected institution')}</strong>
+                <div class="muted" style="font-size:12px;margin-top:4px;">
+                  ${connection.lastSyncAt ? `Last synced ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
+                  ${connection.lastErrorCode ? ' · Connection needs attention' : ''}
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${connection.status === 'relink_required' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
+                <button class="btn btn-secondary" onclick="syncPlaidConnection(${connection.id})">Sync now</button>
+                <button class="btn btn-secondary" onclick="disconnectPlaidConnection(${connection.id})">Disconnect</button>
+              </div>
+            </div>
+            ${connection.accounts.map(account => {
+              const eligible = account.type === 'depository' && account.currency === 'USD';
+              const reportedBalance = account.availableBalance ?? account.currentBalance;
+              const balance = reportedBalance == null ? NaN : Number(reportedBalance);
+              const currency = /^[A-Z]{3}$/.test(account.currency || '') ? account.currency : 'USD';
+              return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+                <div><strong>${escapeHtml(account.name)}${account.mask ? ` ···· ${escapeHtml(account.mask)}` : ''}</strong>
+                  <div class="muted" style="font-size:12px;">${escapeHtml([account.type, account.subtype].filter(Boolean).join(' · '))}
+                    ${Number.isFinite(balance) ? ` · ${account.availableBalance != null ? 'Available' : 'Current'} reported balance ${balance.toLocaleString('en-US', { style: 'currency', currency })}` : ' · Balance unavailable'}
+                  </div>
+                </div>
+                ${eligible ? `<label style="display:flex;gap:8px;align-items:center;font-size:12px;"><input type="checkbox" ${account.useForCashflow ? 'checked' : ''} onchange="setPlaidCashflowAccount(${account.id},this.checked)"> Include in cash projection</label>` : '<span class="muted" style="font-size:12px;">Not used for cash projection</span>'}
+              </div>`;
+            }).join('')}
+          </div>`).join('');
+      } catch (error) {
+        target.textContent = error.message;
+      }
+    }
+
+    async function syncPlaidConnection(id) {
+      const status = document.getElementById('plaid-status');
+      try {
+        status.textContent = 'Syncing transactions and checking account balances...';
+        const result = await plaidRequest(`/api/plaid/connections/${id}/sync`, 'POST', {});
+        status.textContent = `Sync complete: ${result.added} added, ${result.modified} updated, ${result.removed} removed.`;
+        await loadPlaidConnections();
+        await loadTransactionImportReviews();
+        await loadDashboard();
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    }
+
+    async function setPlaidCashflowAccount(id, enabled) {
+      const status = document.getElementById('plaid-status');
+      try {
+        await plaidRequest(`/api/plaid/accounts/${id}/cashflow`, 'PATCH', { enabled });
+        await loadPlaidConnections();
+        await loadDashboard();
+      } catch (error) {
+        status.textContent = error.message;
+        await loadPlaidConnections();
+      }
+    }
+
+    async function disconnectPlaidConnection(id) {
+      if (!confirm('Disconnect this bank? Existing transactions remain in your history, but automatic updates will stop.')) return;
+      const status = document.getElementById('plaid-status');
+      try {
+        await plaidRequest(`/api/plaid/connections/${id}`, 'DELETE');
+        status.textContent = 'Bank disconnected. Imported transactions were kept.';
+        await loadPlaidConnections();
+        await loadDashboard();
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    }
+
+    async function loadTransactionImportReviews() {
+      const target = document.getElementById('import-reviews');
+      if (!target) return;
+      try {
+        const { reviews } = await plaidRequest('/api/import-review/reviews');
+        if (!reviews.length) {
+          target.innerHTML = '<p class="muted">No possible duplicate transactions need review.</p>';
+          return;
+        }
+        target.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr>
+          <th style="text-align:left;padding:8px;">Incoming transaction</th>
+          <th style="text-align:left;padding:8px;">Possible existing match</th>
+          <th style="text-align:left;padding:8px;">Decision</th>
+        </tr></thead><tbody>${reviews.map(review => {
+          const incoming = `${review.date} · ${review.description} · ${Number(review.amount).toFixed(2)} ${review.direction}`;
+          const matches = (review.candidates || []).map(row =>
+            escapeHtml(`${row.date} · ${row.description} · ${Number(row.amount).toFixed(2)} ${row.direction}`)).join('<br>');
+          const matchChoices = (review.candidates || []).map(row =>
+            `<option value="${Number(row.id)}">${escapeHtml(`${row.date} · ${row.description} · ${Number(row.amount).toFixed(2)}`)}</option>`).join('');
+          return `<tr style="border-top:1px solid var(--border);">
+            <td style="padding:10px;">${escapeHtml(incoming)}<div class="muted" style="font-size:11px;">${escapeHtml(review.source)}${review.is_pending ? ' · Pending bank transaction' : ''}</div></td>
+            <td style="padding:10px;">${matches || '<span class="muted">No active match remains; choose whether to add it separately.</span>'}
+              ${matchChoices ? `<label class="muted" style="display:block;margin-top:8px;font-size:11px;">Match this to<select id="import-review-match-${review.id}" style="display:block;max-width:100%;margin-top:4px;">${matchChoices}</select></label>` : ''}
+            </td>
+            <td style="padding:10px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${matchChoices ? `<button class="btn btn-secondary" onclick="resolveImportReview(${review.id},'duplicate')">Keep selected existing</button>` : ''}
+              <button class="btn btn-primary" onclick="resolveImportReview(${review.id},'import')">Add as separate</button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+      } catch (error) {
+        target.textContent = error.message;
+      }
+    }
+
+    async function resolveImportReview(id, action) {
+      if (action === 'import' && !confirm('Add this transaction as a separate entry? This may affect totals and projections.')) return;
+      try {
+        const body = { action };
+        if (action === 'duplicate') {
+          const candidate = document.getElementById(`import-review-match-${id}`)?.value;
+          if (!candidate || !confirm('Treat this as the same transaction as the selected existing record?')) return;
+          body.matchTransactionId = Number(candidate);
+        }
+        await plaidRequest(`/api/import-review/reviews/${id}/resolve`, 'POST', body);
+        await loadTransactionImportReviews();
+        await loadDashboard();
+      } catch (error) {
+        notify(error.message);
+      }
     }
 
     let pendingCsvFile = null;
@@ -1542,10 +1763,12 @@
         if (data.success) {
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
-            <div style="color: var(--success); font-weight: 700;">✅ Import Complete</div>
+            <div style="color: ${data.errors ? 'var(--warning)' : 'var(--success)'}; font-weight: 700;">${data.errors ? '⚠️ Import completed with rejected rows' : '✅ Import Complete'}</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
-              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
+              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} already processed &nbsp;|&nbsp; ${data.needsReview || 0} held for review
             </div>
+            ${data.errors ? `<div style="font-size:12px;color:var(--warning);margin-top:8px;">${data.errors} row(s) were rejected because they could not be parsed. ${Array.isArray(data.parserDetails) ? data.parserDetails.map(escapeHtml).join('<br>') : ''}</div>` : ''}
+            ${data.needsReview ? "<button class=\"btn btn-secondary\" onclick=\"closeImportModal();showView('etl')\">Review possible matches</button>" : ''}
           `;
           pendingCsvFile = null;
           document.getElementById('csv-file-list').innerHTML = '';
@@ -1608,8 +1831,9 @@
           resultDiv.innerHTML = `
             <div style="color: var(--success); font-weight: 700;">✅ PDF Import Complete</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
-              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.totalInFile} found in PDF
+              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} already processed &nbsp;|&nbsp; ${data.needsReview || 0} held for review &nbsp;|&nbsp; ${data.totalInFile} found in PDF
             </div>
+            ${data.needsReview ? "<button class=\"btn btn-secondary\" onclick=\"closeImportModal();showView('etl')\">Review possible matches</button>" : ''}
           `;
           pendingPdfFile = null;
           document.getElementById('pdf-file-list').innerHTML = '';
@@ -1828,6 +2052,7 @@
     });
 
   </script>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script src="refresh.js"></script>
   <script src="account.js"></script>
   <script>FinanceSession.start();</script>

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
+import { failure, loadCategorization } from '../utils/categorization.js';
+import { importTransactions } from '../utils/transactionImport.js';
 
 const router = Router();
 const db = new Database();
@@ -18,27 +20,23 @@ router.get('/attention', async (req, res) => {
 });
 
 // POST /api/staging/force-push - Manually push a skipped item to production
-router.post('/force-push', async (req, res) => {
+router.post('/force-push', async (req, res, next) => {
   try {
-    const { id } = req.body;
-    const st = await db.get("SELECT * FROM staging_transactions WHERE id = $1", [id]);
-    
-    if (!st) return res.status(404).json({ error: 'Staging item not found' });
-
-    // Insert into main transactions table regardless of logic
-    await db.run(
-      `INSERT INTO transactions (date, description, amount, direction, balance, source, user_id, category) 
-       VALUES ($1, $2, $3, $4, $5, $6, current_setting('app.user_id')::integer, 'Other')`,
-      [st.date, st.description, st.amount, st.direction, st.balance, st.source]
-    );
-
-    // Mark as processed
-    await db.run("UPDATE staging_transactions SET status = 'force_processed' WHERE id = $1", [id]);
-    
-    log('ETL', `Force pushed staging item ${id} to production`);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const id = Number(req.body?.id);
+    if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'A valid staging item ID is required');
+    const result = await db.transaction(async client => {
+      const st = (await client.query('SELECT * FROM staging_transactions WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!st) throw failure(404, 'Staging item not found');
+      const config = await loadCategorization(client);
+      const imported = await importTransactions(client, [st], config, st.source || 'staging_import');
+      await client.query("UPDATE staging_transactions SET status='force_processed' WHERE id=$1", [id]);
+      return imported;
+    });
+    log('ETL', `Processed staging item ${id} through validated transaction import`);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
   }
 });
 
