@@ -4,7 +4,7 @@ const tenants = new AsyncLocalStorage();
 
 export function withUser(userId, callback, options = {}) {
   if (!Number.isSafeInteger(userId) || userId < 1) throw new Error('A valid authenticated user is required');
-  return tenants.run({ userId, readOnly: options.readOnly === true }, callback);
+  return tenants.run({ userId, readOnly: options.readOnly === true, loginId: options.loginId }, callback);
 }
 
 export function currentUserId() {
@@ -15,4 +15,8 @@ export function currentUserId() {
 
 export function currentReadOnly() {
   return tenants.getStore()?.readOnly === true;
+}
+
+export function currentLoginId() {
+  return tenants.getStore()?.loginId;
 }

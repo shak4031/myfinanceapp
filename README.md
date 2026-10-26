@@ -18,6 +18,19 @@ checking balances can be selected for the upcoming-payment projection. Bank
 reported balances may be delayed, so the projection displays the source and
 last app-check time and advises users to verify their bank balance.
 
+See [Account data privacy and isolation](ACCOUNT_DATA_PRIVACY.md) for the
+implemented guard rails, support/operator access boundaries, encryption and
+retention limitations, and the import-focused advanced diagnostics workflow.
+
+Sessions expire after **10 minutes without user interaction**, enforced by the
+server as well as the browser, with a separate **12-hour absolute lifetime**.
+Background polling, page loads, and session checks do not renew inactivity.
+Logout clears confidential views across open tabs. Hidden/restored pages are
+revalidated before revealing protected content. Session cookies are HttpOnly,
+SameSite=Strict, Secure in production, and are no longer persisted for seven days.
+The first deployment of this policy revokes existing sessions; later restarts do
+not sign out valid sessions. The admin console uses the same timeout.
+
 Before deploying, back up the database and follow the private-account setup in
 [DEPLOYMENT.md](./DEPLOYMENT.md). Public registration is off by default. Startup
 requires a migration-capable PostgreSQL connection; migration fails rather than
@@ -25,6 +38,14 @@ starting with isolation disabled. Production requires HTTPS and `APP_ORIGIN`.
 
 The main application retains bill projections, debt payoff, goals, CSV/PDF
 imports, and category drill-downs, with an original light sidebar/card layout.
+CSV imports use account numbers in the file first, including TD multi-account
+exports. Identified new CSV/OFX accounts are created automatically during import,
+without mapping prompts; only missing, ambiguous, or conflicting identity/type
+needs review. If type is absent, accounts use Other and parser sign detection.
+Matching is always limited to the current household; later uploads match its
+saved accounts automatically when possible.
+Each account receives its own import-history batch. See
+[import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
 Spending coaching uses local, evidence-based calculations: no financial records
 are sent to an external AI service. It is budgeting guidance, not a licensed
 adviser's financial, tax, or investment advice.
@@ -38,9 +59,11 @@ For a new loan not yet in imported spending, uncheck **Monthly payment already
 included in imported spending** so its minimum payment is reserved separately.
 Check it again once that obligation is represented in the imported history.
 
-Changing a transaction's category automatically saves a normalized, literal
-merchant mapping for future imports; setting it to Uncategorized disables that
-merchant mapping. It never rewrites other transactions or Fixed Payment flags.
+Changing a transaction's category opens a review before saving. Choose matching
+payments individually, use **Only this one**, or dismiss without changes.
+**Remember this category for future imports** separately controls saving a normalized,
+literal merchant mapping; when checked, setting Uncategorized disables that mapping.
+Leaving it unchecked does not change existing mappings. Fixed Payment flags are untouched.
 Category management supports creating, renaming, and deleting categories;
 deletion requires choosing a replacement and moves existing transactions and
 merchant mappings to it. Categorization suggestions can also be reviewed and
@@ -55,11 +78,232 @@ Failed logins, lockouts, admin actions and server errors are written to an
 append-only audit log with request IDs. Admins use `/admin.html` for health,
 user support, audit/error search and an API explorer. Customers can grant
 time-limited, revocable support access (read-only by default) in **Settings &
-support**; admins never see customer data otherwise. See
+support**. Normal admin financial requests stay in the admin's own workspace;
+operational audit metadata and privileged infrastructure access have separate
+trust boundaries, as explained in the privacy documentation. See
 [DEPLOYMENT.md](./DEPLOYMENT.md) for required environment variables.
 
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
+
+For the table dictionary, database constraints, household isolation diagram, and
+bank-account-scoped import matching, see
+[Database architecture and deduplication](./DATABASE_ARCHITECTURE.md) and its
+[standalone architecture diagram](./DATABASE_ARCHITECTURE.svg).
+
+The multi-household regression can also run independently:
+
+```powershell
+node --test backend\utils\household-scale.test.js backend\utils\household-billing.test.js
+```
+
+It creates 24 independent households and eight invited members (32 customer
+logins, plus a setup administrator), 48 bank accounts, and 24,000 transactions
+through real CSV import endpoints. Identical CSVs across households/accounts and
+12,000 reimported rows check tenant-scoped deduplication. Every customer signs out
+and back in; reads, a 32-login concurrent read burst, shared edits, and 1,200
+foreign-ID probes exercise isolation and owner/member permissions. Import
+diagnostics must remain capped at 100 rows per response.
+
+Stripe/SMTP are in-memory fakes: the suite signs webhook requests and exercises
+Basic/Pro trials, owner reminders, cancellation, paid conversion, failed invoices,
+renewal, duplicate/reordered webhooks, and paid resubscription without another
+trial. A completed checkout for an ended subscription must not block its paid
+replacement; pending replacement checkout still cannot create a second subscription.
+No live users, database, cards, charges or email deliveries are involved. PGlite
+serializes database connections, so printed timings are local regression
+observations, **not production PostgreSQL capacity or a real Stripe payment test**.
+Use the staging checklist in [DEPLOYMENT.md](./DEPLOYMENT.md) for those checks.
+
+## Demo account
+
+The server creates a showcase account on start-up: `demo@myfinance.app` /
+`password1234`. It holds a year of generated sample data (income, fixed bills
+with auto-pay/manual modes, budgets, goals, debts and categorization rules) and
+always includes MyFinance Pro. Its data is rebuilt on every deploy and nightly
+at 08:00 UTC, so changes made during a demo never persist. Admins cannot grant
+or revoke its license, and password-reset emails are never sent for it. Set
+`DEMO_ACCOUNT=false` to disable it.
+
+## Responsive workspace and activity filters
+
+PDF uploads detect card versus bank statements and reconcile transactions before
+committing. Card imports capture New Balance and purchase APR, with latest
+statement facts visible on Accounts. See the [PDF import guide](PDF_IMPORT_GUIDE.md)
+for validation, supported patterns, failure recovery, API examples and tests.
+
+The finance workspace uses a shared navy navigation rail, emerald actions,
+high-contrast typography, and white panels. Navigation remains available on every
+finance view; on phones, open the menu in the upper left. Browser Back/Forward
+and direct links also work, including the category management view. The admin
+console includes links back to each finance view. The legacy transaction viewer
+now redirects to the authenticated workspace rather than showing a separate demo.
+
+Transactions and Categories both offer an **Activity month** calendar. An empty
+month means **All time**. Transaction month, category, and fixed-bill filters
+combine; visible totals always use the same filtered rows. **Reset filters**
+clears all three. Category counts and spending totals use the selected month,
+and opening a category carries that month into its floating detail panel.
+The detail panel has its own calendar and **All time** action. Dashboard
+month-to-date cards continue to open the specific month shown on the dashboard.
+
+The Categories overview ranks active spending categories by amount and shows
+each category's share of spending. Deposits and transfers appear in a separate
+**Other money movement** group; transfers are excluded from spending totals.
+Categories without activity stay available in the collapsed **No activity this
+period** group. Softly tinted, raised cards keep the primary view focused on the
+category, amount, and transaction count. With Pro analytics enabled, expand
+**Explore spending insights** to reveal the spending mix and category trend
+lines; these details are collapsed by default. Card trends use at least six
+completed calendar months (up to 24), ending at the last completed month in the
+selected period. Shorter selections expand the trend window backwards; card
+totals and spending shares still use the selected dates. The current partial
+month is excluded so it cannot look like a spending drop. Each line has monthly
+points and a dashed monthly-average reference; its change compares the second
+half against the first half of that same window. A zero-spend first half is
+labeled **New spending**, not a percentage increase. If any month in the window
+has no imported activity, the chart shows a history-needed message instead of
+inventing zeros. Zero category spending within months with other activity is
+shown as zero; imported activity does not prove every account is complete. Category icons
+use whole-word matching so names such as Healthcare and Credit Card do not
+accidentally receive a car icon. Custom names without a match use a neutral icon.
+
+The shared raised-card depth also appears on finance panels, welcome metrics,
+analytics KPIs, payment cards and summaries, tutorial cards, Accounts, Debts,
+and Goals. Selected cards retain a focus ring in addition to the same depth.
+Soft emerald, blue and lavender welcome accents and semantic warning colors are preserved.
+Calculation information icons open a labeled, keyboard-accessible dialog with
+the relevant formula rather than a floating tooltip clipped by its card.
+Accounts show **Last data update** (the latest transaction date or statement
+closing date) and, when known, when transaction data was last added. Data more
+than **45 calendar days** old receives an amber **Stale data** marker and an
+import reminder; exactly 45 days is not flagged. Importing historical data or
+renaming an account does not make its coverage current. Accounts without data
+explicitly show that freshness is unknown; external recipients are not flagged.
+
+When editing a transaction, the similar-payment confirmation respects the active
+search text, and also checks the same bank merchant even if only the selected
+payment has the searched friendly name (while still looking across months). Toast/TST and Square prefixes
+identify payment processors, not merchants; suggestions use the following merchant
+words instead. Renamed payees still group by the chosen name. Review and confirm
+the suggested rows before applying changes to other transactions.
+Renaming only one payment does not disconnect it from unrenamed payments with
+the same bank merchant identity; two explicitly different payee names stay separate.
+Rename previews suggest merchant words without processor/location boilerplate for
+Toast and Square payments, so the same payee can match across bank formats.
+The rename dialog lists individual matching payments with checkboxes and Select all.
+Its separate **Remember this name for future imports** option controls the future
+rule. Unchecked existing payments retain their names, including when rules are
+recomputed later. Unchecking Remember while editing a saved rule removes that
+rule; existing transaction-specific names remain. Removing a saved rule via
+Renamed payees resets names currently assigned by that rule, not unrelated names.
+
+Every main Spending Compass panel has its own period selector: plan/headline and
+insights, money flow, signal overlap, merchants, heatmap, normal range, and technical
+readings. The default is the last **3 completed months**, including the underlying
+money flow, merchant and heatmap calculations. Choose 3, 6, 12 or 24 **completed months**, or Choose months to reveal start and end
+month fields for a range of 1–24 completed months, then Apply. Other panels keep
+their ranges. Until Apply, the previous selection remains. Selections survive navigation and
+data refreshes within the page, but are not saved across browser reloads.
+Panels retain the full available content width, with the range controls above each.
+Transactions and Categories use the same **Last 3, 6, 12 and 24 months** presets and
+default (and reset) to three months, including the current month. They also retain
+current/previous month, quarter, year and explicit All time options. An empty custom
+selection shows no activity rather than silently switching to all time. Category
+details inherit the selected period; unfiltered details default to three months.
+The dashboard's 30-day forecast, month-to-date cards and annual cash-flow history
+retain their purpose-specific windows. Compass uses completed months so partial
+months do not distort its comparisons.
+On phones, Analytics stacks cards, wraps labels and controls, and keeps wide tables
+and charts in labeled, keyboard-focusable horizontal scroll regions with swipe hints.
+Merchant bubbles can be sized by **Total amount** or **Transactions** in the period
+(transaction count, not physical store visits). Colour defaults to **Category**,
+with a consistent intensity per category. **Spending swing %** uses
+`(highest monthly spend - lowest monthly spend) / average monthly spend`; the
+deeper violet highlights greater variability, not good/bad spending. The scale
+caps at 200%, but exact percentages remain visible in the detail. Zero-spend
+months within available history count, and fewer than two months shows insufficient
+history rather than a fabricated swing. Tap a bubble for totals, count, average
+transaction amount, monthly low/high, and swing. **Vs previous period** remains
+optional: red/green compare monthly average spend with the preceding period, with
+the comparison-month count shown. Fixed bills, transfers, and identified one-offs
+remain excluded; incomplete imports can distort all these measures.
+Selected-period averages, money flow and distributions use the selected history;
+technical trend indicators retain their labelled 3/6/12-month windows within it.
+Merchant changes compare with the preceding equal-length period when available.
+Each panel reports available history; short ranges may have insufficient data for
+signals, and missing statements can understate spending. Historical selections
+continue to use the published 2024 BLS benchmarks, not fabricated historical benchmarks.
+
+Month-to-date spending cards emphasize the category, amount spent and transaction
+count. Hover or keyboard-focus the **6-month history** footer, or select it on
+touch screens, to open a layered historical preview. The preview shows six completed
+calendar months (not the current partial month), monthly spending and an average.
+Months before imported history are marked **No data**, not fabricated zeroes;
+all totals depend on the statements imported. Escape, close, or moving away
+dismisses the preview without changing the card's transaction drill-down.
+The section uses a soft mint-to-lilac backdrop; alternating tinted cards, tonal
+category markers and layered shadows separate each category without obscuring
+amounts or counts. Hover lift respects reduced-motion preferences.
+
+Pro adds the highest/lowest month, change from the preceding month, period
+transaction count, and months above the **current** monthly budget. This is a
+comparison against today's budget, not a claim that historical budget settings
+were recorded. Basic includes the basic history with a Pro upgrade option.
+History loads only on demand, refreshes with the dashboard, and clears on logout.
+
+With Pro
+analytics enabled, budgeted categories show a single remaining or over-budget
+amount and a right-side vertical budget meter, rather than repeated budget totals
+and percentages. Over-budget cards use explicit text and a striped red meter;
+screen readers receive the spent, budget and forecast amounts. Budget editing,
+the analytics toggle and category transaction drill-down remain available.
+
+Category details, imports, goal/debt editors, confirmations, and savings entry
+use centered, viewport-constrained floating dialogs with dimmed backdrops.
+Dialogs retain keyboard focus, close with Escape or their close/cancel controls,
+and scroll internally when needed. On smaller screens, content stacks and wide
+data tables scroll within their panels rather than widening the whole page.
+
+Run `node --test frontend/frontend.test.mjs` for focused navigation, dialog,
+calendar-filter, filtered-summary, and request-order regressions.
+
+### Actionable alerts and account review
+
+The welcome greeting is followed directly by the rotating insight carousel.
+Its navy-to-teal insight stage, champagne action buttons and subtle contour rings
+add character without animated decoration or greeting emoji. Simple line icons and
+emerald, blue and lavender metric cards complement the rest of the app.
+Rose and amber insight accents remain reserved for urgent
+insights and at-risk balances; softly tinted metric cards keep amounts easy to scan.
+The carousel uses a gentle transition, retains pause and manual navigation,
+and respects reduced-motion preferences.
+**Action needed** and **Heads up** messages include the flagged item's details
+and action within their slides, without a separate badge or duplicate alert list.
+Unknown-transfer badges link to Accounts for review.
+**Transaction troubleshooting** provides a paged table of transactions with their
+current treatment: counted, excluded as an internal transfer, saved, or awaiting
+account review. Use a row's **Correct decision** control to count it normally
+(and choose a non-transfer category), mark it as an internal transfer, or treat
+it as savings. Corrections are saved as manual decisions and immediately refresh
+transfer reconciliation.
+The personal **Activity log** lists retained workspace events with the actor,
+timestamp, and relevant details, including imported file names, category
+creation, account changes, and transaction reclassification. The audit history
+is scoped to the signed-in user's workspace.
+Transaction descriptions in account transfers, category details, income review,
+category suggestions, and unusual-charge alerts link to `#transactions/<id>`.
+Opening one clears conflicting filters and shows only that transaction, including
+its filtered totals and exact-ID CSV export. The link works on reload and with browser Back/Forward.
+**Reset filters** removes the exact-transaction filter and restores all activity.
+
+Accounts separates confirmed accounts from external recipients and explains
+references inferred from statement descriptions. Review does not connect a bank
+or move money. **Yes, confirm my account** requires an account type.
+**No, it is not mine** saves an external recipient: outgoing transfers count as
+spending and incoming transfers as other income, not regular pay. Change the
+type later to correct the choice. Unreviewed transfers remain excluded from
+spending and income; account-type-specific savings and loan rules are unchanged.
 
 ## 📚 Available Documentation
 
@@ -163,6 +407,20 @@ tests and HTTP account/session flows. Tests do not connect to your live database
 ## 🎯 Features at a Glance
 
 ### Dashboard Tab ✅
+- **Welcome hero** instead of a bar chart: a greeting, a one-line status headline and
+  rotating insight cards (over-budget categories, bills due soon, manual payments,
+  balance dipping below a safe level before payday, debt-free progress, goal status,
+  price increases and Pro tips). Cards rotate every 7 seconds, pause on hover/focus,
+  can be paused, swiped or stepped with the arrow keys, and respect reduced motion.
+  The hero pairs a light greeting with a navy-to-teal insight stage, champagne
+  actions, line icons and subtle transitions. Balanced three-column metric rows
+  become two columns on phones, with blue and lavender accents alongside emerald.
+  The stage resizes smoothly to each message, with reduced-motion support.
+- **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
+  debt-free month. Insights come from `GET /api/dashboard/insights`
+  (rules in `backend/utils/insights.js`).
+- The cash-flow history chart is still available in a collapsed drawer below the
+  upcoming payments and only loads when opened.
 - 4 summary metrics (income, expenses, net cashflow, balance)
 - Date filtering (Current Month, Last Month, YTD, All Time)
 - Upcoming payments with smart balance cascade
@@ -171,22 +429,50 @@ tests and HTTP account/session flows. Tests do not connect to your live database
 
 #### Upcoming fixed payments
 
-- The current month's schedule uses fixed **debit** payments from the immediately
-  preceding calendar month, not older historical transactions.
-- Each bill uses its most recent payment day and amount from that month. A day
-  that does not exist in the current month is moved to the month's final day.
-- Payments matched in the current month appear greyed out as **Paid**, even if
+- The main calendar and list always cover **today through 30 days from today**
+  (including the final day), not just the remainder of the calendar month.
+  Earlier unpaid bills from this month extend the view back to their earliest
+  pending date and remain included in projected cash. Month labels distinguish
+  repeated day numbers across month and year boundaries. Welcome insights,
+  safe-to-spend and lowest-balance indicators use this same dated window.
+- Bill templates use the latest flagged **debit** from the previous or current
+  month. They recur monthly throughout the window; older history alone does not
+  revive a bill. Days missing from a target month clamp to its final day.
+- Payments matched in the current month remain accessible in the expandable
+  **Paid fixed bills this month** section above the calendar/list as **Paid**,
+  with transaction links, even if
   the imported payment is missing its fixed flag or has a different amount.
-  Matching uses the merchant/label and distinguishes masked account numbers.
+  Matching requires the same merchant or explicit payee name and distinguishes
+  source accounts and masked account numbers. A shared category label alone never
+  identifies a bill, so ordinary purchases cannot enter fixed-bill history just
+  because they have the same label.
 - Only unpaid bills reduce the latest recorded account balance. Unrecorded bills
   with past due days remain in the projection and are labelled overdue.
-  Assumed payroll deposits and optional debt-payoff-plan payments are not added.
+- **Income is projected too.** Credits categorised as Salary/Income are treated as
+  fixed automatically; the pay cadence (weekly, biweekly on a weekday, semi-monthly
+  or monthly) is detected from the last months of deposits, and expected paychecks
+  are added to the running balance through the same 30-day horizon.
+  Debt-free-plan and goal contributions appear as violet **Flexible** cards
+  that can be adjusted or skipped for the current month. Future-month entries
+  are labeled **Plan estimate**, use current allocations and that month's saved
+  overrides, and do not edit this month's plan. History contains only recorded
+  fixed-bill payments, not received income or past debt/savings allocations.
+  Paychecks and future plan allocations remain in the forecast; all activity
+  is still accessible on Transactions.
+- **You decide what counts as pay.** Regular deposits (even Zelle or Venmo money
+  from a friend) can look like a paycheck. Each deposit in Transactions has an
+  **Income** toggle under *Fixed / Income*, and **Review income** (Transactions
+  header, the Upcoming "Income still coming" tile, any income card, or the Goals
+  money-flow panel) lists every repeat sender with its cadence, why it was counted,
+  and an *Income / Not income* switch. Your choice beats automatic detection, is
+  offered for the sender's other deposits, sticks to future imports from the same
+  sender, and can be reset to automatic at any time.
 - The **Fixed Payment flag is authoritative** for debit transactions: the app
   does not reject your selection because of its category or merchant name.
   Unflagged transactions do not create bill templates; credits do not create
   payments. Startup and auto-categorization never turn your choices on or off.
 - Use the transaction's Fixed Bill checkbox to manage recurring bills. New bills
-  need a payment in the previous month before they can supply a monthly template.
+  can supply a monthly template as soon as a payment is recorded this month.
   The projection is based on imported records, not verified bank due dates; keep
   imports up to date. Missing balance/payment data is shown explicitly, never as
   a fully funded result.
@@ -200,19 +486,163 @@ Run focused regression tests with `node --test backend\utils\fixedPayments.test.
 - Complete transaction history per category
 - Back button to return to overview
 
-### Debt Payoff Tab ✅
-- Credit card list with balances
-- APR and credit limit display
-- Progress bar toward payoff
-- Color-coded status indicators
+### Plans and the public login page
 
-### Savings Goals Tab ✅
-- Goal list with targets
-- Current vs. target amounts
-- Progress bars
-- Deadline display
+The signed-out login page doubles as the public marketing page: a benefit-led
+introduction, illustrative progress preview, Basic / Pro comparison,
+and the existing sign-in, registration and password-recovery forms.
+
+The page scrolls normally while signed out and has a sticky top bar (Features,
+Basic vs Pro, Pricing, Sign in) plus links back to sign-in and to the top after
+pricing. In-page links scroll without touching the app's hash router. Above the
+sign-in card, a "7 quick wins" feature spotlight (`frontend/marketing.js`)
+rotates through Basic and Pro capabilities with varied entrance
+effects. It has dots, arrows and a pause button, pauses on hover or focus and
+in background tabs, and does not auto-rotate when reduced motion is preferred.
+
+Prices are USD per month **per household**:
+- **Basic ($9.99):** imports, accounts, transactions, category review and the everyday dashboard.
+- **Pro ($14.99):** Basic plus budgets, analytics, charts, forecasts, recurring-charge
+  radar, unusual-charge signals, CSV exports, Debt Free and Savings Goals.
+
+There is no free financial-access tier. Eligible households select a paid plan,
+verify email and add a payment method through Stripe-hosted Checkout to start a
+one-time **15-day Pro trial**. Stripe automatically bills the selected plan after
+the trial unless the owner cancels. The owner receives an email when 24 hours
+remain. Cancelling preserves trial access through its end. Existing paid
+licenses retain Pro access without an automatic charge or Stripe subscription.
+The primary operator and public synthetic demo retain full access.
+
+#### Choosing a plan
+
+Account creation includes Basic and Pro plan cards, followed by email verification
+and Stripe Checkout. The chosen plan carries directly into subscription onboarding,
+including when browser storage is unavailable; account creation alone never starts
+a subscription. The signup layout is centered instead of leaving an empty marketing
+column beside a long form. Unpaid households see subscription onboarding instead
+of financial pages. Only the owner can consent
+to billing and open Stripe Checkout or the cancellation/payment-method portal.
+Pro feature badges consistently read PRO, including during a trial. Locked
+features display a lock icon that opens billing options. An active Basic owner
+without scheduled cancellation can upgrade to Pro through a Stripe-hosted
+confirmation showing an immediate prorated charge, with the renewal date unchanged.
+Only Pro is offered in that upgrade flow. Webhooks
+keep Basic access until Stripe confirms the upgrade invoice is paid.
+Pro owners can explicitly confirm Basic at **USD 9.99/month at the next renewal**
+inside app billing. Pro remains available until then, including the full original
+trial if still trialing; no immediate charge, credit, or data deletion occurs.
+The app uses a Stripe subscription schedule (two bounded phases, then release),
+not a general portal downgrade: Basic and Pro are separate Stripe products.
+Billing shows the pending date and a **Keep Pro** option to remove the downgrade.
+Remove a pending downgrade before opening Stripe to cancel; keeping Pro retains
+USD 14.99/month renewal. Members cannot schedule or remove changes. Subscription
+and schedule webhooks fetch current Stripe state; only the actual Basic transition
+changes access, preserving all saved finances.
+Success redirects never grant access by themselves; verified Stripe webhooks
+update household entitlements. Legacy no-card trial/plan-request endpoints no
+longer activate access.
+
+The entitlement response uses `active` for any paid/trial financial access and
+`plusActive` for Pro capabilities. Financial routes require an active household
+subscription or preserved manual license. Analytics, budgets, debt/goal planning
+require Pro. Losing access locks features but preserves financial records.
+
+#### Separate logins for a shared household
+
+The owner emails invitations from household settings. Each person has their own
+password and session but shares household financial records and subscription.
+Members can edit finances; only the owner manages membership/billing/support
+grants. Invitations are single-use, email-bound and expire after 48 hours.
+Removing a member revokes their sessions. Existing households containing financial
+history or paid access cannot automatically merge; no records are silently moved.
+See [privacy and isolation](ACCOUNT_DATA_PRIVACY.md) and
+[Stripe deployment checklist](DEPLOYMENT.md).
+
+### Debt-free plan tab (Pro only)
+- Include or exclude any loan, card or other debt; star one as your focus
+- Strategies: **Avalanche** (highest APR first), **Snowball** (smallest balance first),
+  **Interest cost**, **Cash-flow** (free up payments fastest) and **My order**
+- APR-driven guidance, a suggested extra payment, and a debt-free date chart vs. minimums only
+- **Starting-point assessment:** shows recorded monthly inflows, spending, surplus,
+  existing extra payments, allocated goal contributions and what remains. Expand
+  the assessment to inspect each observed completed month and the funding rule.
+  These are imported cash flows, not verified recurring salary or a live cash balance.
+- **Conservative acceleration allowance:** with three observed completed months
+  containing inflows and outflows and a minimum-covering debt budget, take the lower of average
+  surplus and the tightest month's surplus, subtract existing extra payments and
+  allocated goal contributions, then reserve the greater of $100 or 10% of average
+  spending. Round the remaining increase down to $25 increments. Minimums marked
+  missing from history reduce both the average and each month's surplus once.
+  For debt extras and each goal, reserve the higher of the long-term amount and
+  this month's flexible override; temporary reductions do not inflate headroom.
+  Missing history, negative cash flow or an overcommitted plan suppresses an
+  increase suggestion. The cushion is an illustrative heuristic, not a personalized
+  emergency-fund target or guarantee; incomplete imports can overstate capacity.
+- **Spending experiments:** review up to three discretionary categories, excluding
+  fixed-marked charges, transfers and essential/debt category names. A hypothetical
+  10% reduction provides a monthly/weekly ceiling and an independently simulated
+  payoff date and interest impact. Review activity opens the underlying category
+  transactions for the same observed months. These savings are never assumed to
+  exist, combined automatically, or applied to a budget.
+- **Motivation grounded in the model:** $25/$50/$100 extra-payment comparisons,
+  first-payoff dates and interest tradeoffs by strategy, the next three modeled
+  months' principal reduction and the first minimum that rolls forward. These are
+  projections, not recorded achievements. Weekly review prompts favor sustainable
+  choices and adjustment without blame. No payment is executed by the app.
+- Guidance links to CFPB resources on [emergency savings](https://www.consumerfinance.gov/an-essential-guide-to-building-an-emergency-fund/)
+  and [credit counseling](https://www.consumerfinance.gov/ask-cfpb/what-is-credit-counseling-en-1451/).
+  It avoids guaranteed-return or credit-score promises; rates, lender terms and
+  future behavior can change results.
+- Pro what-if simulator (extra per month and lump sums)
+- Each month's minimums and extra payment land on the dashboard calendar; the extra is flexible
+- **How the strategy dates work:** every strategy is simulated month by month at your
+  current monthly debt budget. Each card shows the resulting debt-free month, the total
+  interest and which debt receives the extra first. When two strategies pay your debts
+  in the same order (common when your highest-APR debt is also your smallest), their
+  results are identical; the page says so and switching shows a confirmation.
+
+### Tutorials tab
+- Short animated walkthroughs for the **Debt-free plan**, **Savings goals**, the
+  **Dashboard**, **Fixed bills & income**, **Categories**, **Transactions**,
+  **Accounts**, **Analytics** and **Spending Compass**, with
+  chapters, a progress bar, full screen, keyboard controls (Space/K, ←/→, F) and
+  optional voice narration using the browser's speech engine.
+- The Fixed, Categories and Transactions tours each end with a "which page when?"
+  comparison: Transactions for detail (one charge), Categories for patterns (what
+  money is for) and Fixed bills & income for timing (when money moves).
+- Deep links such as `#tutorials/debt-strategies`, `#tutorials/income` or
+  `#tutorials/which-page` open a specific chapter; they are linked from the
+  Debt-free plan ("Watch the tour", "How it works"), Goals, Categories,
+  Transactions, Accounts, Analytics, the dashboard welcome ("Tour") and Settings.
+- Accounts explains ownership review, the menu's needs-review badge, account
+  types, transfer treatment, assigning older unassigned imports, and refreshing
+  coverage by importing a recent statement into the same saved account. Editing
+  account metadata does not refresh financial data; coverage older than 45 days
+  is stale. Imported statement facts do not synchronize separately entered debts.
+- Updated chapters distinguish selected totals from six-completed-month category
+  trends, cover debt affordability and independent spending experiments, explain
+  current ranges and mobile chart scrolling, and separate savings records from
+  actual money movement. Library durations are calculated from chapter content
+  rather than promising every walkthrough takes one minute.
+- Scenes are HTML/CSS on a scalable 16:9 canvas, so they stay sharp at every screen
+  size and need no video hosting. Edit them in `frontend/tutorial.js`.
+
+### Goals tab (Pro only)
+- Money-flow view: income streams, monthly surplus, debt extra, goal budget, unassigned
+- Priority order, nearest deadline, balanced funding and what-ifs
+- Per-goal monthly contribution, contribution day, include toggle, status and timeline
 
 ### File Import ✅
+- Valid current imports save directly; duplicates, warnings and errors appear in
+  the import result. They do not populate an approval queue.
+- **Legacy import review** is no longer a main-menu item. Open **Transactions →
+  Older import tools** (or the existing `#etl` link) for historical queued records.
+  Add anyway deliberately bypasses duplicate detection, saves category Other
+  without an account, and requires explicit confirmation; review the category
+  and assign its source under Accounts afterwards. The add and queue-state update
+  are atomic, repeated adds are rejected, and invalid records must be corrected
+  at the source. Dismiss removes only the queued copy. Failed requests are
+  reported, not presented as success.
 - CSV upload from banks
 - PDF statement support
 - Drag-and-drop interface
@@ -271,7 +701,10 @@ Warning:   #ffd93d (Caution Yellow)
 |--------|----------|---------|
 | POST | `/api/dashboard/summary` | Get metrics with date filter |
 | POST | `/api/dashboard/upcoming-payments` | Get payment cascade |
+| GET | `/api/dashboard/insights` | Welcome insights and today's pulse |
 | POST | `/api/transactions` | Get transactions |
+| GET | `/api/transactions/income-sources` | Repeat deposit senders and whether each counts as income |
+| POST | `/api/transactions/update-income-role` | Mark deposits `income`, `other`, or `null` (automatic) |
 | POST | `/api/debts` | Get credit cards |
 | POST | `/api/goals` | Get savings goals |
 | POST | `/api/import/import-csv` | Import CSV file |

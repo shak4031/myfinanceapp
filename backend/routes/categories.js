@@ -3,6 +3,7 @@ import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { currentUserId } from '../utils/tenant.js';
 import { failure } from '../utils/categorization.js';
+import { recordAudit } from '../utils/audit.js';
 
 const router = Router();
 const db = new Database();
@@ -35,9 +36,12 @@ router.post('/', async (req, res) => {
       'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3) RETURNING id,name,icon,color',
       [cleanName, icon, color]
     );
+    await recordAudit(req, 'category.created', 'success', {
+      detail: { categoryId: result.rows[0].id, category: result.rows[0].name }
+    });
     res.status(201).json({ success: true, category: result.rows[0] });
   } catch (err) {
-    log('CATEGORIES', `❌ Error creating category: ${err.message}`);
+    log('CATEGORIES', `❌ Error creating category: ${err.message}`, err.code === '23505' || err.status < 500 ? 'warn' : 'error');
     res.status(err.status || (err.code === '23505' ? 409 : 500)).json({
       error: err.code === '23505' ? 'A category with that name already exists' : err.message
     });
@@ -50,15 +54,20 @@ router.put('/:id', async (req, res) => {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'A valid category id is required');
     if (!name || name.length > 100) throw failure(400, 'Category name must contain 1 to 100 characters');
+    let previousName;
     const category = await db.transaction(async client => {
       const userId = currentUserId();
       const current = (await client.query('SELECT id,name FROM categories WHERE id=$1 AND user_id=$2 FOR UPDATE', [id, userId])).rows[0];
       if (!current) throw failure(404, 'Category not found');
+      previousName = current.name;
       const renamed = (await client.query('UPDATE categories SET name=$1 WHERE id=$2 AND user_id=$3 RETURNING id,name,icon,color',
         [name, id, userId])).rows[0];
       await client.query('UPDATE transactions SET category=$1 WHERE user_id=$2 AND category=$3',
         [name, userId, current.name]);
       return renamed;
+    });
+    await recordAudit(req, 'category.renamed', 'success', {
+      detail: { categoryId: category.id, previousCategory: previousName, category: category.name }
     });
     res.json({ success: true, category });
   } catch (err) {
@@ -89,8 +98,13 @@ router.delete('/:id', async (req, res) => {
       await client.query('UPDATE transaction_labels SET category_id=$1 WHERE user_id=$2 AND category_id=$3',
         [replacementId, ownerId, id]);
       await client.query('DELETE FROM categories WHERE id=$1 AND user_id=$2', [id, ownerId]);
-      return { transactions: transactions.rowCount };
+      return { transactions: transactions.rowCount, sourceCategory: source.name, replacementCategory: replacement.name };
     });
+    await recordAudit(req, 'category.deleted', 'success', {
+      detail: { category: moved.sourceCategory, replacementCategory: moved.replacementCategory, transactionsMoved: moved.transactions }
+    });
+    delete moved.sourceCategory;
+    delete moved.replacementCategory;
     res.json({ success: true, ...moved });
   } catch (err) {
     log('CATEGORIES', `❌ Error deleting category: ${err.message}`);

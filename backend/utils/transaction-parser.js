@@ -1,9 +1,25 @@
 /**
- * BULLETPROOF Transaction Parser
- * Handles CSV parsing with automatic column detection, deduplication, and categorization
+ * Transaction parser
+ * Bank-agnostic CSV/OFX parsing with automatic column and sign detection, deduplication and categorization
  */
 
 import { log } from './logger.js';
+import { createHash } from 'node:crypto';
+
+const accountIdentity = value => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');
+  if (!normalized) return { accountKey: 'unidentified', accountLast4: null };
+  return { accountKey: createHash('sha256').update(normalized).digest('hex'), accountLast4: normalized.match(/(\d{4})$/)?.[1] || null };
+};
+const ACCOUNT_TYPES = Object.freeze({
+  checking: 'checking', chequing: 'checking', savings: 'savings', saving: 'savings',
+  creditcard: 'credit_card', credit: 'credit_card', card: 'credit_card',
+  loan: 'loan', investment: 'investment', brokerage: 'investment', crypto: 'crypto', other: 'other'
+});
+const accountKind = value => {
+  const key = String(value || '').toLowerCase().replace(/[\s_-]/g, '');
+  return Object.hasOwn(ACCOUNT_TYPES, key) ? ACCOUNT_TYPES[key] : null;
+};
 
 /**
  * Category matching patterns for intelligent auto-categorization
@@ -94,232 +110,360 @@ function categorizeTransaction(description, txnType) {
 }
 
 /**
- * Parse CSV with flexible column detection
- * Handles any CSV format by detecting column names
+ * Bank-agnostic statement parser.
+ * Reads CSV/TSV exports from any bank or card issuer, plus OFX/QFX/QBO downloads, and returns
+ * transactions as { date: 'YYYY-MM-DD', description, amount (positive), direction: DEBIT|CREDIT, balance }.
  */
 class TransactionCSVParser {
   constructor() {
+    this.reset();
+  }
+
+  reset() {
     this.transactions = [];
     this.errors = [];
+    this.skipped = 0;
     this.columnMap = {};
+    this.format = null;
   }
 
-  /**
-   * Detect CSV columns by looking at header row
-   * @param {string} headerRow - First row of CSV
-   * @returns {Object} Map of column names to indices
-   */
-  detectColumns(headerRow) {
-    const columns = headerRow.split(',').map(c => c.trim().toLowerCase());
-    
-    const map = {
-      date: columns.findIndex(c => c.includes('date')),
-      description: columns.findIndex(c => 
-        c.includes('description') || c.includes('memo') || c.includes('narration')
-      ),
-      amount: columns.findIndex(c => c.includes('amount') || c.includes('debit') || c.includes('credit')),
-      debit: columns.findIndex(c => c === 'debit'),
-      credit: columns.findIndex(c => c === 'credit'),
-      balance: columns.findIndex(c => c.includes('balance') || c.includes('running')),
-      txnType: columns.findIndex(c => 
-        c.includes('type') || c.includes('transaction') || c.includes('tran type')
-      ),
-      checkNumber: columns.findIndex(c => c.includes('check')),
-      accountNumber: columns.findIndex(c => c.includes('account')),
-      rtn: columns.findIndex(c => c.includes('rtn')),
-    };
-
-    return map;
-  }
-
-  /**
-   * Parse a single transaction row
-   * @param {string} row - CSV row
-   * @param {Object} columnMap - Column mapping
-   * @returns {Object|null} Parsed transaction or null if invalid
-   */
-  parseRow(row, columnMap) {
-    try {
-      const fields = this.parseCSVRow(row);
-      
-      if (fields.length < 2) return null;
-
-      // Extract fields using column map
-      const date = fields[columnMap.date]?.trim();
-      const description = fields[columnMap.description]?.trim();
-      let amount = fields[columnMap.amount]?.trim();
-      const debit = fields[columnMap.debit]?.trim();
-      const credit = fields[columnMap.credit]?.trim();
-      const balance = fields[columnMap.balance]?.trim();
-      const txnType = fields[columnMap.txnType]?.trim() || 'DEBIT';
-
-      // Validate date
-      if (!date || !this.isValidDate(date)) {
-        return null;
-      }
-
-      // If amount field is empty, use debit/credit fields
-      if (!amount) {
-        if (debit && debit !== '') {
-          amount = debit;
-        } else if (credit && credit !== '') {
-          amount = credit;
-        }
-      }
-
-      // Parse amount
-      let parsedAmount = this.parseAmount(amount);
-      if (parsedAmount === null) {
-        return null;
-      }
-
-      // Determine transaction direction
-      let direction = 'DEBIT';
-      if (credit && credit !== '') {
-        direction = 'CREDIT';
-      } else if (txnType === 'CREDIT') {
-        direction = 'CREDIT';
-      }
-
-      // Parse balance
-      let parsedBalance = balance ? this.parseAmount(balance) : null;
-
-      // Parse description (handle special characters)
-      const cleanDescription = this.cleanString(description || 'Unknown');
-
-      // Auto-categorize
-      const category = categorizeTransaction(cleanDescription, direction);
-
-      return {
-        date,
-        description: cleanDescription,
-        category,
-        amount: Math.abs(parsedAmount), // Store as absolute value
-        direction,
-        balance: parsedBalance,
-        source: 'TD Bank CSV Import',
-        type: txnType
-      };
-    } catch (err) {
-      log('PARSER', `Row parse error: ${err.message}`);
-      return null;
+  // Delimiter that splits the first lines most consistently (comma, semicolon, tab or pipe).
+  detectDelimiter(text) {
+    const sample = text.split('\n').slice(0, 40).filter(line => line.trim());
+    let best = ',', bestScore = -1;
+    for (const delimiter of [',', ';', '\t', '|']) {
+      const counts = sample.map(line => this.splitRecords(line, delimiter)[0]?.length || 1);
+      const multi = counts.filter(count => count > 1);
+      if (!multi.length) continue;
+      const mode = [...new Set(multi)].sort((a, b) => multi.filter(c => c === b).length - multi.filter(c => c === a).length)[0];
+      const score = multi.filter(count => count === mode).length * 10 + mode;
+      if (score > bestScore) { best = delimiter; bestScore = score; }
     }
+    return best;
   }
 
-  /**
-   * Parse CSV row handling quoted fields
-   */
+  // RFC 4180 records: quoted fields may contain delimiters, doubled quotes and line breaks.
+  splitRecords(text, delimiter = ',') {
+    const records = [];
+    let record = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (inQuotes) {
+        if (char === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (char === '"') inQuotes = false;
+        else field += char;
+      } else if (char === '"' && !field.trim()) { field = ''; inQuotes = true; }
+      else if (char === delimiter) { record.push(field); field = ''; }
+      else if (char === '\n' || char === '\r') {
+        if (char === '\r' && text[i + 1] === '\n') i++;
+        record.push(field); records.push(record); record = []; field = '';
+      } else field += char;
+    }
+    if (field || record.length) { record.push(field); records.push(record); }
+    return records.map(row => row.map(cell => cell.trim())).filter(row => row.some(cell => cell));
+  }
+
+  // Back-compat for callers that split a single line.
   parseCSVRow(row) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
+    return this.splitRecords(row)[0] || [];
+  }
 
-    for (let i = 0; i < row.length; i++) {
-      const char = row[i];
-      const nextChar = row[i + 1];
-
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === ',' && !inQuotes) {
-        result.push(current);
-        current = '';
-      } else {
-        current += char;
+  // Header names vary by bank; each role takes the best-ranked matching column.
+  detectColumns(headerRow) {
+    const columns = (Array.isArray(headerRow) ? headerRow : this.parseCSVRow(headerRow))
+      .map(cell => cell.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/\s+/g, ' '));
+    const pick = (tests, exclude = []) => {
+      for (const testFn of tests) {
+        const index = columns.findIndex((name, i) => !exclude.includes(i) && testFn(name));
+        if (index >= 0) return index;
       }
-    }
-
-    result.push(current);
-    return result;
-  }
-
-  /**
-   * Validate date format (YYYY-MM-DD or MM/DD/YYYY)
-   */
-  isValidDate(dateStr) {
-    let year, month, day, match;
-    match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
-    if (match) [, year, month, day] = match.map((value, index) => index ? Number(value) : value);
-    else {
-      match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dateStr);
-      if (match) [, month, day, year] = match.map((value, index) => index ? Number(value) : value);
-    }
-    if (!match || year < 1900 || year > 2100) return false;
-    const parsed = new Date(Date.UTC(year, month - 1, day));
-    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
-  }
-
-  /**
-   * Parse amount, handling currency and negative values
-   */
-  parseAmount(amountStr) {
-    if (!amountStr || amountStr === '') return null;
-
-    // Remove currency symbols and whitespace
-    let cleaned = amountStr.replace(/\$/g, '').replace(/\s/g, '').trim();
-
-    if (cleaned === '' || cleaned === '-') return null;
-    if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(cleaned)) return null;
-
-    const num = Number(cleaned.replace(/,/g, ''));
-    if (isNaN(num)) return null;
-
-    return num;
-  }
-
-  /**
-   * Clean string: handle special characters, escape quotes
-   */
-  cleanString(str) {
-    if (!str) return '';
-
-    return str
-      .replace(/^\s+|\s+$/g, '') // Trim
-      .replace(/\s+/g, ' ')       // Normalize spaces
-      .substring(0, 500);         // Max length
-  }
-
-  /**
-   * Parse CSV content and return transactions
-   */
-  parse(csvContent, sourceFile = 'Unknown') {
-    const lines = csvContent.split('\n').map(l => l.trim()).filter(l => l);
-    
-    if (lines.length < 2) {
-      this.errors.push(`CSV has less than 2 lines (${lines.length})`);
-      return { transactions: [], errors: this.errors, duplicates: 0 };
-    }
-
-    // Detect columns from header
-    this.columnMap = this.detectColumns(lines[0]);
-
-    log('PARSER', `Detected columns: ${JSON.stringify(this.columnMap)}`);
-    log('PARSER', `Processing ${lines.length - 1} transaction rows from ${sourceFile}`);
-
-    // Parse each row
-    for (let i = 1; i < lines.length; i++) {
-      const txn = this.parseRow(lines[i], this.columnMap);
-
-      if (txn) {
-        this.transactions.push(txn);
-      } else {
-        this.errors.push(`Failed to parse row ${i + 1}: ${lines[i].substring(0, 50)}`);
-      }
-    }
-
-    log('PARSER', `✓ Parsed ${this.transactions.length} transactions, ${this.errors.length} errors`);
-
-    return {
-      transactions: this.transactions,
-      errors: this.errors,
-      duplicates: 0
+      return -1;
     };
+    const date = pick([
+      name => /^(trans(action)?\.? ?date|date|transaction date|txn date)$/.test(name),
+      name => /^(posting|posted|post|effective|value|booking) date$/.test(name),
+      name => /date/.test(name) && !/time/.test(name)
+    ]);
+    const debit = pick([name => /^(debits?|withdrawals?|money out|paid out|outflow|charges?|debit amount|withdrawal amount|amount debit|debit \(\$\))$/.test(name)]);
+    const credit = pick([name => /^(credits?|deposits?|money in|paid in|inflow|credit amount|deposit amount|amount credit|credit \(\$\))$/.test(name)]);
+    const amount = pick([
+      name => /^(amount|transaction amount|amt|amount \(\$\)|amount \(usd\)|value|net amount)$/.test(name),
+      name => /amount|\bamt\b/.test(name) && !/summary|balance/.test(name)
+    ], [debit, credit]);
+    const description = pick([
+      name => /^(description|transaction description|payee|merchant|merchant name|name|narrative|narration|transaction details)$/.test(name),
+      name => /description|payee|merchant/.test(name),
+      name => /^(details|memo|notes?|reference)$/.test(name)
+    ], [date, amount, debit, credit]);
+    const memo = pick([name => /^(memo|notes?|extended description)$/.test(name)], [description]);
+    const balance = pick([name => /balance|running bal/.test(name)]);
+    const accountNumber = pick([name => /^(account|account number|account no\.?|account #|account id|acct number|acct no\.?)$/.test(name)]);
+    const accountType = pick([name => /^(account type|acct type|account kind)$/.test(name)]);
+    // Type-like columns are only used for unambiguous debit/credit words.
+    const types = columns.map((name, i) => (/^(type|transaction type|trans(action)? type|tran type|details|transaction|debit\/credit|dr\/cr|cr\/dr|credit\/debit|indicator)$/.test(name) ? i : -1))
+      .filter(i => i >= 0 && ![date, amount, debit, credit, description, balance].includes(i));
+    return { date, description, memo, amount, debit, credit, balance, accountNumber, accountType, types, txnType: types[0] ?? -1, columns };
+  }
+
+  isHeader(row) {
+    const map = this.detectColumns(row);
+    return map.date >= 0 && (map.amount >= 0 || map.debit >= 0 || map.credit >= 0)
+      && row.every(cell => !this.parseDate(cell) || /date/i.test(cell));
+  }
+
+  // Accepts ISO, M/D/YYYY, M/D/YY, YYYYMMDD, "Oct 14, 2026" and "14 Oct 2026". Day-first only when unambiguous.
+  parseDate(value) {
+    const s = String(value || '').trim().replace(/^"|"$/g, '');
+    if (!s) return null;
+    const valid = (year, month, day) => {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+        && year >= 1990 && year <= 2100 ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
+    };
+    let match = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:$|[T\s])/);
+    if (match) return valid(+match[1], +match[2], +match[3]);
+    match = s.match(/^(\d{4})(\d{2})(\d{2})(?:\d{6})?(?:\.\d+)?(?:\[.*\])?$/);
+    if (match) return valid(+match[1], +match[2], +match[3]);
+    match = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})(?:$|\s)/);
+    if (match) {
+      let year = +match[3];
+      if (match[3].length === 2) year += year >= 70 ? 1900 : 2000;
+      const first = +match[1], second = +match[2];
+      return first > 12 ? valid(year, second, first) : valid(year, first, second);
+    }
+    const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    match = s.match(/^([a-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})$/i);
+    if (match && MONTHS.includes(match[1].toLowerCase())) return valid(+match[3], MONTHS.indexOf(match[1].toLowerCase()) + 1, +match[2]);
+    match = s.match(/^(\d{1,2})[ -]([a-z]{3})[a-z]*\.?[ -](\d{2}|\d{4})$/i);
+    if (match && MONTHS.includes(match[2].toLowerCase())) {
+      const year = match[3].length === 2 ? 2000 + +match[3] : +match[3];
+      return valid(year, MONTHS.indexOf(match[2].toLowerCase()) + 1, +match[1]);
+    }
+    return null;
+  }
+
+  isValidDate(value) {
+    return this.parseDate(value) !== null;
+  }
+
+  // Signed number from "$1,234.56", "-15.49", "(15.49)", "15.49 CR", "15.49-" or "USD 15.49".
+  parseAmount(value) {
+    let s = String(value ?? '').trim();
+    if (!s) return null;
+    let sign = 1;
+    if (/^\(.*\)$/.test(s)) { sign = -1; s = s.slice(1, -1); }
+    if (/\bCR\.?$/i.test(s)) s = s.replace(/\s*CR\.?$/i, '');
+    else if (/\bDR\.?$/i.test(s)) { sign = -sign; s = s.replace(/\s*DR\.?$/i, ''); }
+    if (/-$/.test(s)) { sign = -sign; s = s.slice(0, -1); }
+    s = s.replace(/^(?:USD|CAD|EUR|GBP)\s*|\s*(?:USD|CAD|EUR|GBP)$/i, '').replace(/[$£€\s,]/g, '');
+    if (s.startsWith('+')) s = s.slice(1);
+    if (!/^-?\d*\.?\d+$/.test(s)) return null;
+    const number = Number(s) * sign;
+    return Number.isFinite(number) ? number : null;
+  }
+
+  cleanString(str) {
+    return String(str || '').replace(/\s+/g, ' ').trim().substring(0, 500);
+  }
+
+  // Unambiguous direction words from a bank's own type column.
+  typeDirection(value) {
+    const s = String(value || '').toLowerCase();
+    if (!s) return null;
+    if (/\b(debit|dr|withdrawal|purchase|sale|fee|charge)\b|_debit\b|^debit/.test(s) && !/credit|deposit|refund|return/.test(s)) return 'DEBIT';
+    if (/\b(credit|cr|deposit|refund|return)\b|_credit\b|^credit/.test(s) && !/debit|withdrawal/.test(s)) return 'CREDIT';
+    return null;
+  }
+
+  // Columns for files without a header row (e.g. Wells Fargo): inferred from the data itself.
+  inferColumns(rows) {
+    const width = Math.max(...rows.map(row => row.length));
+    const share = test => Array.from({ length: width }, (_, i) => rows.filter(row => test(row[i] ?? '')).length / rows.length);
+    const dates = share(cell => this.parseDate(cell) !== null);
+    const numbers = share(cell => this.parseAmount(cell) !== null);
+    const date = dates.findIndex(value => value >= 0.8);
+    const amount = numbers.findIndex((value, i) => i !== date && value >= 0.8);
+    const textLength = Array.from({ length: width }, (_, i) => i === date || i === amount ? -1
+      : rows.reduce((sum, row) => sum + (this.parseAmount(row[i]) === null ? String(row[i] || '').length : 0), 0));
+    const description = textLength.indexOf(Math.max(...textLength));
+    return { date, description, memo: -1, amount, debit: -1, credit: -1, balance: -1, types: [], txnType: -1, columns: [] };
+  }
+
+  parse(content, sourceFile = 'Unknown', { accountType = null, accountTypes = {} } = {}) {
+    this.reset();
+    const text = String(content || '').replace(/^\uFEFF/, '');
+    if (/<OFX>|OFXHEADER:/i.test(text.slice(0, 4000))) return this.parseOfx(text, accountType, accountTypes);
+
+    const rows = this.splitRecords(text, this.detectDelimiter(text));
+    if (rows.length < 1) {
+      this.errors.push('The file is empty');
+      return this.result();
+    }
+    // Some banks (e.g. Bank of America) put a summary block above the real header.
+    let headerIndex = rows.slice(0, 40).findIndex(row => this.isHeader(row));
+    let map;
+    if (headerIndex >= 0) map = this.detectColumns(rows[headerIndex]);
+    else {
+      const dataRows = rows.filter(row => row.some(cell => this.parseDate(cell)));
+      map = dataRows.length ? this.inferColumns(dataRows) : null;
+      headerIndex = -1;
+      if (!map || map.date < 0 || map.amount < 0) {
+        this.errors.push('No header row with date and amount (or debit/credit) columns was found');
+        return this.result();
+      }
+    }
+    this.columnMap = map;
+
+    const parsed = [];
+    const accountNumbers = new Set();
+    for (let i = headerIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      const date = this.parseDate(row[map.date]);
+      if (!date) {
+        // Repeated headers, totals and footers are skipped; anything that looks like data is an error.
+        if (row.some(cell => this.parseAmount(cell) !== null) && !/total|balance|summary/i.test(row.join(' '))) this.errors.push(`Row ${i + 1}: unreadable date "${String(row[map.date] ?? '').slice(0, 20)}"`);
+        else this.skipped++;
+        continue;
+      }
+      const debit = map.debit >= 0 ? this.parseAmount(row[map.debit]) : null;
+      const credit = map.credit >= 0 ? this.parseAmount(row[map.credit]) : null;
+      const signed = map.amount >= 0 ? this.parseAmount(row[map.amount]) : null;
+      let amount = null, direction = null, signedOnly = false;
+      if (debit) { amount = Math.abs(debit); direction = 'DEBIT'; }
+      else if (credit) { amount = Math.abs(credit); direction = 'CREDIT'; }
+      else if (signed) { amount = Math.abs(signed); signedOnly = true; }
+      if (!amount) {
+        this.skipped++; // e.g. "Beginning balance" rows with no amount
+        continue;
+      }
+      if (map.accountNumber >= 0) {
+        const number = String(row[map.accountNumber] || '').replace(/[\s-]/g, '');
+        if (number) accountNumbers.add(number);
+      }
+      const hint = map.types.map(index => this.typeDirection(row[index])).find(Boolean) || null;
+      let description = this.cleanString(row[map.description]);
+      const memo = map.memo >= 0 ? this.cleanString(row[map.memo]) : '';
+      if (!description) description = memo;
+      else if (memo && !/download|usbank|^\d+$/i.test(memo) && !description.toUpperCase().includes(memo.toUpperCase())) description = this.cleanString(`${description} ${memo}`);
+      parsed.push({ ...accountIdentity(map.accountNumber >= 0 ? row[map.accountNumber] : null), row: i + 1, date, description: description || 'Unknown', amount: Math.round(amount * 100) / 100, direction, signed, signedOnly, hint,
+        detectedKind: map.accountType >= 0 ? accountKind(row[map.accountType]) : null,
+        balance: map.balance >= 0 ? this.parseAmount(row[map.balance]) : null });
+    }
+
+    const groups = new Map();
+    for (const item of parsed) {
+      if (!groups.has(item.accountKey)) groups.set(item.accountKey, []);
+      groups.get(item.accountKey).push(item);
+    }
+    const conventions = new Set();
+    for (const [key, items] of groups) {
+      const detectedKinds = [...new Set(items.map(item => item.detectedKind).filter(Boolean))];
+      const detected = detectedKinds.length === 1 ? detectedKinds[0] : null;
+      const kind = accountTypes[key] || accountType || (['checking', 'savings', 'credit_card'].includes(detected) ? detected : null);
+      const convention = this.resolveSigns(items, kind);
+      conventions.add(convention);
+      for (const item of items) {
+        item.accountType = kind;
+        if (item.signedOnly) item.direction = item.hint || ((item.signed < 0) === (convention === 'negative-is-spending') ? 'DEBIT' : 'CREDIT');
+      }
+    }
+    this.format = {
+      kind: 'csv', header: headerIndex >= 0, signConvention: parsed.some(item => item.signedOnly) ? conventions.size > 1 ? 'per-account' : [...conventions][0] : 'debit-credit-columns',
+      accountCount: accountNumbers.size,
+      accountLast4: [...new Set([...accountNumbers].map(value => value.match(/(\d{4})$/)?.[1]).filter(Boolean))],
+      accounts: [...groups].map(([key, items]) => {
+        const detected = [...new Set(items.map(item => item.detectedKind).filter(Boolean))];
+        return { key, last4: items[0].accountLast4, rows: items.length,
+          kind: detected.length === 1 ? detected[0] : null, typeAmbiguous: detected.length > 1 };
+      }),
+      columns: Object.fromEntries(['date', 'description', 'amount', 'debit', 'credit', 'balance'].filter(key => map[key] >= 0).map(key => [key, map.columns[map[key]] ?? `column ${map[key] + 1}`]))
+    };
+    return this.finish(parsed, accountType, sourceFile);
+  }
+
+  // One signed-amount column means different things per issuer: most banks and Chase/BofA cards show spending as
+  // negative, while Amex and Discover cards show charges as positive. Payment/deposit rows and the type column decide;
+  // otherwise spending is the more common sign.
+  resolveSigns(parsed, accountType) {
+    const signed = parsed.filter(item => item.signedOnly);
+    if (!signed.length) return 'negative-is-spending';
+    // Bank accounts always show withdrawals as negative; only card issuers differ. A savings file can be all deposits.
+    if (accountType === 'checking' || accountType === 'savings') return 'negative-is-spending';
+    let negativeSpending = 0, positiveSpending = 0;
+    for (const item of signed) {
+      const moneyIn = item.hint === 'CREDIT' || (!item.hint && INFLOW_TEXT.test(item.description));
+      const moneyOut = item.hint === 'DEBIT';
+      if (moneyIn) item.signed < 0 ? positiveSpending++ : negativeSpending++;
+      else if (moneyOut) item.signed < 0 ? negativeSpending++ : positiveSpending++;
+    }
+    if (negativeSpending !== positiveSpending) return negativeSpending > positiveSpending ? 'negative-is-spending' : 'positive-is-spending';
+    const negatives = signed.filter(item => item.signed < 0).length;
+    const positives = signed.length - negatives;
+    if (negatives !== positives) return negatives > positives ? 'negative-is-spending' : 'positive-is-spending';
+    return accountType === 'credit_card' ? 'positive-is-spending' : 'negative-is-spending';
+  }
+
+  finish(parsed, accountType, sourceFile) {
+    const seen = new Set();
+    let duplicates = 0;
+    for (const item of parsed) {
+      const card = (item.accountType || accountType) === 'credit_card';
+      const key = JSON.stringify([item.accountKey, item.date, item.description, item.amount, item.direction]);
+      if (seen.has(key)) { duplicates++; continue; }
+      seen.add(key);
+      // A payment received on a card account moves money between your own accounts; it is not income.
+      const cardPayment = item.direction === 'CREDIT' && (card ? CARD_PAYMENT_TEXT.test(item.description) : /THANK\s*YOU/i.test(item.description) && /PAYMENT|PYMT/i.test(item.description));
+      this.transactions.push({
+        date: item.date, description: item.description, category: cardPayment ? 'Transfer' : categorizeTransaction(item.description, item.direction),
+        amount: item.amount, direction: item.direction, balance: item.balance ?? null, source: sourceFile, type: item.direction,
+        ...(cardPayment ? { categoryHint: 'Transfer' } : {}),
+        accountKey: item.accountKey, accountLast4: item.accountLast4
+      });
+    }
+    log('PARSER', `Parsed ${this.transactions.length} transactions from ${sourceFile} (${this.format?.kind || 'csv'}, ${this.format?.signConvention || 'n/a'}), ${duplicates} duplicates, ${this.skipped} skipped, ${this.errors.length} errors`);
+    return this.result(duplicates);
+  }
+
+  result(duplicates = 0) {
+    return { transactions: this.transactions, errors: this.errors, duplicates, skipped: this.skipped, format: this.format };
+  }
+
+  // OFX/QFX/QBO (Quicken/QuickBooks downloads): a standard format with signed TRNAMT (negative = money out)
+  // for bank and credit card accounts alike.
+  parseOfx(text, accountType, accountTypes = {}) {
+    const tag = (block, name) => (block.match(new RegExp(`<${name}>([^<\\r\\n]*)`, 'i'))?.[1] || '').trim();
+    const decode = value => value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+    const identity = accountIdentity(tag(text, 'ACCTID'));
+    if ((text.match(/<ACCTID>/gi) || []).length > 1) {
+      this.errors.push('Multi-account OFX files are not supported. Export each account as a separate OFX file, or use a multi-account CSV.');
+      return this.result();
+    }
+    accountType = accountTypes[identity.accountKey] || accountType;
+    const isCard = /<CCSTMTRS>/i.test(text) || accountType === 'credit_card';
+    const balance = this.parseAmount(tag(text.match(/<LEDGERBAL>[\s\S]*?(?:<\/LEDGERBAL>|$)/i)?.[0] || '', 'BALAMT'));
+    const parsed = [];
+    const blocks = text.match(/<STMTTRN>[\s\S]*?(?=<\/STMTTRN>|<STMTTRN>|<\/BANKTRANLIST>)/gi) || [];
+    blocks.forEach((block, index) => {
+      const date = this.parseDate(tag(block, 'DTPOSTED').slice(0, 8)) || this.parseDate(tag(block, 'DTUSER').slice(0, 8));
+      const signed = this.parseAmount(tag(block, 'TRNAMT'));
+      if (!date || !signed) { this.errors.push(`Transaction ${index + 1}: missing date or amount`); return; }
+      const name = decode(tag(block, 'NAME') || tag(block, 'PAYEE'));
+      const memo = decode(tag(block, 'MEMO'));
+      const description = this.cleanString(name && memo && !name.toUpperCase().includes(memo.toUpperCase()) && memo.length < 80 ? `${name} ${memo}` : name || memo) || 'Unknown';
+      parsed.push({ ...identity, date, description, amount: Math.round(Math.abs(signed) * 100) / 100, direction: signed < 0 ? 'DEBIT' : 'CREDIT', balance: null });
+    });
+    if (!blocks.length) this.errors.push('No transactions were found in this OFX/QFX file');
+    if (parsed.length && balance !== null) parsed.at(-1).balance = balance;
+    this.format = { kind: 'ofx', header: true, signConvention: 'negative-is-spending', columns: {},
+      accountCount: identity.accountKey === 'unidentified' ? 0 : 1, accountLast4: identity.accountLast4 ? [identity.accountLast4] : [],
+      accounts: [{ key: identity.accountKey, last4: identity.accountLast4, rows: parsed.length,
+        kind: isCard ? 'credit_card' : accountKind(tag(text, 'ACCTTYPE')) }] };
+    return this.finish(parsed, isCard ? 'credit_card' : accountType, 'OFX Import');
   }
 }
+
+const INFLOW_TEXT = /\b(?:payroll|direct dep(?:osit)?|dir dep|salary|deposit|refund|payment\s*-?\s*thank\s*you|thank\s*you|autopay payment|online payment|internet payment|mobile pa?y?me?n?t|pymt|interest (?:paid|earned)|cash ?back|reward)\b/i;
+const CARD_PAYMENT_TEXT = /\b(?:payment|pymt|pmt|thank\s*you|autopay|auto\s*pay|ach credit)\b/i;
 
 /**
  * Generate bulletproof SQL INSERT statements

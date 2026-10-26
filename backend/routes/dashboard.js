@@ -3,102 +3,18 @@ import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { buildUpcomingPayments } from '../utils/fixedPayments.js';
+import { isIncomeTransaction, projectIncome } from '../utils/income.js';
 import { currentUserId } from '../utils/tenant.js';
+import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
+import { getEntitlement } from '../utils/license.js';
+import { buildAnalytics } from '../utils/analytics.js';
+import { buildInsights } from '../utils/insights.js';
+import { cashBalance, savedAmount } from '../utils/transfers.js';
+import { buildSpendingHistory } from '../utils/spendingHistory.js';
+import { recordAudit } from '../utils/audit.js';
 
 const router = Router();
 const db = new Database();
-
-// Helper: Internal transfer keywords to exclude
-const INTERNAL_TRANSFER_KEYWORDS = ['transfer', 'xfer', 'move', 'internal', 'savings', 'chequing', 'acct'];
-
-// Helper: Check if transaction is an internal transfer
-function isInternalTransfer(description) {
-  if (!description) return false;
-  const desc = description.toLowerCase();
-  return INTERNAL_TRANSFER_KEYWORDS.some(keyword => desc.includes(keyword));
-}
-
-// Helper: Calculate 90-day rolling monthly averages (excluding internal transfers & incomplete months)
-async function get90DayAverages() {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Anchor to the end of the current month
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const ninetyDaysAgo = new Date(monthEnd);
-    ninetyDaysAgo.setDate(monthEnd.getDate() - 90);
-    const startDate = ninetyDaysAgo.toISOString().split('T')[0];
-    const endDate = monthEnd.toISOString().split('T')[0];
-    const currentMonth = today.toISOString().slice(0, 7); // YYYY-MM
-
-    log('DASHBOARD', `Calculating 90-day averages from ${startDate} to ${endDate}, excluding current month ${currentMonth}`);
-
-    const rows = await db.all(
-      `SELECT
-        date::date as txn_date,
-        amount,
-        direction,
-        description
-      FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3
-      ORDER BY date::date`,
-      [currentUserId(), startDate, endDate]
-    );
-
-    if (rows.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0 };
-    }
-
-    const monthGroups = new Map();
-
-    for (const tx of rows) {
-      const desc = (tx.description || '').toLowerCase();
-      const isInternal = INTERNAL_TRANSFER_KEYWORDS.some(kw => desc.includes(kw));
-      if (isInternal) continue;
-      if (/\b(x5261|x5237)\b/.test(desc)) continue;
-
-      // date::date returns a Date object from pg driver... convert to string
-      const dateStr = tx.txn_date instanceof Date ? tx.txn_date.toISOString().split('T')[0] : String(tx.txn_date).split('T')[0];
-      const monthKey = dateStr.substring(0, 7); // YYYY-MM
-
-      // Exclude the current incomplete month from averages
-      // It would distort the average since partial-month income is always lower
-      if (monthKey === currentMonth) continue;
-
-      if (!monthGroups.has(monthKey)) {
-        monthGroups.set(monthKey, { income: 0, expenses: 0 });
-      }
-      const bucket = monthGroups.get(monthKey);
-      const amt = parseFloat(tx.amount) || 0;
-      const dir = (tx.direction || '').toUpperCase();
-      if (dir === 'CREDIT') bucket.income += amt;
-      else if (dir === 'DEBIT') bucket.expenses += amt;
-    }
-
-    const months = Array.from(monthGroups.entries()).map(([month, vals]) => ({
-      month,
-      monthly_income: vals.income,
-      monthly_expenses: vals.expenses
-    })).sort((a, b) => b.month.localeCompare(a.month));
-
-    if (months.length === 0) {
-      return { avgIncome: 0, avgExpenses: 0 };
-    }
-
-    const totalIncome = months.reduce((s, m) => s + m.monthly_income, 0);
-    const totalExpenses = months.reduce((s, m) => s + m.monthly_expenses, 0);
-
-    return {
-      avgIncome: totalIncome / months.length,
-      avgExpenses: totalExpenses / months.length,
-      monthsUsed: months.length
-    };
-  } catch (error) {
-    log('DASHBOARD', `Error calculating 90-day averages: ${error.message}`);
-    return { avgIncome: 0, avgExpenses: 0 };
-  }
-}
 
 // Helper: Get date range based on filter
 function getDateRange(filter) {
@@ -136,157 +52,6 @@ function getDateRange(filter) {
   };
 }
 
-// Helper: Calculate 3-month historical averages (excluding internal transfers)
-async function getHistoricalAverages() {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Get last 3 months (April, May, June for June 4)
-    const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-    const startDate = threeMonthsAgo.toISOString().split('T')[0];
-    const endDate = today.toISOString().split('T')[0];
-    
-    log('DASHBOARD', `Calculating historical averages from ${startDate} to ${endDate}`);
-    
-    const result = await db.all(
-      `SELECT 
-        DATE_TRUNC('month', date::date)::date as month,
-        SUM(CASE WHEN UPPER(COALESCE(direction, '')) = 'CREDIT' THEN COALESCE(amount, 0) ELSE 0 END) as monthly_income,
-        SUM(CASE WHEN UPPER(COALESCE(direction, '')) = 'DEBIT' THEN COALESCE(amount, 0) ELSE 0 END) as monthly_expenses
-      FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3
-      GROUP BY DATE_TRUNC('month', date::date)
-      ORDER BY month DESC`,
-      [currentUserId(), startDate, endDate]
-    );
-    
-    log('DASHBOARD', `Historical query returned ${result.length} months: ${JSON.stringify(result)}`);
-    
-    if (result.length === 0) {
-      log('DASHBOARD', 'No transactions found in historical period');
-      return { avgIncome: 0, avgExpenses: 0, months: [] };
-    }
-    
-    // Filter out internal transfers from averages
-    let totalIncome = 0;
-    let totalExpenses = 0;
-    const filteredMonths = [];
-    
-    for (const month of result) {
-      const monthTransactions = await db.all(
-        `SELECT description, amount, direction FROM transactions 
-         WHERE user_id = $1 AND DATE_TRUNC('month', date::date)::date = $2`,
-        [currentUserId(), month.month]
-      );
-      
-      let monthIncome = 0;
-      let monthExpenses = 0;
-      
-      for (const tx of monthTransactions) {
-        if (isInternalTransfer(tx.description)) {
-          continue; // Skip internal transfers
-        }
-        
-        if (tx.direction && tx.direction.toUpperCase() === 'CREDIT') {
-          monthIncome += parseFloat(tx.amount) || 0;
-        } else if (tx.direction && tx.direction.toUpperCase() === 'DEBIT') {
-          monthExpenses += parseFloat(tx.amount) || 0;
-        }
-      }
-      
-      totalIncome += monthIncome;
-      totalExpenses += monthExpenses;
-      filteredMonths.push({
-        month: month.month,
-        monthly_income: monthIncome,
-        monthly_expenses: monthExpenses
-      });
-    }
-    
-    const avgIncome = filteredMonths.length > 0 ? totalIncome / filteredMonths.length : 0;
-    const avgExpenses = filteredMonths.length > 0 ? totalExpenses / filteredMonths.length : 0;
-    
-    log('DASHBOARD', `Historical averages (filtered): Income $${avgIncome.toFixed(2)}, Expenses $${avgExpenses.toFixed(2)}`);
-    
-    return { avgIncome, avgExpenses, months: filteredMonths };
-  } catch (error) {
-    log('DASHBOARD', `Error calculating historical averages: ${error.message}`);
-    return { avgIncome: 0, avgExpenses: 0, months: [] };
-  }
-}
-
-// Helper: Detect recurring payments (subscriptions, bills) - excluding internal transfers
-async function getRecurringPayments() {
-  try {
-    const result = await db.all(
-      `SELECT 
-        description,
-        category,
-        amount,
-        EXTRACT(DAY FROM date::date) as day_of_month,
-        MAX(is_fixed::int)::boolean as is_fixed_flag,
-        COUNT(*) as frequency,
-        MAX(date) as last_date
-      FROM transactions
-      WHERE user_id = $1 AND (UPPER(direction) = 'DEBIT' OR is_fixed = TRUE)
-      GROUP BY description, category, amount, EXTRACT(DAY FROM date::date)
-      HAVING COUNT(*) >= 2 OR MAX(is_fixed::int) = 1
-      ORDER BY frequency DESC, last_date DESC`,
-      [currentUserId()]
-    );
-    
-    return result.filter(p => {
-      // Exclude internal transfers
-      if (isInternalTransfer(p.description)) {
-        return false;
-      }
-      const recurring = p.frequency >= 2;
-      const isSubscription = /netflix|prime|spotify|hulu|subscription|monthly|fee|bill|payment|insurance|mortgage|utilities/i.test(p.description);
-      const isFixedManual = p.is_fixed_flag === true;
-      return recurring || isSubscription || isFixedManual;
-    }).map(p => ({
-      description: p.description,
-      amount: parseFloat(p.amount),
-      dayOfMonth: parseInt(p.day_of_month),
-      lastDate: p.last_date,
-      frequency: parseInt(p.frequency)
-    }));
-  } catch (error) {
-    log('DASHBOARD', `Error detecting recurring payments: ${error.message}`);
-    return [];
-  }
-}
-
-// Helper: Categorize subscriptions
-function categorizeSubscription(description) {
-  const desc = description.toLowerCase();
-  
-  // 1. PRIMARY FIXED BILLS (Credit Cards & Loans first to catch 'mobile' in CC payments)
-  if (/ollo|credit.*card|visa|mastercard|payment.*thank.*you|discover|amex|marriott|capital.*one|chase/i.test(desc)) return { type: 'credit_card', name: 'Credit Cards', isFixed: true };
-  if (/hyundai|santander|car.*payment|auto.*loan|vehicle.*loan/i.test(desc)) return { type: 'auto', name: 'Car Loans', isFixed: true };
-  if (/mortgage|rent|lease|apartment|property|td bank mortgage/i.test(desc)) return { type: 'housing', name: 'Housing', isFixed: true };
-
-  // 2. UTILITIES
-  if (/pseg|electricity|gas|water|power|utility|hydro|pepco|eversource|constellation|coned/i.test(desc)) return { type: 'utilities', name: 'Utilities', isFixed: true };
-  if (/internet|comcast|xfinity|fios|verizon|at&t|phone|mobile|wireless|cable|broadband|t-mobile/i.test(desc)) return { type: 'utilities', name: 'Internet/Phone', isFixed: true };
-  if (/chargepoint|tesla\s?(supercharger|charging)|supercharger|blink|ev\s?charging|plugshare|electric\s?vehicle\s?charging/i.test(desc)) return { type: 'ev_charging', name: 'EV Charging', isFixed: false };
-  
-  // 3. INSURANCE
-  if (/insurance|homeowners|renters|life.*ins|state farm|geico|allstate|usaa|progressive|amica|liberty mutual/i.test(desc)) return { type: 'insurance', name: 'Insurance', isFixed: true };
-  
-  // 4. SECONDARY & SUBSCRIPTIONS
-  if (/uber.*eats|doordash|grubhub|seamless|restaurant|starbucks|mcdonalds/i.test(desc)) return { type: 'dining', name: 'Dining', isFixed: false };
-  if (/netflix|amazon.*prime|prime.*video|spotify|hulu|disney|espn\+|hbo|iptv|apple tv|youtube|crunchyroll|paramount|peacock/i.test(desc)) return { type: 'subscriptions', name: 'Subscriptions', isFixed: false };
-  if (/gym|fitness|peloton|yoga|membership|equinox|la fitness|orangetheory|planet/i.test(desc)) return { type: 'wellness', name: 'Fitness', isFixed: false };
-  if (/office|microsoft|adobe|dropbox|onedrive|icloud|google one|amazon photos|backup/i.test(desc)) return { type: 'software', name: 'Software/Cloud', isFixed: false };
-  if (/overdraft|bank fee|atm fee|wire transfer|td bank.*fee/i.test(desc)) return { type: 'banking', name: 'Banking Fees', isFixed: false };
-  
-  if (/subscription|membership|annual|yearly|monthly|recurring/i.test(desc)) return { type: 'subscription', name: 'Subscription', isFixed: false };
-  
-  return { type: 'subscription', name: 'Recurring Payment', isFixed: false };
-}
-
 router.post('/summary', async (req, res) => {
   try {
     const { dateFilter = 'current' } = req.body;
@@ -294,47 +59,30 @@ router.post('/summary', async (req, res) => {
 
     log('DASHBOARD', `Summary: ${startDate} to ${endDate}`);
 
-    // 1. Get latest balance
-    const latestBalance = await db.all(
-       'SELECT balance FROM transactions WHERE user_id = $1 AND balance IS NOT NULL AND date::date <= CURRENT_DATE ORDER BY date::date DESC, id DESC LIMIT 1',
-       [currentUserId()]
-    );
-    const plaidBalance = await db.get(`SELECT SUM(COALESCE(available_balance,current_balance)) AS balance,
-        MAX(balance_checked_at) AS updated_at, COUNT(*) AS account_count
-      FROM plaid_accounts WHERE user_id=$1 AND use_for_cashflow=TRUE AND type='depository'
-        AND iso_currency_code='USD' AND COALESCE(available_balance,current_balance) IS NOT NULL`,
-    [currentUserId()]);
-    const hasPlaidBalance = Number(plaidBalance.account_count) > 0 && plaidBalance.balance !== null;
-    const balance = hasPlaidBalance
-      ? Number(plaidBalance.balance)
-      : latestBalance.length > 0 ? Number(latestBalance[0].balance) : null;
-    const balanceSource = hasPlaidBalance ? 'plaid' : latestBalance.length > 0 ? 'statement' : null;
-    const balanceCheckedAt = hasPlaidBalance ? plaidBalance.updated_at : null;
-    const balanceStale = balanceCheckedAt
-      ? Date.now() - new Date(balanceCheckedAt).getTime() > 36 * 60 * 60 * 1000
-      : false;
+    const cash = await loadCash(currentUserId());
+    const { balance, balanceSource, balanceCheckedAt, balanceStale } = cash;
     if (balance !== null && !Number.isFinite(balance)) throw new Error('Invalid account balance');
 
     // 2. Calculation of ACTUAL totals for the selected period (used for charts / AI analysis)
     const result = await db.get(
-      `SELECT 
+      `SELECT
         SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE 0 END) as total_income,
         SUM(CASE WHEN direction = 'DEBIT' THEN amount ELSE 0 END) as total_expenses
       FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND transfer_kind IS NULL`,
       [currentUserId(), startDate, endDate]
     );
 
     const periodIncome = parseFloat(result.total_income || 0);
     const periodExpenses = parseFloat(result.total_expenses || 0);
 
-    // 3. 90-day rolling monthly averages for the top cards
-    const { avgIncome, avgExpenses, monthsUsed } = await get90DayAverages();
+    // 3. The same typical monthly surplus the Goals, Debt and Coach pages use.
+    const typical = typicalSurplus(await loadPlanInputs(db, new Date()), new Date());
 
     res.json({
-      income: avgIncome,
-      expenses: avgExpenses,
-      netCashflow: avgIncome - avgExpenses,
+      income: typical.avgMonthlyIncome ?? 0,
+      expenses: typical.avgMonthlyExpenses ?? 0,
+      netCashflow: typical.monthlySurplus ?? 0,
       balance: balance,
       balanceSource,
       balanceCheckedAt,
@@ -342,8 +90,8 @@ router.post('/summary', async (req, res) => {
       period: { startDate, endDate },
       periodIncome,
       periodExpenses,
-      monthsAveraged: monthsUsed,
-      historicalNotice: "Income & Expenses are 90-day monthly averages excluding the current incomplete month."
+      monthsAveraged: typical.monthsUsed,
+      historicalNotice: 'Income, spending and surplus are monthly averages of the last 3 full months, transfers excluded.'
     });
   } catch (error) {
     log('DASHBOARD', `Error: ${error.message}`);
@@ -357,7 +105,7 @@ router.get('/monthly-cashflow', async (req, res) => {
     const rows = await db.all(
       `SELECT date, amount, direction, description 
        FROM transactions 
-       WHERE user_id = $1 
+       WHERE user_id = $1 AND transfer_kind IS NULL
        ORDER BY date ASC, id ASC`,
       [currentUserId()]
     );
@@ -366,9 +114,6 @@ router.get('/monthly-cashflow', async (req, res) => {
     const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     for (const tx of rows) {
-      if (isInternalTransfer(tx.description)) continue;
-      if (/\b(x5261|x5237)\b/i.test(tx.description || '')) continue;
-
       const parsed = parseTxDate(tx.date);
       if (!parsed) continue;
 
@@ -445,31 +190,176 @@ router.get('/monthly-cashflow', async (req, res) => {
   }
 });
 
+async function loadUpcoming(req, today = new Date()) {
+  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const transactions = await db.all(
+    `SELECT
+      id,
+      date,
+      description,
+      category,
+      amount,
+      direction,
+      label_id,
+      account_id,
+      is_fixed,
+      pay_mode,
+      display_name
+    FROM transactions
+    WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
+    [currentUserId(), dateString(previousMonth), dateString(today)]
+  );
+  const through = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
+  const bills = buildUpcomingPayments(transactions, today, { through });
+  // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
+  let extras = [], plan = null, pro = false, streams = [];
+  try {
+    const [inputs, entitlement] = await Promise.all([loadPlanInputs(db, today), getEntitlement(req.user.id)]);
+    pro = !!entitlement.plusActive;
+    const computed = computePlan(inputs, { pro: !!entitlement.plusActive, now: today });
+    plan = entitlement.plusActive ? computed : null;
+    streams = computed.income?.streams || [];
+    extras = projectIncome(inputs.recent, today, { through }).items;
+    if (plan) {
+      for (let offset = 0; new Date(today.getFullYear(), today.getMonth() + offset, 1) <= through; offset++) {
+        const target = offset === 0 ? today : new Date(today.getFullYear(), today.getMonth() + offset, 1);
+        extras.push(...buildPlanPayments(plan, target).map(item => ({
+          ...item, date: dateString(new Date(target.getFullYear(), target.getMonth(), item.dayOfMonth)),
+          // Future allocations are estimates, not edits to this month's plan.
+          flexible: offset === 0 && item.flexible, futurePlan: offset > 0
+        })).filter(item => item.date <= dateString(through)));
+      }
+    }
+  } catch (error) {
+    log('DASHBOARD', `Upcoming plan items unavailable: ${error.message}`);
+  }
+  const items = [...bills, ...extras].sort((a, b) => a.date.localeCompare(b.date) || Number(b.isIncome) - Number(a.isIncome));
+  return { items, plan, pro, streams };
+}
+
 router.post('/upcoming-payments', async (req, res) => {
   try {
-    log('DASHBOARD', 'Fetching monthly fixed payments based on the previous month');
-    const today = new Date();
-    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const transactions = await db.all(
-      `SELECT 
-        id,
-        date,
-        description,
-        category,
-        amount,
-        direction,
-        label_id,
-        is_fixed
-      FROM transactions
-      WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
-      [currentUserId(), dateString(previousMonth), dateString(today)]
-    );
-    res.json(buildUpcomingPayments(transactions, today));
+    log('DASHBOARD', 'Fetching the next 30 days of payments, overdue bills and current-month history');
+    res.json((await loadUpcoming(req)).items);
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Spendable cash plus the account-tracker facts the dashboard highlights. Degrades to the newest balance on failure.
+async function loadCash(userId) {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const rows = await db.all('SELECT id, date, balance, account_id FROM transactions WHERE user_id = $1 AND balance IS NOT NULL', [userId]);
+  let accounts = [];
+  try { accounts = await db.all('SELECT id, name, kind, last4, status, statement FROM accounts WHERE user_id = $1', [userId]); }
+  catch (error) { log('DASHBOARD', `Accounts unavailable: ${error.message}`, 'warn'); }
+  const byId = new Map(accounts.map(account => [account.id, account]));
+  const statementBalance = cashBalance(rows, byId, todayIso);
+  const plaid = await db.get(`SELECT SUM(COALESCE(available_balance,current_balance)) AS balance,
+      MAX(balance_checked_at) AS updated_at, COUNT(*) AS account_count
+    FROM plaid_accounts WHERE user_id=$1 AND use_for_cashflow=TRUE AND type='depository'
+      AND iso_currency_code='USD' AND COALESCE(available_balance,current_balance) IS NOT NULL`,
+  [userId]);
+  const hasPlaidBalance = Number(plaid.account_count) > 0 && plaid.balance !== null;
+  const balanceCheckedAt = hasPlaidBalance ? plaid.updated_at : null;
+  return {
+    balance: hasPlaidBalance ? Number(plaid.balance) : statementBalance,
+    balanceSource: hasPlaidBalance ? 'plaid' : Number.isFinite(statementBalance) ? 'statement' : null,
+    balanceCheckedAt,
+    balanceStale: balanceCheckedAt ? Date.now() - new Date(balanceCheckedAt).getTime() > 36 * 60 * 60 * 1000 : false,
+    accounts,
+    byId
+  };
+}
+
+async function accountSignals(userId, byId, accounts) {
+  try {
+    const today = new Date();
+    const prefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const rows = await db.all(`SELECT date, amount, direction, account_id, transfer_kind FROM transactions
+      WHERE user_id = $1 AND transfer_kind IN ('savings','unknown')`, [userId]);
+    let saved = 0, savedCount = 0, unknownCount = 0, unknownTotal = 0;
+    for (const row of rows) {
+      if (row.transfer_kind === 'unknown') { unknownCount++; unknownTotal += Math.abs(Number(row.amount)) || 0; continue; }
+      if (parseTxDate(row.date)?.iso?.startsWith(prefix)) { saved += savedAmount(row, byId.get(row.account_id)?.kind || null); savedCount++; }
+    }
+    const review = accounts.filter(account => account.status === 'needs_review');
+    return {
+      savedThisMonth: { amount: Math.round(saved * 100) / 100, transfers: savedCount },
+      unknownTransfers: { count: unknownCount, total: Math.round(unknownTotal * 100) / 100 },
+      accountsToReview: review.map(account => ({ id: account.id, name: account.name, last4: account.last4 }))
+    };
+  } catch (error) {
+    log('DASHBOARD', `Account signals unavailable: ${error.message}`, 'warn');
+    return null;
+  }
+}
+
+// Import freshness is a nice-to-have: any failure degrades to "unknown" instead of breaking the dashboard.
+async function importStats(userId) {
+  try {
+    const row = await db.get('SELECT COUNT(*) AS total, MAX(created_at) AS last_import FROM transactions WHERE user_id = $1', [userId]);
+    const dates = await db.all('SELECT DISTINCT date FROM transactions WHERE user_id = $1', [userId]);
+    const latestDate = dates.map(r => parseTxDate(r.date)?.iso).filter(Boolean).sort().pop() || null;
+    const at = row?.last_import ? new Date(row.last_import) : null;
+    return { total: Number(row?.total) || 0, lastImportAt: at && !Number.isNaN(at.getTime()) ? at.toISOString() : null, latestDate };
+  } catch (error) {
+    log('DASHBOARD', `Import freshness unavailable: ${error.message}`, 'warn');
+    const row = await db.get('SELECT COUNT(*) AS total FROM transactions WHERE user_id = $1', [userId]);
+    return { total: Number(row?.total) || 0, lastImportAt: null, latestDate: null };
+  }
+}
+
+router.get('/insights', async (req, res) => {
+  try {
+    const today = new Date();
+    const userId = currentUserId();
+    const [{ items, plan, pro, streams }, cash, count] = await Promise.all([
+      loadUpcoming(req, today),
+      // Text dates are parsed in JS so one malformed row cannot fail the whole dashboard.
+      loadCash(userId).catch(error => { log('DASHBOARD', `Latest balance unavailable: ${error.message}`, 'warn'); return { balance: null, accounts: [], byId: new Map() }; }),
+      importStats(userId)
+    ]);
+    const balance = cash.balance;
+    const accounts = count.total > 0 ? await accountSignals(userId, cash.byId, cash.accounts) : null;
+    let analytics = null;
+    if (pro) {
+      try {
+        analytics = await db.transaction(async client => {
+          const transactions = (await client.query('SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name FROM transactions ORDER BY date, id')).rows;
+          const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
+            .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
+          return buildAnalytics({ transactions, budgets, latestBalance: balance, today });
+        });
+      } catch (error) {
+        log('DASHBOARD', `Insight analytics unavailable: ${error.message}`);
+      }
+    }
+    // Rows imported before created_at existed have no import time; the newest transaction date is the best proxy.
+    const importedAt = count.lastImportAt || (count.latestDate ? `${count.latestDate}T12:00:00.000Z` : null);
+    const lastImport = importedAt ? { at: importedAt, latestDate: count.latestDate } : null;
+    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: count.total > 0, incomeStreams: streams, lastImport, accounts }));
+  } catch (error) {
+    log('DASHBOARD', `Error building insights: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/spending-history', async (req, res, next) => {
+  try {
+    const entitlement = await getEntitlement(currentUserId());
+    const inputs = await db.transaction(async client => {
+      const transactions = (await client.query('SELECT date,amount,direction,category,transfer_kind FROM transactions WHERE user_id=$1', [currentUserId()])).rows;
+      const budgets = entitlement.plusActive
+        ? (await client.query('SELECT category,monthly_amount FROM category_budgets WHERE user_id=$1', [currentUserId()])).rows.map(row => ({ category: row.category, amount: Number(row.monthly_amount) }))
+        : [];
+      return { transactions, budgets };
+    });
+    res.json(buildSpendingHistory({ ...inputs, pro: entitlement.plusActive }));
+  } catch (error) { next(error); }
 });
 
 router.post('/category-spending', async (req, res) => {
@@ -486,7 +376,7 @@ router.post('/category-spending', async (req, res) => {
         COUNT(*) as transaction_count,
         DATE_TRUNC('month', date::date)::date as month
       FROM transactions
-      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND UPPER(direction) = 'DEBIT'
+      WHERE user_id = $1 AND date >= $2 AND date <= $3 AND UPPER(direction) = 'DEBIT' AND transfer_kind IS NULL
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, total_spending DESC`,
       [currentUserId(), startDate, endDate]
@@ -547,7 +437,7 @@ router.post('/category-transactions', async (req, res) => {
     const result = await db.all(
       `SELECT 
         date,
-        description,
+        COALESCE(display_name, description) AS description,
         amount
       FROM transactions
       WHERE user_id = $1 AND category = $2 AND date >= $3 AND date <= $4
@@ -580,7 +470,7 @@ router.post('/category-trends', async (req, res) => {
         SUM(CASE WHEN UPPER(direction) = 'DEBIT' THEN amount ELSE 0 END) as total_spending,
         COUNT(*) as transaction_count
       FROM transactions
-      WHERE user_id = $1 AND UPPER(direction) = 'DEBIT'
+      WHERE user_id = $1 AND UPPER(direction) = 'DEBIT' AND transfer_kind IS NULL
       GROUP BY category, DATE_TRUNC('month', date::date)
       ORDER BY month DESC, category ASC`,
       [currentUserId()]
@@ -644,7 +534,7 @@ router.post('/category-transactions-for-month', async (req, res) => {
       `SELECT 
         id,
         date,
-        description,
+        COALESCE(display_name, description) AS description,
         amount,
         category as currentCategory
       FROM transactions
@@ -674,17 +564,28 @@ router.get('/all-transactions', async (req, res) => {
   try {
     const result = await db.all(`
       SELECT 
-        id,
-        date,
-        description,
-        amount,
-        direction,
-        category,
-        is_fixed,
-        user_id
-      FROM transactions
-      WHERE user_id = $1
-      ORDER BY date DESC
+        t.id,
+        t.date,
+        t.description,
+        t.display_name,
+        t.amount,
+        t.direction,
+        t.category,
+        t.is_fixed,
+        t.pay_mode,
+        t.income_role,
+        t.user_id,
+        t.transfer_kind,
+        t.account_id,
+        a.name AS account_name,
+        a.kind AS account_kind,
+        a.last4 AS account_last4,
+        o.name AS transfer_account_name
+      FROM transactions t
+      LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+      LEFT JOIN accounts o ON o.id = t.transfer_account_id AND o.user_id = t.user_id
+      WHERE t.user_id = $1
+      ORDER BY t.date DESC
     `, [currentUserId()]);
 
     log('DASHBOARD', `Returning ${result.length} total transactions (including is_fixed)`);
@@ -695,7 +596,8 @@ router.get('/all-transactions', async (req, res) => {
         ...row,
         id: row.id.toString(),
         amount: parseFloat(row.amount),
-        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true'
+        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true',
+        counts_as_income: row.transfer_kind == null && isIncomeTransaction(row)
       }))
     });
   } catch (error) {
@@ -715,7 +617,7 @@ router.post('/update-category', async (req, res) => {
     }
 
     // Get old category before update
-    const oldTxn = await db.get('SELECT id, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, currentUserId()]);
+    const oldTxn = await db.get('SELECT id, date, description, category FROM transactions WHERE id = $1 AND user_id = $2', [transaction_id, currentUserId()]);
     
     if (!oldTxn) {
       log('CATEGORIZE', `❌ Transaction not found: ID ${transaction_id}`);
@@ -728,8 +630,11 @@ router.post('/update-category', async (req, res) => {
     const validCategory = await db.get('SELECT id FROM categories WHERE name = $1', [new_category]);
     if (!validCategory) return res.status(400).json({ error: 'Choose one of your categories' });
     await db.run('UPDATE transactions SET category = $1, previous_category = category, category_corrected = TRUE, correction_timestamp = NOW() WHERE id = $2 AND user_id = $3', [new_category, transaction_id, currentUserId()]);
+    await recordAudit(req, 'transaction.reclassified', 'success', {
+      detail: { transactionId: Number(transaction_id), date: oldTxn.date, previousCategory: oldCategory, category: new_category }
+    });
 
-    log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: "${oldTxn.description}" | ${oldCategory} → ${new_category}`);
+    log('CATEGORIZE', `✅ Updated transaction ${transaction_id}: ${oldCategory} → ${new_category}`);
 
     res.json({
       success: true,

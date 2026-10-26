@@ -4,6 +4,7 @@ import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
 import { setMailTransportForTests } from './mailer.js';
+import { grantFixtureAccess } from './paidFixture.js';
 import { attemptKeysForEmail } from '../routes/auth.js';
 import application from '../app.js';
 
@@ -65,6 +66,8 @@ test('audit logging, password reset, admin console and consented support access'
     const adminCookie = cookieFrom(owner);
     const customer = await call('/api/auth/register', { body: { name: 'Customer', email: 'customer@example.com', password } });
     let customerCookie = cookieFrom(customer);
+    sent.length = 0; // Verification mail is separate from the password-reset assertions below.
+    await grantFixtureAccess(database, customer.body.user.id);
     assert.equal(customer.body.user.role, 'user');
     assert.equal((await call('/api/goals', { body: { name: 'Customer car', target_amount: 30000, target_date: '2027-01-01' }, cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/goals', { body: { name: 'Owner boat', target_amount: 9000, target_date: '2027-01-01' }, cookie: adminCookie })).status, 200);
@@ -128,6 +131,26 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal(relogin.status, 200);
     customerCookie = cookieFrom(relogin);
 
+    // Signed-in password change: current password required, this device stays signed in, other devices are signed out.
+    const otherDevice = cookieFrom(await call('/api/auth/login', { body: { email: 'customer@example.com', password: newPassword } }));
+    const changedPassword = 'changed-in-app-password-1';
+    assert.equal((await call('/api/auth/password', { body: { currentPassword: newPassword, newPassword: 'short' }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/auth/password', { body: { currentPassword: newPassword, newPassword }, cookie: customerCookie })).status, 400);
+    const wrongCurrent = await call('/api/auth/password', { body: { currentPassword: 'not-my-password-123', newPassword: changedPassword }, cookie: customerCookie });
+    assert.equal(wrongCurrent.status, 401);
+    assert.equal((await call('/api/goals', { cookie: customerCookie })).status, 200, 'a wrong current password does not sign you out');
+    assert.equal((await call('/api/auth/password', { body: { currentPassword: newPassword, newPassword: changedPassword } })).status, 401);
+    const noticesBefore = sent.length;
+    const changed = await call('/api/auth/password', { body: { currentPassword: newPassword, newPassword: changedPassword }, cookie: customerCookie });
+    assert.equal(changed.status, 200);
+    assert.equal((await call('/api/goals', { cookie: customerCookie })).status, 200);
+    assert.equal((await call('/api/goals', { cookie: otherDevice })).status, 401);
+    assert.equal((await call('/api/auth/login', { body: { email: 'customer@example.com', password: newPassword } })).status, 401);
+    assert.equal((await call('/api/auth/login', { body: { email: 'customer@example.com', password: changedPassword } })).status, 200);
+    await settle();
+    assert.ok(sent.slice(noticesBefore).some(message => message.subject.includes('password was changed')));
+    assert.equal((await call('/api/auth/password', { body: { currentPassword: changedPassword, newPassword }, cookie: customerCookie })).status, 200);
+
     // Admin-initiated reset emails the customer; the admin never receives the token.
     const adminReset = await call('/api/admin/users/2/password-reset', { body: {}, cookie: adminCookie });
     assert.equal(adminReset.status, 200);
@@ -157,6 +180,7 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal((await call('/api/dashboard/summary', { body: { dateFilter: 'current' }, cookie: supportCookie })).status, 200);
     const blockedWrite = await call('/api/goals', { body: { name: 'Sneaky', target_amount: 1 }, cookie: supportCookie });
     assert.equal(blockedWrite.status, 403);
+    assert.equal((await call('/api/auth/password', { body: { currentPassword: password, newPassword: 'support-chosen-password' }, cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/admin/overview', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-access', { cookie: supportCookie })).status, 403);
     await settle();

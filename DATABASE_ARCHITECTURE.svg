@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
+  <title id="title">MyFinance household ownership and database isolation</title>
+  <desc id="description">Login users join households through membership. The household owner's user ID anchors financial records. Accounts, transactions and import batches share the tenant. Composite foreign keys protect transaction source accounts, batches and labels. Privileged billing and identity tables are separate from financial runtime access.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#3b6657"/></marker>
+    <style>
+      text { font-family: Arial, sans-serif; fill: #203d33; }
+      .title { font-size: 26px; font-weight: 700; }
+      .head { font-size: 18px; font-weight: 700; }
+      .body { font-size: 15px; }
+      .note { font-size: 13px; fill: #4e645b; }
+      .box { fill: #fff; stroke: #a9c1b4; stroke-width: 1.5; }
+      .link { stroke: #3b6657; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1200" height="900" fill="#f7f8f2"/>
+  <text x="40" y="45" class="title">MyFinance: login identity, shared household, bank accounts</text>
+  <text x="40" y="72" class="note">Current implementation reference | 24 October 2026 | Owner-user tenant anchor, not financial household_id columns</text>
+  <rect class="box" x="40" y="100" width="270" height="125" rx="12"/>
+  <text x="60" y="130" class="head">users + sessions</text>
+  <text x="60" y="158" class="body">Separate login for each person</text>
+  <text x="60" y="181" class="body">Hashed session token</text>
+  <text x="60" y="204" class="note">Example: Alice 20; Bob 21</text>
+  <rect class="box" x="370" y="100" width="300" height="125" rx="12"/>
+  <text x="390" y="130" class="head">household_members</text>
+  <text x="390" y="158" class="body">user_id PK; household_id FK</text>
+  <text x="390" y="181" class="body">Role: owner or member</text>
+  <text x="390" y="204" class="note">One current household per login</text>
+  <rect class="box" x="730" y="100" width="430" height="125" rx="12"/>
+  <text x="750" y="130" class="head">households</text>
+  <text x="750" y="158" class="body">id PK; owner_user_id UNIQUE FK</text>
+  <text x="750" y="181" class="body">Example: household 7, owner user 20</text>
+  <text x="750" y="204" class="note">Alice and Bob both use financial tenant 20</text>
+  <path class="link" d="M310,160 H370"/>
+  <path class="link" d="M670,160 H730"/>
+  <rect x="40" y="280" width="1120" height="435" rx="16" fill="#edf4eb" stroke="#7aa58a" stroke-width="2"/>
+  <text x="60" y="312" class="head">Financial boundary: SET LOCAL ROLE finance_app_runtime + app.user_id = owner user ID</text>
+  <text x="60" y="337" class="note">Forced row-level security: rows may be read/written only when row.user_id equals the verified tenant</text>
+  <path class="link" d="M945,225 V280"/>
+  <text x="730" y="256" class="note">Logical ownership join: owner_user_id = financial.user_id</text>
+  <rect class="box" x="65" y="365" width="290" height="140" rx="10"/>
+  <text x="85" y="394" class="head">accounts</text>
+  <text x="85" y="422" class="body">id PK; user_id FK</text>
+  <text x="85" y="445" class="body">kind, institution, name, last4</text>
+  <text x="85" y="470" class="note">Last four digits are not unique</text>
+  <text x="85" y="490" class="note">No separate member-level privacy</text>
+  <rect class="box" x="435" y="365" width="330" height="195" rx="10"/>
+  <text x="455" y="394" class="head">transactions</text>
+  <text x="455" y="422" class="body">id PK; user_id tenant FK</text>
+  <text x="455" y="445" class="body">account_id: source bank account</text>
+  <text x="455" y="468" class="body">import_batch_id: provenance</text>
+  <text x="455" y="491" class="body">date, description, amount, direction</text>
+  <text x="455" y="516" class="note">Dedup: same tenant + bank account</text>
+  <text x="455" y="538" class="note">NULL account: confirmed overlap only</text>
+  <rect class="box" x="845" y="365" width="290" height="140" rx="10"/>
+  <text x="865" y="394" class="head">import_batches</text>
+  <text x="865" y="422" class="body">id PK; user_id FK</text>
+  <text x="865" y="445" class="body">source, account_id, counts</text>
+  <text x="865" y="470" class="body">backup / restore JSONB</text>
+  <text x="865" y="490" class="note">Batch account checked by app</text>
+  <path class="link" d="M355,425 H435"/>
+  <path class="link" d="M845,425 H765"/>
+  <text x="363" y="410" class="note">1 : many</text>
+  <text x="775" y="410" class="note">1 : many</text>
+  <rect class="box" x="65" y="590" width="1070" height="100" rx="10"/>
+  <text x="85" y="618" class="head">Other tenant-protected tables</text>
+  <text x="85" y="644" class="body">categories, transaction_labels, name_rules, import_reviews, staging_transactions</text>
+  <text x="85" y="669" class="body">credit_cards (debts), savings_goals, category_budgets, money_plans, household_profiles</text>
+  <rect class="box" x="40" y="745" width="1120" height="115" rx="12"/>
+  <text x="60" y="775" class="head">Privileged control plane: no financial-runtime access; explicit server authorization</text>
+  <text x="60" y="801" class="body">Identity/tokens, invitations, household_subscriptions, user_licenses, stripe_events, support_grants</text>
+  <text x="60" y="824" class="body">audit_events (actor login / subject tenant), app_logs, app_migrations; Stripe collects card details externally</text>
+  <text x="60" y="847" class="note">Composite transaction FKs enforce tenant-safe account / batch / label links. See the document for application-only rules.</text>
+  <text x="40" y="885" class="note">Different households cannot share financial rows. Different bank accounts in one household remain jointly visible to its members.</text>
+</svg>

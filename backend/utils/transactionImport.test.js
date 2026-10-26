@@ -34,7 +34,7 @@ test('CSV/PDF/Plaid overlaps are held outside calculations and Plaid replays are
       date TEXT NOT NULL, description TEXT NOT NULL, amount NUMERIC(14,2) NOT NULL, direction TEXT NOT NULL,
       balance NUMERIC(14,2), source TEXT, category TEXT, label_id INT, is_fixed BOOLEAN DEFAULT FALSE,
       plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE,
-      category_corrected BOOLEAN DEFAULT FALSE
+      category_corrected BOOLEAN DEFAULT FALSE, display_name TEXT
     );
     CREATE UNIQUE INDEX transactions_user_plaid_transaction_key
       ON transactions (user_id, plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL;
@@ -104,7 +104,7 @@ test('a review refreshes newly appeared matches before allowing a separate impor
       date TEXT NOT NULL, description TEXT NOT NULL, amount NUMERIC(14,2) NOT NULL, direction TEXT NOT NULL,
       balance NUMERIC(14,2), source TEXT, category TEXT, label_id INT, is_fixed BOOLEAN DEFAULT FALSE,
       plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE,
-      category_corrected BOOLEAN DEFAULT FALSE
+      category_corrected BOOLEAN DEFAULT FALSE, display_name TEXT
     );
     CREATE TABLE transaction_import_reviews (
       id SERIAL PRIMARY KEY, source TEXT NOT NULL, date TEXT NOT NULL, description TEXT NOT NULL,

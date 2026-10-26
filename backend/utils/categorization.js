@@ -146,7 +146,7 @@ export async function applyUpdates(db, updates, { expected = true, protectCorrec
     for (const item of updates) {
       const row = byId.get(Number(item.id));
       if (!row) throw failure(404, 'Transaction not found');
-      if (!categories.has(item.category)) throw failure(400, 'Unknown category');
+      if (item.category && !categories.has(item.category)) throw failure(400, 'Unknown category');
       if ((expected && (row.category ?? null) !== item.expectedCategory)
         || (protectCorrections && row.category_corrected)) {
         throw failure(409, `Transaction ${item.id} changed or has a manual correction; refresh the preview`);
@@ -154,9 +154,9 @@ export async function applyUpdates(db, updates, { expected = true, protectCorrec
     }
     let updated = 0;
     for (const item of updates) {
-      if (byId.get(Number(item.id)).category === item.category) continue;
+      if ((byId.get(Number(item.id)).category ?? '') === item.category) continue;
       await client.query(`UPDATE transactions SET previous_category=category, category=$1,
-        category_corrected=TRUE, correction_timestamp=NOW() WHERE id=$2 AND ${TENANT}`, [item.category, item.id]);
+        category_corrected=TRUE, correction_timestamp=NOW() WHERE id=$2 AND ${TENANT}`, [item.category || null, item.id]);
       updated++;
     }
     if (!learnRules) return { updated };
@@ -175,6 +175,10 @@ export async function applyUpdates(db, updates, { expected = true, protectCorrec
     let rulesSaved = 0;
     for (const [pattern, category] of merchants) {
       if (conflictingMerchants.has(pattern)) continue;
+      if (!category) {
+        await client.query(`UPDATE transaction_labels SET enabled=FALSE WHERE ${TENANT} AND match_type='merchant' AND pattern=$1`, [pattern]);
+        continue;
+      }
       await saveRule(client, { pattern, display_label: pattern, category, priority: 100, enabled: true });
       rulesSaved++;
     }

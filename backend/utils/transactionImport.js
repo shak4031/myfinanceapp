@@ -75,11 +75,12 @@ async function insertTransaction(client, transaction, config, source, plaid = {}
   const category = manualCategory ?? suggestion.category;
   const row = (await client.query(`INSERT INTO transactions
     (date,description,amount,direction,balance,source,category,label_id,is_fixed,
-      plaid_transaction_id,plaid_account_id,is_pending,category_corrected)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      plaid_transaction_id,plaid_account_id,is_pending,category_corrected,display_name)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
   [transaction.date, transaction.description, transaction.amount, transaction.direction, transaction.balance,
     source, category, suggestion?.label?.id ?? null, fixed,
-    plaid.transactionId ?? null, plaid.accountId ?? null, plaid.isPending === true, manualCategory !== null])).rows[0];
+    plaid.transactionId ?? null, plaid.accountId ?? null, plaid.isPending === true, manualCategory !== null,
+    transaction.displayName ?? null])).rows[0];
   return row.id;
 }
 

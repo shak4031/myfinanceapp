@@ -9,6 +9,7 @@ import categorizationsRouter from '../routes/categorizations.js';
 import { importTransactions } from '../routes/import.js';
 import { canonicalMerchant, compileRules, classify, preview, saveRule, loadCategorization, applyUpdates } from './categorization.js';
 import { withUser } from './tenant.js';
+import { compileNameRules, matchesName, nameKey, resolveName, suggestNamePattern, validateNameRule } from './naming.js';
 
 const names = new Set(['Other', 'Shopping', 'Groceries', 'Dining', 'Subscriptions', 'Salary']);
 const merchant = (id, pattern, category, priority = 100, extra = {}) =>
@@ -84,13 +85,17 @@ async function fixture() {
       date TEXT, description TEXT, category TEXT, previous_category TEXT, category_corrected BOOLEAN DEFAULT FALSE,
       correction_timestamp TIMESTAMPTZ, direction TEXT, amount NUMERIC, balance NUMERIC, source TEXT,
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
-      plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE);
+      plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE,
+      pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')),
+      account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE, import_batch_id INT);
     CREATE TABLE transaction_import_reviews (id SERIAL PRIMARY KEY, user_id INT, source TEXT, date TEXT,
       description TEXT, amount NUMERIC, direction TEXT, balance NUMERIC, category TEXT, plaid_transaction_id TEXT,
       plaid_account_id TEXT, is_pending BOOLEAN, candidate_transaction_ids INTEGER[], status TEXT DEFAULT 'pending');
     CREATE UNIQUE INDEX import_reviews_user_plaid_transaction_key
       ON transaction_import_reviews (user_id, plaid_transaction_id)
       WHERE plaid_transaction_id IS NOT NULL AND status = 'pending';
+    CREATE TABLE name_rules (id SERIAL PRIMARY KEY, user_id INT DEFAULT current_setting('app.user_id')::integer,
+      pattern TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(user_id,pattern));
     INSERT INTO categories (name) VALUES ('Other'),('Groceries'),('Dining'),('Shopping');
     INSERT INTO categories (user_id,name) VALUES (2,'Foreign');
     INSERT INTO transactions (description,category,is_fixed) VALUES ('MY STORE','Other',TRUE),('MY STORE','Dining',FALSE);
@@ -168,20 +173,178 @@ test('import uses one rule snapshot, user rule category and explicit label flags
       return client.query(sql, params);
     } };
     assert.deepEqual(await withUser(1, () => importTransactions(countedClient, transactions, config, 'test')),
-      { imported: 2, duplicates: 0, needsReview: 2, excluded: 0 });
+      { imported: 3, duplicates: 1, excluded: 0 });
     assert.equal(labelQueries, 0);
-    const rows = (await client.query('SELECT * FROM transactions ORDER BY id')).rows;
+    const rows = (await client.query('SELECT * FROM transactions WHERE user_id=1 ORDER BY id')).rows;
     assert.equal(rows[0].category, 'Other');
     assert.equal(rows[0].is_fixed, true);
+    assert.equal(rows[1].category, 'Dining');
     assert.equal(rows[1].is_fixed, false);
-    assert.equal(rows[3].category, 'Groceries');
-    assert.equal(rows[3].label_id, saved.id);
-    assert.equal(rows[3].is_fixed, true);
-    assert.equal(rows[4].category, 'Other');
-    assert.equal(rows[4].is_fixed, false);
-    assert.equal(rows[4].user_id, 1);
-    assert.equal((await client.query("SELECT COUNT(*) AS count FROM transaction_import_reviews WHERE status='pending'")).rows[0].count, 2);
+    assert.equal(rows[2].category, 'Groceries');
+    assert.equal(rows[2].label_id, saved.id);
+    assert.equal(rows[2].is_fixed, true);
+    assert.equal(rows[3].category, 'Other');
+    assert.equal(rows[3].is_fixed, false);
+    assert.equal(rows[4].category, 'Groceries');
+    assert.equal(rows[4].is_fixed, true);
+    assert.equal((await client.query('SELECT category FROM transactions WHERE user_id=2')).rows[0].category, 'Foreign');
+    assert.equal((await client.query("SELECT COUNT(*) AS count FROM transaction_import_reviews WHERE status='pending'")).rows[0].count, 0);
+    assert.deepEqual(rows.slice(2).map(row => row.pay_mode), [null, null, null]);
   } finally { await pg.close(); }
+});
+
+test('import inherits auto-pay/manual from earlier payments to the same bill, else detects it from wording', async () => {
+  const { pg, client } = await fixture();
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category,pay_mode) VALUES
+      ('2026-01-05','VISA DDA PUR AP 420429 NETFLIX COM 408 CA',15.49,'DEBIT','Other','auto'),
+      ('2026-01-06','ONLINE PMT CITI CARD X1234',300,'DEBIT','Other','manual')`);
+    const config = await loadCategorization(client);
+    const make = (description, amount = 15.49, direction = 'DEBIT') => ({ date: '2026-02-05', description, amount, direction });
+    await importTransactions(client, [
+      make('DDA PURCHASE AP 00001000 NETFLIX COM LOS GATOS CA'),
+      make('ONLINE PMT CITI CARD X1234', 280),
+      make('CITI CARD X9999 PAYMENT', 50),
+      make('PSEG AUTOPAY 0001', 120),
+      make('BILL PAY VERIZON', 90),
+      make('UNKNOWN STORE', 12),
+      make('NETFLIX COM REFUND', 15.49, 'CREDIT')
+    ], config, 'test');
+    const modes = (await client.query("SELECT description,pay_mode FROM transactions WHERE date='2026-02-05' ORDER BY id")).rows.map(row => row.pay_mode);
+    assert.deepEqual(modes, ['auto', 'manual', null, 'auto', 'manual', null, null]);
+  } finally { await pg.close(); }
+});
+
+test('import keeps the user income decision for new deposits from the same sender', async () => {
+  const { pg, client } = await fixture();
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category,income_role) VALUES
+      ('2026-01-09','MOBILE DEPOSIT JANE DOE REF 991',150,'CREDIT','Other','other'),
+      ('2026-01-10','ETSY PAYOUT 1234',80,'CREDIT','Other','income')`);
+    const config = await loadCategorization(client);
+    await importTransactions(client, [
+      { date: '2026-02-06', description: 'MOBILE DEPOSIT JANE DOE REF 2044', amount: 150, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ETSY PAYOUT 5678', amount: 95, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ACME PAYROLL', amount: 2000, direction: 'CREDIT' },
+      { date: '2026-02-06', description: 'ETSY PAYOUT 5678', amount: 12, direction: 'DEBIT' }
+    ], config, 'test');
+    const roles = (await client.query("SELECT income_role FROM transactions WHERE date='2026-02-06' ORDER BY id")).rows.map(row => row.income_role);
+    assert.deepEqual(roles, ['other', 'income', null, null]);
+  } finally { await pg.close(); }
+});
+
+test('rename words ignore reference numbers and case; the most specific rule wins', () => {
+  const zelle = 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA';
+  assert.equal(nameKey(zelle), 'SENT ZELLE CRISTIANE DE LIMA');
+  assert.equal(suggestNamePattern(zelle), 'ZELLE CRISTIANE DE LIMA');
+  assert.equal(suggestNamePattern('VISA DDA PUR AP 420429 TRADER JOE S #552'), 'TRADER JOE S');
+  for (const description of [
+    'TST* TRIBOS PERI PERI - M METUCHEN NJ',
+    'VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',
+    'SQ * TRIBOS PERI PERI METUCHEN NJ'
+  ]) assert.equal(suggestNamePattern(description), 'TRIBOS PERI PERI');
+  const rules = compileNameRules([{ id: 1, pattern: 'zelle', name: 'Zelle' }, { id: 2, pattern: 'Zelle  Cristiane de Lima', name: 'Cristiane De Lima' }, { id: 3, pattern: '1234', name: 'Numbers only' }]);
+  assert.equal(rules.length, 2, 'a pattern of only numbers matches nothing and is skipped');
+  assert.equal(resolveName('SENT 77XQ12 ZELLE CRISTIANE DE LIMA', rules).name, 'Cristiane De Lima');
+  assert.equal(resolveName('RECEIVED 9 Zelle CRISTIANE DE LIMA', rules).name, 'Cristiane De Lima');
+  assert.equal(resolveName('ZELLE TO SAM PATEL', rules).name, 'Zelle');
+  assert.equal(resolveName('CRISTIANE DE LIMAS BAKERY', rules), null, 'whole words only');
+  assert.equal(matchesName('ZELLE CRISTIANE DE LIMA', ''), false);
+  assert.throws(() => validateNameRule({ pattern: '123', name: 'X' }), { status: 400 });
+  assert.throws(() => validateNameRule({ pattern: 'ABC', name: ' ' }), { status: 400 });
+  assert.throws(() => validateNameRule({ pattern: 'ABC', name: 'x'.repeat(81) }), { status: 400 });
+  assert.deepEqual(validateNameRule({ pattern: ' zelle  cristiane ', name: '  Cristiane   De Lima ' }), { pattern: 'ZELLE CRISTIANE', name: 'Cristiane De Lima' });
+});
+
+test('rename rules apply to past rows, new imports and manual rows, and can be removed', async () => {
+  const { pg, client, db } = await fixture();
+  const original = Database.prototype.transaction;
+  Database.prototype.transaction = db.transaction;
+  const app = express();
+  app.use(express.json());
+  app.use((req, res, next) => withUser(1, next));
+  app.use('/api/transactions', transactionsRouter);
+  const server = await new Promise(resolve => { const listener = app.listen(0, '127.0.0.1', () => resolve(listener)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const request = async (path, body, method = 'POST') => {
+    const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  try {
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category) VALUES
+      ('2026-01-03','SENT 626800I0ARPL Zelle CRISTIANE DE LIMA',200,'DEBIT','Other'),
+      ('2026-02-03','SENT 7Q11ZZ90 Zelle CRISTIANE DE LIMA',200,'DEBIT','Other'),
+      ('2026-02-04','ZELLE TO SAM PATEL',50,'DEBIT','Other')`);
+    await client.query("INSERT INTO transactions (user_id,date,description,amount,direction) VALUES (2,'2026-02-03','SENT 1 Zelle CRISTIANE DE LIMA',5,'DEBIT')");
+    const preview = await request('/api/transactions/name-rules/preview', { description: 'SENT 626800I0ARPL Zelle CRISTIANE DE LIMA' });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.body.suggested, 'ZELLE CRISTIANE DE LIMA');
+    assert.equal(preview.body.count, 2, 'other users are invisible');
+    assert.equal(preview.body.current, null);
+    assert.equal((await request('/api/transactions/name-rules', { pattern: '9999', name: 'Nope' })).status, 400);
+    const saved = await request('/api/transactions/name-rules', { pattern: preview.body.suggested, name: 'Cristiane De Lima' });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.changed, 2);
+    assert.equal(saved.body.rule.matches, 2);
+    const names = async () => (await client.query('SELECT description,display_name FROM transactions ORDER BY id')).rows.map(row => row.display_name);
+    assert.deepEqual(await names(), [null, null, null, 'Cristiane De Lima', 'Cristiane De Lima', null, null]);
+    const config = await loadCategorization(client);
+    await importTransactions(client, [{ date: '2026-03-03', description: 'SENT AB12 Zelle CRISTIANE DE LIMA', amount: 200, direction: 'DEBIT' }], config, 'test');
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-03-03'")).rows[0].display_name, 'Cristiane De Lima', 'future imports are renamed');
+    assert.equal((await request('/api/transactions/insert-manual', { date: '2026-03-04', description: 'Zelle Cristiane de Lima', amount: 10, direction: 'DEBIT', category: 'Other' })).status, 200);
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-03-04'")).rows[0].display_name, 'Cristiane De Lima');
+    const again = await request('/api/transactions/name-rules/preview', { description: 'SENT 1 Zelle CRISTIANE DE LIMA' });
+    assert.deepEqual(again.body.current, { id: saved.body.rule.id, pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane De Lima' });
+    const listed = await request('/api/transactions/name-rules', undefined, 'GET');
+    assert.deepEqual(listed.body.rules.map(rule => [rule.name, rule.matches]), [['Cristiane De Lima', 4]]);
+    const edited = await request('/api/transactions/name-rules', { id: saved.body.rule.id, pattern: 'ZELLE CRISTIANE DE LIMA', name: 'Cristiane (cleaning)' });
+    assert.equal(edited.body.changed, 4);
+    assert.equal((await request('/api/transactions/name-rules', { id: 999, pattern: 'X', name: 'Y' })).status, 404);
+    assert.equal((await request(`/api/transactions/name-rules/${saved.body.rule.id}`, undefined, 'DELETE')).body.changed, 4);
+    assert.equal((await client.query('SELECT COUNT(*)::int AS n FROM transactions WHERE display_name IS NOT NULL')).rows[0].n, 0);
+    assert.equal((await request('/api/transactions/name-rules/abc', undefined, 'DELETE')).status, 400);
+    assert.equal((await request(`/api/transactions/name-rules/${saved.body.rule.id}`, undefined, 'DELETE')).status, 404);
+    await client.query(`INSERT INTO transactions (date,description,amount,direction,category) VALUES
+      ('2026-09-23','TST* TRIBOS PERI PERI - M METUCHEN NJ',29.50,'DEBIT','Dining'),
+      ('2026-08-10','VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',94.30,'DEBIT','Dining'),
+      ('2026-08-06','VISA DDA PUR AP 413746 TST TRIBOS PERI PERI METUCHEN * NJ',33.94,'DEBIT','Dining'),
+      ('2026-08-01','TST CHAI CHENAK NEW BRUNSWICK NJ',29.50,'DEBIT','Shopping')`);
+    const narrow = await request('/api/transactions/name-rules', { pattern: 'TST TRIBOS PERI PERI M METUCHEN NJ', name: 'Peri Peri' });
+    assert.equal(narrow.body.rule.matches, 1);
+    const merchantPreview = await request('/api/transactions/name-rules/preview', { description: 'TST* TRIBOS PERI PERI - M METUCHEN NJ' });
+    assert.equal(merchantPreview.body.suggested, 'TRIBOS PERI PERI');
+    assert.equal(merchantPreview.body.count, 3);
+    const broadened = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: merchantPreview.body.suggested, name: 'Peri Peri' });
+    assert.equal(broadened.body.rule.matches, 3);
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%CHAI CHENAK%'")).rows[0].display_name, null);
+    const periRows = (await client.query("SELECT id,description FROM transactions WHERE user_id=1 AND description LIKE '%TRIBOS%' ORDER BY id")).rows;
+    const selectedId = periRows[0].id;
+    const selective = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: 'TRIBOS PERI PERI', name: 'Dinner spot', ids: [selectedId], remember: true });
+    assert.equal(selective.status, 200);
+    assert.equal(selective.body.rule.matches, 1);
+    assert.deepEqual((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%TRIBOS%' ORDER BY id")).rows.map(row => row.display_name), ['Dinner spot', 'Peri Peri', 'Peri Peri']);
+    await request('/api/transactions/name-rules', { pattern: 'CHAI CHENAK', name: 'Chai' });
+    assert.deepEqual((await client.query("SELECT display_name FROM transactions WHERE description LIKE '%TRIBOS%' ORDER BY id")).rows.map(row => row.display_name), ['Dinner spot', 'Peri Peri', 'Peri Peri'], 'later rule recomputation preserves unchecked rows');
+    await importTransactions(client, [{ date: '2026-09-25', description: 'TST TRIBOS PERI PERI METUCHEN NJ', amount: 30, direction: 'DEBIT' }], config, 'test');
+    assert.equal((await client.query("SELECT display_name FROM transactions WHERE date='2026-09-25'")).rows[0].display_name, 'Dinner spot');
+    const foreign = (await client.query('SELECT id FROM transactions WHERE user_id=2 LIMIT 1')).rows[0].id;
+    assert.equal((await request('/api/transactions/name-rules', { pattern: 'TRIBOS PERI PERI', name: 'No', ids: [foreign], remember: false })).status, 409);
+    assert.equal((await request('/api/transactions/name-rules', { pattern: 'TRIBOS PERI PERI', name: 'No', ids: [selectedId, selectedId], remember: false })).status, 400);
+    const oneTime = await request('/api/transactions/name-rules', { id: narrow.body.rule.id, pattern: 'TRIBOS PERI PERI', name: 'One dinner', ids: [selectedId], remember: false });
+    assert.equal(oneTime.status, 200);
+    assert.equal((await client.query('SELECT id FROM name_rules WHERE id=$1', [narrow.body.rule.id])).rows.length, 0);
+    const labelsBefore = (await client.query('SELECT COUNT(*)::int AS n FROM transaction_labels')).rows[0].n;
+    const categoryOnce = await request('/api/transactions/categorization-apply', { updates: [{ id: selectedId, category: 'Shopping', expectedCategory: 'Dining' }], learnRules: false, protectCorrections: false });
+    assert.equal(categoryOnce.status, 200);
+    assert.equal((await client.query('SELECT COUNT(*)::int AS n FROM transaction_labels')).rows[0].n, labelsBefore);
+    const clearOnce = await request('/api/transactions/categorization-apply', { updates: [{ id: selectedId, category: '', expectedCategory: 'Shopping' }], learnRules: false, protectCorrections: false });
+    assert.equal(clearOnce.status, 200);
+    assert.equal((await client.query('SELECT category FROM transactions WHERE id=$1', [selectedId])).rows[0].category, null);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    Database.prototype.transaction = original;
+    await pg.close();
+  }
 });
 
 test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learning saves without rewriting', async () => {
@@ -210,6 +373,41 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.equal((await request('/api/transactions/update-fixed', { id: 1, is_fixed: true })).status, 200);
     const flags = (await client.query('SELECT is_fixed,category FROM transactions WHERE user_id=1 ORDER BY id')).rows;
     assert.deepEqual(flags, [{ is_fixed: true, category: 'Other' }, { is_fixed: true, category: 'Dining' }]);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 3], is_fixed: false })).status, 404);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: ['1'], is_fixed: false })).status, 400);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 1], is_fixed: false })).status, 400);
+    assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
+    assert.deepEqual(await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: false }), { status: 200, body: { success: true, updated: 2 } });
+    assert.deepEqual((await client.query('SELECT is_fixed FROM transactions WHERE user_id=1 ORDER BY id')).rows.map(row => row.is_fixed), [false, false]);
+    assert.equal((await request('/api/transactions/update-fixed-many', { ids: [1, 2], is_fixed: true })).body.updated, 2);
+    await client.query("UPDATE transactions SET direction='DEBIT' WHERE id IN (1,3)");
+    await client.query("UPDATE transactions SET direction='CREDIT' WHERE id=2");
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: 'sometimes' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1] })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [], pay_mode: 'auto' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 1], pay_mode: 'auto' })).status, 400);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 3], pay_mode: 'auto' })).status, 404);
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1, 2], pay_mode: 'auto' })).status, 400);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, null);
+    assert.deepEqual(await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: 'manual' }), { status: 200, body: { success: true, updated: 1 } });
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, 'manual');
+    assert.equal((await request('/api/transactions/update-pay-mode', { ids: [1], pay_mode: null })).body.updated, 1);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=1')).rows[0].pay_mode, null);
+    assert.equal((await client.query('SELECT pay_mode FROM transactions WHERE id=3')).rows[0].pay_mode, null);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2] })).status, 400, 'role is required');
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2], income_role: 'salary' })).status, 400);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [1], income_role: 'other' })).status, 400, 'debits cannot be income');
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2, 3], income_role: 'other' })).status, 404, 'other users are invisible');
+    assert.deepEqual(await request('/api/transactions/update-income-role', { ids: [2], income_role: 'other' }), { status: 200, body: { success: true, updated: 1 } });
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // The route uses the server's local date; PGlite's CURRENT_DATE is UTC and can be a day ahead.
+    await client.query('UPDATE transactions SET date=$1,amount=150 WHERE id=2', [localToday]);
+    const sources = (await request('/api/transactions/income-sources', undefined, 'GET')).body.sources;
+    assert.deepEqual(sources.map(source => [source.name, source.status, source.by]), [['My Store', 'other', 'you']]);
+    assert.equal((await request('/api/transactions/update-income-role', { ids: [2], income_role: null })).body.updated, 1);
+    assert.equal((await client.query('SELECT income_role FROM transactions WHERE id=2')).rows[0].income_role, null);
+    await client.query('UPDATE transactions SET direction=NULL WHERE id IN (1,2,3)');
     assert.equal((await request('/api/transactions/update-transaction', { id: 1, category: 'Dining', is_fixed: false })).status, 200);
     assert.equal((await client.query('SELECT is_fixed FROM transactions WHERE id=1')).rows[0].is_fixed, true);
     const mapped = (await client.query("SELECT c.name,l.pattern,l.match_type FROM transaction_labels l JOIN categories c ON c.id=l.category_id WHERE l.pattern='MY STORE'")).rows[0];
@@ -241,6 +439,16 @@ test('HTTP cleanup is non-destructive, fixed toggles are explicit, legacy learni
     assert.deepEqual(approved, { status: 200, body: { updated: 1 } });
     assert.equal((await request('/api/transactions/categorization-apply',
       { updates: [{ id: 2, category: 'Shopping', expectedCategory: 'Dining' }] })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }] })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }], protectCorrections: 'no' })).status, 400);
+    assert.deepEqual(await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Dining', expectedCategory: 'Groceries' }], protectCorrections: false }), { status: 200, body: { updated: 1 } });
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Groceries', expectedCategory: 'Groceries' }], protectCorrections: false })).status, 409);
+    assert.equal((await request('/api/transactions/categorization-apply',
+      { updates: [{ id: 2, category: 'Groceries', expectedCategory: 'Dining' }], protectCorrections: false })).status, 200);
     await client.query("INSERT INTO transaction_labels (pattern,match_type) VALUES ('(a+)+$', 'regex')");
     await client.query("INSERT INTO transactions (description,category) VALUES ('STARBUCKS','Other')");
     const previewWithLegacyRule = await request('/api/transactions/categorization-preview', { scope: 'all' });

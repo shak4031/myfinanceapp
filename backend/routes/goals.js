@@ -1,15 +1,17 @@
 import { Router } from 'express';
 import Database from '../db.js';
+import { requireProPlus } from '../utils/license.js';
 import { buildFinancialPlan } from '../utils/financialPlan.js';
 import { parseTxDate } from '../utils/normalize.js';
 
 const router = Router();
+router.use(requireProPlus);
 const db = new Database();
 
 async function fundingAnalysis() {
   const goals = await db.all('SELECT * FROM savings_goals ORDER BY priority, id');
   const rows = await db.all(`
-    SELECT id, date, description, category, direction, amount FROM transactions
+    SELECT id, date, description, category, direction, amount, transfer_kind FROM transactions
     WHERE date::date >= (date_trunc('month', CURRENT_DATE) - INTERVAL '3 months')::date
       AND date::date < date_trunc('month', CURRENT_DATE)::date
   `);
@@ -34,10 +36,21 @@ router.get('/', async (req, res, next) => {
 
 function validatedGoal(input, partial = false) {
   const result = {};
-  for (const key of ['name', 'target_amount', 'current_amount', 'target_date', 'priority', 'icon', 'color', 'notes']) {
+  for (const key of ['name', 'target_amount', 'current_amount', 'target_date', 'priority', 'icon', 'color', 'notes', 'included', 'monthly_contribution', 'contribution_day']) {
     if (input[key] === undefined && partial) continue;
     const value = input[key];
-    if (key === 'name') {
+    if (key === 'included') {
+      if (value !== undefined && typeof value !== 'boolean') throw Object.assign(new Error('Choose whether the goal is in the plan'), { status: 400 });
+      result[key] = value ?? true;
+    } else if (key === 'monthly_contribution') {
+      const number = value == null || value === '' ? null : Number(value);
+      if (number != null && (!Number.isFinite(number) || number < 0 || number > 1e9)) throw Object.assign(new Error('Enter a valid monthly amount'), { status: 400 });
+      result[key] = number;
+    } else if (key === 'contribution_day') {
+      const number = value == null || value === '' ? null : Number(value);
+      if (number != null && (!Number.isInteger(number) || number < 1 || number > 31)) throw Object.assign(new Error('Contribution day must be between 1 and 31'), { status: 400 });
+      result[key] = number;
+    } else if (key === 'name') {
       if (typeof value !== 'string' || !value.trim() || value.length > 150) throw Object.assign(new Error('A goal name of up to 150 characters is required'), { status: 400 });
       result[key] = value.trim();
     } else if (['target_amount', 'current_amount', 'priority'].includes(key)) {

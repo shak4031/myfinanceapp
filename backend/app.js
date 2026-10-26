@@ -8,6 +8,7 @@ import auth, { requireUser, requireAdmin, enforceSameOrigin } from './routes/aut
 import admin from './routes/admin.js';
 import supportAccess from './routes/supportAccess.js';
 import { recordAudit, structuredLog } from './utils/audit.js';
+import { requestContext } from './utils/logger.js';
 import dashboard from './routes/dashboard.js';
 import transactions from './routes/transactions.js';
 import debts from './routes/debts.js';
@@ -19,6 +20,15 @@ import categorizations from './routes/categorizations.js';
 import clientErrors from './routes/clientErrors.js';
 import plaid, { webhookRouter as plaidWebhook } from './routes/plaid.js';
 import importReview from './routes/import-review.js';
+import license from './routes/license.js';
+import budgets from './routes/budgets.js';
+import analytics from './routes/analytics.js';
+import moneyPlan from './routes/plan.js';
+import monitor from './routes/monitor.js';
+import accounts from './routes/accounts.js';
+import activity from './routes/activity.js';
+import billing, { stripeWebhook, requireSubscription } from './routes/billing.js';
+import household from './routes/household.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,6 +67,7 @@ app.use((req, res, next) => {
   req.id = /^[A-Za-z0-9-]{8,64}$/.test(incoming || '') ? incoming : randomUUID();
   res.set('X-Request-Id', req.id);
   const started = process.hrtime.bigint();
+  res.locals.requestStarted = started;
   res.on('finish', () => {
     if (!req.originalUrl.startsWith('/api')) return;
     structuredLog(res.statusCode >= 500 ? 'error' : 'info', {
@@ -69,8 +80,10 @@ app.use((req, res, next) => {
       recordAudit(req, 'server.error', 'error', { status: res.statusCode, detail: { source: 'route' } });
     }
   });
-  next();
+  requestContext.run({ requestId: req.id, route: `${req.method} ${req.originalUrl.split('?')[0]}` }, next);
 });
+// Stripe verifies the untouched body; Plaid webhook verification also needs the raw JSON bytes.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhook);
 app.use(bodyParser.json({
   limit: '20mb',
   verify(req, res, buffer) {
@@ -82,8 +95,12 @@ app.use('/api', (req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   const json = res.json.bind(res);
   res.json = body => {
+    res.append('Server-Timing', `app;dur=${(Number(process.hrtime.bigint() - res.locals.requestStarted) / 1e6).toFixed(2)}`);
     if (res.statusCode >= 500 && !res.locals.errorAudited) {
       res.locals.errorAudited = true;
+      // The client only sees a generic message; the real reason goes to the log, tied to the request ID.
+      structuredLog('error', { event: 'route.error', requestId: req.id, method: req.method, path: req.originalUrl.split('?')[0],
+        status: res.statusCode, message: safeErrorMessage(typeof body?.error === 'string' ? body.error : 'unknown') });
       recordAudit(req, 'server.error', 'error', {
         status: res.statusCode,
         detail: { source: 'route', ...(typeof body?.error === 'string' ? { message: safeErrorMessage(body.error) } : {}) }
@@ -104,10 +121,17 @@ import staging from './routes/staging.js';
 // Routes BEFORE static files
 app.use('/api/auth', auth);
 app.use('/api/plaid/webhook', plaidWebhook);
+// Token-authenticated (not session) so CI and uptime monitors can read redacted error logs.
+app.use('/api/monitor', monitor);
 app.use('/api', requireUser);
 app.use('/api/client-errors', clientErrors);
 app.use('/api/support-access', supportAccess);
 app.use('/api/admin', requireAdmin, admin);
+app.use('/api/license', license);
+app.use('/api/billing', billing);
+app.use('/api/household', household);
+app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
+app.use('/api', requireSubscription);
 app.use('/api/dashboard', dashboard);
 app.use('/api/transactions', transactions);
 app.use('/api/staging', staging);
@@ -117,13 +141,17 @@ app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
 app.use('/api/import-review', importReview);
 app.use('/api/plaid', plaid);
+app.use('/api/accounts', accounts);
+app.use('/api/activity', activity);
 app.use('/api/bulk-import', bulkImport);
 app.use('/api/categories', categories);
 app.use('/api/categorizations', categorizations);
+app.use('/api/budgets', budgets);
+app.use('/api/analytics', analytics);
+app.use('/api/plan', moneyPlan);
 app.use('/api/categorizations-lite', (req, res) => res.status(410).json({ error: 'Use the private categorization tools in the main application' }));
-// Global application logs and legacy fixture imports are never exposed to users.
-app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Server logs are not available through the application' }));
-app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
+// Global application logs are only available to administrators (/api/admin/logs) and monitors (/api/monitor/logs).
+app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Use the admin console App logs tab (/api/admin/logs)' }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
 // Static files (after API routes)
@@ -150,7 +178,8 @@ app.use((err, req, res, next) => {
   const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
   if (status >= 500) {
     res.locals.errorAudited = true;
-    structuredLog('error', { event: 'server.exception', requestId: req.id, name: err.name, code: err.code, stack: err.stack });
+    structuredLog('error', { event: 'server.exception', requestId: req.id, method: req.method, path: req.originalUrl.split('?')[0], status,
+      name: err.name, code: err.code, message: typeof err.message === 'string' ? safeErrorMessage(err.message) : undefined, stack: err.stack });
     recordAudit(req, 'server.error', 'error', { status, detail: {
       name: err.name, code: err.code || null, source: 'exception',
       ...(typeof err.message === 'string' ? { message: safeErrorMessage(err.message) } : {})

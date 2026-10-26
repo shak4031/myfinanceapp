@@ -1,0 +1,19 @@
+name: Release check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Unit/HTTP tests, then the smoke run that fails on any 5xx response or error-level log entry.
+      - run: npm run release:check

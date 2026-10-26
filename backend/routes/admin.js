@@ -7,6 +7,10 @@ import { mailConfigured, sendSecurityNotice } from '../utils/mailer.js';
 import { issuePasswordReset, attemptKeysForEmail, supportCookieName, cookieOptions } from './auth.js';
 import { openApiSpec } from '../utils/openapi.js';
 import { log } from '../utils/logger.js';
+import { queryLogs, parseSince, logRetentionDays } from '../utils/logStore.js';
+import { monitorEnabled } from './monitor.js';
+import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.js';
+import { isDemoEmail } from '../utils/demo.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -29,7 +33,7 @@ router.get('/overview', async (req, res, next) => {
     const stats = await administrativeTransaction(async client => (await client.query(`
       SELECT
         (SELECT COUNT(*)::int FROM users WHERE password_hash IS NOT NULL) AS users,
-        (SELECT COUNT(*)::int FROM sessions WHERE expires_at > NOW() AND support_grant_id IS NULL) AS active_sessions,
+        (SELECT COUNT(*)::int FROM sessions WHERE expires_at > NOW() AND last_activity_at > NOW() - INTERVAL '10 minutes' AND support_grant_id IS NULL) AS active_sessions,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
            AND event_type = 'auth.login' AND outcome = 'failure') AS failed_logins_24h,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
@@ -38,7 +42,11 @@ router.get('/overview', async (req, res, next) => {
            AND event_type = 'server.error') AS server_errors_24h,
         (SELECT COUNT(*)::int FROM audit_events WHERE created_at > NOW() - INTERVAL '24 hours'
            AND event_type = 'client.error') AS browser_errors_24h,
-        (SELECT COUNT(*)::int FROM support_grants WHERE revoked_at IS NULL AND expires_at > NOW()) AS active_support_grants
+        (SELECT COUNT(*)::int FROM support_grants WHERE revoked_at IS NULL AND expires_at > NOW()) AS active_support_grants,
+        (SELECT COUNT(*)::int FROM user_licenses WHERE requested_plan IS NOT NULL) AS pending_plan_requests,
+        (SELECT COUNT(*)::int FROM app_logs WHERE created_at > NOW() - INTERVAL '24 hours' AND level = 'error'
+           AND source NOT IN ('http.request', 'server.error')) AS app_errors_24h,
+        (SELECT COUNT(*)::int FROM app_logs WHERE created_at > NOW() - INTERVAL '24 hours' AND level = 'warn') AS app_warnings_24h
     `)).rows[0]);
     res.json({
       status: 'healthy',
@@ -50,6 +58,8 @@ router.get('/overview', async (req, res, next) => {
       alertWebhookConfigured: Boolean(process.env.ALERT_WEBHOOK_URL),
       registrationEnabled: process.env.ALLOW_REGISTRATION === 'true',
       auditRetentionDays: auditRetentionDays(),
+      logRetentionDays: logRetentionDays(),
+      monitorTokenConfigured: monitorEnabled(),
       stats
     });
   } catch (error) { next(error); }
@@ -64,13 +74,28 @@ router.get('/users', async (req, res, next) => {
         (SELECT MAX(created_at) FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login' AND a.outcome='success') AS last_login,
         (SELECT COUNT(*)::int FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login'
            AND a.outcome='failure' AND a.created_at > NOW() - INTERVAL '24 hours') AS failed_logins_24h,
-        (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.support_grant_id IS NULL) AS active_sessions,
-        (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants
+        (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.last_activity_at > NOW() - INTERVAL '10 minutes' AND s.support_grant_id IS NULL) AS active_sessions,
+        (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants,
+        l.plan AS license_plan, l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
+        l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at,
+        l.requested_plan AS license_requested_plan, l.requested_at AS license_requested_at,
+        h.owner_user_id AS household_owner_id,to_jsonb(subscription) AS subscription
       FROM users u
+      LEFT JOIN household_members membership ON membership.user_id=u.id
+      LEFT JOIN households h ON h.id=membership.household_id
+      LEFT JOIN household_subscriptions subscription ON subscription.household_id=h.id
+      LEFT JOIN user_licenses l ON l.user_id = COALESCE(h.owner_user_id,u.id)
       WHERE u.password_hash IS NOT NULL AND ($1 = '' OR lower(u.email) LIKE '%' || $1 || '%' OR lower(u.name) LIKE '%' || $1 || '%')
-      ORDER BY u.id LIMIT 200
+      ORDER BY (l.requested_plan IS NOT NULL) DESC, u.id LIMIT 200
     `, [q])).rows);
-    res.json(rows);
+    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, license_requested_plan, license_requested_at, subscription, household_owner_id, ...user }) => {
+      const row = license_granted_at || license_revoked_at || license_trial_started_at || license_requested_plan || subscription
+        ? { plan: license_plan, granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at,
+            requested_plan: license_requested_plan, requested_at: license_requested_at, subscription }
+        : null;
+      const { tier, source, daysLeft, trialEndsAt, plusActive, request } = entitlementFromRow(household_owner_id || user.id, row, new Date(), user.email);
+      return { ...user, license: { tier, source, daysLeft, trialEndsAt, plusActive, request } };
+    }));
   } catch (error) { next(error); }
 });
 
@@ -132,6 +157,24 @@ router.get('/errors', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.get('/logs', async (req, res, next) => {
+  try {
+    const level = ['error', 'warn', 'info'].includes(req.query.level) ? req.query.level : 'warn';
+    const since = parseSince(typeof req.query.since === 'string' ? req.query.since : '', '24h');
+    const result = await queryLogs({
+      level, since,
+      q: typeof req.query.q === 'string' ? req.query.q : '',
+      requestId: typeof req.query.requestId === 'string' ? req.query.requestId : '',
+      limit: Number(req.query.limit) || 200
+    });
+    // Auto-refresh polls are not audited individually; the first view of each search is.
+    if (req.query.refresh !== '1') {
+      recordAudit(req, 'admin.logs_viewed', 'success', { status: 200, detail: { level, since: result.since, filtered: Boolean(req.query.q || req.query.requestId) } });
+    }
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
 router.post('/users/:id/password-reset', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
@@ -169,6 +212,27 @@ router.post('/users/:id/unlock', async (req, res, next) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     await recordAudit(req, 'admin.account_unlocked', 'success', { subjectUserId: id, status: 200 });
     res.json({ success: true });
+  } catch (error) { next(error); }
+});
+
+router.post('/users/:id/license', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const action = req.body?.action;
+    const plan = req.body?.plan ?? 'pro';
+    if (!['grant', 'revoke'].includes(action)) return res.status(400).json({ error: 'action must be grant or revoke' });
+    if (!['basic', 'pro'].includes(plan)) return res.status(400).json({ error: 'plan must be basic or pro' });
+    if (id === OWNER_USER_ID) return res.status(400).json({ error: 'The owner account always includes MyFinance Pro' });
+    const entitlement = id && await administrativeTransaction(async client => {
+      const user = await loadUser(client, id);
+      if (!user) return null;
+      if (isDemoEmail(user.email)) return { demo: true };
+      return setLicense(client, id, action, req.user.id, plan);
+    });
+    if (!entitlement) return res.status(404).json({ error: 'User not found' });
+    if (entitlement.demo) return res.status(400).json({ error: 'The demo account always includes MyFinance Pro' });
+    await recordAudit(req, `admin.license_${action === 'grant' ? 'granted' : 'revoked'}`, 'success', { subjectUserId: id, status: 200 });
+    res.json({ success: true, license: { tier: entitlement.tier, source: entitlement.source, plusActive: entitlement.plusActive } });
   } catch (error) { next(error); }
 });
 

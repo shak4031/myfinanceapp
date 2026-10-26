@@ -53,21 +53,36 @@
         ${stat('Accounts', s.users)}${stat('Active sessions', s.active_sessions)}
         ${stat('Failed logins (24h)', s.failed_logins_24h, s.failed_logins_24h > 20)}${stat('Lockouts (24h)', s.lockouts_24h, s.lockouts_24h > 0)}
         ${stat('Server errors (24h)', s.server_errors_24h, s.server_errors_24h > 0)}
+        ${stat('App log errors (24h)', s.app_errors_24h ?? 0, s.app_errors_24h > 0)}
+        ${stat('App log warnings (24h)', s.app_warnings_24h ?? 0, false)}
         ${stat('Browser errors (24h)', s.browser_errors_24h, s.browser_errors_24h > 0)}
         ${stat('Active support grants', s.active_support_grants)}
+        ${stat('Plan requests to review', s.pending_plan_requests ?? 0, s.pending_plan_requests > 0)}
       </div>
       <div class="card" style="margin-top:16px"><table><tbody>
         <tr><th>Environment</th><td>${esc(data.environment)}</td></tr><tr><th>Node</th><td>${esc(data.node)}</td></tr>
         <tr><th>Uptime</th><td>${esc(Math.round(data.uptimeSeconds / 60))} minutes</td></tr>
         <tr><th>Public registration</th><td>${data.registrationEnabled ? 'Open' : 'Closed'}</td></tr>
         <tr><th>Audit retention</th><td>${esc(data.auditRetentionDays)} days</td></tr>
+        <tr><th>App log retention</th><td>${esc(data.logRetentionDays)} days (warnings &amp; errors)</td></tr>
+        <tr><th>Monitoring token</th><td>${data.monitorTokenConfigured ? 'Configured' : 'Not set: automated log checks (/api/monitor/logs) are off'}</td></tr>
       </tbody></table>
       <div class="actions" style="margin-top:12px">
+        ${s.pending_plan_requests > 0 ? '<button class="btn btn-primary" data-users-jump>Review plan requests</button>' : ''}
+        <button class="btn btn-secondary" data-logs-jump>View app logs</button>
         <button class="btn btn-secondary" data-error-jump>View error logs</button>
         <button class="btn btn-secondary" data-jump="auth.login">View failed logins</button>
       </div></div>`;
   }
   $('overview').addEventListener('click', event => {
+    if (event.target.dataset.usersJump !== undefined) return openTab('users');
+    if (event.target.dataset.logsJump !== undefined) {
+      $('logs-level').value = 'warn';
+      $('logs-since').value = '24h';
+      $('logs-q').value = '';
+      $('logs-request').value = '';
+      return openTab('logs');
+    }
     if (event.target.dataset.errorJump !== undefined) {
       $('errors-range').value = '24h';
       $('errors-request').value = '';
@@ -80,12 +95,30 @@
     openTab('audit');
   });
 
+  const planName = plan => plan === 'basic' ? 'Basic' : 'Pro';
+  function planCell(user) {
+    const license = user.license || { tier: 'none' };
+    const detail = license.tier === 'trial' ? `Pro trial${license.daysLeft == null ? '' : ` · ${license.daysLeft}d left`}` : license.active ? `${planName(license.tier)} · ${license.source}` : 'No subscription';
+    const request = license.request ? `<br><span class="plan-pill is-requested" title="Requested ${esc(when(license.request.requestedAt))}">Wants ${esc(planName(license.request.plan))}</span>` : '';
+    return `<span class="plan-pill is-${esc(license.tier)}">${esc(detail)}</span>${request}`;
+  }
+  function planButton(user) {
+    const license = user.license || { tier: 'none' };
+    if (license.source === 'owner' || license.source === 'demo') return '';
+    const attrs = `data-id="${esc(user.id)}" data-email="${esc(user.email)}"`;
+    const wanted = license.request?.plan;
+    const approve = wanted ? `<button class="btn btn-primary" data-action="license-grant" data-plan="${esc(wanted)}" ${attrs}>Approve ${esc(planName(wanted))} request</button>` : '';
+    return `${approve}${license.tier !== 'basic' && wanted !== 'basic' ? `<button class="btn btn-secondary" data-action="license-grant" data-plan="basic" ${attrs}>Grant Basic</button>` : ''}
+      ${license.tier !== 'pro' && wanted !== 'pro' ? `<button class="btn ${wanted ? 'btn-secondary' : 'btn-primary'}" data-action="license-grant" data-plan="pro" ${attrs}>Grant Pro</button>` : ''}
+      ${license.active || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
+  }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
-    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
-      rows.map(user => `<tr><td>${esc(user.id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td>${esc(user.role)}</td>
+    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
+      rows.map(user => `<tr><td>${esc(user.id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td>${esc(user.role)}</td><td>${planCell(user)}</td>
         <td>${esc(when(user.last_login))}</td><td>${esc(user.failed_logins_24h)}</td><td>${esc(user.active_sessions)}</td><td>${esc(user.active_grants)}</td>
         <td class="actions">
+          ${planButton(user)}
           <button class="btn btn-secondary" data-action="password-reset" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Email reset link</button>
           <button class="btn btn-secondary" data-action="unlock" data-id="${esc(user.id)}">Unlock</button>
           <button class="btn btn-secondary" data-action="revoke-sessions" data-id="${esc(user.id)}">Sign out everywhere</button>
@@ -95,18 +128,23 @@
   }
   $('user-search').onclick = () => loadUsers().catch(error => toast(error.message));
   $('users').addEventListener('click', async event => {
-    const { action, id, email } = event.target.dataset;
+    const { action, id, email, plan = 'pro' } = event.target.dataset;
     if (!action) return;
     if (action === 'audit') { $('f-user').value = id; $('f-type').value = ''; $('f-outcome').value = ''; return openTab('audit'); }
     const prompts = {
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
       'revoke-sessions': 'Sign this user out of every device?',
-      unlock: 'Clear failed sign-in lockouts for this user?'
+      unlock: 'Clear failed sign-in lockouts for this user?',
+      'license-grant': plan === 'pro'
+        ? `Grant MyFinance Pro (USD 14.99/month per household) to ${email}? This includes all analytics, budgets, debt planning and goals. This license action does not collect payment.`
+        : `Set ${email} to MyFinance Basic (USD 9.99/month per household)? Core finances unlock. Analytics, budgets, debt planning and goals will be locked, with saved data kept. This license action does not collect payment.`,
+      'license-revoke': `Revoke paid access from ${email}? Saved financial data is kept. Subscription cancellation must be managed through Stripe.`
     };
-    if (!confirm(prompts[action])) return;
+    if (!await FinanceUI.confirm(prompts[action])) return;
     try {
-      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' });
-      toast(result.message || 'Done. The action was recorded in the audit log.');
+      const license = action.startsWith('license-');
+      const result = await api(`/api/admin/users/${encodeURIComponent(id)}/${license ? 'license' : action}`, { method: 'POST', body: JSON.stringify(license ? { action: action.slice(8), plan } : {}) });
+      toast(license ? `Paid access ${action === 'license-grant' ? 'updated' : 'revoked'}. The change was recorded in the audit log.` : result.message || 'Done. The action was recorded in the audit log.');
       await loadUsers();
     } catch (error) { toast(error.message); }
   });
@@ -160,6 +198,57 @@
   }
   $('errors-search').onclick = () => loadErrorLogs().catch(error => {
     $('errors').innerHTML = `<p class="outcome-error">${esc(error.message)}</p>`;
+  });
+
+  let logsTimer = null;
+  async function loadAppLogs(refresh = false) {
+    if (!refresh) $('logs').innerHTML = '<p class="muted">Loading application logs…</p>';
+    const params = new URLSearchParams({ level: $('logs-level').value, since: $('logs-since').value, limit: '300' });
+    if ($('logs-q').value.trim()) params.set('q', $('logs-q').value.trim());
+    if ($('logs-request').value.trim()) params.set('requestId', $('logs-request').value.trim());
+    if (refresh) params.set('refresh', '1');
+    const data = await api(`/api/admin/logs?${params}`);
+    const { counts, failedRequests } = data.summary;
+    const stat = (label, value, bad) => `<div class="stat ${bad ? 'bad' : ''}"><span class="eyebrow">${esc(label)}</span><b>${esc(value)}</b></div>`;
+    const causes = data.causes.length
+      ? `<h3 style="margin:16px 0 0">Problems (${data.causes.length})</h3><div class="log-causes">${data.causes.slice(0, 15).map(cause => `
+          <div class="log-cause ${cause.level === 'warn' ? 'warn' : ''}">
+            <span class="level-pill level-${esc(cause.level)}">${esc(cause.level)}</span> <b>${esc(cause.count)}×</b> <code>${esc(cause.source)}</code> ${esc(cause.message)}
+            <br><small>Last ${esc(when(cause.last))} · first ${esc(when(cause.first))}${cause.routes.length ? ` · ${esc(cause.routes.join(', '))}` : ''}</small>
+            ${cause.requestIds.length ? `<br><small>Requests: ${cause.requestIds.map(id => `<a href="#" data-log-request="${esc(id)}"><code>${esc(id)}</code></a>`).join(' ')}</small>` : ''}
+          </div>`).join('')}</div>`
+      : `<div class="log-ok">No warnings or errors in this range.</div>`;
+    $('logs-summary').innerHTML = `<div class="stats">
+        ${stat('Errors', counts.error, counts.error > 0)}${stat('Warnings', counts.warn, false)}
+        ${data.level === 'info' ? stat('Info', counts.info, false) : ''}
+        ${stat('Failed requests (5xx)', failedRequests.reduce((sum, row) => sum + row.count, 0), failedRequests.length > 0)}
+      </div>${causes}
+      ${data.coverage.databaseAvailable ? '' : '<div class="warn">Stored logs could not be read; showing this instance’s recent logs only.</div>'}
+      <p class="muted">Updated ${esc(when(data.generatedAt))} · instance ${esc(data.coverage.instance)} · showing ${esc(data.entries.length)} of ${esc(data.total)} lines</p>`;
+    $('logs').innerHTML = data.entries.length ? `<table><thead><tr><th>When</th><th>Level</th><th>Source</th><th>Message</th><th>Route</th><th>Request ID</th></tr></thead><tbody>${
+      data.entries.map(entry => `<tr><td>${esc(when(entry.time))}</td><td><span class="level-pill level-${esc(entry.level)}">${esc(entry.level)}</span></td>
+        <td><code>${esc(entry.source)}</code></td><td>${esc(entry.message)}</td><td>${esc(entry.route || '')}</td>
+        <td>${entry.requestId ? `<a href="#" data-log-request="${esc(entry.requestId)}"><code>${esc(entry.requestId)}</code></a>` : '—'}</td></tr>`).join('')
+    }</tbody></table>` : '<p class="muted">No log lines match these filters.</p>';
+  }
+  const showLogsError = error => { $('logs').innerHTML = `<p class="outcome-error">${esc(error.message)}</p>`; };
+  $('logs-search').onclick = () => loadAppLogs().catch(showLogsError);
+  $('logs-live').onchange = () => {
+    clearInterval(logsTimer);
+    if ($('logs-live').checked) logsTimer = setInterval(() => {
+      if (!document.querySelector('[data-panel="logs"]').hidden) loadAppLogs(true).catch(showLogsError);
+    }, 30000);
+  };
+  // A request ID shows every line written while handling that request, at all levels.
+  document.addEventListener('click', event => {
+    const link = event.target.closest('[data-log-request]');
+    if (!link) return;
+    event.preventDefault();
+    $('logs-request').value = link.dataset.logRequest;
+    $('logs-level').value = 'info';
+    $('logs-since').value = '30d';
+    $('logs-q').value = '';
+    if (document.querySelector('[data-panel="logs"]').hidden) openTab('logs'); else loadAppLogs().catch(showLogsError);
   });
 
   async function loadGrants() {
@@ -227,7 +316,7 @@
     } catch (error) { output.textContent = `Request not sent: ${error.message}`; }
   });
 
-  const loaders = { overview: loadOverview, users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
+  const loaders = { overview: loadOverview, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
 
   (async () => {
     try {

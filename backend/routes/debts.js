@@ -1,18 +1,23 @@
 import { Router } from 'express';
 import Database from '../db.js';
+import { requireProPlus } from '../utils/license.js';
 
 const router = Router();
+router.use(requireProPlus);
 const db = new Database();
 const numeric = ['balance', 'apr', 'credit_limit', 'min_payment'];
 
 function debtFields(body, partial = false) {
   const values = {};
-  for (const key of ['name', ...numeric, 'due_date', 'debt_type', 'payment_in_history']) {
+  for (const key of ['name', ...numeric, 'due_date', 'debt_type', 'payment_in_history', 'included', 'focus']) {
     if (partial && body[key] === undefined) continue;
     if (numeric.includes(key)) {
       const value = Number(body[key] ?? 0);
       if (!Number.isFinite(value) || value < 0 || value > 1e10 || (key === 'apr' && value > 100)) throw Object.assign(new Error(`Invalid ${key}`), { status: 400 });
       values[key] = value;
+    } else if (key === 'included' || key === 'focus') {
+      if (body[key] !== undefined && typeof body[key] !== 'boolean') throw Object.assign(new Error(`Choose whether the debt is ${key === 'focus' ? 'a focus' : 'in the debt-free program'}`), { status: 400 });
+      values[key] = body[key] ?? key === 'included';
     } else if (key === 'payment_in_history') {
       if (body[key] !== undefined && typeof body[key] !== 'boolean') throw Object.assign(new Error('Choose whether the debt payment is already in imported spending'), { status: 400 });
       values[key] = body[key] ?? true;

@@ -1,0 +1,439 @@
+{
+  "title": "MyFinance Stripe and server setup guide",
+  "version": 1,
+  "updated": "2026-10-24",
+  "purpose": "Human-readable setup instructions. This file is documentation, not an executable deployment configuration. The application does not load environment variables from this JSON.",
+  "safety": [
+    "All example values are placeholders. Never put real secret keys, SMTP passwords, database credentials or card data in this file or source control.",
+    "Enter secrets directly in the hosting provider's server environment or secret manager. Do not paste them into chat.",
+    "Start in a separate staging deployment and Stripe sandbox. Do not point automated tests at a production database.",
+    "Keep ALLOW_REGISTRATION=false on the deployment being configured until launch checks pass. This does not disable existing logins, invitation acceptance or existing customer billing.",
+    "Do not deploy sandbox Stripe settings over an existing live billing deployment."
+  ],
+  "subscription_model": {
+    "currency": "USD",
+    "billing_interval": "monthly",
+    "billing_scope": "One subscription per household, not per login or bank account.",
+    "basic": {
+      "price_usd": 9.99,
+      "unit_amount_cents": 999,
+      "features": "Accounts, imports, transactions, categories and everyday dashboard."
+    },
+    "pro": {
+      "price_usd": 14.99,
+      "unit_amount_cents": 1499,
+      "features": "Basic plus analytics, budgets, debt planning and savings goals."
+    },
+    "trial": {
+      "days": 15,
+      "access": "Pro, even when Basic is the selected renewal plan.",
+      "start": "Only after verified email, explicit recurring-billing consent and completion of Stripe-hosted Checkout with payment details.",
+      "renewal": "Stripe bills the selected monthly plan automatically after the trial unless canceled.",
+      "reminder": "The application attempts to email the household owner when the trial has 24 hours remaining.",
+      "repeat_eligibility": "A used trial cannot restart for the same household/account. Different unrelated email accounts are not currently linked for person-level anti-abuse."
+    }
+  },
+  "stripe_dashboard_setup": [
+    {
+      "step": 1,
+      "action": "Create or sign in to your Stripe account.",
+      "url": "https://dashboard.stripe.com/",
+      "instructions": [
+        "Create or select a sandbox for initial setup.",
+        "Confirm every product, price, API key and webhook in this phase belongs to that same sandbox.",
+        "Complete business verification and payout setup before accepting live payments."
+      ]
+    },
+    {
+      "step": 2,
+      "action": "Create two products and recurring prices in Product catalog.",
+      "products": [
+        {
+          "name": "MyFinance Basic",
+          "currency": "USD",
+          "amount": 9.99,
+          "type": "recurring",
+          "interval": "month",
+          "interval_count": 1,
+          "pricing": "Fixed per-unit price; quantity one; not metered or tiered.",
+          "copy_to_server_variable": "STRIPE_BASIC_PRICE_ID"
+        },
+        {
+          "name": "MyFinance Pro",
+          "currency": "USD",
+          "amount": 14.99,
+          "type": "recurring",
+          "interval": "month",
+          "interval_count": 1,
+          "pricing": "Fixed per-unit price; quantity one; not metered or tiered.",
+          "copy_to_server_variable": "STRIPE_PRO_PRICE_ID"
+        }
+      ],
+      "notes": [
+        "Copy Price IDs beginning price_, not Product IDs beginning prod_.",
+        "The application sets the eligible 15-day trial in Checkout; no separate product trial configuration is needed.",
+        "Checkout validates active status, USD amount and monthly interval against the published plan.",
+        "Tax collection is not configured by this guide. Review applicable tax obligations before live launch."
+      ]
+    },
+    {
+      "step": 3,
+      "action": "Obtain the sandbox server secret key from API keys.",
+      "url": "https://dashboard.stripe.com/apikeys",
+      "copy_to_server_variable": "STRIPE_SECRET_KEY",
+      "example_prefix": "sk_test_",
+      "notes": [
+        "The current hosted Checkout integration does not require a frontend publishable key.",
+        "Keep the server key private. If exposed, rotate it in Stripe and update the server.",
+        "A restricted key requires separately validated permissions for customers, prices, subscriptions (including metadata updates), subscription schedules (create/read/update/release), Checkout and billing-portal operations."
+      ]
+    },
+    {
+      "step": 4,
+      "action": "Create an account webhook event destination in Stripe Workbench/Webhooks.",
+      "endpoint_method": "POST",
+      "endpoint_url_template": "https://YOUR_APP_DOMAIN/api/billing/webhook",
+      "events": [
+        "checkout.session.completed",
+        "checkout.session.expired",
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+        "customer.subscription.trial_will_end",
+        "invoice.paid",
+        "invoice.payment_failed",
+        "subscription_schedule.created",
+        "subscription_schedule.updated",
+        "subscription_schedule.released",
+        "subscription_schedule.completed",
+        "subscription_schedule.canceled",
+        "subscription_schedule.aborted"
+      ],
+      "copy_to_server_variable": "STRIPE_WEBHOOK_SECRET",
+      "example_prefix": "whsec_",
+      "notes": [
+        "The signing secret belongs to this specific webhook destination and is different from the API key.",
+        "The endpoint must be publicly reachable over HTTPS, without a hosting login, CAPTCHA or browser session requirement.",
+        "Do not rewrite the raw request body or strip the Stripe-Signature header at the proxy.",
+        "A successful processed event returns HTTP 200 with received=true. Unsigned or invalid-signature requests should return 400, not 200.",
+        "Application access comes from verified webhook synchronization, never solely from a browser success redirect."
+      ]
+    },
+    {
+      "step": 5,
+      "action": "Review Stripe business branding, support details and customer communication settings.",
+      "instructions": [
+        "Set the correct business name, support email, statement descriptor and relevant legal-policy links.",
+        "Review receipt and payment-failure email settings and your cancellation/refund policy.",
+        "The app creates its own billing-portal configuration when an owner opens billing. It enables cancellation at period end, payment-method updates, invoices and customer email/address updates.",
+        "Active Basic owners without pending changes or scheduled cancellation can use Upgrade to Pro in Stripe in app billing. Stripe confirms an immediate prorated charge and keeps the renewal date. Pro access requires a paid upgrade invoice and verified webhook.",
+        "Pro owners, including Pro-selected trials, can explicitly consent in app billing to Basic USD 9.99/month at the next renewal or original trial expiry. Pro remains until then, with no immediate charge, proration, or data deletion. Separate Stripe products require subscription schedules rather than assuming portal same-product downgrade support.",
+        "The schedule preserves the current Pro phase and trial_end, adds one bounded monthly Basic phase and releases to ongoing Basic. Billing shows the pending effective date. Keep Pro removes a pending downgrade and retains USD 14.99/month renewal; remove it before using the cancellation portal. Members cannot change billing. Subscription and schedule webhooks synchronize current Stripe state; trial reminders reflect pending Basic pricing.",
+        "Sandbox verification: confirm next-renewal timing, retained Pro before transition, original trial expiry, Basic reminder amount, duplicate/retried scheduling after a lost response, Keep Pro and rescheduling, owner/member permissions, cancellation conflicts, and preserved financial records after Basic activates. Automated tests use fakes; run real sandbox checks separately before launch."
+      ]
+    }
+  ],
+  "server_environment": {
+    "where_to_set": "Hosting service dashboard: environment variables/secrets for the Node backend, or the equivalent process-manager/service configuration. Set these on the server, not in browser JavaScript.",
+    "automatic_env_file_loading": false,
+    "automatic_env_file_loading_note": "The npm start command runs node backend/server.js and does not itself load a .env file. Use your hosting platform's environment injection or an explicitly configured supported environment loader.",
+    "required_values": [
+      {
+        "name": "STRIPE_SECRET_KEY",
+        "example": "sk_test_REPLACE_IN_HOST_SECRET_MANAGER",
+        "secret": true,
+        "purpose": "Server-side Stripe API access."
+      },
+      {
+        "name": "STRIPE_WEBHOOK_SECRET",
+        "example": "whsec_REPLACE_IN_HOST_SECRET_MANAGER",
+        "secret": true,
+        "purpose": "Signature verification for this deployment's Stripe webhook."
+      },
+      {
+        "name": "STRIPE_BASIC_PRICE_ID",
+        "example": "price_REPLACE_WITH_BASIC_MONTHLY_USD_PRICE",
+        "secret": false,
+        "purpose": "Active USD 9.99 monthly recurring price from the same Stripe environment."
+      },
+      {
+        "name": "STRIPE_PRO_PRICE_ID",
+        "example": "price_REPLACE_WITH_PRO_MONTHLY_USD_PRICE",
+        "secret": false,
+        "purpose": "Active USD 14.99 monthly recurring price from the same Stripe environment."
+      },
+      {
+        "name": "APP_ORIGIN",
+        "example": "https://YOUR_APP_DOMAIN",
+        "secret": false,
+        "purpose": "Exact public browser origin, including a nonstandard port if applicable. No path or trailing slash. Production requires HTTPS."
+      },
+      {
+        "name": "SMTP_HOST",
+        "example": "smtp.YOUR_EMAIL_PROVIDER",
+        "secret": false,
+        "purpose": "Outbound email server for verification, invitations, password reset and trial reminders."
+      },
+      {
+        "name": "SMTP_FROM",
+        "example": "MyFinance <no-reply@YOUR_VERIFIED_EMAIL_DOMAIN>",
+        "secret": false,
+        "purpose": "Sender address authorized by your email provider."
+      },
+      {
+        "name": "DATABASE_URL",
+        "example": "postgresql://USER:PASSWORD@HOST:5432/DATABASE",
+        "secret": true,
+        "purpose": "Keep the deployment's correct existing database connection. Use an isolated database for staging."
+      },
+      {
+        "name": "NODE_ENV",
+        "example": "production",
+        "secret": false,
+        "purpose": "Enables production HTTPS and cookie protections, including on a hosted staging deployment."
+      },
+      {
+        "name": "ALLOW_REGISTRATION",
+        "example": "false",
+        "secret": false,
+        "purpose": "Keep public signup closed during rollout. Set true only after launch checks pass."
+      }
+    ],
+    "provider_or_deployment_specific_values": [
+      {
+        "name": "SMTP_PORT",
+        "example": "587",
+        "purpose": "Use your email provider's port; 587 is the app default."
+      },
+      {
+        "name": "SMTP_SECURE",
+        "example": "false",
+        "purpose": "Use true for implicit TLS, commonly port 465. False on port 587 uses the provider's STARTTLS behavior; it is not a request to disable all TLS."
+      },
+      {
+        "name": "SMTP_USER",
+        "example": "REPLACE_WITH_PROVIDER_USERNAME",
+        "purpose": "Required if your SMTP provider requires authentication."
+      },
+      {
+        "name": "SMTP_PASS",
+        "example": "REPLACE_IN_HOST_SECRET_MANAGER",
+        "secret": true,
+        "purpose": "SMTP password or provider credential when authentication is required."
+      },
+      {
+        "name": "DATABASE_SSL",
+        "example": "true",
+        "purpose": "Enable certificate-verified database TLS when required by your database provider. Do not disable certificate validation."
+      },
+      {
+        "name": "TRUST_PROXY_HOPS",
+        "example": "1",
+        "purpose": "Set only to the actual trusted reverse-proxy hop count. Incorrect trust can break or undermine client-IP throttling; do not blindly copy 1."
+      },
+      {
+        "name": "PORT",
+        "example": "3000",
+        "purpose": "Use the hosting platform's assigned port if present; the application defaults to 3000 and binds to 0.0.0.0."
+      }
+    ],
+    "existing_security_settings": [
+      "Preserve the deployment's AUDIT_HASH_SECRET and existing monitoring/retention settings.",
+      "OWNER_SETUP_TOKEN is only for first-time administrator setup. Do not recreate the owner or change ownership just to enable Stripe.",
+      "No separate STRIPE_ENABLED flag or cron service is required. Configuration readiness is derived from Stripe and SMTP settings."
+    ]
+  },
+  "server_enablement_steps": [
+    {
+      "step": 1,
+      "action": "Back up the database and verify a restore before upgrading.",
+      "notes": "Use a separate database and hostname for staging. Do not copy live secrets into source or run tests against live data."
+    },
+    {
+      "step": 2,
+      "action": "Deploy the application version containing household billing and the latest billing regression fixes.",
+      "commands_from_application_root": [
+        "npm ci",
+        "npm test",
+        "npm audit --omit=dev"
+      ],
+      "windows_note": "Use npm.cmd instead of npm if PowerShell blocks npm.ps1.",
+      "notes": [
+        "Run tests in development/CI or staging, not as a live-data test procedure.",
+        "The lockfile already includes the Stripe SDK; no separate global Stripe SDK installation is needed.",
+        "The last recorded audit reported 17 advisories, including two critical. Run a fresh audit and remediate before public launch; do not apply major-version fixes blindly."
+      ]
+    },
+    {
+      "step": 3,
+      "action": "Set the server environment values above and configure HTTPS/proxy routing.",
+      "notes": [
+        "Allow outbound HTTPS to Stripe and outbound connections to your configured SMTP server.",
+        "Route /api/billing/webhook to this Node application, not a static frontend or SPA fallback.",
+        "Use the same environment variables on every application instance.",
+        "Do not expose application secrets through frontend build variables or public files."
+      ]
+    },
+    {
+      "step": 4,
+      "action": "Restart or redeploy the Node web service through your hosting provider or process manager.",
+      "start_command": "npm start",
+      "direct_equivalent": "node backend/server.js",
+      "notes": [
+        "Do not start a second unmanaged copy if your host already supervises the service.",
+        "Startup performs schema migration through the configured database connection. Its role needs the documented table/role migration privileges.",
+        "Confirm startup logs contain 'Private account schema ready' and 'MyFinanceApp listening on port'. Investigate startup failures rather than ignoring them.",
+        "The trial-reminder worker starts automatically in this server process and checks every minute.",
+        "Keep at least one instance always on. Sleeping/scale-to-zero hosting can delay reminders; worker locks coordinate multiple active instances."
+      ]
+    },
+    {
+      "step": 5,
+      "action": "Verify configuration while signed in as a household owner.",
+      "checks": [
+        "Open Settings > Billing or the subscription onboarding page.",
+        "An authenticated GET /api/billing should return configured=true and owner=true for the household owner.",
+        "configured=true checks presence of required Stripe/SMTP settings only; it does not prove credentials, SMTP delivery, webhook connectivity or price validity.",
+        "Complete the real sandbox checks below before declaring payments operational."
+      ]
+    }
+  ],
+  "sandbox_acceptance_checks": [
+    {
+      "scenario": "Prepare a fresh customer household",
+      "expected": "Use a new unpaid owner with no previous trial, not administrator user 1, the public demo, or a grandfathered manual paid household. For public-signup testing, temporarily enable ALLOW_REGISTRATION=true only on isolated staging, restart, and create a synthetic customer. Keep live signup closed."
+    },
+    {
+      "scenario": "Email verification",
+      "expected": "Verification mail arrives and its link works. Checkout remains blocked before verification."
+    },
+    {
+      "scenario": "Select Basic and start Checkout",
+      "expected": "Signup retains Basic. Explicit recurring-billing consent is required. Stripe collects the payment method and shows the 15-day trial and Basic renewal price."
+    },
+    {
+      "scenario": "Sandbox card",
+      "test_card": {
+        "number": "4242 4242 4242 4242",
+        "expiry": "Any future date",
+        "cvc": "Any three digits"
+      },
+      "expected": "Use only with sandbox/test keys. Do not enter real card data. No real payment is made."
+    },
+    {
+      "scenario": "Webhook and trial activation",
+      "expected": "Stripe event deliveries return HTTP 200. The app grants Pro features for the trial, including for Basic-selected renewal. Redirecting without a successful subscription webhook does not grant access."
+    },
+    {
+      "scenario": "Cancellation during trial",
+      "expected": "Owner opens the Stripe portal and cancels. Access stays active until trial end, then financial routes lock. No paid conversion should occur for a properly canceled trial."
+    },
+    {
+      "scenario": "Continue from trial to paid Basic or Pro",
+      "expected": "Stripe sandbox lifecycle validation confirms the selected paid plan and invoice outcome. Basic loses advanced features after conversion; Pro retains them.",
+      "time_simulation_note": "The current app does not attach Checkout customers to Stripe Test Clocks. Do not assume advancing a clock also advances the app's system time or its reminder worker. Test-clock orchestration requires additional setup/code; otherwise validate with actual sandbox lifecycle events and supported Stripe testing workflows."
+    },
+    {
+      "scenario": "Payment failure and recovery",
+      "expected": "Use Stripe-documented sandbox failure scenarios. Past-due/unpaid access locks; successful current-period payment synchronization restores eligible access. Billing and authentication remain available."
+    },
+    {
+      "scenario": "Return after canceled trial",
+      "expected": "Sign back in with the same account. A new Checkout has no second trial; paid activation is required. Existing records remain intact."
+    },
+    {
+      "scenario": "Shared household and isolation",
+      "expected": "Invite a second login. It shares the household's entitlement and financial records but cannot manage billing. A separate unrelated household sees neither financial data nor subscription details belonging to the first."
+    },
+    {
+      "scenario": "Reminder delivery",
+      "expected": "Confirm owner-only reminder delivery around 24 hours before the actual trial deadline while the server is running. Verify SMTP delivery and monitor failures; simulated automated emails are not proof of real delivery."
+    },
+    {
+      "scenario": "Retries and repeated clicks",
+      "expected": "Repeat Checkout clicks do not create multiple active subscriptions. Retried events are idempotent. An old canceled subscription event does not overwrite a paid replacement."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "symptom": "Online billing is not configured or configured=false",
+      "check": "Check STRIPE_SECRET_KEY, both Price IDs, STRIPE_WEBHOOK_SECRET, SMTP_HOST and SMTP_FROM on the backend process. Restart after changes."
+    },
+    {
+      "symptom": "Configured price does not match the published plan",
+      "check": "Verify active USD fixed monthly prices: Basic 999 cents, Pro 1499 cents, interval_count=1. Do not use Product IDs, annual prices or sandbox/live mismatches."
+    },
+    {
+      "symptom": "Invalid Stripe webhook signature",
+      "check": "Use this destination's whsec_ secret, preserve raw body and Stripe-Signature, verify sandbox/live match and server clock. A browser visit or unsigned request should fail."
+    },
+    {
+      "symptom": "Webhook receives redirects, HTML, 401, 403 or 404",
+      "check": "Check domain, HTTPS, reverse-proxy routing, deployment protection and destination URL. The endpoint must reach the raw-body billing webhook handler without browser authentication."
+    },
+    {
+      "symptom": "Checkout completed but access is still locked",
+      "check": "Inspect Stripe delivery status and backend billing.webhook_failed logs. Verify the authoritative subscription/customer and paid or trial timestamps. Fix and retry failed events; do not grant access from a success URL."
+    },
+    {
+      "symptom": "Existing paid access refuses a new subscription",
+      "check": "Administrator/primary owner and grandfathered manual paid households are protected against accidental double billing. Use a fresh synthetic household for testing; replacing manual paid access needs an explicit operational migration."
+    },
+    {
+      "symptom": "Reminder missing",
+      "check": "Confirm an always-on server, correct owner email, trial timestamps, SMTP delivery and billing.reminder_failed logs. A customer email edited only in Stripe does not change the app owner's reminder destination."
+    },
+    {
+      "symptom": "Unexpected duplicate reminder",
+      "check": "The app marks reminders sent after mail submission. A crash after delivery but before commit can cause a retry; delivery is not guaranteed exactly once."
+    },
+    {
+      "symptom": "Cannot change Basic to Pro in Stripe portal",
+      "check": "Use Upgrade to Pro in Stripe in app billing, not the general management portal. Requires active Basic without pending changes or scheduled cancellation. Verify proration, declined payment and webhooks in sandbox. Pro-to-Basic changes use explicit in-app consent and subscription schedules at next renewal; remove a pending downgrade with Keep Pro before cancelling."
+    }
+  ],
+  "live_launch": {
+    "prerequisites": [
+      "Sandbox acceptance checks pass, including real webhook deliveries and SMTP.",
+      "Review and remediate dependency advisories and complete the required production security review.",
+      "Review business verification, tax handling, privacy notice, automatic-renewal disclosures, refund/cancellation terms and support details.",
+      "Confirm backups, monitoring, HTTPS and always-on reminder processing."
+    ],
+    "steps": [
+      "Create Basic and Pro products/prices in Stripe live mode at the exact USD monthly amounts.",
+      "Create the live webhook destination for the production URL with the same event list.",
+      "Set production STRIPE_SECRET_KEY to the live secret key and replace both Price IDs and STRIPE_WEBHOOK_SECRET with live values from that same account.",
+      "Keep sandbox keys, prices and webhook destination restricted to staging.",
+      "Restart/redeploy production and verify configuration and endpoint delivery.",
+      "Perform any real-money smoke test only with explicit authorization; live mode can charge actual money.",
+      "Explicitly set ALLOW_REGISTRATION=true and restart only when ready to accept new customers."
+    ],
+    "existing_customer_warning": "Never switch a live billing deployment back to sandbox keys as a casual rollback. Existing live subscriptions can keep charging in Stripe even if application settings are changed. If billing must be stopped, handle subscriptions explicitly in Stripe and reconcile application state."
+  },
+  "references": [
+    {
+      "label": "Project deployment guide",
+      "path": "DEPLOYMENT.md"
+    },
+    {
+      "label": "Database and billing ownership architecture",
+      "path": "DATABASE_ARCHITECTURE.md"
+    },
+    {
+      "label": "Account data privacy",
+      "path": "ACCOUNT_DATA_PRIVACY.md"
+    },
+    {
+      "label": "Stripe API key guidance",
+      "url": "https://docs.stripe.com/keys"
+    },
+    {
+      "label": "Stripe webhooks",
+      "url": "https://docs.stripe.com/webhooks"
+    },
+    {
+      "label": "Stripe sandbox testing",
+      "url": "https://docs.stripe.com/testing"
+    }
+  ]
+}

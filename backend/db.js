@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { currentUserId, currentReadOnly } from './utils/tenant.js';
+import { currentUserId, currentReadOnly, currentLoginId } from './utils/tenant.js';
 import { migratePrivateSchema, seedUserCategories } from './utils/schema.js';
 import { log } from './utils/logger.js';
 
@@ -48,8 +48,14 @@ export default class Database {
     const client = await rawPool.connect();
     try {
       await client.query('BEGIN');
-      // Read-only support access is enforced by PostgreSQL, not just route checks.
       if (currentReadOnly()) await client.query('SET TRANSACTION READ ONLY');
+      const loginId = currentLoginId();
+      if (loginId) {
+        const member = (await client.query(`SELECT m.user_id FROM household_members m JOIN households h ON h.id=m.household_id
+          WHERE m.user_id=$1 AND h.owner_user_id=$2 ${currentReadOnly() ? '' : 'FOR SHARE OF m'}`, [loginId, userId])).rows[0];
+        if (!member) throw Object.assign(new Error('Household membership changed. Sign in again.'), { status: 403 });
+      }
+      // Read-only support access is enforced by PostgreSQL, not just route checks.
       await client.query('SET LOCAL ROLE finance_app_runtime');
       await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
       const result = await callback(client);

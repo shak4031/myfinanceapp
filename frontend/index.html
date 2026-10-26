@@ -4,8 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyFinance · Your money, with direction</title>
-  <script src="session.js"></script>
-  <script src="client-errors.js"></script>
+  <meta name="description" content="Shared household finances with MyFinance Basic or Pro. Start a 15-day Pro trial with a selected plan and payment details in Stripe Checkout.">
+  <script src="session-guard.js?v=20261023a"></script>
+  <script src="session.js?v=20261024-signup"></script>
+  <script src="performance.js?v=20261026a"></script>
+  <script src="client-errors.js?v=20261017r"></script>
   <style>
     :root {
       --primary: #4a9eff;
@@ -337,14 +340,6 @@
         grid-template-columns: 1fr !important;
       }
 
-      /* Import modal → full screen */
-      #import-modal > div {
-        width: 100% !important;
-        max-width: 100% !important;
-        max-height: 100vh !important;
-        border-radius: 0 !important;
-        height: 100vh;
-      }
       #add-goal-modal > div {
         width: 95% !important;
         max-width: 95% !important;
@@ -394,6 +389,10 @@
         text-align: center;
         font-size: 11px !important;
       }
+      #full-txn-table td:nth-child(5) select {
+        font-size: 10px !important;
+        padding: 4px 18px 4px 6px !important;
+      }
       #full-txn-table td:last-child {
         white-space: nowrap;
         font-size: 12px !important;
@@ -402,7 +401,7 @@
         padding: 8px !important;
         overflow-x: auto;
       }
-      #full-txn-table { min-width: 500px; }
+      #full-txn-table { min-width: 600px; }
 
       /* Nav buttons — wider touch targets */
       .nav-btn { padding: 14px 16px; font-size: 15px; }
@@ -428,21 +427,142 @@
       #pdf-dropzone { padding: 24px !important; }
     }
 
+      /* Accounts page and import account picker */
+    .import-account { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .import-account > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+    .import-new-account, .acct-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+    .import-new-account[hidden] { display: none; }
+    .import-new-account label, .acct-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+    .import-new-account input, .import-new-account select, .acct-form input, .acct-form select, .acct-actions select {
+      padding: 8px 10px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+    #accounts-root, #accounts-root * { box-sizing: border-box; }
+    #accounts-root { min-width: 0; overflow-wrap: anywhere; }
+    .acct-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-bottom: 24px; }
+    .acct-summary .panel { min-width: 0; padding: 22px; border-top: 3px solid var(--primary); }
+    .acct-summary .panel:nth-child(2) { border-top-color: var(--warning); }
+    .acct-summary .panel:first-child { border-top-color: var(--success); }
+    .acct-summary strong { display: block; font-size: clamp(24px, 3vw, 32px); margin: 10px 0; letter-spacing: -1px; }
+    .acct-summary p { margin: 0; line-height: 1.6; }
+    .acct-review-link { display: inline-block; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--primary); }
+    .acct-review-intro { padding: 22px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 16px; }
+    .acct-review-intro h2 { margin: 6px 0 10px; font-size: 20px; }
+    .acct-review-intro > p:last-child { margin-bottom: 0; max-width: 85ch; font-size: 14px; line-height: 1.7; color: var(--text-secondary); }
+    .acct-section { font-size: 17px; margin: 28px 0 12px; }
+    .acct-list { display: grid; gap: 16px; }
+    .acct-card { min-width: 0; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 18px; padding: clamp(16px, 2.5vw, 24px); box-shadow: 0 4px 18px -14px rgba(18,33,56,.3); }
+    .acct-card.acct-review { border-left: 4px solid var(--warning); }
+    .acct-card .acct-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+    .acct-form label, .acct-head > div { min-width: 0; }
+    .acct-form input, .acct-form select, .acct-actions select { width: 100%; min-width: 0; max-width: 100%; }
+    .acct-actions select { flex: 1 1 200px; }
+    .acct-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .acct-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 6px; }
+    .acct-head p { margin: 0; line-height: 1.6; }
+    .acct-balance { text-align: right; display: flex; flex-direction: column; }
+    .acct-balance strong { font-size: 18px; }
+    .acct-found { margin: 18px 0 0; padding: 16px; background: var(--bg-tertiary); border-radius: 12px; font-size: 13px; line-height: 1.7; }
+    .acct-found p { margin: 6px 0 0; }
+    .acct-found blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid var(--warning); color: var(--text-secondary); }
+    .acct-choice-note { margin: 14px 0 0; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+    .acct-statement { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-tertiary); font-size: 13px; line-height: 1.7; }
+    .acct-statement p { margin: 6px 0 0; }
+    .acct-stats, .acct-kind-help { font-size: 12px; margin: 8px 0 0; }
+    .acct-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+    .acct-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+    .acct-badge.warn { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
+    .acct-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .acct-table th, .acct-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
+    .acct-rules { margin-top: 28px; }
+    .acct-rules summary { cursor: pointer; font-weight: 600; }
+    .acct-rules li { margin: 8px 0; font-size: 13px; }
+    .acct-nav-badge { margin-left: auto; min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--warning); color: #1b1b1b; font-size: 11px; font-weight: 700; text-align: center; }
+    .acct-nav-badge[hidden] { display: none; }
+    .transaction-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    .transaction-link:hover { color: var(--primary); }
+    .transaction-link:focus-visible, .acct-review-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 3px; }
+    @media (max-width: 640px) {
+      .acct-card .acct-form { grid-template-columns: minmax(0, 1fr); }
+      .acct-head { flex-direction: column; }
+      .acct-balance { text-align: left; }
+      .acct-actions { align-items: stretch; }
+      .acct-actions .btn { width: 100%; white-space: normal; }
+      .acct-table th, .acct-table td { padding: 8px 4px; font-size: 12px; }
+    }
+    .tx-transfer-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--bg-tertiary); color: var(--text-secondary); white-space: nowrap; }
+    .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
+    .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css">
+  <link rel="stylesheet" href="refresh.css?v=20261030d">
+  <link rel="stylesheet" href="spending-history.css?v=20261025b">
+  <link rel="stylesheet" href="analytics.css?v=20261031c">
+  <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
+  <link rel="stylesheet" href="categories.css?v=20261027a">
+  <link rel="stylesheet" href="plan.css?v=20261031a">
+  <link rel="stylesheet" href="welcome.css?v=20261030c">
+  <link rel="stylesheet" href="income-review.css?v=20261017r">
+  <link rel="stylesheet" href="tutorial.css?v=20261022d">
+  <link rel="stylesheet" href="review-tools.css?v=20261023b">
+  <link rel="stylesheet" href="marketing.css?v=20261024-signup">
+  <link rel="stylesheet" href="household.css?v=20261024-signup">
 </head>
 <body class="auth-pending">
-  <section id="auth-screen" class="auth-screen" aria-label="Account access">
-    <div class="auth-card">
+  <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
+    <header class="marketing-nav" id="marketing-top">
+      <a class="marketing-brand" href="#marketing-top" data-marketing-jump="top" aria-label="MyFinance, back to top"><svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/><path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/><circle class="brand-mark-accent" cx="47" cy="18" r="4"/></svg> MyFinance</a>
+      <nav class="marketing-links" aria-label="Page sections">
+        <a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Features</a>
+        <a href="#marketing-benefits" data-marketing-jump="marketing-benefits">Basic vs Pro</a>
+        <a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Pricing</a>
+      </nav>
+      <a class="marketing-nav-cta" href="#marketing-signin" data-marketing-jump="marketing-signin" data-marketing-signin>Sign in <span aria-hidden="true">&rarr;</span></a>
+    </header>
+    <div class="marketing-hero">
+      <div class="marketing-story">
+        <p class="marketing-kicker"><span aria-hidden="true">&#10022;</span> SMALL STEPS. BIGGER POSSIBILITIES.</p>
+        <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
+        <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
+        <div class="marketing-actions"><button class="btn btn-primary" type="button" id="marketing-start">Find my starting point <span aria-hidden="true">&rarr;</span></button><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">See what fits me</a></div>
+        <p class="marketing-reassurance">One plan for your household. No bank connection needed. No perfect budget required.</p>
+        <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
+          <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
+          <div class="marketing-preview-title"><span aria-hidden="true">&#10022;</span><strong>Little by little.<br>Look at you go.</strong><span class="marketing-sticker">a little<br>more possible</span></div>
+          <div class="marketing-preview-steps"><span><b>01</b> Know your spending<small>Basic</small></span><span><b>02</b> Spot your patterns<small>Pro</small></span><span><b>03</b> Plan your next chapter<small>Pro</small></span></div>
+          <div class="marketing-goal"><span>Emergency fund <small>Pro</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
+          <p class="marketing-preview-note">Your own pace. Your own priorities. Estimates, not promises.</p>
+        </div>
+      </div>
+    <div class="marketing-access" id="marketing-access">
+      <section class="marketing-spotlight" id="marketing-spotlight" aria-roledescription="carousel" aria-labelledby="marketing-spotlight-title">
+        <div class="mk-spot-head"><p class="mk-spot-kicker" id="marketing-spotlight-title"><span aria-hidden="true">&#10022;</span> WHAT YOU GET &middot; 7 QUICK WINS</p><button type="button" class="mk-ctl" id="marketing-spotlight-toggle" aria-pressed="false" aria-label="Pause feature tour"><span aria-hidden="true">&#10074;&#10074;</span></button></div>
+        <div class="mk-stage" id="marketing-spotlight-stage" aria-live="off"></div>
+        <div class="mk-spot-foot"><button type="button" class="mk-ctl" data-mk-step="-1" aria-label="Previous feature"><span aria-hidden="true">&larr;</span></button><div class="mk-dots" id="marketing-spotlight-dots" role="group" aria-label="Choose a feature"></div><button type="button" class="mk-ctl" data-mk-step="1" aria-label="Next feature"><span aria-hidden="true">&rarr;</span></button></div>
+        <span class="mk-blob mk-blob-a" aria-hidden="true"></span><span class="mk-blob mk-blob-b" aria-hidden="true"></span>
+      </section>
+      <div class="auth-card" id="marketing-signin">
       <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="MyFinance mark">
         <rect class="brand-mark-bg" x="1" y="1" width="62" height="62" rx="19"/>
         <path class="brand-mark-line" d="M15 43V25l11 11 13-15v22"/>
         <circle class="brand-mark-accent" cx="47" cy="18" r="4"/>
       </svg>
       <p class="eyebrow">MYFINANCE / YOUR NEXT CHAPTER</p>
-      <h1 id="auth-title">A clearer picture of your money.</h1>
+      <h2 id="auth-title">A clearer picture of your money.</h2>
       <p class="muted" id="auth-description">Checking your secure session…</p>
+      <ol class="auth-signup-steps" id="auth-signup-steps" aria-label="Account setup steps" hidden>
+        <li aria-current="step"><span>1</span> Plan &amp; account</li>
+        <li><span>2</span> Verify email</li>
+        <li><span>3</span> Secure checkout</li>
+      </ol>
+      <div class="auth-plan" id="auth-plan" role="status" hidden><p class="auth-plan-head"><span>Your plan</span><strong id="auth-plan-name"></strong><b id="auth-plan-price"></b></p><p class="auth-plan-note" id="auth-plan-note"></p><p class="auth-plan-links"><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Change plan</a><button class="link-button" id="auth-plan-clear" type="button">Clear choice</button></p></div>
       <form id="auth-form" hidden>
+        <fieldset class="auth-plan-options" id="auth-plan-options" hidden>
+          <legend>Choose your household plan</legend>
+          <p class="auth-trial-note">Both plans start with 15 days of Pro. Your selection is the plan you pay for after the trial.</p>
+          <div class="auth-plan-grid">
+            <label class="auth-plan-option"><input id="auth-plan-basic" type="radio" name="signup-plan" value="basic" disabled><span><strong>Basic</strong><b>USD $9.99<span> / month</span></b><small>Accounts, statement imports, transactions, categories and everyday dashboard.</small></span></label>
+            <label class="auth-plan-option"><input id="auth-plan-pro" type="radio" name="signup-plan" value="pro" disabled><span><strong>Pro</strong><b>USD $14.99<span> / month</span></b><small>Everything in Basic, plus analytics, budgets, debt planning and savings goals.</small></span></label>
+          </div>
+          <p class="auth-trial-note">One monthly subscription per household. After the trial, Stripe charges your selected plan automatically unless you cancel. Payment details and billing consent are collected in the next steps, not on this form.</p>
+        </fieldset>
         <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="100"></label>
         <label id="auth-email-label">Email<input id="auth-email" type="email" autocomplete="username" required></label>
         <label id="auth-password-label">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="12" required></label>
@@ -451,13 +571,37 @@
         <button class="btn btn-primary" id="auth-submit" type="submit">Sign in</button>
         <button class="btn btn-secondary" id="auth-switch" type="button" hidden>Create an account</button>
         <button class="link-button" id="auth-forgot" type="button" hidden>Forgot your password?</button>
+        <button class="link-button" id="auth-setup" type="button" hidden>First-time setup: create the owner account</button>
       </form>
+      <section class="auth-privacy" aria-labelledby="auth-privacy-title">
+        <div class="auth-privacy-heading"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7Z"/><path d="m8 12 3 3 5-6"/></svg><h3 id="auth-privacy-title">Your workspace. Clear boundaries.</h3></div>
+        <p>Database rules keep workspaces separate. Other users do not have access to your financial workspace by default. Passwords are stored as salted hashes, and sessions expire after 10 minutes without interaction.</p>
+        <p>MyFinance does not connect to your bank or move money. You choose which statement files to import.</p>
+        <details><summary>Understand access and support</summary><p>Authorized server operators retain infrastructure access. Support access requires your approval and is time-limited and audited.</p></details>
+      </section>
+    </div><p class="auth-footnote">Start with a statement, not a bank connection.<br>MyFinance never moves your money.</p>
+    <div class="marketing-first-step"><span aria-hidden="true">&#8627;</span><p><strong>Just one small start.</strong><br>Import a statement. Get a clearer picture.<br>Choose your next step when you are ready.</p></div></div>
     </div>
-    <p class="auth-footnote">Private by design. Your financial data stays on this server.</p>
+    <section class="marketing-benefits" id="marketing-benefits" aria-labelledby="marketing-benefits-title"><div><p class="marketing-kicker">LESS OVERWHELM. MORE &ldquo;I CAN DO THIS.&rdquo;</p><h2 id="marketing-benefits-title">A clearer today.<br>A more intentional tomorrow.</h2></div>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#8599;</span><p class="marketing-tier">BASIC</p><h3>Find your money story.</h3><p>Import CSV or OFX/QFX files from any bank or credit card, or PDF statements from TD Bank. Review categories and see spending in one place. A useful first step, not another spreadsheet project.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Notice. Adjust. Repeat.</h3><p>Category budgets, spending trends and forecasts help you spot patterns. Recurring-charge and unusual-charge alerts show what deserves a closer look.</p></article>
+      <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO</p><h3>Make room for what matters.</h3><p>Compare debt payoff plans and set monthly savings targets for an emergency fund, a home, college or a well-earned adventure.</p></article>
+    </section>
+    <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
+      <p class="marketing-kicker">ONE PLAN. YOUR WHOLE HOUSEHOLD.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Choose Basic or Pro. A 15-day trial includes all Pro features after selecting a plan and adding payment details in Stripe hosted Checkout.</p>
+      <div class="marketing-plan-grid">
+        <article class="marketing-plan"><p class="marketing-tier">BASIC</p><h3>Your everyday finances.</h3><p class="marketing-price">$9.99<span>USD / month per household</span></p><ul><li>CSV &amp; OFX imports from any bank or card, PDF from TD Bank</li><li>Accounts &amp; transactions</li><li>Category review</li><li>Your everyday dashboard</li><li>Shared household editing</li></ul><p class="marketing-plan-limit">Analytics, budgets, debt planning and goals require Pro.</p><button class="btn btn-secondary" type="button" data-choose-plan="basic" aria-pressed="false">Choose Basic</button></article>
+        <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$14.99<span>USD / month per household</span></p><ul><li>Everything in Basic</li><li>All analytics, budgets &amp; forecasts</li><li>Recurring &amp; unusual charge alerts</li><li>Debt payoff strategies &amp; what-if planning</li><li>Savings goals &amp; monthly targets</li></ul><p class="marketing-plan-limit">All Pro features are included during your 15-day trial, whichever plan you select.</p><button class="btn btn-primary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
+      </div>
+              <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Choose Basic or Pro</li><li><b>2</b> Sign in or create an account when enabled</li><li><b>3</b> Owner confirms payment details in Stripe hosted Checkout</li></ol>
+              <p class="marketing-billing-note">Prices in USD, per household. Your selected plan is automatically charged after the 15-day trial unless cancelled. Only the household owner manages billing and invitations. Cancel in the Stripe billing portal; trial access continues until its end. The owner receives a reminder email 24 hours before the trial ends. Payment details are never entered in this app. Existing paid access is retained.</p>
+            <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="#marketing-signin" data-marketing-jump="marketing-signin" data-marketing-signin>Sign in to continue <span aria-hidden="true">&uarr;</span></a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
+          </section>
+          <footer class="marketing-footer"><strong>Small steps count. So do you.</strong><p>Planning tools, not financial advice. Forecasts and payoff dates are estimates; results depend on your inputs and actions.</p><a class="marketing-top-link" href="#marketing-top" data-marketing-jump="top">Back to top <span aria-hidden="true">&uarr;</span></a></footer>
   </section>
   <div class="app-container">
     <!-- HAMBURGER BUTTON (visible on mobile) -->
-    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
     <!-- NAVIGATION -->
@@ -471,47 +615,80 @@
         <span>MyFinance</span>
       </div>
       <div class="sidebar-caption">YOUR MONEY, WITH DIRECTION</div>
+      <nav aria-label="Main navigation">
       <ul class="nav-list">
-        <li><button class="nav-btn active" onclick="showView('dashboard')">📊 Dashboard</button></li>
-        <li><button class="nav-btn" onclick="showView('categories')">🏷️ Categories</button></li>
-        <li><button class="nav-btn" onclick="showView('transactions')">💰 Transactions</button></li>
-        <li><button class="nav-btn" onclick="showView('etl')">↳ Import review</button></li>
-        <li><button class="nav-btn" onclick="showView('payoff')">🏔️ Payoff Plan</button></li>
-        <li><button class="nav-btn" onclick="showView('goals')">🎯 Goals</button></li>
-        <li><button class="nav-btn" onclick="showView('insights')">◈ Spending coach</button></li>
-        <li><button class="nav-btn" onclick="showView('settings')">⚙ Settings &amp; support</button></li>
-        <li class="admin-only"><a class="nav-btn" href="/admin.html">🛠 Admin console</a></li>
+        <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
+        <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
+        <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
+        <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
+        <li><a class="nav-btn nav-pro" data-view="analytics" href="#analytics"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>Analytics<span class="pro-nav-badge" id="pro-nav-badge">PRO</span></a></li>
+        <li><a class="nav-btn" data-view="knowledge-base" href="#knowledge-base"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 5.5v13A2.5 2.5 0 0 1 6.5 16H20M8 7h8m-8 4h8"/></svg>Knowledge Base</a></li>
+        <li><a class="nav-btn" data-view="payoff" href="#payoff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2 20 8-15 5 9 3-5 5 11ZM7 11l3 2 3-2"/></svg>Debt-free plan<span class="plus-nav-badge">PRO</span></a></li>
+        <li><a class="nav-btn" data-view="goals" href="#goals"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 8-8"/></svg>Goals<span class="plus-nav-badge">PRO</span></a></li>
+        <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Spending coach</a></li>
+        <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
+        <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
+        <li class="admin-only" id="nav-admin-item" hidden><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
       </ul>
+      </nav>
+      <details id="advanced-diagnostics-nav" class="diagnostics-nav">
+        <summary>Advanced diagnostics</summary>
+        <nav aria-label="Advanced diagnostics">
+          <ul class="nav-list">
+            <li><a class="nav-btn" data-view="transaction-review" href="#transaction-review"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16.2 16.2 4.3 4.3M8 10.8l1.8 1.8 3.8-4"/></svg>Transaction troubleshooting</a></li>
+            <li><a class="nav-btn" data-view="activity" href="#activity"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>Activity log</a></li>
+          </ul>
+        </nav>
+      </details>
       <div class="sidebar-bottom"><p id="account-name"></p><small>Small steps. Real progress.</small><button class="btn btn-secondary" onclick="FinanceSession.logout()">Sign out</button></div>
     </aside>
 
     <!-- CONTENT AREA -->
     <main class="main-content">
+      <div class="workspace-bar">
+        <nav aria-label="Breadcrumb"><a href="#dashboard">Workspace</a><span aria-hidden="true">/</span><span id="current-page" aria-current="page">Dashboard</span></nav>
+        <span class="workspace-badge"><span aria-hidden="true"></span>Private workspace</span>
+      </div>
       
       <!-- DASHBOARD -->
       <section id="dashboard-view" class="view active">
-        <header class="header">
-          <div><p class="eyebrow">THE BIG PICTURE</p><h1>Your money at a glance</h1><p class="muted">Know where you stand. Choose what comes next.</p></div>
-          <div class="toolbar" style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="openImportModal('plaid')">🏦 Connect a Bank</button>
-            <button class="btn btn-secondary" onclick="openImportModal('csv')">📥 Import Statements</button>
-          </div>
-        </header>
+        <h1 class="visually-hidden">Dashboard</h1>
+        <section id="welcome-hero" class="welcome-hero" aria-label="Welcome and insights"></section>
+        <div class="header-actions" style="margin: 12px 0;">
+          <button class="btn btn-primary" onclick="openImportModal('plaid')">Connect a bank</button>
+          <button class="btn btn-secondary" onclick="openImportModal('csv')">Import statements</button>
+        </div>
 
-        <!-- MONTHLY CASHFLOW HISTORY (INCOME VS EXPENSE) -->
-        <div class="panel" style="padding: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div class="metrics-grid" id="dashboard-metrics"></div>
+        <div id="balance-freshness-note" class="muted" style="font-size:12px;margin:-10px 0 12px;"></div>
+
+        <div id="upcoming-section" class="panel section-panel">
+          <div class="section-head">
             <div>
-              <h2 style="font-size: 20px; margin: 0;">📈 Monthly Income vs Expense History</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track patterns, seasonal trends, and net cashflow across months and years</div>
+              <h2>Upcoming payments &amp; projected runway</h2>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">The next 30 days, plus unpaid bills from earlier this month. Paid fixed bills are in the history drawer above the timeline. The running balance starts from your latest recorded balance; unrecorded payments are estimates.</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <label for="cashflow-year-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Year:</label>
-              <select id="cashflow-year-select" onchange="changeCashflowYear(this.value)" style="padding: 8px 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
-              </select>
+            <div class="section-head-actions">
+              <div id="cashflow-safety-badge"></div>
+              <div class="view-toggle" role="group" aria-label="Upcoming payments layout">
+                <button type="button" data-pay-view="calendar" onclick="setPayView('calendar')" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>Calendar</button>
+                <button type="button" data-pay-view="list" onclick="setPayView('list')" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4h8.5M5.5 8h8.5M5.5 12h8.5"/><circle cx="2.5" cy="4" r=".9"/><circle cx="2.5" cy="8" r=".9"/><circle cx="2.5" cy="12" r=".9"/></svg>List</button>
+              </div>
             </div>
           </div>
-
+          <div id="dashboard-payments"></div>
+        </div>
+        <!-- INCOME & EXPENSE HISTORY (optional drawer) -->
+        <details id="cashflow-history" class="panel section-panel history-disclosure">
+          <summary>
+            <div><h2>Income &amp; expense history</h2><p>Month-by-month income, spending and net cashflow by year</p></div>
+            <span class="history-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          </summary>
+          <div class="history-body">
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px;">
+              <label for="cashflow-year-select" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Year:</label>
+              <select id="cashflow-year-select" onchange="changeCashflowYear(this.value)" style="padding: 8px 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;"></select>
+            </div>
           <!-- Key Metrics Badges for Selected Year -->
           <div id="cashflow-year-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;"></div>
 
@@ -524,88 +701,119 @@
             <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: var(--danger); border-radius: 3px; display: inline-block;"></span> <span>Expenses</span></div>
             <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 14px; height: 14px; background: #3b82f6; border-radius: 3px; display: inline-block;"></span> <span>Net Cashflow</span></div>
           </div>
-        </div>
-
-        <div class="metrics-grid" id="dashboard-metrics"></div>
-
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-            <div>
-              <h2 style="margin: 0;">📅 Upcoming Payments & Projected Runway</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Last month's fixed bills, using the same payment day and amount. Only unpaid bills reduce the latest recorded balance; no future income is assumed.</div>
-            </div>
-            <div id="cashflow-safety-badge"></div>
           </div>
-          <div id="balance-freshness-note" class="muted" style="font-size:12px;margin:-10px 0 12px;"></div>
-          <div id="dashboard-payments"></div>
-        </div>
+        </details>
       </section>
 
       <!-- CATEGORY OVERVIEW -->
       <section id="categories-view" class="view">
         <header class="header category-overview-header">
-          <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">A colorful snapshot of where your money goes. Pick a category to view its transactions.</p></div>
-          <button class="btn btn-primary" onclick="showView('category-admin')">⚙ Manage categories</button>
+          <div><p class="eyebrow">YOUR SPENDING, ORGANIZED</p><h1>Categories</h1><p class="muted">A little clarity for every part of your life. Open a category to explore its transactions.</p></div>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/categories"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button></div>
         </header>
+        <div class="filter-panel panel">
+          <label for="category-filter-period">Time period<select id="category-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
+          <p id="category-filter-status" class="filter-status" role="status"></p>
+          <div id="category-filter-months" class="month-picker" hidden></div>
+        </div>
         <div id="category-overview-summary" class="category-overview-summary"></div>
         <div id="category-cards" class="category-cards" aria-live="polite"></div>
       </section>
 
+      <!-- PRO ANALYTICS -->
+      <section id="analytics-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow" id="analytics-eyebrow">MYFINANCE PRO &middot; ANALYTICS</p><h1 id="analytics-heading">Your spending, like a market</h1><p class="muted" id="analytics-intro">Trends, moving averages, forecasts and signals across every category, so you can act before the month gets away from you.</p></div>
+          <div class="pro-header-actions" id="analytics-actions"></div>
+        </header>
+        <div id="analytics-content" class="analytics-content" aria-live="polite"></div>
+      </section>
+
+      <section id="knowledge-base-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">KNOWLEDGE BASE · FIRST GUIDE</p><h1>Make sense of your analytics</h1><p class="muted">A practical guide to what each view measures, how to use it, and what it can (and cannot) tell you.</p></div>
+        </header>
+        <div class="kb-content">
+          <section class="kb-intro panel">
+            <p>MyFinance has two analytics views with different jobs. <strong>Overview</strong> looks for changes in your own transaction history. <strong>Spending Compass</strong> adds context from published U.S. household spending data and looks for places your own spending could move toward levels you have already reached.</p>
+            <nav class="kb-jump-links" aria-label="Analytics guide sections">
+              <a class="btn btn-primary" href="#analytics" data-view="analytics">Open Analytics</a>
+              <a class="btn btn-secondary" href="#analytics/compass" data-view="analytics/compass">Open Spending Compass</a>
+              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-overview">Overview cards</button>
+              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-compass">Compass panels</button>
+            </nav>
+          </section>
+          <section class="kb-section" aria-labelledby="kb-start-title">
+            <div class="kb-section-heading"><p class="eyebrow">GETTING USEFUL RESULTS</p><h2 id="kb-start-title">Start with complete, well-organized data</h2></div>
+            <div class="kb-grid kb-grid-3">
+              <article class="kb-card"><h3>Import statements regularly</h3><p>Missing statements make totals look lower than they were. At least 3 complete months help the Overview averages; longer histories make trend signals steadier. Compass comparisons use completed months and need at least 3 full months in standard spending categories.</p></article>
+              <article class="kb-card"><h3>Check categories and transfers</h3><p>Correct categories make category comparisons meaningful. Transfers between your own accounts are excluded from spending to avoid counting the same money twice. Review unusual classifications before acting on a signal.</p></article>
+              <article class="kb-card"><h3>Set your household profile</h3><p>In Spending Compass, enter household size, region and rent/own status for a closer comparison. Until you do, it uses the average U.S. household. Comparisons are guideposts, not targets every household should meet.</p></article>
+            </div>
+            <p class="kb-caveat">Forecasts assume recent patterns continue. They are estimates, can change when new transactions arrive, and are not financial advice.</p>
+          </section>
+          <section class="kb-section" id="knowledge-base-overview" aria-labelledby="kb-overview-title">
+            <div class="kb-section-heading"><p class="eyebrow">ANALYTICS · OVERVIEW</p><h2 id="kb-overview-title">Your history, signals and near-term picture</h2><p>Use this view to notice a change, identify where it came from, then decide what to inspect or adjust.</p></div>
+            <article class="kb-feature panel"><h3>At-a-glance measures</h3><p class="kb-purpose">Six quick checks summarize the current month and recent household finances.</p>
+              <div class="kb-metric-list">
+                <div><h4>Spent this month</h4><p>Spending since the first of this month, compared with the same point last month. Useful for spotting a change in pace; partial months should only be compared at the same point in time.</p></div>
+                <div><h4>Projected</h4><p>Estimated month-end spending, including bills still due and typical flexible spending for the remaining days. Treat it as an early warning, not a promise.</p></div>
+                <div><h4>Avg monthly</h4><p>Average monthly spending across the last 3 full months, shown beside average income. A quick baseline for whether the household is generally spending more or less than it brings in.</p></div>
+                <div><h4>Savings rate</h4><p>Average income left after spending, as a share of income over those 3 full months. It cannot be measured without recorded income and may be negative when spending exceeds income.</p></div>
+                <div><h4>Fixed vs flexible</h4><p>The share of average monthly spending marked as fixed bills. It helps distinguish committed costs from more adjustable spending; incorrect fixed-bill labels distort this share.</p></div>
+                <div><h4>Daily burn</h4><p>This month's spending pace per elapsed day, alongside days left in the month. Use it with the projection to see whether the current pace is sustainable, not as a spending target.</p></div>
+              </div>
+            </article>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Month-end forecast</h3><p>Plots this month's spending pace beside last month and estimates the finish, splitting the estimate into bills still due and expected flexible spending. Check it after large purchases or as bills come due; compare like-for-like months and remember that new data can move the estimate.</p></article>
+              <article class="kb-card"><h3>6-month cash flow</h3><p>Projects the recorded balance forward if typical income and spending continue. The starting point comes from your latest recorded account balance; the line highlights the projected balance, lowest point and typical surplus or shortfall. Update balances and fixed bills, and treat the result as a scenario—not a guaranteed runway.</p></article>
+              <article class="kb-card"><h3>Monthly spend trend</h3><p>Shows up to 12 months of spending, a 3-month moving average and income. The average smooths one-off bumps so you can see direction; use the monthly bars to find when a change began. Missing statement months can make the trend misleading.</p></article>
+              <article class="kb-card"><h3>Recurring charges not marked fixed</h3><p>Finds steady, scheduled charges that are not already marked as fixed bills, estimates their monthly/yearly cost and flags detected price increases. Review the merchant, amount and cadence: a repeating charge is not automatically a bill or subscription. Mark genuine bills fixed so they can feed the bill calendar and forecast; review unwanted charges with the provider.</p></article>
+              <article class="kb-card"><h3>Category signals</h3><p>For each spending category, compare this month, the same point last month, 3- and 6-month averages, share of spending, trend and volatility. “Running hot” means the projected month is at least 15% above its 3-month average; “Cooling” is a direction, not proof that spending is healthy. Sort the columns, then open a category to inspect its transactions.</p></article>
+              <article class="kb-card"><h3>Unusual activity</h3><p>Surfaces individual charges or category spending far outside the usual pattern. Use it as a review queue for possible duplicates, miscategorized items or genuine one-offs—not an automatic fraud alert. Confirm against the statement before changing anything.</p></article>
+              <article class="kb-card"><h3>Top merchants</h3><p>Ranks where the last 90 days of spending went, including transaction count, average purchase, share and change. It is useful for finding a concentrated or growing expense; a high total alone does not tell you whether the spending is avoidable.</p></article>
+              <article class="kb-card"><h3>Weekly rhythm</h3><p>Totals recent spending by weekday and weekend, with an average week and quietest day. It can prompt questions about routines, but it does not adjust for how many of each weekday occur or why purchases happened. Treat small differences as descriptive, not behavioral evidence.</p></article>
+            </div>
+          </section>
+          <section class="kb-section" id="knowledge-base-compass" aria-labelledby="kb-compass-title">
+            <div class="kb-section-heading"><p class="eyebrow">SPENDING COMPASS</p><h2 id="kb-compass-title">Your patterns, with outside context</h2><p>Compass is not another forecast. It combines your category history with published Consumer Expenditure Survey benchmarks, adjusted for household size, region and housing. Set a time period for each panel; short or incomplete periods can produce unstable comparisons.</p></div>
+            <article class="kb-feature panel"><h3>Compass plan and headline</h3><p>Start here. It estimates potential monthly savings for categories where spending is at least $10 above a suggested level and is either above a relevant benchmark or showing an upward trend. Suggested levels are based on your own lower-spending months, typical household spending or—when spending is seasonal—the same months last year. The opportunity is a scenario, not a promised saving or a requirement to spend like another household. Review the category evidence before setting a target.</p></article>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Where your money flows</h3><p>Shows how average monthly income is divided among fixed bills, everyday categories, debt minimums and money left over. Use it to see the broad shape of your budget and which category contributes most. It reflects imported and classified activity; it cannot include bills or debt payments that were never recorded.</p></article>
+              <article class="kb-card"><h3>Where the signals overlap</h3><p>Combines three separate checks—above a similar household, trending up and unusually high for your own history. Categories with multiple signals deserve earlier review; one signal alone is a prompt to watch, not a verdict. This adds benchmark and unusual-month context beyond Overview's category trend table.</p></article>
+              <article class="kb-card"><h3>Who gets your money</h3><p>Explores vendors and spending concentration. Select a bubble to see that vendor's story; change the bubble size or color to explore the available measures. It helps move from “which category?” to “which merchant?”—but a large merchant is not necessarily a problem.</p></article>
+              <article class="kb-card"><h3>Hot and cold months</h3><p>A category-by-month view that makes seasonality, recurring peaks and unusually quiet months easier to see. Hover or focus a cell for the exact value. Compare complete months only; a missing statement is not a zero-spending month.</p></article>
+              <article class="kb-card"><h3>Your normal range</h3><p>Compares recent category spending with its historical range and shows how exceptional the latest month is relative to prior months. Use it to distinguish a routine fluctuation from a genuine spike, while checking that the history is complete and relevant.</p></article>
+              <article class="kb-card"><h3>Technical readings</h3><p>An optional detail table for average vs. typical spending, momentum, moving-average crossovers, volatility bands, how many recent months rose, and whether change came from purchase frequency or purchase size. It is for investigating the “why” behind a signal; the headline and plan are enough for a quick review.</p></article>
+            </div>
+            <p class="kb-caveat">Benchmark values come from the cited U.S. Bureau of Labor Statistics Consumer Expenditure Survey, not other MyFinance users. Contracted bills such as mortgage, rent, loans, insurance and internet are not compared. Survey averages are context, not a judgment about what you should spend.</p>
+          </section>
+          <section class="kb-section kb-value-review" aria-labelledby="kb-value-title">
+            <div class="kb-section-heading"><p class="eyebrow">WHAT IS DISTINCTIVE?</p><h2 id="kb-value-title">A candid note on usefulness</h2></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Strongest decision support</h3><p>The month-end forecast, category signals and recurring-charge review each suggest a concrete next step: check the pace, investigate a category, or verify a repeating payment. Compass adds a different lens by combining personal trends with an external household benchmark.</p></article>
+              <article class="kb-card"><h3>Most useful together</h3><p>Overview's “Running hot” signal compares a category with your own recent average; Compass's overlap adds whether it is above a similar household and unusually high for you. These are related but not identical. Use Overview to spot movement, Compass to add context, and transaction details to decide.</p></article>
+              <article class="kb-card"><h3>Worth evaluating</h3><p>Weekly rhythm currently reports weekday totals and a peak day, but gives little context for day-of-week frequency or a practical action. If it does not change a decision, it may be a candidate to simplify or replace with a normalized comparison. Top merchants can also be descriptive unless the user can drill into a specific opportunity. These are product questions, not conclusions from your personal data.</p></article>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section id="category-admin-view" class="view">
         <header class="header category-admin-header">
-          <div><p class="eyebrow">PERSONALIZE YOUR WORKSPACE</p><h1>Category admin</h1><p class="muted">Manage category names and the merchant mappings that automatically organize future imports.</p></div>
+          <div><p class="eyebrow">PERSONALIZE YOUR WORKSPACE</p><h1>Manage categories</h1><p class="muted">Manage category names and the merchant mappings that automatically organize future imports.</p></div>
           <button class="btn btn-secondary" onclick="showView('categories')">← Back to categories</button>
         </header>
         <div id="category-admin-content"></div>
       </section>
 
-      <!-- DEBT PAYOFF PLAN -->
+      <!-- DEBT-FREE PROGRAM -->
       <section id="payoff-view" class="view">
         <header class="header">
-          <h1>🏔️ Debt Avalanche Payoff</h1>
-          <div style="display: flex; gap: 16px;">
-            <div class="metric-card" style="padding: 10px 20px; flex-direction: row; gap: 20px; align-items: center; margin: 0;">
-               <div><span class="metric-label">Total Debt:</span> <span id="payoff-total-debt" class="metric-value" style="font-size: 18px;">$0.00</span></div>
-               <label>Monthly budget ($)<input id="payoff-budget" type="number" min="0" step="0.01" placeholder="Enter budget" onchange="loadPayoffPlan()"></label>
-               <button class="btn btn-primary" onclick="openDebtEditor()">+ Add debt or loan</button>
-            </div>
-          </div>
+          <div><p class="eyebrow">A CLEARER PATH FORWARD</p><h1>Your debt-free plan</h1><p class="muted">Every balance in one place. Pick a strategy, set what you can afford and watch the finish line move closer.</p></div>
+          <a class="btn btn-secondary header-tour" href="#tutorials/debt"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a>
         </header>
-
-        <!-- Timeline visualization -->
-        <div class="panel" style="padding: 24px; margin-bottom: 12px;">
-          <h3 style="margin-bottom: 16px;">Your avalanche projection</h3>
-          <p class="muted">Minimums first, then extra money to the highest APR. Estimates use monthly interest, no new charges, and your entered budget; lender calculations may differ.</p>
-          <div id="payoff-timeline-chart" style="display: flex; flex-direction: column; gap: 16px;"></div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 350px; gap: 32px;">
-          <div class="panel" style="padding: 24px;">
-            <h3 style="margin-bottom: 16px;">Step-by-Step Payment Schedule</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr style="text-align: left; color: var(--text-secondary); font-size: 12px; border-bottom: 1px solid var(--border);">
-                  <th style="padding: 12px;">Priority</th>
-                  <th>Account</th>
-                  <th style="text-align: right;">Balance</th>
-                  <th style="text-align: right;">This Month's Payment</th>
-                  <th style="text-align: center;">Due Day</th>
-                </tr>
-              </thead>
-              <tbody id="payoff-schedule-body"></tbody>
-            </table>
-          </div>
-
-          <div class="panel" style="padding: 24px; background: var(--bg-tertiary);">
-            <h3 style="margin-bottom: 16px;">🏆 Achievements</h3>
-            <div id="achievements-list" style="display: flex; flex-direction: column; gap: 12px;">
-              <div class="list-item" style="background: var(--bg-secondary); border-radius: 8px;">
-                <div style="font-weight: 700; color: var(--warning);">⭐ Program Goal: Debt Freedom</div>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Build a plan around your actual balances, rates, and minimum payments. Keep an emergency cushion and check your savings goals before increasing the budget.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div id="plan-debt-root" class="plan-root"></div>
       </section>
 
       <!-- INSIGHTS -->
@@ -627,34 +835,58 @@
       <!-- TRANSACTIONS -->
       <section id="transactions-view" class="view">
         <header class="header">
-          <h1>Transactions</h1>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <select id="txn-filter-category" onchange="loadAllTransactions()" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-              <option value="">All Categories</option>
-            </select>
-            <label for="txn-filter-month" style="font-size: 13px; color: var(--text-secondary);">Month</label>
-            <input id="txn-filter-month" type="month" onchange="loadAllTransactions()" aria-label="Filter transactions by month" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; background: var(--bg-tertiary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);">
-              <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
-              Fixed Bills Only
-            </label>
-          </div>
+          <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
-        
-        <div class="panel" style="padding: 24px;">
-          <table style="width: 100%; border-collapse: collapse;">
+          <div class="filter-panel panel">
+            <label for="txn-filter-search" class="search-filter">Search transactions
+            <input id="txn-filter-search" type="search" placeholder="e.g. Netflix, Zelle, 42.50" autocomplete="off" spellcheck="false"></label>
+            <label for="txn-filter-category">Category
+            <select id="txn-filter-category" onchange="loadAllTransactions()">
+              <option value="">All Categories</option>
+            </select></label>
+            <label for="txn-filter-period">Time period
+            <select id="txn-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
+            <label for="txn-filter-paymode">Pays by
+            <select id="txn-filter-paymode" onchange="loadAllTransactions()">
+              <option value="">All payments</option>
+              <option value="auto">Auto-pay</option>
+              <option value="manual">Manual</option>
+              <option value="unset">Not set</option>
+            </select></label>
+            <label class="checkbox-filter">
+              <input type="checkbox" id="txn-filter-fixed" onchange="loadAllTransactions()">
+              Fixed bills only
+            </label>
+            <button class="btn btn-secondary" type="button" onclick="resetTransactionFilters()">Reset filters</button>
+            <button class="btn btn-secondary" type="button" data-name-rules title="Friendly names you gave to messy bank descriptions">Renamed payees</button>
+            <p id="txn-filter-status" class="filter-status" role="status"></p>
+            <div id="txn-filter-months" class="month-picker" hidden></div>
+          </div>
+        <div id="txn-summary" class="metrics-grid" aria-live="polite"></div>
+        <p class="mobile-scroll-hint">Swipe sideways to see all transaction details.</p>
+        <div class="panel transaction-panel" role="region" aria-label="Transaction details" tabindex="0">
+          <table class="transactions-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
-              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;">Fixed Bill?</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
+              <tr><th style="padding: 12px;">Date</th><th>Description</th><th style="padding: 12px;">Category</th><th style="padding: 12px; text-align: center;" title="Debits: a fixed monthly bill. Deposits: counts as regular income for payday forecasts.">Fixed / Income</th><th style="padding: 12px;" title="Auto-pay goes out on its own; Manual needs you to pay it">Pays by</th><th style="text-align: right; padding: 12px;">Amount</th></tr>
             </thead>
             <tbody id="full-txn-table"></tbody>
           </table>
         </div>
+        <nav id="txn-pagination" class="toolbar" aria-label="Transaction pages" hidden></nav>
+        <details class="panel" style="padding: 16px; margin-top: 20px;">
+          <summary>Older import tools</summary>
+          <p class="muted">Current imports save valid new rows directly and show duplicates, warnings and errors in the import result. This queue is only for older records.</p>
+          <a class="btn btn-secondary" href="#etl" data-view="etl">Legacy import review</a>
+          <a class="btn btn-secondary" href="#tutorials/transactions/import-review">How import results work</a>
+        </details>
       </section>
 
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <h1>⚙️ Import Review</h1>
+          <div><p class="eyebrow">OLDER QUEUED RECORDS ONLY</p><h1>Legacy import review</h1><p class="muted">Current imports do not wait here. Read their results in the import dialog.</p></div>
+          <a class="btn btn-secondary" href="#transactions" data-view="transactions">Back to Transactions</a>
         </header>
         <div class="panel" style="padding: 24px; margin-bottom: 16px;">
           <h2>Possible duplicate transactions</h2>
@@ -666,9 +898,10 @@
         <div class="panel" style="padding: 24px;">
           <h2>Import processing issues</h2>
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
-            These transactions were skipped or flagged by the ETL process (duplicates, errors, or exclusions). Review them here to prevent data loss.
+            These records came from an older import queue. Compare with Transactions before using Add anyway: it bypasses duplicate checks and saves the record as Other without an account. Review the category and assign its source under Accounts afterwards. Dismiss removes only the queued copy, not an existing transaction.
           </p>
-          <table style="width: 100%; border-collapse: collapse;">
+          <div class="table-scroll" role="region" aria-label="Older queued import records" tabindex="0">
+          <table class="review-table" style="width: 100%; border-collapse: collapse;">
             <thead style="text-align: left; color: var(--text-secondary);">
               <tr>
                 <th style="padding: 12px;">Date</th>
@@ -680,84 +913,168 @@
             </thead>
             <tbody id="etl-staging-table"></tbody>
           </table>
+          </div>
         </div>
       </section>
 
       <!-- GOALS -->
       <section id="goals-view" class="view">
         <header class="header">
-          <h1>🎯 Savings Goals</h1>
-          <button class="btn btn-primary" onclick="openAddGoalModal()">+ New Goal</button>
+          <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Savings goals</h1><p class="muted">Every goal gets a monthly amount that fits next to your bills and your debt-free plan.</p></div>
+          <a class="btn btn-secondary header-tour" href="#tutorials/goals"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>How goals work</a>
         </header>
+        <div id="plan-goals-root" class="plan-root"></div>
+      </section>
 
-        <!-- Funding Overview -->
-        <div id="goals-funding-overview" class="panel" style="padding: 20px; margin-bottom: 16px;"></div>
+      <!-- ACCOUNTS -->
+      <section id="accounts-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">KNOW WHERE YOUR MONEY GOES</p><h1>Accounts</h1><p class="muted">Organize your imported accounts and review transfer recipients, so your spending, income and savings tell the right story.</p></div>
+          <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/accounts">How Accounts works</a><button class="btn btn-primary" onclick="openImportModal()">Import a statement</button></div>
+        </header>
+        <div id="accounts-root"></div>
+      </section>
 
-        <!-- Goals Grid -->
-        <div id="goals-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px;"></div>
+      <section id="transaction-review-view" class="view diagnostics-view">
+        <header class="header diagnostics-header">
+          <div><p class="eyebrow">ADVANCED DIAGNOSTICS / TRANSACTIONS</p><h1>Transaction troubleshooting</h1>
+            <p class="muted">A closer look at how your totals are built. Review an imported statement and correct transfer decisions when needed.</p></div>
+        </header>
+        <section class="panel review-controls" aria-labelledby="review-start-title">
+          <div class="review-controls-intro"><span class="review-step" aria-hidden="true">1</span><div><h2 id="review-start-title">Start with an import</h2><p>Select an import first, then narrow by how transactions are handled. Review 50 transactions per page.</p></div></div>
+          <div class="review-toolbar">
+            <label for="transfer-review-import" class="review-import-label">Imported statement
+              <select id="transfer-review-import" aria-describedby="transfer-review-import-summary"><option value="">Choose an import</option></select>
+            </label>
+            <button type="button" class="btn btn-secondary" id="transfer-review-import-more" hidden>Load older imports</button>
+            <label for="transfer-review-filter">Show
+              <select id="transfer-review-filter">
+                <option value="all">All transactions</option>
+                <option value="excluded">Not counted in totals</option>
+                <option value="counted">Counted in totals</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn-secondary" id="transfer-review-refresh">Refresh</button>
+          </div>
+          <p id="transfer-review-import-summary" class="review-import-summary" role="status">Choose an import to see its transactions and review how they affect your totals.</p>
+        </section>
+        <details class="review-explainer panel">
+          <summary>How to read transaction statuses</summary>
+          <dl class="review-status-legend">
+            <div><dt><span class="handling-status handling-counted">Counted in totals</span></dt><dd>Affects spending or income.</dd></div>
+            <div><dt><span class="handling-status handling-internal">Internal transfer</span></dt><dd>Excluded from spending and income.</dd></div>
+            <div><dt><span class="handling-status handling-savings">Savings transfer</span></dt><dd>Tracked as saved, not spending or income.</dd></div>
+            <div><dt><span class="handling-status handling-unknown">Needs review</span></dt><dd>Temporarily excluded until you decide.</dd></div>
+          </dl>
+        </details>
+        <p id="transfer-review-error" class="review-error" role="alert"></p>
+        <div class="panel review-results">
+          <div class="panel-header"><h2>Transaction treatment</h2><span id="transfer-review-count" role="status"></span></div>
+          <div class="review-table-wrap" role="region" aria-label="Transaction treatment" tabindex="0">
+            <table class="review-audit-table">
+              <thead><tr><th scope="col">Date</th><th scope="col">Description</th><th scope="col">Account / file</th><th scope="col">Category</th><th scope="col">How handled</th><th scope="col">Amount</th><th scope="col">Correct decision</th></tr></thead>
+              <tbody id="transfer-review-rows"><tr><td colspan="7"><strong>Choose an import to get started</strong><small>Your transactions will appear here, 50 at a time.</small></td></tr></tbody>
+            </table>
+          </div>
+          <nav id="transfer-review-pagination" class="toolbar diagnostics-pagination" aria-label="Transaction review pages"></nav>
+        </div>
+      </section>
+
+      <section id="activity-view" class="view diagnostics-view">
+        <header class="header diagnostics-header">
+          <div><p class="eyebrow">ADVANCED DIAGNOSTICS / WORKSPACE HISTORY</p><h1>Activity log</h1>
+            <p class="muted">Review imports and changes made in this workspace. Times are shown in your local time zone.</p></div>
+          <button type="button" class="btn btn-secondary" id="activity-refresh">Refresh</button>
+        </header>
+        <p id="activity-error" class="review-error" role="alert"></p>
+        <section class="panel activity-panel" aria-labelledby="activity-history-title">
+          <div class="panel-header"><div><h2 id="activity-history-title">Workspace timeline</h2><p>Imports, corrections and account activity in one place.</p></div><p id="activity-count" role="status"></p></div>
+          <div id="activity-events" class="activity-list" aria-live="polite"></div>
+          <nav id="activity-pagination" class="toolbar diagnostics-pagination" aria-label="Activity log pages"></nav>
+        </section>
+      </section>
+
+      <!-- TUTORIALS -->
+      <section id="tutorials-view" class="view">
+        <header class="header">
+          <div><p class="eyebrow">LEARN MYFINANCE</p><h1>Tutorials</h1><p class="muted">Short, narrated walkthroughs. Press play, pause any time, or jump to a chapter.</p></div>
+        </header>
+        <div id="tutorial-root" class="tut-root"></div>
       </section>
 
     </main>
   </div>
 
   <!-- IMPORT MODAL -->
-  <div id="import-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow);">
-      <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="font-size: 18px;">📥 Import Statements</h2>
-        <button onclick="closeImportModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+  <dialog id="import-modal" class="floating-dialog" aria-labelledby="import-title">
+    <div class="floating-dialog-body">
+      <div class="import-header">
+        <div><h2 id="import-title">Import a statement</h2><p>Bring your transactions into one clear view.</p></div>
+        <button type="button" onclick="closeImportModal()" class="dialog-close" aria-label="Close import">&times;</button>
       </div>
 
       <!-- Tabs -->
-      <div style="display: flex; border-bottom: 1px solid var(--border);">
-        <button id="tab-csv" onclick="switchImportTab('csv')" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600;">CSV Bank Export</button>
-        <button id="tab-pdf" onclick="switchImportTab('pdf')" style="flex: 1; padding: 12px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; cursor: pointer; font-weight: 500;">PDF Statement</button>
-        <button id="tab-plaid" onclick="switchImportTab('plaid')" style="flex: 1; padding: 12px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; cursor: pointer; font-weight: 500;">Connect bank</button>
+      <div class="import-tabs" role="group" aria-label="Statement format">
+        <button type="button" id="tab-csv" onclick="switchImportTab('csv')" style="background: var(--primary); color: white; font-weight: 600;" aria-controls="import-csv-panel">CSV / OFX / QFX</button>
+        <button type="button" id="tab-pdf" onclick="switchImportTab('pdf')" style="background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500;" aria-controls="import-pdf-panel">PDF statement</button>
+        <button type="button" id="tab-plaid" onclick="switchImportTab('plaid')" style="background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500;" aria-controls="import-plaid-panel">Connect bank</button>
       </div>
 
-      <div style="padding: 24px;">
+      <div class="import-content">
+        <p class="import-hint" id="import-limit-note">Import one file at a time. Wait for its result before starting another CSV, OFX or PDF import. Multiple-file drops are not supported.</p>
+        <div id="import-account-picker" class="import-account" hidden>
+          <label for="import-account-select">Account <span class="muted">(PDF fallback)</span></label>
+          <select id="import-account-select" aria-describedby="import-account-help"><option value="">Loading accounts…</option></select>
+          <div id="import-new-account" class="import-new-account" hidden>
+            <label>Name<input id="import-new-name" maxlength="80" placeholder="e.g. Chase checking"></label>
+            <label>Type<select id="import-new-kind"></select></label>
+            <label>Last 4 digits<input id="import-new-last4" inputmode="numeric" maxlength="4" placeholder="1180"></label>
+            <label>Bank<input id="import-new-institution" maxlength="80" placeholder="Chase"></label>
+          </div>
+          <p id="import-account-help" class="import-hint">Used to match transfers, so moving money isn't counted as spending.</p>
+        </div>
         <!-- CSV Import Panel -->
         <div id="import-csv-panel">
-          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
-            Upload your bank's CSV export file. Supports any bank format with automatic column detection.
+          <p class="import-description">
+            Use a CSV, OFX or QFX bank export. Dates, columns and amounts are detected automatically.
+            Accounts are matched from the file, including multi-account CSVs. Identified new accounts are created automatically; missing or ambiguous account details need your review.
           </p>
-          <input type="file" id="csv-input" accept=".csv" style="display: none;" onchange="onCsvSelected(event)">
-          <div id="csv-dropzone" onclick="document.getElementById('csv-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
+          <input type="file" id="csv-input" accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo" style="display: none;" onchange="onCsvSelected(event)">
+          <button type="button" id="csv-dropzone" class="import-dropzone" onclick="document.getElementById('csv-input').click()"
                ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
                ondragleave="this.style.borderColor='var(--border)';"
                ondrop="handleCsvDrop(event)">
-            <div style="font-size: 32px; margin-bottom: 12px;">📊</div>
-            <div style="font-weight: 600;">Click or drag a CSV file here</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Any bank format supported</div>
-          </div>
-          <div id="csv-file-list" style="margin-top: 16px;"></div>
-          <div style="margin-top: 16px; display: flex; gap: 12px; align-items: center;">
-            <button class="btn btn-primary" onclick="importCSV()" style="flex: 1;" disabled id="csv-import-btn">🚀 Import CSV</button>
-            <select id="csv-source-select" style="padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
-              <option value="checking">Checking Account</option>
-              <option value="savings">Savings Account</option>
-              <option value="credit_card">Credit Card</option>
-            </select>
+            <span class="import-file-icon" aria-hidden="true">↥</span>
+            <strong>Choose a bank export</strong>
+            <span>or drag it here · CSV, OFX, QFX</span>
+          </button>
+          <div id="csv-file-list" class="import-file-list" aria-live="polite"></div>
+          <section id="csv-account-review" aria-label="Review detected accounts" hidden></section>
+          <section id="csv-overlap-review" aria-label="Review possible duplicate transactions" hidden></section>
+          <div class="import-actions">
+            <button type="button" class="btn btn-primary" onclick="importCSV()" disabled id="csv-import-btn">Import transactions</button>
           </div>
         </div>
 
         <!-- PDF Import Panel -->
         <div id="import-pdf-panel" style="display: none;">
-          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
-            Upload a PDF bank statement. Supports TD Bank checking, savings, and credit card statements.
+          <div class="import-detected-account"><span>Account detected from your statement</span><button type="button" onclick="choosePdfAccount()">Choose account instead</button></div>
+          <p class="import-description">
+            Upload an original bank or credit card PDF. Balances and transactions are checked before saving.
           </p>
           <input type="file" id="pdf-input" accept=".pdf" style="display: none;" onchange="onPdfSelected(event)">
-          <div id="pdf-dropzone" onclick="document.getElementById('pdf-input').click()" style="border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: var(--transition);"
+          <button type="button" id="pdf-dropzone" class="import-dropzone" onclick="document.getElementById('pdf-input').click()"
                ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
                ondragleave="this.style.borderColor='var(--border)';"
                ondrop="handlePdfDrop(event)">
-            <div style="font-size: 32px; margin-bottom: 12px;">📄</div>
-            <div style="font-weight: 600;">Click or drag a PDF statement here</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Maximum 10MB per file</div>
-          </div>
-          <div id="pdf-file-list" style="margin-top: 16px;"></div>
-          <div style="margin-top: 16px;">
-            <button class="btn btn-primary" onclick="importPDF()" style="width: 100%;" disabled id="pdf-import-btn">🚀 Import PDF</button>
+            <span class="import-file-icon" aria-hidden="true">↥</span>
+            <strong>Choose a PDF statement</strong>
+            <span>or drag it here · Up to 12 MB / 100 pages</span>
+          </button>
+          <p class="import-hint">Text-based, unlocked PDFs only. For scans or protected files, use a CSV/OFX export instead. Purchase APR is captured when readable.</p>
+          <div id="pdf-file-list" class="import-file-list" aria-live="polite"></div>
+          <div class="import-actions">
+            <button type="button" class="btn btn-primary" onclick="importPDF()" disabled id="pdf-import-btn">Import statement</button>
           </div>
         </div>
 
@@ -773,45 +1090,76 @@
           <div id="plaid-connections" style="margin-top: 16px;"></div>
         </div>
 
-        <div id="import-result" style="margin-top: 20px; padding: 16px; border-radius: 8px; display: none;"></div>
+        <div id="import-result" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
+        <details id="import-history">
+          <summary>Import history &amp; recovery</summary>
+          <p class="import-hint"><strong>Selecting a file never changes your data.</strong> Select imports, review the validated impact, acknowledge it, then confirm. Undo is reversible using its retained Restore backup.</p>
+          <p class="import-hint">Undo removes only transactions added by the selected imports and keeps a server-side backup for Restore. Skipped duplicates are never removed. Accounts and saved rules stay in place.</p>
+          <p class="import-hint">Older imports are inferred from filename, account and saved timestamp. Verify them carefully: previous PDF statement balances cannot be recovered for these older imports.</p>
+          <div class="import-actions" role="group" aria-label="Recovery mode">
+            <button type="button" class="btn btn-secondary" id="import-history-active" aria-pressed="true">Active imports</button>
+            <button type="button" class="btn btn-secondary" id="import-history-backups" aria-pressed="false">Undone / Restore backups</button>
+          </div>
+          <div class="import-actions" id="import-history-recent-controls">
+            <label>Recent active imports <input id="import-history-count" type="number" min="1" max="100" value="1" style="width: 65px;"></label>
+            <button type="button" class="btn btn-secondary" id="import-history-recent">Select recent</button>
+            <button type="button" class="btn btn-secondary" id="import-history-refresh">Refresh</button>
+          </div>
+          <div id="import-history-list" aria-live="polite"></div>
+          <p id="import-history-selection" role="status">No imports selected.</p>
+          <div class="import-actions">
+            <button type="button" class="btn btn-primary" id="import-history-undo" disabled>Review undo</button>
+            <button type="button" class="btn btn-primary" id="import-history-restore" disabled hidden>Review restore</button>
+          </div>
+          <section id="import-history-review" class="import-recovery-review" aria-labelledby="import-history-review-title" hidden>
+            <h3 id="import-history-review-title">Review before confirming</h3>
+            <div id="import-history-impact"></div>
+            <label><input type="checkbox" id="import-history-ack"> I understand this impact and want to proceed.</label>
+            <div class="import-actions">
+              <button type="button" class="btn btn-secondary" id="import-history-cancel">Cancel review</button>
+              <button type="button" class="btn btn-primary" id="import-history-commit" disabled>Confirm change</button>
+            </div>
+          </section>
+          <p id="import-history-status" role="status" aria-live="polite"></p>
+        </details>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <!-- ADD GOAL MODAL -->
-  <div id="add-goal-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 480px; box-shadow: var(--shadow);">
+  <dialog id="add-goal-modal" class="floating-dialog" aria-labelledby="goal-editor-title">
+    <div class="floating-dialog-body">
       <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="font-size: 18px;">🎯 New Savings Goal</h2>
-        <button onclick="closeAddGoalModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+        <h2 id="goal-editor-title" style="font-size: 18px;">New savings goal</h2>
+        <button onclick="closeAddGoalModal()" class="dialog-close" aria-label="Close goal editor">&times;</button>
       </div>
       <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Goal Name</label>
+          <label for="goal-name" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Goal Name</label>
           <input id="goal-name" type="text" placeholder="e.g., Emergency Fund" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Amount ($)</label>
+            <label for="goal-target" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Amount ($)</label>
             <input id="goal-target" type="number" placeholder="5000" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Current Savings ($)</label>
+            <label for="goal-current" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Current Savings ($)</label>
             <input id="goal-current" type="number" placeholder="0" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Date</label>
+            <label for="goal-date" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Target Date</label>
             <input id="goal-date" type="date" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Priority (1=Highest)</label>
+            <label for="goal-priority" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Priority (1=Highest)</label>
             <input id="goal-priority" type="number" min="1" max="10" value="1" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
           </div>
         </div>
         <div>
-          <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Icon</label>
+          <label for="goal-icon" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Icon</label>
           <select id="goal-icon" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
             <option value="🎯">🎯 General</option>
             <option value="🛡️">🛡️ Emergency</option>
@@ -825,22 +1173,39 @@
             <option value="🎮">🎮 Entertainment</option>
           </select>
         </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label for="goal-monthly" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Monthly amount ($)</label>
+            <input id="goal-monthly" type="number" min="0" step="5" placeholder="Automatic" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+          <div>
+            <label for="goal-day" style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 600;">Set aside on day</label>
+            <input id="goal-day" type="number" min="1" max="31" step="1" placeholder="Payday" style="width: 100%; padding: 10px 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+          </div>
+        </div>
+        <p class="goal-plan-hint">Leave the monthly amount blank and the planner works it out from your target date and budget. It appears on your dashboard calendar on payday unless you pick a day.</p>
+        <label class="goal-include"><input id="goal-included" type="checkbox" checked> Include in my monthly plan</label>
+        <p id="goal-error" role="alert"></p>
         <button class="btn btn-primary" onclick="saveGoal()" style="width: 100%; margin-top: 8px;">Create Goal</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <div class="toast-container" id="toasts"></div>
   <dialog id="mtd-transactions-dialog" class="mtd-dialog" aria-labelledby="mtd-dialog-title">
     <div class="mtd-dialog-shell">
   <header class="mtd-dialog-header">
     <div>
-      <p class="eyebrow">MONTH-TO-DATE DETAIL</p>
+      <p class="eyebrow">CATEGORY ACTIVITY</p>
       <h2 id="mtd-dialog-title"></h2>
       <p id="mtd-dialog-period" class="muted"></p>
     </div>
     <button type="button" class="mtd-dialog-close" aria-label="Close transactions">&times;</button>
   </header>
+  <div class="dialog-filter">
+    <label for="category-dialog-month">Activity month<input id="category-dialog-month" type="month"></label>
+    <button id="category-dialog-all" type="button" class="btn btn-secondary">All time</button>
+  </div>
   <div class="mtd-dialog-summary">
     <div><span>Total spending</span><strong id="mtd-dialog-total">$0.00</strong></div>
     <div><span>Transactions</span><strong id="mtd-dialog-count">0</strong></div>
@@ -855,6 +1220,10 @@
   <script>
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+    function usd(value) {
+      const number = Number(value) || 0;
+      return (number < 0 ? '-' : '') + '$' + Math.abs(number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     // TIMEZONE-SAFE DATE PARSING
     // 'new Date("2026-06-01")' parses as UTC midnight, which shifts to previous day
@@ -897,6 +1266,10 @@
       }
     }
 
+    document.getElementById('cashflow-history')?.addEventListener('toggle', event => {
+      if (event.target.open && !cashflowDataCache) loadCashflowChart();
+    });
+
     function changeCashflowYear(year) {
       if (!cashflowDataCache) return;
       renderCashflowYear(year);
@@ -913,15 +1286,15 @@
 
       // 1. KPI Badges
       summaryContainer.innerHTML = `
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card income" style="padding: 16px;">
           <div class="metric-label">${yearNum} Total Income</div>
           <div class="metric-value" style="font-size: 22px; color: var(--success);">$${summary.totalIncome.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card expense" style="padding: 16px;">
           <div class="metric-label">${yearNum} Total Expenses</div>
           <div class="metric-value" style="font-size: 22px; color: var(--danger);">$${summary.totalExpenses.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
-        <div class="metric-card" style="padding: 16px;">
+        <div class="metric-card net" style="padding: 16px;">
           <div class="metric-label">${yearNum} Net Cashflow</div>
           <div class="metric-value" style="font-size: 22px; color: ${summary.netSavings >= 0 ? 'var(--success)' : 'var(--danger)'};">${summary.netSavings >= 0 ? '+' : ''}$${summary.netSavings.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
         </div>
@@ -941,7 +1314,7 @@
         const hasData = m.income > 0 || m.expenses > 0;
 
         chartHtml += `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative;" title="${m.monthName} ${yearNum}: Income $${m.income.toFixed(2)} | Expenses $${m.expenses.toFixed(2)} | Net $${m.net.toFixed(2)}">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative;" title="${m.monthName} ${yearNum}: Income ${usd(m.income)} | Expenses ${usd(m.expenses)} | Net ${usd(m.net)}">
             <!-- Bars Group -->
             <div style="display: flex; gap: 4px; align-items: flex-end; width: 100%; justify-content: center; height: 170px;">
               <!-- Income Bar -->
@@ -966,7 +1339,21 @@
     }
 
     // DASHBOARD LOGIC
+    let dashboardRequest = 0;
     async function loadDashboard() {
+      const run = ++dashboardRequest;
+      const finishLoad = window.FinancePerformance?.begin('panel', 'dashboard.load');
+      const pending = ['/summary', '/upcoming-payments', '/category-spending'].map(async path => {
+        const response = await fetch(`/api/dashboard${path}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'}) });
+        const value = await response.json();
+        if (!response.ok) throw new Error(value.error || 'Unable to load dashboard panel');
+        return value;
+      }).map(promise => promise.then(value => ({ value }), error => ({ error })));
+      const readPanel = async index => {
+        const result = await pending[index];
+        if (result.error) throw result.error;
+        return result.value;
+      };
       // 0. CLEAR existing containers to prevent duplication on multiple nav clicks
       const paymentsContainer = document.getElementById('dashboard-payments');
       paymentsContainer.innerHTML = '<div class="loading">Syncing Timeline...</div>';
@@ -977,51 +1364,69 @@
       const existingMtd = document.getElementById('mtd-spending-section');
       if (existingMtd) existingMtd.remove();
 
-      // Load Cashflow History Chart
-      loadCashflowChart();
+      window.FinanceWelcome?.load();
+      if (document.getElementById('cashflow-history')?.open) loadCashflowChart();
 
       let data;
       try {
-        const summaryRes = await fetch('/api/dashboard/summary', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-        data = await summaryRes.json();
-        if (!summaryRes.ok) throw new Error(data.error || 'Unable to load account balance');
+        data = await readPanel(0);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
       } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         paymentsContainer.textContent = `Unable to load account balance: ${error.message}`;
         document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        finishLoad?.('error');
         return;
       }
       
+      const finishSummary = window.FinancePerformance?.begin('cpu', 'dashboard.metrics');
+      const how = (text, label) => window.FinanceUI?.howCalc(text, label) || '';
+      const basis = data.monthsAveraged ? `the last ${data.monthsAveraged} full month${data.monthsAveraged === 1 ? '' : 's'}` : 'the last 3 full months';
       document.getElementById('dashboard-metrics').innerHTML = `
-        <div class="metric-card"><div class="metric-label">Income <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--success)">$${data.income.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Expenses <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value" style="color: var(--danger)">$${Math.abs(data.expenses).toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Net <span style="font-size:10px;opacity:.6">(90d avg)</span></div><div class="metric-value">$${data.netCashflow.toFixed(2)}</div></div>
-        <div class="metric-card"><div class="metric-label">Balance <span style="font-size:10px;opacity:.7">${data.balanceSource === 'plaid' ? '(Plaid reported)' : data.balanceSource === 'statement' ? '(statement)' : ''}</span></div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? '$' + data.balance.toFixed(2) : 'Unavailable'}</div></div>
+        <div class="metric-card income"><div class="metric-label">Typical income <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Average money in per month over ${basis}. Transfers between your own accounts are excluded.`)}</div><div class="metric-value" style="color: var(--success)">${usd(data.income)}</div></div>
+        <div class="metric-card expense"><div class="metric-label">Typical spending <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Average money out per month over ${basis}, transfers excluded. Minimum payments for debts you added but have not imported yet are included.`)}</div><div class="metric-value" style="color: var(--danger)">${usd(Math.abs(data.expenses))}</div></div>
+        <div class="metric-card net"><div class="metric-label">Typical surplus <span style="font-size:10px;opacity:.6">/ mo</span>${how(`Typical income minus typical spending over ${basis}. This is the same surplus your Debt, Goals and Coach pages plan with.`)}</div><div class="metric-value">${usd(data.netCashflow)}</div></div>
+        <div class="metric-card balance"><div class="metric-label">Balance <span style="font-size:10px;opacity:.7">${data.balanceSource === 'plaid' ? '(Plaid reported)' : data.balanceSource === 'statement' ? '(statement)' : ''}</span></div><div class="metric-value" style="color: var(--primary)">${Number.isFinite(data.balance) ? usd(data.balance) : 'Unavailable'}</div></div>
       `;
       const freshnessNote = document.getElementById('balance-freshness-note');
-      if (data.balanceSource === 'plaid') {
-        const checkedAt = data.balanceCheckedAt ? new Date(data.balanceCheckedAt).toLocaleString() : 'unknown';
-        freshnessNote.textContent = `Using Plaid-reported account balances, last checked ${checkedAt}. Bank data can lag; verify with your institution before relying on this projection.${data.balanceStale ? ' The connection has not refreshed recently.' : ''}`;
-      } else if (data.balanceSource === 'statement') {
-        freshnessNote.textContent = 'Using the latest balance from an imported statement. This may not reflect recent activity.';
-      } else {
-        freshnessNote.textContent = 'Connect a checking account or import a statement balance to show the projected runway.';
+      if (freshnessNote) {
+        if (data.balanceSource === 'plaid') {
+          const checkedAt = data.balanceCheckedAt ? new Date(data.balanceCheckedAt).toLocaleString() : 'unknown';
+          freshnessNote.textContent = `Using Plaid-reported account balances, last checked ${checkedAt}. Bank data can lag; verify with your institution before relying on this projection.${data.balanceStale ? ' The connection has not refreshed recently.' : ''}`;
+        } else if (data.balanceSource === 'statement') {
+          freshnessNote.textContent = 'Using the latest balance from an imported statement. This may not reflect recent activity.';
+        } else {
+          freshnessNote.textContent = 'Connect a checking account or import a statement balance to show the projected runway.';
+        }
       }
+      finishSummary?.();
 
       // 1. TIMELINE PROJECTION & CASHFLOW SAFETY CHECK
       let timeline;
       try {
-        const payRes = await fetch('/api/dashboard/upcoming-payments', { method: 'POST' });
-        const payload = await payRes.json();
-        if (!payRes.ok) throw new Error(payload.error || 'Unable to load upcoming payments');
+        const payload = await readPanel(1);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         if (!Array.isArray(payload)) throw new Error('Invalid upcoming payments response');
+        if (payload.some(item => !/^\d{4}-\d{2}-\d{2}$/.test(item.date) || !Number.isFinite(item.amount))) throw new Error('Upcoming payments are missing valid dates or amounts');
         timeline = payload;
       } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
         paymentsContainer.textContent = `Unable to load upcoming payments: ${error.message}`;
         document.getElementById('cashflow-safety-badge').textContent = 'Projection unavailable';
+        finishLoad?.('error');
         return;
       }
       
-      timeline.sort((a,b) => a.dayOfMonth - b.dayOfMonth);
+      const finishTimeline = window.FinancePerformance?.begin('cpu', 'dashboard.timeline');
+      const calToday = new Date();
+      calToday.setHours(0, 0, 0, 0);
+      const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const todayKey = dateKey(calToday);
+      const horizonEnd = new Date(calToday.getFullYear(), calToday.getMonth(), calToday.getDate() + 30);
+      const endKey = dateKey(horizonEnd);
+      const monthStartKey = `${todayKey.slice(0, 7)}-01`;
+      timeline = timeline.filter(item => item.date >= monthStartKey && item.date <= endKey);
+      timeline.sort((a,b) => a.date.localeCompare(b.date) || Number(b.isIncome) - Number(a.isIncome));
 
       let runningBalance = data.balance;
       let minProjectedBalance = data.balance;
@@ -1031,12 +1436,12 @@
       // Scan through to find min balance & jeopardy
       timeline.forEach(item => {
         if (item.status !== 'processed' && Number.isFinite(data.balance)) {
-          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
+          runningBalance = Math.round((runningBalance + (item.isIncome ? item.amount : -item.amount)) * 100) / 100;
 
           if (runningBalance < minProjectedBalance) {
             minProjectedBalance = runningBalance;
             if (runningBalance < 0 && deficitDay === null) {
-              deficitDay = item.dayOfMonth;
+              deficitDay = item.date;
               deficitBill = item.description;
             }
           }
@@ -1053,104 +1458,179 @@
         } else if (minProjectedBalance < 0) {
           safetyBadge.innerHTML = `
             <div style="background: rgba(235, 87, 87, 0.15); border: 1px solid var(--danger); color: var(--danger); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <span>🚨 DEFICIT ALERT:</span> ${deficitDay === null ? 'Recorded balance is already negative.' : 'First shortfall: Day ' + deficitDay + ' (' + deficitBill + ').'} Minimum projected balance: -$${Math.abs(minProjectedBalance).toFixed(2)}
+              <span>🚨 DEFICIT ALERT:</span> ${deficitDay === null ? 'Recorded balance is already negative.' : 'First shortfall: ' + escapeHtml(deficitDay) + ' (' + escapeHtml(deficitBill) + ').'} Minimum projected balance: -${usd(Math.abs(minProjectedBalance))}
             </div>
           `;
         } else {
           safetyBadge.innerHTML = `
             <div style="background: rgba(81, 207, 102, 0.15); border: 1px solid var(--success); color: var(--success); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-              <span>🛡️ All Bills Fully Funded</span> (Min Projected: $${minProjectedBalance.toFixed(2)})
+              <span>🛡️ Next 30 Days Funded</span> (including overdue bills; min projected: ${usd(minProjectedBalance)})
             </div>
           `;
         }
       }
 
-      // Re-run for row-by-row rendering
+      // Keep history out of the balance walk: those transactions are already in recorded cash.
       runningBalance = data.balance;
-      let timelineHtml = `
-        <div class="panel" style="padding: 0; overflow: hidden;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead style="background: var(--bg-tertiary); color: var(--text-secondary); text-align: left; font-size: 11px; text-transform: uppercase;">
-              <tr>
-                <th style="padding: 12px 16px;">Status</th>
-                <th>Description</th>
-                <th style="text-align: right;">Amount</th>
-                <th style="text-align: right; padding: 12px 16px;">Projected Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-
+      const hasBalance = Number.isFinite(data.balance);
+      const fmtMoney = value => (value < 0 ? '-' : '') + '$' + Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const byDay = new Map();
+      const history = [];
+      let paidTotal = 0, dueTotal = 0, paidCount = 0, dueCount = 0, overdueCount = 0, riskCount = 0, manualDueCount = 0, incomeReceived = 0, incomeExpected = 0, nextPay = null;
       timeline.forEach(item => {
         const isPaid = item.status === 'processed';
-        const isOverdue = !isPaid && item.dayOfMonth < new Date().getDate();
-        
-        if (!isPaid && Number.isFinite(data.balance)) {
-          runningBalance = Math.round((runningBalance - item.amount) * 100) / 100;
-        }
-
-        const isDeficit = !isPaid && Number.isFinite(data.balance) && runningBalance < 0;
-
-        timelineHtml += `
-          <tr style="border-bottom: 1px solid var(--border); opacity: ${isPaid ? '0.65' : '1'}; color: ${isPaid ? 'var(--text-secondary)' : 'var(--text-primary)'}; background: ${isDeficit ? 'rgba(235, 87, 87, 0.12)' : (item.isIncome ? 'rgba(81, 207, 102, 0.08)' : 'transparent')}">
-            <td style="padding: 12px 16px; font-weight: 600; color: ${isPaid ? 'var(--text-secondary)' : (isDeficit ? 'var(--danger)' : 'var(--primary)')};">
-              ${isPaid ? '✅ Paid' : 'Day ' + item.dayOfMonth}
-              ${isOverdue ? '<span style="display: block; font-size: 10px;">Overdue / not recorded</span>' : ''}
-              ${isDeficit ? '<span style="display: block; font-size: 10px; color: var(--danger); font-weight: 700;">⚠️ AT RISK</span>' : ''}
-            </td>
-            <td style="padding: 12px 0;">
-              <div style="font-size: 14px; font-weight: 600;">${item.isIncome ? '💰 ' : ''}${escapeHtml(item.description)}</div>
-              <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(item.category)}</div>
-              ${item.sourceTransactionId ? `<button class="btn btn-secondary" data-id="${escapeHtml(item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" style="font-size:11px;margin-top:8px">Stop projecting this bill</button>` : ''}
-            </td>
-            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: ${isPaid ? 'var(--text-secondary)' : (item.isIncome ? 'var(--success)' : 'var(--danger)')}">
-              ${item.isIncome ? '+' : '-'}$${item.amount.toFixed(2)}
-            </td>
-            <td style="padding: 12px 16px; text-align: right; font-weight: 700; font-size: 15px; color: ${isPaid ? 'var(--text-secondary)' : (runningBalance < 0 ? 'var(--danger)' : 'var(--text-primary)')}">
-              ${isPaid || !Number.isFinite(data.balance) ? '—' : (runningBalance < 0 ? '-' : '') + '$' + Math.abs(runningBalance).toFixed(2)}
-            </td>
-          </tr>
-        `;
+        const date = item.date;
+        const isOverdue = !isPaid && !item.isIncome && date < todayKey;
+        if (!isPaid && hasBalance) runningBalance = Math.round((runningBalance + (item.isIncome ? item.amount : -item.amount)) * 100) / 100;
+        const isDeficit = !isPaid && !item.isIncome && hasBalance && runningBalance < 0;
+        if (item.isIncome) { if (isPaid) incomeReceived += item.amount; else { incomeExpected += item.amount; if (!nextPay) nextPay = { date, item }; } }
+        else if (isPaid) { if (!item.planned && item.isFixed === true) { paidTotal += item.amount; paidCount++; } } else { dueTotal += item.amount; dueCount++; if (item.payMode === 'manual') manualDueCount++; }
+        if (isOverdue) overdueCount++;
+        if (isDeficit) riskCount++;
+        const entry = { item, isPaid, isOverdue, isDeficit, balanceAfter: runningBalance };
+        if (isPaid) { if (!item.isIncome && !item.planned && item.isFixed === true) history.push(entry); return; }
+        if (!byDay.has(date)) byDay.set(date, []);
+        byDay.get(date).push(entry);
       });
-
-      timelineHtml += '</tbody></table></div>';
+      const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : 'Paid';
+      const flexAttrs = item => item.status === 'processed' ? '' : item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"`
+        : item.isIncome && item.incomeKey ? ` data-income-key="${escapeHtml(item.incomeKey)}" role="button" tabindex="0" aria-label="Review income from ${escapeHtml(item.description)}"` : '';
+      const statusOf = entry => entry.item.isIncome ? (entry.isPaid ? ['is-paid', 'Received'] : ['is-upcoming', 'Expected']) : entry.isPaid ? ['is-paid', doneLabel(entry.item)] : entry.isDeficit ? ['is-deficit', entry.isOverdue ? 'Overdue · at risk' : 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const shortMoney = value => '$' + (Math.abs(value) >= 1000 ? (Math.abs(value) / 1000).toFixed(Math.abs(value) >= 10000 ? 0 : 1) + 'k' : Math.round(Math.abs(value)).toLocaleString('en-US'));
+      const stopButton = (entry, cls) => entry.item.sourceTransactionId && !entry.isPaid
+        ? `<button type="button" class="${cls}" data-id="${escapeHtml(entry.item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop projecting ${escapeHtml(entry.item.description)}" title="Stop projecting this bill">&times;</button>` : '';
+      const modeChip = (entry, long) => {
+        const { item } = entry;
+        if (item.isIncome) return long && item.cadenceLabel ? `<span class="pay-card-mode is-income" title="Detected pay schedule">${escapeHtml(item.cadenceLabel)}</span>` : '';
+        if (item.futurePlan) return '<span class="pay-card-mode is-flex" title="Estimate using your current monthly allocation">Plan estimate</span>';
+        if (item.flexible) return `<span class="pay-card-mode is-flex" title="Flexible: select to adjust this month">${long ? 'Flexible' : 'Flex'}</span>`;
+        if (item.payMode === 'auto') return `<span class="pay-card-mode is-auto" title="Goes out automatically">${long ? 'Auto-pay' : 'Auto'}</span>`;
+        if (item.payMode === 'manual') return `<span class="pay-card-mode is-manual" title="${entry.isPaid ? 'Paid manually' : 'You need to make this payment'}">Manual${entry.isPaid || !long ? '' : ' · pay it'}</span>`;
+        return '';
+      };
+      const firstKey = [...byDay.keys()].filter(date => date < todayKey).sort()[0] || todayKey;
+      const firstDate = new Date(`${firstKey}T00:00:00`);
+      const gridStart = new Date(firstDate);
+      gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+      const dayCell = date => {
+        const key = dateKey(date);
+        if (key < firstKey || key > endKey) return '<div class="pay-day is-blank" aria-hidden="true"></div>';
+        const entries = byDay.get(key) || [];
+        const isToday = key === todayKey;
+        const label = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+        return `<div class="pay-day${entries.length ? ' has-items' : ''}${isToday ? ' is-today' : ''}${key < todayKey ? ' is-past' : ''}" data-date="${key}" role="listitem" aria-label="${label}${isToday ? ', today' : ''}: ${entries.length} payment${entries.length === 1 ? '' : 's'}">
+          <div class="pay-day-num"><span>${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getDate()}</span>${isToday ? '<span class="pay-day-today">Today</span>' : ''}</div>
+          <div class="pay-day-items">${entries.map(entry => {
+            const [cls, label] = statusOf(entry);
+            const { item } = entry;
+            const balance = hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;';
+            const sign = item.isIncome ? '+' : '&minus;';
+            return `<article class="pay-card ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}${item.payMode ? ` mode-${item.payMode}` : ''}"${flexAttrs(item)} title="${escapeHtml(item.description)} &middot; ${escapeHtml(item.category || 'Uncategorized')} &middot; ${sign === '+' ? '+' : '−'}${fmtMoney(item.amount)}${item.isIncome ? ' &middot; Not your pay? Select to review income' : ''} &middot; ${label}${item.payMode ? ` &middot; ${item.payMode === 'auto' ? 'Auto-pay' : 'Manual'}` : ''}">
+              ${stopButton(entry, 'pay-card-stop')}
+              <span class="pay-card-cat">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.label || item.category || 'Uncategorized')}</span>
+              <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
+              <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? doneLabel(item) : `<small>Bal</small> ${balance}`}</span>
+              ${modeChip(entry, false)}
+            </article>`;
+          }).join('')}</div>
+        </div>`;
+      };
+      let weeksHtml = '';
+      for (let start = new Date(gridStart); start <= horizonEnd; start.setDate(start.getDate() + 7)) {
+        const dates = Array.from({ length: 7 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+        const isCurrentWeek = dates.some(date => dateKey(date) === todayKey);
+        weeksHtml += `<div class="pay-week${isCurrentWeek ? ' is-current' : ''}" role="list" aria-label="Week of ${dateKey(start)}">${dates.map(dayCell).join('')}</div>`;
+      }
+      const weekHead = `<div class="pay-weekdays" aria-hidden="true">${weekdays.map(name => `<span>${name}</span>`).join('')}</div>`;
+      const listRow = entry => {
+        const [cls, label] = statusOf(entry);
+        const { item } = entry;
+        const date = new Date(`${item.date}T00:00:00`);
+        return `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}"${flexAttrs(item)}>
+          <span class="pay-row-date"><small>${date.toLocaleDateString('en-US', { month: 'short' })}</small><strong>${date.getDate()}</strong><small>${weekdays[date.getDay()]}</small></span>
+          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.description)}</span></span>
+          <span class="pay-row-tags"><span class="pay-row-status">${label}</span>${modeChip(entry, true)}</span>
+          <span class="pay-row-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
+          <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? `<small>Status</small>${doneLabel(item)}` : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
+          <span class="pay-row-action">${stopButton(entry, 'pay-card-stop pay-row-stop')}</span>
+        </li>`;
+      };
+      const overdueEntries = [...byDay.entries()].filter(([date]) => date < todayKey).flatMap(([, entries]) => entries);
+      const futureEntries = [...byDay.entries()].filter(([date]) => date >= todayKey).flatMap(([, entries]) => entries);
+      const listHtml = `${overdueEntries.length ? '<li class="pay-list-heading">Earlier this month &middot; still pending</li>' + overdueEntries.map(listRow).join('') : ''}
+        <li class="pay-list-today"><span>Today &middot; ${calToday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} &rarr; ${horizonEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></li>
+        ${futureEntries.map(listRow).join('') || '<li class="pay-list-heading">No payments expected in the next 30 days.</li>'}`;
+      const monthName = calToday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const rangeLabel = `${calToday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${horizonEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      const timelineHtml = timeline.length ? `
+        <div class="pay-cal-summary">
+          <div><span>Next 30 days</span><strong>${rangeLabel}</strong><small>Earlier unpaid bills included below</small></div>
+          <div class="is-income"><span>Income still coming <button type="button" class="pay-sum-link" data-income-review title="Check which deposits count as your pay">Review</button></span><strong>${incomeExpected ? '+' + fmtMoney(incomeExpected) : fmtMoney(0)}</strong><small>${nextPay ? `Next ${nextPay.date}${nextPay.item.cadenceLabel ? ` &middot; ${escapeHtml(nextPay.item.cadenceLabel)}` : ''}` : incomeReceived ? `${fmtMoney(incomeReceived)} received` : 'Tag paychecks as Salary to project them'}</small></div>
+          <div class="is-paid"><span>Paid this month</span><strong>${fmtMoney(paidTotal)}</strong><small>${paidCount} bill${paidCount === 1 ? '' : 's'} &middot; expand history below</small></div>
+          <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
+          <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected balance in 30 days</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After unpaid bills and expected income'}</small></div>
+        </div>
+        <details class="pay-history"><summary>Paid fixed bills this month &middot; ${monthName} &middot; ${paidCount} paid bill${paidCount === 1 ? '' : 's'} &middot; ${fmtMoney(paidTotal)}</summary>
+          <p class="pay-window-note">Recorded payments matching your fixed bills only. These are already reflected in recorded cash and are not deducted again. View all other transactions on the <a href="#transactions">Transactions page</a>.</p>
+          <ol class="pay-list" aria-label="Fixed payment history for ${monthName}">${history.map(listRow).join('') || '<li class="pay-list-heading">No recorded fixed payments yet this month.</li>'}</ol>
+        </details>
+        <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-income">Income</span><span class="is-flex">Flexible plan</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
+        <p class="pay-window-note">${overdueCount ? `${overdueCount} earlier unpaid bill${overdueCount === 1 ? '' : 's'} carried forward. ` : ''}Forecast through ${endKey}. Expected income and future plan allocations are estimates; plan entries use your current monthly allocation.</p>
+        <div class="pay-cal" aria-label="Next 30 days and earlier unpaid bills">${weekHead}${weeksHtml}</div>
+        <ol class="pay-list" aria-label="Next 30 days and earlier unpaid bills, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
+      if (typeof window.setPayView === 'function') window.setPayView();
+      finishTimeline?.();
 
       // 2. REPEATABLE CATEGORY SPENDING (Endpoint-driven drill-down)
-      const catRes = await fetch('/api/dashboard/category-spending', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dateFilter: 'current'})});
-      const categories = await catRes.json();
+      let categories;
+      try {
+        categories = await readPanel(2);
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
+        if (!Array.isArray(categories)) throw new Error('Invalid category spending response');
+      } catch (error) {
+        if (run !== dashboardRequest) { finishLoad?.('superseded'); return; }
+        document.getElementById('upcoming-section').insertAdjacentHTML('afterend', `<div id="mtd-spending-section" class="panel" role="alert">Unable to load spending cards: ${escapeHtml(error.message)}</div>`);
+        finishLoad?.('error');
+        return;
+      }
+      const finishCards = window.FinancePerformance?.begin('cpu', 'dashboard.spending-cards');
       
-      const categoryIcons = {
-        'Groceries': '🛒', 'Utilities': '⚡', 'EV Charging': '🔌', 'Gas': '⛽', 'Dining': '🍽️', 'Shopping': '🛍️',
-        'Auto': '🚗', 'Internet': '🌐', 'Housing': '🏠', 'Credit Cards': '💳', 'Salary': '💰'
-      };
-
       let catHtml = `
-        <div id="mtd-spending-section">
-          <h2 style="margin: 32px 0 20px 0;">📊 Month-to-Date Spending</h2>
-          <div class="metrics-grid">
+        <div id="mtd-spending-section" class="panel section-panel">
+          <div class="section-head">
+            <div>
+              <h2>Month-to-date spending</h2>
+              <div>Spending by category this month. Select a category to see its transactions.</div>
+            </div>
+          </div>
+          <div class="metrics-grid mtd-grid">
       `;
       
       categories.forEach(cat => {
-        const icon = categoryIcons[cat.name] || '📦';
         const now = new Date();
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
         catHtml += `
+          <div class="mtd-card-wrap">
           <button type="button" class="metric-card list-item mtd-category-card" data-category="${escapeHtml(cat.name)}" data-month="${escapeHtml(currentMonthKey)}" onclick="window.openCategoryTransactions(this.dataset.category, this.dataset.month)">
-            <div style="display: flex; justify-content: space-between; align-items: start;">
-              <span style="font-size: 24px;">${icon}</span>
-              <div style="text-align: right;">
-                <div class="metric-label">${escapeHtml(cat.name)}</div>
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary)">$${cat.totalSpending.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${cat.transactionCount} txns</div>
-              </div>
-            </div>
+            <span class="mtd-card-head"><strong>${escapeHtml(cat.name)}</strong></span>
+            <span class="mtd-card-body">
+              <span class="mtd-card-total">$${cat.totalSpending.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              <small>spent this month</small>
+              <span class="mtd-card-count">${Number(cat.transactionCount) || 0} transaction${Number(cat.transactionCount) === 1 ? '' : 's'}</span>
+            </span>
           </button>
+          <button type="button" class="mtd-history-trigger" data-spending-history="${escapeHtml(cat.name)}" aria-label="Six-month spending history for ${escapeHtml(cat.name)}" aria-expanded="false" aria-controls="spending-history-preview">6-month history <span aria-hidden="true">↗</span></button>
+          </div>
         `;
       });
       
       catHtml += '</div></div>';
-      paymentsContainer.insertAdjacentHTML('afterend', catHtml);
+      document.getElementById('upcoming-section').insertAdjacentHTML('afterend', catHtml);
+      window.emitFinanceEvent?.('mtd:rendered', { categories });
+      finishCards?.();
+      finishLoad?.();
     }
 
     async function toggleFixed(txnId, isFixed) {
@@ -1241,7 +1721,7 @@
         <div class="list-item" data-category="${escapeHtml(cat)}" data-month="${escapeHtml(m.month)}" onclick="loadMonthTransactions(this.dataset.category, this.dataset.month)">
           <div style="display: flex; justify-content: space-between;">
             <div style="font-weight: 600;">${localDate(m.month).toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</div>
-            <div style="color: var(--primary); font-weight: 700;">$${m.spending.toFixed(2)}</div>
+            <div style="color: var(--primary); font-weight: 700;">${usd(m.spending)}</div>
           </div>
           <div style="font-size: 11px; color: var(--text-secondary);">${m.transactions} transactions</div>
         </div>
@@ -1260,67 +1740,10 @@
       document.getElementById('txn-list').innerHTML = data.map(t => `
         <div class="list-item" style="font-size: 12px;">
           <div style="color: var(--text-secondary); font-size: 10px;">${t.date}</div>
-          <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(t.description)}">${escapeHtml(t.description)}</div>
-          <div style="color: var(--danger); font-weight: 700; text-align: right;">$${t.amount.toFixed(2)}</div>
+          <div style="font-weight: 500;" title="${escapeHtml(t.description)}">${window.transactionLink(t.id, t.description)}</div>
+          <div style="color: var(--danger); font-weight: 700; text-align: right;">${usd(t.amount)}</div>
         </div>
       `).join('');
-    }
-
-    async function loadAllTransactions() {
-      const tbody = document.getElementById('full-txn-table');
-      const filterCat = document.getElementById('txn-filter-category').value;
-      const filterMonth = document.getElementById('txn-filter-month').value;
-      const filterFixed = document.getElementById('txn-filter-fixed').checked;
-      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading...</td></tr>';
-      
-      try {
-        const catRes = await fetch('/api/categories');
-        const categories = await catRes.json();
-        
-        // 1. Unified Sync Helper: Populate filter dropdown if empty
-        const filterSelect = document.getElementById('txn-filter-category');
-        if (filterSelect.options.length <= 1) {
-          categories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.textContent = c.name;
-            filterSelect.appendChild(opt);
-          });
-        }
-
-        // 2. Fetch from main endpoint
-        const res = await fetch('/api/dashboard/all-transactions');
-        const data = await res.json();
-        let txns = data.transactions || [];
-        
-        // 3. Centralized Filtering Logic (Matches Dashboard Timeline)
-        txns = window.filterTransactionsByCategoryAndMonth(txns, filterCat, filterMonth);
-        if (filterFixed) {
-          // Robust check for boolean truthy values from database
-          txns = txns.filter(t => t.is_fixed === true || t.is_fixed === 1 || t.is_fixed === 'true');
-        }
-        
-        tbody.innerHTML = txns.sort((a,b) => localDate(b.date) - localDate(a.date)).map(t => `
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 12px; font-size: 12px; color: var(--text-secondary);">${localDate(t.date).toLocaleDateString('en-US', {month: 'short', day: '2-digit', year: 'numeric'})}</td>
-            <td style="padding: 12px; font-weight: 500; font-size: 13px;">${t.description}</td>
-            <td style="padding: 12px;">
-              <select onchange="modifyTransaction('${t.id}', this.value)" style="width: 100%; padding: 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
-                <option value="">Uncategorized</option>
-                ${categories.map(c => `<option value="${c.name}" ${t.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
-              </select>
-            </td>
-            <td style="padding: 12px; text-align: center;">
-              <input type="checkbox" ${t.is_fixed ? 'checked' : ''} onchange="toggleFixed('${t.id}', this.checked)" style="cursor: pointer;">
-            </td>
-            <td style="padding: 12px; text-align: right; font-weight: 700; color: ${t.direction.toLowerCase() === 'debit' ? 'var(--danger)' : 'var(--success)'}">
-              ${t.direction.toLowerCase() === 'debit' ? '-' : '+'}$${Math.abs(t.amount).toFixed(2)}
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load transactions</td></tr>';
-      }
     }
 
     async function modifyTransaction(id, category) {
@@ -1341,169 +1764,6 @@
       }
     }
 
-    async function loadEtlStaging() {
-      const tbody = document.getElementById('etl-staging-table');
-      tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center;">Loading staging area...</td></tr>';
-      
-      try {
-        const res = await fetch('/api/staging/attention');
-        const items = await res.json();
-        
-        if (items.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center; color: var(--success); font-weight: 500;">✓ All set! No transactions require attention.</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = items.map(t => `
-          <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 12px; font-size: 12px;">${t.date}</td>
-            <td style="padding: 12px;"><span style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--warning); text-transform: uppercase;">${escapeHtml(t.status)}</span></td>
-            <td style="padding: 12px; font-size: 13px;">${escapeHtml(t.description)}</td>
-            <td style="padding: 12px; font-weight: 700;">$${Math.abs(t.amount).toFixed(2)}</td>
-            <td style="padding: 12px; text-align: center; display: flex; gap: 8px; justify-content: center;">
-              <button data-id="${escapeHtml(t.id)}" onclick="forcePushStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--success); color: white;">Push</button>
-              <button data-id="${escapeHtml(t.id)}" onclick="dismissStaging(this.dataset.id)" class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--danger); color: white;">Delete</button>
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--danger);">Failed to load staging items</td></tr>';
-      }
-    }
-
-    async function forcePushStaging(id) {
-       await fetch('/api/staging/force-push', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
-       notify('✓ Transaction pushed to production');
-       loadEtlStaging();
-    }
-
-    async function dismissStaging(id) {
-       await fetch('/api/staging/dismiss', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
-       notify('Transaction dismissed');
-       loadEtlStaging();
-    }
-
-    async function loadPayoffPlan() {
-      const scheduleBody = document.getElementById('payoff-schedule-body');
-      const totalDebtEl = document.getElementById('payoff-total-debt');
-      scheduleBody.innerHTML = '<tr><td colspan="5" style="padding: 40px; text-align: center;">Calculating payoff sequence...</td></tr>';
-
-      try {
-        const res = await fetch('/api/debts', { method: 'POST' });
-        const debts = await res.json();
-        
-        // Sort by APR (Avalanche) - We need APR from backend. 
-        // The current endpoint /api/debts provides: card_name, balance, apr, limit
-        debts.sort((a,b) => b.apr - a.apr);
-        
-        let totalDebt = 0;
-        let html = '';
-        
-        debts.forEach((d, index) => {
-          totalDebt += d.balance;
-          const isTopPriority = index === 0;
-          const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
-          const othersMinTotal = debts.slice(1).reduce((sum, curr) => sum + (curr.min_payment || 35), 0);
-          const payment = isTopPriority ? (monthlyCommitment - othersMinTotal) : (d.min_payment || 35);
-
-          html += `
-            <tr style="border-bottom: 1px solid var(--border); ${isTopPriority ? 'background: rgba(74, 158, 255, 0.05);' : ''}">
-              <td style="padding: 16px;">
-                <span style="background: ${isTopPriority ? 'var(--primary)' : 'var(--bg-tertiary)'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
-                  ${isTopPriority ? '🚀 ACTIVE ATTACK' : '#' + (index + 1)}
-                </span>
-              </td>
-              <td>
-                <div style="font-weight: 600;">${d.card_name}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${d.apr}% APR</div>
-              </td>
-              <td style="text-align: right; font-weight: 500;">$${d.balance.toLocaleString()}</td>
-              <td style="text-align: right; font-weight: 700; color: ${isTopPriority ? 'var(--success)' : 'var(--text-primary)'};">
-                $${payment.toFixed(2)}
-              </td>
-              <td style="text-align: center; color: var(--text-secondary); font-size: 12px;">—</td>
-            </tr>
-          `;
-        });
-
-        totalDebtEl.textContent = '$' + totalDebt.toLocaleString(undefined, {minimumFractionDigits: 2});
-        scheduleBody.innerHTML = html;
-
-        // Generate Timeline Chart
-        generateTimelineChart(debts);
-      } catch (err) { scheduleBody.innerHTML = '<tr><td colspan="5" style="color: var(--danger)">Failed to load payoff plan</td></tr>'; }
-    }
-
-    function generateTimelineChart(debts) {
-      const chartContainer = document.getElementById('payoff-timeline-chart');
-      chartContainer.innerHTML = '';
-
-      // Deep copy debts to avoid mutating main state
-      let activeDebts = debts.map(d => ({ ...d }));
-      const monthlyCommitment = Number(document.getElementById('payoff-budget').value) || 0;
-      const timelineMonths = 600;
-      
-      const today = new Date();
-      
-      let totalOutstanding = activeDebts.reduce((sum, d) => sum + d.balance, 0);
-      const initialMax = totalOutstanding;
-
-      for (let m = 0; m < timelineMonths; m++) {
-        const targetMonth = new Date(today.getFullYear(), today.getMonth() + m, 1);
-        const monthLabel = targetMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-        // Calculate payoff step
-        // 1. Pay minimums first
-        let availableExtra = monthlyCommitment;
-        activeDebts.forEach(d => {
-          const min = Math.min(d.balance, d.min_payment || 35);
-          d.balance -= min;
-          availableExtra -= min;
-        });
-
-        // 2. Apply extra to highest APR (Avalanche)
-        activeDebts.sort((a,b) => b.apr - a.apr);
-        for (let d of activeDebts) {
-          if (d.balance > 0 && availableExtra > 0) {
-            const extraPayment = Math.min(d.balance, availableExtra);
-            d.balance -= extraPayment;
-            availableExtra -= extraPayment;
-          }
-        }
-
-        const currentTotal = activeDebts.reduce((sum, d) => sum + d.balance, 0);
-        const percentagePaid = ((initialMax - currentTotal) / initialMax) * 100;
-        
-        // Determine which card is being actively attacked or fully paid off
-        let attackFocus = 'Fully Debt Free! 🎉';
-        const activeAttackCard = activeDebts.find(d => d.balance > 0);
-        if (activeAttackCard) {
-          attackFocus = `Focus: paying off 💰 <strong>${activeAttackCard.card_name}</strong>`;
-        }
-
-        const stepHtml = `
-          <div style="display: grid; grid-template-columns: 100px 100px 1fr; align-items: center; gap: 16px;">
-            <div style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">${monthLabel}</div>
-            <div style="font-weight: 700; font-size: 14px; text-align: right; color: var(--primary);">$${Math.round(currentTotal).toLocaleString()}</div>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div style="display: flex; height: 16px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: 100%;">
-                <div style="background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%); width: ${percentagePaid.toFixed(1)}%; height: 100%; transition: width 0.5s ease;"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
-                <span>${percentagePaid.toFixed(0)}% paid</span>
-                <span>${attackFocus}</span>
-              </div>
-            </div>
-          </div>
-        `;
-        chartContainer.insertAdjacentHTML('beforeend', stepHtml);
-
-        if (currentTotal <= 0) {
-          break; // Stop drafting timeline months once fully debt-free
-        }
-      }
-    }
-
     function notify(msg) {
       const t = document.createElement('div');
       t.className = 'toast';
@@ -1516,15 +1776,48 @@
     // IMPORT MODAL
     // ===========================================
     function openImportModal(tab = 'csv') {
-      document.getElementById('import-modal').style.display = 'flex';
+      document.getElementById('import-modal').showModal();
+      window.FinanceImportHistory?.load();
+      const result = document.getElementById('import-result');
+      if (result.style.display === 'block') result.scrollIntoView({ block: 'nearest' });
       switchImportTab(tab);
     }
     function closeImportModal() {
-      document.getElementById('import-modal').style.display = 'none';
-      document.getElementById('import-result').style.display = 'none';
+      document.getElementById('import-modal').close();
+    }
+    document.getElementById('import-modal').addEventListener('close', () => {
+      if (pdfImportInProgress || csvImportInProgress) return;
+      pendingPdfFile = null;
+      document.getElementById('pdf-input').value = '';
+      document.getElementById('pdf-file-list').textContent = '';
+      document.getElementById('pdf-import-btn').disabled = true;
+      pdfManualAccount = false;
+      document.getElementById('import-account-picker').hidden = true;
+      FinanceAccounts.resetCsv();
+    });
+
+    function setImportStatus(kind, message) {
+      const result = document.getElementById('import-result');
+      result.style.display = 'block';
+      result.style.background = kind === 'error' ? 'rgba(255, 107, 107, 0.15)' : 'rgba(74, 158, 255, 0.1)';
+      result.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      result.setAttribute('aria-busy', String(kind === 'progress'));
+      result.innerHTML = `${kind === 'progress' ? '<progress aria-label="File import in progress"></progress>' : ''}<div>${escapeHtml(message)}</div>`;
+      result.scrollIntoView({ block: 'nearest' });
+    }
+    let csvImportInProgress = false;
+    function importIsBusy() { return csvImportInProgress || pdfImportInProgress || window.FinanceImportHistory?.isBusy(); }
+    window.importIsBusy = importIsBusy;
+    function importSupportReference(response, data) {
+      return data?.requestId || response.headers?.get?.('X-Request-Id') || '';
+    }
+    function appendImportReference(reference) {
+      if (!reference) return;
+      document.getElementById('import-result').innerHTML += `<p class="import-hint">Support reference: <code>${escapeHtml(reference)}</code></p>`;
     }
 
     function switchImportTab(tab) {
+      document.getElementById('import-account-picker').hidden = tab !== 'pdf' || !pdfManualAccount;
       document.getElementById('import-csv-panel').style.display = tab === 'csv' ? 'block' : 'none';
       document.getElementById('import-pdf-panel').style.display = tab === 'pdf' ? 'block' : 'none';
       document.getElementById('import-plaid-panel').style.display = tab === 'plaid' ? 'block' : 'none';
@@ -1721,8 +2014,9 @@
     let pendingCsvFile = null;
     function onCsvSelected(e) {
       if (e.target.files.length > 0) {
+        FinanceAccounts.resetCsv();
         pendingCsvFile = e.target.files[0];
-        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${pendingCsvFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
       }
     }
@@ -1730,61 +2024,111 @@
       e.preventDefault();
       e.currentTarget.style.borderColor = 'var(--border)';
       const files = e.dataTransfer.files;
-      if (files.length > 0 && (files[0].name.endsWith('.csv') || files[0].type === 'text/csv')) {
+      if (files.length > 0 && (/\.(csv|tsv|txt|ofx|qfx|qbo)$/i.test(files[0].name) || files[0].type === 'text/csv')) {
+        FinanceAccounts.resetCsv();
         pendingCsvFile = files[0];
-        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${pendingCsvFile.name}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
+        document.getElementById('csv-file-list').innerHTML = `<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-tertiary); border-radius: 8px;"><span>📊</span><span>${escapeHtml(pendingCsvFile.name)}</span><span style="font-size: 11px; color: var(--text-secondary);">${(pendingCsvFile.size/1024).toFixed(0)} KB</span></div>`;
         document.getElementById('csv-import-btn').disabled = false;
       }
     }
 
     async function importCSV() {
-      if (!pendingCsvFile) { notify('Select a CSV file first'); return; }
+      if (window.importIsBusy?.()) return;
+      if (!pendingCsvFile) { setImportStatus('error', 'Select a bank export first.'); return; }
+      const file = pendingCsvFile;
+      csvImportInProgress = true;
+      document.getElementById('csv-overlap-review').inert = true;
+      const button = document.getElementById('csv-import-btn');
+      button.disabled = true;
+      button.textContent = 'Importing...';
+      let reference = '';
+      let csvData, account;
 
       const resultDiv = document.getElementById('import-result');
-      resultDiv.style.display = 'block';
-      resultDiv.innerHTML = '<div style="color: var(--primary)">Reading CSV...</div>';
-      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+      setImportStatus('progress', 'Reading bank export... Import one file at a time; wait for this result.');
 
       try {
-        const csvData = await new Promise((resolve, reject) => {
+        csvData = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsText(pendingCsvFile);
+          reader.onerror = () => reject(new Error('The bank export could not be read. Choose the file again.'));
+          reader.onabort = () => reject(new Error('Reading the bank export was interrupted.'));
+          reader.readAsText(file);
         });
 
-        resultDiv.innerHTML = '<div style="color: var(--primary)">Parsing transactions...</div>';
+        account = await FinanceAccounts.prepareCsv(csvData, file.name);
+        if (!account) return;
+        setImportStatus('progress', 'Processing transactions... Please wait for the result before importing another file.');
 
+        reference = crypto.randomUUID();
         const res = await fetch('/api/import/import-csv', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvData, source: document.getElementById('csv-source-select').value })
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': reference },
+          signal: AbortSignal.timeout(120000),
+          body: JSON.stringify({ csvData, source: file.name, ...account })
         });
-        const data = await res.json();
-        if (data.success) {
+        reference = importSupportReference(res) || reference;
+        const data = await res.json().catch(() => { throw new Error(`The server returned an unreadable response (${res.status}). Check Transactions before retrying.`); });
+        reference = importSupportReference(res, data) || reference;
+        if (res.ok && data.success) {
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
             <div style="color: ${data.errors ? 'var(--warning)' : 'var(--success)'}; font-weight: 700;">${data.errors ? '⚠️ Import completed with rejected rows' : '✅ Import Complete'}</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
-              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} already processed &nbsp;|&nbsp; ${data.needsReview || 0} held for review
+              ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} duplicates skipped &nbsp;|&nbsp; ${data.duration}ms
+              ${data.assigned ? `<br>${data.assigned} existing transaction${data.assigned === 1 ? '' : 's'} assigned to confirmed destinations; saved edits retained.` : ''}
             </div>
-            ${data.errors ? `<div style="font-size:12px;color:var(--warning);margin-top:8px;">${data.errors} row(s) were rejected because they could not be parsed. ${Array.isArray(data.parserDetails) ? data.parserDetails.map(escapeHtml).join('<br>') : ''}</div>` : ''}
+            ${data.errors ? `<div style="font-size: 12px; margin-top: 6px; color: var(--warning);">${data.errors} row${data.errors === 1 ? '' : 's'} could not be read${data.parserDetails?.[0] ? `: ${escapeHtml(data.parserDetails[0])}` : ''}</div>` : ''}
+            ${FinanceAccounts.resultNote(data)}
             ${data.needsReview ? "<button class=\"btn btn-secondary\" onclick=\"closeImportModal();showView('etl')\">Review possible matches</button>" : ''}
           `;
+          FinanceAccounts.resetCsv();
+          FinanceAccounts.afterImport(data).catch(error => {
+            resultDiv.innerHTML += `<p role="alert">Imported, but account refresh failed: ${escapeHtml(error.message)}. Reload to refresh.</p>`;
+          });
           pendingCsvFile = null;
           document.getElementById('csv-file-list').innerHTML = '';
+          document.getElementById('csv-input').value = '';
           document.getElementById('csv-import-btn').disabled = true;
           loadDashboard();
         } else {
-          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
+          if (data.code === 'OVERLAP_REVIEW_REQUIRED') {
+            await FinanceAccounts.reviewCsvOverlaps(csvData, file.name, account);
+            return;
+          }
+          if (data.code === 'ACCOUNT_REVIEW_REQUIRED') FinanceAccounts.resetCsv();
+          setImportStatus('error', data.error || `Import failed (${res.status}).`);
         }
       } catch (err) {
-        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
+        if (err.code === 'OVERLAP_REVIEW_REQUIRED') {
+          try { await FinanceAccounts.reviewCsvOverlaps(csvData, file.name, account); }
+          catch (reviewError) { setImportStatus('error', `Could not load overlap review: ${reviewError.message}`); }
+        } else {
+          if (err.code === 'ACCOUNT_REVIEW_REQUIRED') FinanceAccounts.resetCsv();
+          setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
+            ? 'The import request timed out. The server may still be processing it. Check Transactions before retrying.'
+            : err.message);
+        }
+      } finally {
+        csvImportInProgress = false;
+        document.getElementById('csv-overlap-review').inert = false;
+        button.disabled = !pendingCsvFile;
+        button.textContent = 'Import transactions';
+        resultDiv.setAttribute('aria-busy', 'false');
+        appendImportReference(reference);
+        resultDiv.scrollIntoView({ block: 'nearest' });
       }
     }
 
     let pendingPdfFile = null;
+    let pdfImportInProgress = false;
+    let pdfManualAccount = false;
+    function choosePdfAccount() {
+      pdfManualAccount = true;
+      const picker = document.getElementById('import-account-picker');
+      picker.hidden = false;
+      picker.scrollIntoView({ block: 'nearest' });
+      document.getElementById('import-account-select').focus({ preventScroll: true });
+    }
     function onPdfSelected(e) {
       if (e.target.files.length > 0) {
         pendingPdfFile = e.target.files[0];
@@ -1804,48 +2148,84 @@
     }
 
     async function importPDF() {
-      if (!pendingPdfFile) { notify('Select a PDF first'); return; }
+      if (window.importIsBusy?.()) return;
+      if (!pendingPdfFile) { setImportStatus('error', 'Select a PDF first.'); return; }
+      if (pendingPdfFile.size > 12 * 1024 * 1024) { setImportStatus('error', 'Choose a PDF no larger than 12 MB.'); return; }
+      const account = pdfManualAccount ? FinanceAccounts.choice() : {};
+      if (!account) return;
+      const button = document.getElementById('pdf-import-btn');
+      if (button.disabled) return;
+      const file = pendingPdfFile;
+      pdfImportInProgress = true;
+      button.disabled = true;
+      button.textContent = 'Importing PDF...';
+      button.setAttribute('aria-busy', 'true');
+      let reference = '';
 
       const resultDiv = document.getElementById('import-result');
-      resultDiv.style.display = 'block';
-      resultDiv.innerHTML = '<div style="color: var(--primary)">Reading PDF...</div>';
-      resultDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+      setImportStatus('progress', `Reading ${file.name}... You can close this dialog and reopen it to check the result.`);
 
       try {
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(pendingPdfFile);
+          reader.onerror = () => reject(new Error('The selected PDF could not be read. Choose the file again.'));
+          reader.onabort = () => reject(new Error('Reading the PDF was interrupted. Choose the file again.'));
+          reader.readAsDataURL(file);
         });
 
-        resultDiv.innerHTML = '<div style="color: var(--primary)">Parsing transactions...</div>';
+        setImportStatus('progress', `Processing ${file.name}: uploading, detecting statement type, reading transactions and verifying balances. Please wait for the result.`);
 
+        reference = crypto.randomUUID();
         const res = await fetch('/api/import/import-pdf', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfBase64: base64, source: 'pdf_statement', statementType: 'td-checking' })
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': reference },
+          signal: AbortSignal.timeout(120000),
+          body: JSON.stringify({ pdfBase64: base64, source: file.name, ...account })
         });
-        const data = await res.json();
-        if (data.success) {
+        reference = importSupportReference(res) || reference;
+        const data = await res.json().catch(() => { throw new Error(`The server returned an unreadable response (${res.status}). The import outcome is unknown. Check Accounts and Transactions before retrying; repeat PDF imports skip matching transactions.`); });
+        reference = importSupportReference(res, data) || reference;
+        if (res.ok && data.success) {
+          resultDiv.setAttribute('role', 'status');
           resultDiv.style.background = 'rgba(81, 207, 102, 0.15)';
           resultDiv.innerHTML = `
             <div style="color: var(--success); font-weight: 700;">✅ PDF Import Complete</div>
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} already processed &nbsp;|&nbsp; ${data.needsReview || 0} held for review &nbsp;|&nbsp; ${data.totalInFile} found in PDF
             </div>
+            ${data.statement ? `<div style="font-size:13px;margin-top:10px">Detected ${data.statement.type === 'credit-card' ? 'credit card' : 'bank'} statement · closing ${escapeHtml(data.statement.closingDate)}<br>Statement balance: ${usd(data.statement.balance)}${data.statement.purchaseApr == null ? '' : ` · Purchase APR: ${escapeHtml(data.statement.purchaseApr)}%`}<br>Transactions reconcile to the closing balance. ${data.totalInFile === 0 ? 'This is a verified no-activity statement; its balance was saved without creating transactions.' : ''}</div>` : ''}
+            ${(data.warnings || []).length ? `<ul role="status">${data.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : ''}
+            ${FinanceAccounts.resultNote(data)}
             ${data.needsReview ? "<button class=\"btn btn-secondary\" onclick=\"closeImportModal();showView('etl')\">Review possible matches</button>" : ''}
           `;
-          pendingPdfFile = null;
-          document.getElementById('pdf-file-list').innerHTML = '';
-          document.getElementById('pdf-import-btn').disabled = true;
-          loadDashboard();
+          FinanceAccounts.afterImport(data).catch(error => {
+            resultDiv.innerHTML += `<p role="alert">PDF imported, but account refresh failed: ${escapeHtml(error.message)}. Reload the page to refresh your accounts.</p>`;
+            resultDiv.scrollIntoView({ block: 'nearest' });
+          });
+          if (pendingPdfFile === file) {
+            pendingPdfFile = null;
+            document.getElementById('pdf-file-list').innerHTML = '';
+            document.getElementById('pdf-input').value = '';
+          }
+          window.FinancePlan?.invalidate?.();
+          if (document.getElementById('transactions-view').classList.contains('active')) loadAllTransactions();
+          else if (document.getElementById('dashboard-view').classList.contains('active')) loadDashboard();
         } else {
-          resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-          resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(data.error)}</div>`;
+          if (data.code === 'ACCOUNT_REVIEW_REQUIRED') choosePdfAccount();
+          setImportStatus('error', data.error || `PDF import failed (${res.status}). Review the account and file, then try again.`);
         }
       } catch (err) {
-        resultDiv.style.background = 'rgba(255, 107, 107, 0.15)';
-        resultDiv.innerHTML = `<div style="color: var(--danger)">❌ ${escapeHtml(err.message)}</div>`;
+        setImportStatus('error', err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? 'The PDF request timed out. The server may still be processing it. Check Accounts and Transactions before retrying; repeat PDF imports skip matching transactions.'
+          : `${err.message} If the request reached the server, check Accounts and Transactions before retrying.`);
+      } finally {
+        pdfImportInProgress = false;
+        button.disabled = !pendingPdfFile;
+        button.textContent = 'Import PDF';
+        button.setAttribute('aria-busy', 'false');
+        resultDiv.setAttribute('aria-busy', 'false');
+        appendImportReference(reference);
+        resultDiv.scrollIntoView({ block: 'nearest' });
       }
     }
 
@@ -1853,10 +2233,10 @@
     // GOALS PAGE
     // ===========================================
     function openAddGoalModal() {
-      document.getElementById('add-goal-modal').style.display = 'flex';
+      document.getElementById('add-goal-modal').showModal();
     }
     function closeAddGoalModal() {
-      document.getElementById('add-goal-modal').style.display = 'none';
+      document.getElementById('add-goal-modal').close();
       document.getElementById('goal-name').value = '';
       document.getElementById('goal-target').value = '';
       document.getElementById('goal-current').value = '';
@@ -1864,170 +2244,6 @@
       document.getElementById('goal-priority').value = '1';
     }
 
-    async function saveGoal() {
-      const name = document.getElementById('goal-name').value.trim();
-      const target = parseFloat(document.getElementById('goal-target').value);
-      const current = parseFloat(document.getElementById('goal-current').value) || 0;
-      const targetDate = document.getElementById('goal-date').value;
-      const priority = parseInt(document.getElementById('goal-priority').value) || 1;
-      const icon = document.getElementById('goal-icon').value;
-
-      if (!name || !target) { notify('Name and target amount required'); return; }
-
-      try {
-        const res = await fetch('/api/goals', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, target_amount: target, current_amount: current, target_date: targetDate, priority, icon })
-        });
-        const data = await res.json();
-        if (data.success) {
-          notify(`✓ Goal "${name}" created!`);
-          closeAddGoalModal();
-          loadGoals();
-        } else {
-          notify(`❌ ${data.error}`);
-        }
-      } catch (err) { notify('❌ Failed to save goal'); }
-    }
-
-    async function deleteGoal(id) {
-      if (!confirm('Delete this goal?')) return;
-      try {
-        await fetch(`/api/goals/${id}`, { method: 'DELETE' });
-        notify('Goal deleted');
-        loadGoals();
-      } catch (err) { notify('❌ Delete failed'); }
-    }
-
-    async function contributeToGoal(id) {
-      const amount = prompt('Amount to contribute ($):');
-      if (!amount || isNaN(amount) || amount <= 0) return;
-      try {
-        const res = await fetch(`/api/goals/${id}/contribute`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: parseFloat(amount) })
-        });
-        const data = await res.json();
-        if (data.success) {
-          notify(`✓ Contributed $${amount}`);
-          loadGoals();
-        }
-      } catch (err) { notify('❌ Contribution failed'); }
-    }
-
-    async function loadGoals() {
-      try {
-        // Load goals with projection data
-        const res = await fetch('/api/goals');
-        const goals = await res.json();
-
-        // Load funding summary
-        const summaryRes = await fetch('/api/goals/funding-analysis');
-        const summary = await summaryRes.json();
-
-        // Render summary banner
-        const overviewEl = document.getElementById('goals-funding-overview');
-        if (summary.total_goals) {
-          const isOk = summary.gap <= 0;
-          overviewEl.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-              <div style="display: flex; gap: 24px; flex-wrap: wrap;">
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Monthly Income</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--success);">$${summary.total_discretionary ? summary.total_discretionary.toLocaleString() : '0'}</div>
-                </div>
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Suggested Contributions</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--primary);">$${summary.total_suggested_monthly ? summary.total_suggested_monthly.toLocaleString() : '0'}</div>
-                </div>
-                <div>
-                  <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total Remaining</div>
-                  <div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">$${summary.total_remaining ? summary.total_remaining.toLocaleString() : '0'}</div>
-                </div>
-              </div>
-              <div style="font-size: 13px; color: ${isOk ? 'var(--success)' : 'var(--warning)'}; font-weight: 600; text-align: right; max-width: 300px;">
-                ${summary.summary || ''}
-              </div>
-            </div>
-          `;
-        }
-
-        // Render goals grid
-        const listEl = document.getElementById('goals-list');
-        if (goals.length === 0) {
-          listEl.innerHTML = `<div style="grid-column: 1/-1; padding: 60px; text-align: center; color: var(--text-secondary);"><div style="font-size: 32px; margin-bottom: 12px;">🎯</div><h3>No goals yet</h3><p>Click "+ New Goal" to start saving!</p></div>`;
-          return;
-        }
-
-        listEl.innerHTML = goals.map(g => {
-          const progress = parseFloat(g.progress_pct) || 0;
-          const achievable = g.achievable;
-          const daysUntil = g.target_date ? Math.ceil((localDate(g.target_date) - new Date()) / (1000*60*60*24)) : null;
-
-          return `
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;">
-              <div style="padding: 20px; border-bottom: 1px solid var(--border);">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 32px;">${g.icon}</span>
-                    <div>
-                      <div style="font-weight: 700; font-size: 16px;">${g.name}</div>
-                      <div style="font-size: 11px; color: var(--text-secondary);">Priority #${g.priority}${g.target_date ? ' &middot; Due ' + localDate(g.target_date).toLocaleDateString() : ''}</div>
-                    </div>
-                  </div>
-                  <button onclick="deleteGoal(${g.id})" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; padding: 4px;">&times;</button>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-                  <div><span style="font-size: 24px; font-weight: 700; color: var(--primary);">$${(g.current_amount || 0).toLocaleString()}</span><span style="color: var(--text-secondary);"> / $${(g.target_amount || 0).toLocaleString()}</span></div>
-                  <div style="font-weight: 700; color: ${progress >= 100 ? 'var(--success)' : 'var(--primary)'};">${progress}%</div>
-                </div>
-
-                <div style="height: 8px; background: var(--bg-primary); border-radius: 4px; overflow: hidden;">
-                  <div style="height: 100%; width: ${Math.min(progress, 100)}%; background: ${progress >= 100 ? 'var(--success)' : g.color || 'var(--primary)'}; border-radius: 4px; transition: width 0.5s ease;"></div>
-                </div>
-              </div>
-
-              <div style="padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
-                ${g.target_date ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">📅</span>
-                    <span style="font-size: 12px; color: var(--text-secondary);">${daysUntil > 0 ? daysUntil + ' days' : 'Overdue'} remaining</span>
-                  </div>
-                ` : ''}
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-size: 12px;">💰</span>
-                  <span style="font-size: 12px; color: var(--text-secondary);">Need $${(g.remaining || 0).toLocaleString()} more</span>
-                </div>
-                ${g.suggested_monthly > 0 ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">📊</span>
-                    <span style="font-size: 12px; color: ${achievable ? 'var(--success)' : 'var(--warning)'};">
-                      Suggest $${g.suggested_monthly}/mo${achievable ? '' : ' (short $' + g.monthly_shortfall + ')'}
-                    </span>
-                  </div>
-                ` : ''}
-                ${g.projected_date ? `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px;">🎯</span>
-                    <span style="font-size: 12px; color: var(--text-secondary);">Projected: ${localDate(g.projected_date).toLocaleDateString()}</span>
-                  </div>
-                ` : ''}
-
-                <div style="margin-top: auto; padding-top: 12px; display: flex; gap: 8px;">
-                  <button onclick="contributeToGoal(${g.id})" class="btn btn-primary" style="flex: 1; font-size: 12px; padding: 8px;">+ Add Funds</button>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-      } catch (err) {
-        document.getElementById('goals-list').innerHTML = `<div style="padding: 40px; text-align: center; color: var(--danger);">Failed to load goals</div>`;
-      }
-    }
-
-    // --- Sidebar Toggle (Mobile) ---
     function toggleSidebar() {
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('sidebar-overlay');
@@ -2036,6 +2252,10 @@
       overlay.classList.toggle('show');
       hamburger.classList.toggle('open');
       hamburger.textContent = sidebar.classList.contains('open') ? '✕' : '☰';
+      hamburger.setAttribute('aria-expanded', String(sidebar.classList.contains('open')));
+      hamburger.setAttribute('aria-label', sidebar.classList.contains('open') ? 'Close navigation' : 'Open navigation');
+      syncSidebarAccessibility();
+      if (sidebar.classList.contains('open')) sidebar.querySelector('.nav-btn').focus();
     }
     function closeSidebar() {
       document.getElementById('sidebar').classList.remove('open');
@@ -2043,7 +2263,17 @@
       const h = document.getElementById('hamburger-btn');
       h.classList.remove('open');
       h.textContent = '☰';
+      h.setAttribute('aria-expanded', 'false');
+      h.setAttribute('aria-label', 'Open navigation');
+      syncSidebarAccessibility();
     }
+    function syncSidebarAccessibility() {
+      const mobile = window.innerWidth <= 768;
+      const open = document.getElementById('sidebar').classList.contains('open');
+      document.getElementById('sidebar').inert = mobile && !open;
+      document.querySelector('.main-content').inert = mobile && open;
+    }
+    window.addEventListener('resize', syncSidebarAccessibility);
     // Auto-close sidebar on nav click (mobile)
     document.addEventListener('click', function(e) {
       if (e.target.closest('.nav-btn') && window.innerWidth <= 768) {
@@ -2053,8 +2283,24 @@
 
   </script>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-  <script src="refresh.js"></script>
-  <script src="account.js"></script>
+  <script src="ui.js?v=20261030a"></script>
+  <script src="review-tools.js?v=20261024a"></script>
+  <script src="refresh.js?v=20261024-signup"></script>
+  <script src="accounts.js?v=20261024-auto-accounts"></script>
+  <script src="import-history.js?v=20261024a"></script>
+  <script src="account.js?v=20261026-household"></script>
+  <script src="pro-charts.js?v=20261031c"></script>
+  <script src="pro-core.js?v=20261024-pro-locks"></script>
+  <script src="pro-dashboard.js?v=20261024-household"></script>
+  <script src="spending-history.js?v=20261025b"></script>
+  <script src="pro-categories.js?v=20261031-household"></script>
+  <script src="analytics.js?v=20261031-household"></script>
+  <script src="plan.js?v=20261031-household"></script>
+  <script src="welcome.js?v=20261030c"></script>
+  <script src="income-review.js?v=20261020b"></script>
+  <script src="tutorial.js?v=20261024-auto-accounts"></script>
+  <script src="marketing.js?v=20261024-household"></script>
+  <script src="household.js?v=20261024-plan-changes"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

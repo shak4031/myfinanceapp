@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { administrativeTransaction } from '../db.js';
-import { log } from './logger.js';
+import { log, writeEntry } from './logger.js';
 
 const SECRET_KEYS = /pass|token|secret|cookie|authorization|amount|balance|description/i;
 const alertTimes = new Map();
@@ -25,9 +25,7 @@ export function sanitizeDetail(detail = {}) {
 }
 
 export function structuredLog(level, payload) {
-  if (process.env.NODE_TEST_CONTEXT && !process.env.SHOW_TEST_LOGS) return;
-  const line = JSON.stringify({ time: new Date().toISOString(), level, ...payload });
-  if (level === 'error') console.error(line); else console.log(line);
+  writeEntry({ ...payload, level });
 }
 
 async function sendAlert(event) {
@@ -56,7 +54,7 @@ export async function recordAudit(req, eventType, outcome, fields = {}) {
     event_type: eventType,
     outcome,
     actor_user_id: fields.actorUserId ?? req?.support?.actorUserId ?? req?.user?.id ?? null,
-    subject_user_id: fields.subjectUserId ?? req?.user?.id ?? null,
+    subject_user_id: fields.subjectUserId ?? req?.household?.owner_user_id ?? req?.user?.id ?? null,
     support_grant_id: fields.supportGrantId ?? req?.support?.grantId ?? null,
     request_id: req?.id || null,
     ip_hash: req ? hashIdentifier(req.ip) : null,
@@ -66,9 +64,12 @@ export async function recordAudit(req, eventType, outcome, fields = {}) {
     status: fields.status ?? null,
     detail: sanitizeDetail(fields.detail)
   };
+  const logDetail = { ...event.detail };
+  delete logDetail.fileName;
+  delete logDetail.fileNames;
   structuredLog(outcome === 'error' ? 'error' : outcome === 'failure' || outcome === 'denied' ? 'warn' : 'info', {
     event: eventType, outcome, requestId: event.request_id, actor: event.actor_user_id,
-    subject: event.subject_user_id, grant: event.support_grant_id, status: event.status, detail: event.detail
+    subject: event.subject_user_id, grant: event.support_grant_id, status: event.status, detail: logDetail
   });
   try {
     await administrativeTransaction(client => client.query(`

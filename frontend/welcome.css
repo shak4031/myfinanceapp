@@ -1,0 +1,129 @@
+/* Dashboard welcome: a warm greeting, focused insights and today's pulse. */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+#welcome-hero.welcome-hero {
+  --welcome-accent: #16705b; --welcome-accent-soft: #e5f5ed;
+  position: relative; display: grid; gap: 24px; min-width: 0;
+  padding: clamp(18px, 2.6vw, 30px) clamp(18px, 3vw, 34px); border-radius: 22px; color: #122138;
+  background: linear-gradient(135deg, #fff 25%, #f0f6f5 72%, #eaf1fa);
+  border: 1px solid #cddfd9; border-top: 3px solid #258577; box-shadow: 0 6px 24px -18px rgba(18,33,56,.2);
+}
+.welcome-hero h1, .welcome-hero h3, .welcome-hero p { margin: 0; }
+.welcome-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.welcome-greeting { min-width: 0; }
+.welcome-date { display: inline-block; padding: 5px 10px; border-radius: 6px; background: #e5f0ed; color: #345e70; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.welcome-greeting h1 { margin-top: 8px !important; color: #122138; font-size: clamp(25px, 3vw, 34px); font-weight: 700; letter-spacing: -1px; line-height: 1.2; overflow-wrap: anywhere; }
+.welcome-name { color: var(--welcome-accent); text-decoration: underline; text-decoration-color: #b8d9cc; text-decoration-thickness: 4px; text-underline-offset: 7px; }
+.welcome-sub { margin-top: 10px !important; color: #3b4b63; font-size: 15px; line-height: 1.5; }
+.welcome-top-actions { display: flex; gap: 8px; flex: none; }
+.welcome-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 8px 13px; border: 1px solid #d9e2dc; border-radius: 10px;
+  background: #fff; color: #244b3e; font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; transition: background .2s, border-color .2s;
+}
+.welcome-ghost:hover { background: #edf4ef; border-color: #9eb9ac; }
+.welcome-ghost:focus-visible, .welcome-nav:focus-visible, .welcome-dot:focus-visible, .welcome-action:focus-visible { outline: 3px solid #226452; outline-offset: 3px; }
+
+/* Urgency stays with the insight, rather than recolouring the entire welcome. */
+.welcome-carousel {
+  position: relative; isolation: isolate; overflow: hidden; min-width: 0; padding: clamp(18px, 2.5vw, 28px); border: 1px solid #244f60; border-radius: 18px;
+  background: radial-gradient(ellipse at 100% 0%, #2b716d 0%, transparent 64%), linear-gradient(120deg, #152d46, #184c53);
+  box-shadow: inset 0 1px 0 #ffffff24, 0 14px 22px -18px #12213899;
+}
+.welcome-carousel::before { content: ""; position: absolute; z-index: -1; pointer-events: none; width: 330px; height: 330px; right: -110px; top: -190px; border: 1px solid #cfb77d55; border-radius: 50%; box-shadow: 0 0 0 38px #cfb77d0d, 0 0 0 76px #cfb77d0a, 0 0 0 114px #cfb77d07; }
+.welcome-slides { position: relative; transition: height .3s ease; }
+.welcome-slide { --tone: #b9d9f4; --tone-soft: #28485f; display: flex; align-items: flex-start; gap: clamp(12px, 2vw, 18px); }
+.welcome-slide:not(.is-active) { position: absolute; inset: 0 0 auto 0; visibility: hidden; pointer-events: none; }
+.welcome-slide.is-active { animation: welcome-in .3s ease both; }
+.welcome-slide.is-leaving { visibility: visible; animation: welcome-out .18s ease forwards; }
+@keyframes welcome-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes welcome-out { to { opacity: 0; } }
+.welcome-slide.tone-danger { --tone: #ffbfc7; --tone-soft: #583846; }
+.welcome-slide.tone-warning { --tone: #ffdda3; --tone-soft: #54482f; }
+.welcome-slide.tone-success { --tone: #a5efd3; --tone-soft: #23594f; }
+.welcome-slide.tone-learn { --tone: #c7d7ff; --tone-soft: #344c70; }
+.welcome-insight-icon { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid #ffffff30; border-radius: 14px; color: var(--tone); background: var(--tone-soft); box-shadow: inset 0 1px 0 #ffffff1a; }
+.welcome-slide-copy { display: grid; justify-items: start; gap: 8px; min-width: 0; }
+.welcome-slide-tone { color: var(--tone); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.welcome-slide h3 { font-size: clamp(23px, 2.5vw, 31px); font-weight: 700; letter-spacing: -.6px; line-height: 1.3; color: #fff; overflow-wrap: anywhere; }
+.welcome-hl { padding: 0 .08em; color: var(--tone); background: var(--tone-soft); border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.welcome-slide p { max-width: 66ch; color: #d5e4eb; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.welcome-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; max-width: 100%; min-height: 38px; margin-top: 4px; padding: 9px 14px; border: 1px solid transparent; border-radius: 10px;
+  background: #dcbd80; color: #182e40; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: background .2s;
+}
+.welcome-action svg { flex: none; }
+.welcome-action:hover { background: #efd49f; }
+.welcome-carousel :is(.welcome-nav, .welcome-dot, .welcome-action):focus-visible { outline-color: #ffe2a6; }
+
+/* Champagne navigation complements the stage without competing with urgency. */
+.welcome-controls { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+.welcome-dots { display: flex; flex: 1; align-items: center; gap: 2px; min-width: 0; padding: 4px; margin: -4px; overflow-x: auto; }
+.welcome-dot { position: relative; flex: none; width: 24px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.welcome-dot::before, .welcome-dot span { content: ""; position: absolute; top: 11px; left: 8px; width: 8px; height: 6px; border-radius: 999px; background: #91afa9; }
+.welcome-dot:hover::before { background: #728e80; }
+.welcome-dot.is-active { width: 40px; }
+.welcome-dot.is-active::before { width: 32px; left: 4px; background: #557770; }
+.welcome-dot span { display: none; background: #dcbd80; }
+.welcome-dot.is-active span { display: block; left: 4px; width: 0; animation: welcome-fill var(--welcome-rotate, 7s) linear forwards; }
+#welcome-hero.is-paused .welcome-dot.is-active span { animation-play-state: paused; }
+@keyframes welcome-fill { from { width: 0; } to { width: 32px; } }
+.welcome-count { flex: none; min-width: 38px; color: #c6dcd9; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
+.welcome-nav { display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border: 1px solid #ffffff40; border-radius: 50%; background: #ffffff12; color: #fff; cursor: pointer; transition: background .2s, border-color .2s; }
+.welcome-nav:hover { background: #ffffff26; border-color: #b4d7cf; }
+
+/* Soft financial-theme accents; warm colours remain reserved for risk. */
+.welcome-pulse { min-width: 0; }
+.welcome-pulse dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.welcome-pulse-row { --ink: #122138; display: grid; align-content: start; gap: 7px; min-width: 0; padding: 14px; border: 1px solid #e0e7e1; border-top: 3px solid var(--ink); border-radius: 12px; background: #f8faf7; }
+.welcome-pulse-row.is-good, .welcome-pulse-row.is-mint { --ink: #226452; border-color: #cce3d7; background: #edf7f1; }
+.welcome-pulse-row.is-sky { --ink: #345e85; border-color: #d2e1ef; background: #eff5fb; }
+.welcome-pulse-row.is-grape { --ink: #655180; border-color: #dfd7e9; background: #f4f1f8; }
+.welcome-pulse-row.is-warn { --ink: #875117; border-color: #e7d9c2; background: #fcf9f3; }
+.welcome-pulse-row.is-bad { --ink: #a52d40; border-color: #e9cfd4; background: #fdf7f7; }
+.welcome-pulse .welcome-pulse-row { border-top-color: var(--ink); }
+.welcome-pulse-row dt { display: flex; align-items: center; gap: 6px; color: #475569; font-size: 12px; font-weight: 600; }
+.welcome-pulse-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; background: #ffffffc9; flex: none; color: var(--ink); }
+.welcome-pulse-row.is-warn .welcome-pulse-icon, .welcome-pulse-row.is-bad .welcome-pulse-icon { color: var(--ink); }
+.welcome-pulse-row dd { display: grid; gap: 3px; margin: 0; }
+.welcome-pulse-row strong { color: var(--ink); font-size: 20px; font-weight: 700; letter-spacing: -.4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.welcome-pulse-row dd span { color: #52637a; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.welcome-skeleton { display: grid; align-content: start; gap: 12px; padding: 6px 0; }
+.welcome-skeleton span { display: block; height: 14px; border-radius: 8px; background: #e8eee9; }
+.welcome-skeleton span:nth-child(1) { width: 30%; } .welcome-skeleton span:nth-child(2) { width: 70%; height: 24px; } .welcome-skeleton span:nth-child(3) { width: 55%; }
+/* Income & expense history, now an optional drawer further down the dashboard. */
+.history-disclosure { padding: 0 !important; }
+.history-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; cursor: pointer; list-style: none; }
+.history-disclosure > summary::-webkit-details-marker { display: none; }
+.history-disclosure > summary h2 { margin: 0; font-size: 17px; }
+.history-disclosure > summary p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; }
+.history-disclosure > summary .history-chevron { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 1px solid #e2e7df; border-radius: 50%; transition: transform .2s; }
+.history-disclosure[open] > summary .history-chevron { transform: rotate(180deg); }
+.history-disclosure > summary:focus-visible { outline: 3px solid #0f9f6e55; outline-offset: -3px; border-radius: 18px; }
+.history-body { padding: 0 22px 22px; }
+
+@media (max-width: 560px) {
+  #welcome-hero.welcome-hero { border-radius: 18px; gap: 18px; }
+  .welcome-top { flex-direction: column; gap: 14px; }
+  .welcome-top-actions { width: 100%; }
+  .welcome-ghost { flex: 1; }
+  .welcome-carousel { padding-top: 18px; }
+  .welcome-slide { gap: 12px; }
+  .welcome-insight-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .welcome-insight-icon svg { width: 21px; height: 21px; }
+  .welcome-count { display: none; }
+  .welcome-controls { gap: 6px; }
+  .welcome-pulse dl { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+  .welcome-pulse-row { padding: 12px; }
+  .welcome-pulse-row:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .welcome-pulse-row strong { font-size: 18px; }
+  .welcome-action { width: 100%; }
+}
+@media (max-width: 360px) {
+  .welcome-pulse dl { grid-template-columns: minmax(0,1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #welcome-hero *, #welcome-hero *::before, #welcome-hero *::after { animation: none !important; transition: none !important; }
+  .welcome-dot.is-active span { width: 32px; }
+}
+a.welcome-action { text-decoration: none; }
