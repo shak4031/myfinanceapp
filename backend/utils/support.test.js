@@ -4,6 +4,7 @@ import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
 import { setMailTransportForTests } from './mailer.js';
+import { setStripeForTests } from './billing.js';
 import { grantFixtureAccess } from './paidFixture.js';
 import { attemptKeysForEmail } from '../routes/auth.js';
 import application from '../app.js';
@@ -266,12 +267,40 @@ test('audit logging, password reset, admin console and consented support access'
       method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
     })).status, 409);
     await database.query("DELETE FROM plaid_connections WHERE item_id='item-test-delete-guard'");
+    const cancellationCalls = [];
+    let stripeStatus = 'active';
+    setStripeForTests({ subscriptions: {
+      retrieve: async id => {
+        assert.equal(id, 'sub_test_delete_guard');
+        return { id, customer: 'cus_test_delete_guard', status: stripeStatus };
+      },
+      cancel: async (id, params, options) => {
+        cancellationCalls.push({ id, params, options });
+        return { id, status: 'active' };
+      }
+    } });
+    const cancellationUnconfirmed = await call('/api/admin/users/2', {
+      method: 'DELETE', body: {
+        confirmEmail: 'CUSTOMER@example.com', cancelStripeSubscription: true
+      }, cookie: adminCookie
+    });
+    assert.equal(cancellationUnconfirmed.status, 409);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM users WHERE id=2')).rows[0].count, 1);
+    stripeStatus = 'canceled';
     const deleted = await call('/api/admin/users/2', {
-      method: 'DELETE', body: { confirmEmail: 'CUSTOMER@example.com' }, cookie: adminCookie
+      method: 'DELETE', body: {
+        confirmEmail: 'CUSTOMER@example.com', cancelStripeSubscription: true
+      }, cookie: adminCookie
     });
     assert.equal(deleted.status, 200);
     assert.equal(deleted.body.deleted, true);
     assert.equal(deleted.body.email, 'customer@example.com');
+    assert.equal(deleted.body.stripeSubscriptionCanceled, false, 'retry observes Stripe cancellation before deleting');
+    assert.deepEqual(cancellationCalls, [{
+      id: 'sub_test_delete_guard',
+      params: { invoice_now: false, prorate: false },
+      options: { idempotencyKey: 'admin-delete-2-sub_test_delete_guard' }
+    }]);
     assert.equal((await call('/api/auth/me', { cookie: customerCookie })).status, 401);
     assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM transactions WHERE user_id=2')).rows[0].count, 0);
     assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM savings_goals WHERE user_id=2')).rows[0].count, 0);
@@ -286,6 +315,7 @@ test('audit logging, password reset, admin console and consented support access'
   } finally {
     server.close();
     setMailTransportForTests(null);
+    setStripeForTests(null);
     for (const [key, value] of [['OWNER_SETUP_TOKEN', saved.token], ['ALLOW_REGISTRATION', saved.registration], ['APP_ORIGIN', saved.origin]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }

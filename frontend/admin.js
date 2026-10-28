@@ -160,10 +160,13 @@
     try {
       const { id, email } = deleteTarget;
       const result = await api(`/api/admin/users/${encodeURIComponent(id)}`, {
-        method: 'DELETE', body: JSON.stringify({ confirmEmail: deleteEmailInput.value.trim() })
+        method: 'DELETE', body: JSON.stringify({
+          confirmEmail: deleteEmailInput.value.trim(), cancelStripeSubscription: true
+        })
       });
       closeDeleteDialog();
-      toast(`Deleted ${result.email || email}. The action was recorded in the audit log.`);
+      const billingMessage = result.stripeSubscriptionCanceled ? ' Its Stripe subscription was canceled.' : '';
+      toast(`Deleted ${result.email || email}.${billingMessage} The action was recorded in the audit log.`);
       await loadUsers();
     } catch (error) {
       $('delete-account-error').textContent = error.message;

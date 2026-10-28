@@ -11,10 +11,12 @@ import { queryLogs, parseSince, logRetentionDays } from '../utils/logStore.js';
 import { monitorEnabled } from './monitor.js';
 import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.js';
 import { isDemoEmail } from '../utils/demo.js';
+import { stripeClient } from '../utils/billing.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
 const startedAt = Date.now();
+const endedStripeSubscriptionStatuses = new Set(['canceled', 'incomplete_expired']);
 
 const parseId = value => {
   const id = Number(value);
@@ -28,7 +30,7 @@ async function loadUser(client, id) {
 async function loadDeletionTarget(client, id, lock = false) {
   return (await client.query(`SELECT u.id,u.name,u.email,u.role,m.role AS household_role,m.household_id,
       h.owner_user_id,(SELECT COUNT(*)::int FROM household_members members WHERE members.household_id=m.household_id) AS household_members,
-      s.stripe_subscription_id,s.status AS subscription_status,s.checkout_session_id,s.checkout_expires_at
+      s.stripe_customer_id,s.stripe_subscription_id,s.checkout_session_id,s.checkout_expires_at
     FROM users u
     LEFT JOIN household_members m ON m.user_id=u.id
     LEFT JOIN households h ON h.id=m.household_id
@@ -42,15 +44,29 @@ function deletionConflict(target) {
   if (target.household_role === 'owner' && Number(target.household_members) > 1) {
     return 'This account owns a household with other members. Remove or transfer household members before deleting it.';
   }
-  if (target.household_role === 'owner' && target.stripe_subscription_id
-    && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'].includes(target.subscription_status)) {
-    return 'This household has an active or unresolved Stripe subscription. Cancel or resolve the subscription before deleting its owner account.';
-  }
   if (target.household_role === 'owner' && target.checkout_session_id
     && (!target.checkout_expires_at || new Date(target.checkout_expires_at).getTime() > Date.now())) {
     return 'This household has a Stripe checkout in progress. Complete or allow the checkout session to expire before deleting its owner account.';
   }
   return null;
+}
+
+async function cancelStripeSubscriptionForDeletion(target) {
+  if (target.household_role !== 'owner' || !target.stripe_subscription_id) return null;
+  const stripe = stripeClient();
+  const subscription = await stripe.subscriptions.retrieve(target.stripe_subscription_id);
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+  if (customerId !== target.stripe_customer_id) {
+    return 'The Stripe subscription does not match this household’s billing customer. Resolve the billing record before deleting the account.';
+  }
+  if (endedStripeSubscriptionStatuses.has(subscription.status)) return false;
+  const canceled = await stripe.subscriptions.cancel(subscription.id, { invoice_now: false, prorate: false }, {
+    idempotencyKey: `admin-delete-${target.id}-${subscription.id}`
+  });
+  if (!endedStripeSubscriptionStatuses.has(canceled.status)) {
+    return 'Stripe did not confirm that the subscription was canceled. The account was not deleted; refresh and try again.';
+  }
+  return true;
 }
 
 router.get('/openapi.json', (req, res) => res.json(openApiSpec()));
@@ -141,6 +157,10 @@ router.delete('/users/:id', async (req, res, next) => {
     }
     const conflict = deletionConflict(target);
     if (conflict) return res.status(409).json({ error: conflict });
+    if (target.household_role === 'owner' && target.stripe_subscription_id
+      && req.body?.cancelStripeSubscription !== true) {
+      return res.status(409).json({ error: 'Confirm immediate Stripe subscription cancellation to continue deleting this account.' });
+    }
 
     const connections = await administrativeTransaction(async client => (await client.query(
       'SELECT id FROM plaid_connections WHERE user_id=$1', [id]
@@ -162,8 +182,14 @@ router.delete('/users/:id', async (req, res, next) => {
       }
       const currentConflict = deletionConflict(current);
       if (currentConflict) return { conflict: currentConflict };
+      if (current.household_role === 'owner' && current.stripe_subscription_id
+        && req.body?.cancelStripeSubscription !== true) {
+        return { conflict: 'Confirm immediate Stripe subscription cancellation to continue deleting this account.' };
+      }
       const plaid = await client.query('SELECT 1 FROM plaid_connections WHERE user_id=$1 LIMIT 1', [id]);
       if (plaid.rowCount) return { conflict: 'Disconnect this account’s Plaid bank connections in the app before deleting the account.' };
+      const stripeCancellation = await cancelStripeSubscriptionForDeletion(current);
+      if (typeof stripeCancellation === 'string') return { conflict: stripeCancellation };
 
       const counts = {};
       const remove = async (table, sql = `DELETE FROM ${table} WHERE user_id=$1`) => {
@@ -197,15 +223,25 @@ router.delete('/users/:id', async (req, res, next) => {
       }
       const result = await client.query('DELETE FROM users WHERE id=$1 AND email=$2 RETURNING id', [id, current.email]);
       if (!result.rowCount) throw new Error('The account changed during deletion.');
-      return { id: result.rows[0].id, email: current.email, counts };
+      return {
+        id: result.rows[0].id, email: current.email, counts,
+        stripeSubscriptionCanceled: stripeCancellation
+      };
     });
 
     if (!deleted) return res.status(404).json({ error: 'User not found' });
     if (deleted.conflict) return res.status(409).json({ error: deleted.conflict });
     await recordAudit(req, 'admin.account_deleted', 'success', {
-      subjectUserId: deleted.id, status: 200, detail: { removedRecords: deleted.counts }
+      subjectUserId: deleted.id, status: 200,
+      detail: {
+        removedRecords: deleted.counts,
+        stripeSubscriptionCanceled: deleted.stripeSubscriptionCanceled
+      }
     });
-    res.json({ success: true, deleted: true, email: deleted.email });
+    res.json({
+      success: true, deleted: true, email: deleted.email,
+      stripeSubscriptionCanceled: deleted.stripeSubscriptionCanceled
+    });
   } catch (error) { next(error); }
 });
 

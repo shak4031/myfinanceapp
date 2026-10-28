@@ -103,7 +103,7 @@
       <section data-panel="users" hidden>
         <div class="card">
           <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>
-          <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead. Account deletion permanently removes that user's MyFinance data and cannot be undone. Disconnect Plaid, resolve an active Stripe subscription or checkout, and remove other household members first. Historical Stripe billing records are not deleted by this action.</p>
+          <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead. Account deletion permanently removes that user's MyFinance data and cannot be undone. Disconnect Plaid, resolve any checkout in progress, and remove other household members first. If the household has a Stripe subscription, deletion cancels it immediately; Stripe billing records and invoices are retained.</p>
           <div id="users" class="table-scroll"></div>
         </div>
       </section>
@@ -167,12 +167,12 @@
     <dialog id="delete-account-dialog" class="delete-account-dialog" aria-labelledby="delete-account-title">
       <form id="delete-account-form" novalidate>
         <h2 id="delete-account-title">Permanently delete account?</h2>
-        <p>This removes the user's login, imported transactions, planning data, and personal settings. This action cannot be undone and does not cancel subscriptions or delete billing records held by Stripe. An active or unresolved subscription, an unexpired checkout, connected Plaid items, or other household members must be resolved first.</p>
+        <p>This permanently removes the user's login, imported transactions, planning data, and personal settings. If present, the household's Stripe subscription will be canceled immediately before deletion. This does not refund previous payments or clear existing invoice balances; Stripe retains its billing records. An unexpired checkout, connected Plaid items, or other household members must be resolved first.</p>
         <p class="delete-target-email" id="delete-account-target"></p>
         <label for="delete-account-email">Type the account email to confirm
           <input id="delete-account-email" type="email" autocomplete="off" spellcheck="false" required>
         </label>
-        <label class="delete-confirm-check"><input id="delete-account-check" type="checkbox"> I understand this permanently deletes the account and its MyFinance data.</label>
+        <label class="delete-confirm-check"><input id="delete-account-check" type="checkbox"> I understand this permanently deletes the MyFinance account and immediately cancels its Stripe subscription, if any.</label>
         <p id="delete-account-error" role="alert" hidden></p>
         <div class="actions">
           <button type="button" class="btn btn-secondary" id="delete-account-cancel">Cancel</button>
@@ -184,6 +184,6 @@
   <div id="admin-toast" hidden role="status"></div>
   <script src="ui.js?v=20261017r"></script>
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="admin.js?v=20261027-account-delete"></script>
+  <script src="admin.js?v=20261027-account-delete-stripe-cancel"></script>
 </body>
 </html>

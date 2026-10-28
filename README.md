@@ -94,10 +94,11 @@ trust boundaries, as explained in the privacy documentation. See
 Eligible non-admin accounts can be permanently deleted from the Users tab after
 the administrator types the account email and checks an explicit confirmation.
 Deletion is blocked for the owner/demo account, shared household owners, accounts
-with connected Plaid items, active or unresolved Stripe subscriptions, and
-unexpired Stripe checkouts. Canceled subscription history and expired checkout
-references do not block deletion; Stripe-side billing records are not deleted by
-this action. Resolve active dependencies first. Successful deletions are audited.
+with connected Plaid items, and unexpired Stripe checkouts. The confirmation
+explicitly authorizes immediate cancellation of any Stripe subscription before
+deletion; Stripe billing records and invoices remain, and cancellation does not
+refund previous payments or clear existing invoice balances. Successful
+deletions are audited.
 
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
