@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance Basic or Pro. Start a 15-day Pro trial with a selected plan and payment details in Stripe Checkout.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261024-signup"></script>
+  <script src="session.js?v=20261028-analytics"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -494,7 +494,7 @@
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261030d">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
-  <link rel="stylesheet" href="analytics.css?v=20261031c">
+  <link rel="stylesheet" href="analytics.css?v=20261028-ledger">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261031a">
@@ -729,7 +729,10 @@
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/categories"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><button class="btn btn-primary" onclick="showView('category-admin')">Manage categories</button></div>
         </header>
         <div class="filter-panel panel">
+          <label for="category-filter-search" class="search-filter">Search categories
+            <input id="category-filter-search" type="search" placeholder="e.g. Shopping, Groceries, Credit Cards" autocomplete="off" spellcheck="false"></label>
           <label for="category-filter-period">Time period<select id="category-filter-period"><option value="last-3" selected>Last 3 months</option></select></label>
+          <button type="button" class="btn btn-secondary" id="category-filter-reset">Reset filters</button>
           <p id="category-filter-status" class="filter-status" role="status"></p>
           <div id="category-filter-months" class="month-picker" hidden></div>
         </div>
@@ -798,7 +801,7 @@
             <div class="kb-grid">
               <article class="kb-card"><h3>Where your money flows</h3><p>Shows how average monthly income is divided among fixed bills, everyday categories, debt minimums and money left over. Use it to see the broad shape of your budget and which category contributes most. It reflects imported and classified activity; it cannot include bills or debt payments that were never recorded.</p></article>
               <article class="kb-card"><h3>Where the signals overlap</h3><p>Combines three separate checks—above a similar household, trending up and unusually high for your own history. Categories with multiple signals deserve earlier review; one signal alone is a prompt to watch, not a verdict. This adds benchmark and unusual-month context beyond Overview's category trend table.</p></article>
-              <article class="kb-card"><h3>Who gets your money</h3><p>Explores vendors and spending concentration. Select a bubble to see that vendor's story; change the bubble size or color to explore the available measures. It helps move from “which category?” to “which merchant?”—but a large merchant is not necessarily a problem.</p></article>
+              <article class="kb-card"><h3>Who gets your money</h3><p>Totals all non-transfer payments to each merchant in the exact completed months shown, including fixed bills and large purchases. Payments renamed to the same chosen name are combined. Select a bubble for precise money-out totals, separate credits, net outflow and a list of counted transactions. Credits are not automatically treated as refunds or subtracted from spending. The chart shows the largest 36 merchants; its overall spending total includes all merchants. Compare with Transactions using the same months: Transactions' “Last 3 months” includes the current month, while Compass uses completed months. Missing statements can understate any total.</p></article>
               <article class="kb-card"><h3>Hot and cold months</h3><p>A category-by-month view that makes seasonality, recurring peaks and unusually quiet months easier to see. Hover or focus a cell for the exact value. Compare complete months only; a missing statement is not a zero-spending month.</p></article>
               <article class="kb-card"><h3>Your normal range</h3><p>Compares recent category spending with its historical range and shows how exceptional the latest month is relative to prior months. Use it to distinguish a routine fluctuation from a genuine spike, while checking that the history is complete and relevant.</p></article>
               <article class="kb-card"><h3>Technical readings</h3><p>An optional detail table for average vs. typical spending, momentum, moving-average crossovers, volatility bands, how many recent months rose, and whether change came from purchase frequency or purchase size. It is for investigating the “why” behind a signal; the headline and plan are enough for a quick review.</p></article>
@@ -2313,20 +2316,20 @@
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261024a"></script>
-  <script src="refresh.js?v=20261024-signup"></script>
+  <script src="refresh.js?v=20261028-category-search"></script>
   <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261026-household"></script>
   <script src="pro-charts.js?v=20261031c"></script>
-  <script src="pro-core.js?v=20261024-pro-locks"></script>
+  <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
-  <script src="analytics.js?v=20261031-household"></script>
+  <script src="analytics.js?v=20261028-ledger"></script>
   <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="tutorial.js?v=20261024-auto-accounts"></script>
+  <script src="tutorial.js?v=20261028-analytics"></script>
   <script src="marketing.js?v=20261024-household"></script>
   <script src="household.js?v=20261024-plan-changes"></script>
   <script>FinanceSession.start();</script>

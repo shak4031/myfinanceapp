@@ -22,7 +22,7 @@
     export: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>'
   };
-  const state = { entitlement: null, entitlementPromise: null, analytics: null, analyticsAt: 0, analyticsPromise: null };
+  const state = { entitlement: null, entitlementPromise: null, analytics: null, analyticsAt: 0, analyticsPromise: null, analyticsGeneration: 0 };
   async function request(url, options = {}) {
     const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
     const data = await response.json();
@@ -85,10 +85,23 @@
     if (!isPlusActive()) return Promise.reject(new Error('Analytics requires household Pro access.'));
     if (!force && state.analytics && Date.now() - state.analyticsAt < 15000) return Promise.resolve(state.analytics);
     if (!force && state.analyticsPromise) return state.analyticsPromise;
-    state.analyticsPromise = request('/api/analytics').then(data => { state.analytics = data; state.analyticsAt = Date.now(); return data; }).finally(() => { state.analyticsPromise = null; });
-    return state.analyticsPromise;
+    const generation = state.analyticsGeneration;
+    const pending = request('/api/analytics').then(data => {
+      if (generation !== state.analyticsGeneration) return getAnalytics();
+      state.analytics = data;
+      state.analyticsAt = Date.now();
+      return data;
+    }).finally(() => { if (state.analyticsPromise === pending) state.analyticsPromise = null; });
+    state.analyticsPromise = pending;
+    return pending;
   }
-  const invalidateAnalytics = () => { state.analytics = null; state.analyticsAt = 0; };
+  const invalidateAnalytics = () => {
+    state.analyticsGeneration++;
+    state.analytics = null;
+    state.analyticsAt = 0;
+    state.analyticsPromise = null;
+    globalThis.emitFinanceEvent?.('finance:analytics-invalidated', {});
+  };
   const openUpgrade = (reason = '', requiredPlan = 'pro', picked = '') => globalThis.FinanceHousehold?.openBilling(reason, picked || requiredPlan);
   function requirePro(reason) {
     if (isPlusActive()) return true;

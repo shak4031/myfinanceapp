@@ -240,7 +240,7 @@ test('the heatmap lists every spending category by month, biggest first, without
   assert.equal(heatmap.rows[1].total, 2000);
 });
 
-test('merchant bubbles compare the last three months with the three before and set one-offs aside', () => {
+test('merchant bubbles compare periods without hiding fixed bills or large purchases', () => {
   const day = (back, d) => { const x = new Date(2026, 9 - back, d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
   const transactions = [6, 5, 4, 3, 2, 1].flatMap(back => [
     { date: day(back, 3), description: `SHAKE SHACK ${back}`, amount: back <= 3 ? 60 : 30, direction: 'DEBIT', category: 'Dining' },
@@ -255,8 +255,10 @@ test('merchant bubbles compare the last three months with the three before and s
   assert.equal(vendors.months, 3);
   assert.equal(vendors.compareMonths, 3);
   const names = vendors.items.map(v => v.name);
-  assert.ok(!names.some(n => /ROCKET|SAVINGS|BEST BUY/.test(n)), `fixed bills, transfers and one-offs stay out: ${names}`);
-  assert.deepEqual(vendors.setAside, { count: 1, monthly: 416.67, over: 250 });
+  assert.ok(!names.some(n => /SAVINGS/.test(n)), 'transfers stay out');
+  assert.ok(names.some(n => /ROCKET/.test(n)), 'fixed bills count');
+  assert.ok(names.some(n => /BEST BUY/.test(n)), 'large purchases count');
+  assert.equal(vendors.setAside, null);
   const shack = vendors.items.find(v => v.name.startsWith('SHAKE SHACK'));
   assert.deepEqual({ monthly: shack.monthly, visits: shack.visits, change: shack.change, regular: shack.regular }, { monthly: 60, visits: 1, change: 1, regular: true });
   assert.deepEqual([shack.amount, shack.transactions, shack.monthlyLow, shack.monthlyHigh, shack.swingPct], [180, 3, 60, 60, 0]);
@@ -267,7 +269,7 @@ test('merchant bubbles compare the last three months with the three before and s
   assert.equal(cafe.isNew, true);
   assert.equal(cafe.change, null);
   assert.deepEqual([cafe.amount, cafe.transactions, cafe.monthlyLow, cafe.monthlyHigh, cafe.swingPct], [12, 1, 0, 12, 3]);
-  assert.equal(vendors.items[0].name.startsWith('SHAKE SHACK'), true, 'biggest monthly spend first');
+  assert.equal(vendors.items[0].name.startsWith('ROCKET'), true, 'biggest monthly spend first');
 });
 
 test('merchant spending swing uses monthly high minus low divided by the period average, not the previous period', () => {
@@ -302,4 +304,68 @@ test('renamed transactions group and display under the name the user chose', () 
   const { vendors } = buildMoneyFlowSignals({ transactions, today: TODAY });
   const cristiane = vendors.items.filter(v => /CRISTIANE/i.test(v.name));
   assert.deepEqual(cristiane.map(v => [v.name, v.monthly, v.visits]), [['Cristiane De Lima', 120, 2]]);
+});
+
+test('Home Depot ledger totals include large payments and fixed payments; credits stay separate', () => {
+  const amounts = [15, 30, 50, 40, 257.27, 100, 150, 700, 890];
+  const transactions = amounts.map((amount, i) => ({
+    id: i + 1, date: `2026-0${7 + Math.floor(i / 3)}-12`, amount, direction: 'DEBIT',
+    category: i % 2 ? 'Home' : 'Shopping', description: i % 2 ? 'VISA DDA PUR AP 123456 THE HOME DEPOT #1420' : 'HOMEDEPOT.COM 800-123-4567',
+    display_name: i % 2 ? ' Home   Depot ' : 'Home Depot', is_fixed: i === 8
+  }));
+  transactions.push(
+    { id: 10, date: '2026-09-20', amount: 90.60, direction: 'CREDIT', description: 'HOME DEPOT RETURN', display_name: 'home depot', category: 'Shopping' },
+    { id: 11, date: '2026-06-02', amount: 50, direction: 'DEBIT', description: 'THE HOME DEPOT', display_name: 'Home Depot', category: 'Shopping' },
+    { id: 12, date: '2026-09-01', amount: 9999, direction: 'DEBIT', description: 'HOME GOODS', category: 'Shopping' },
+    { id: 13, date: '2026-10-01', amount: 500, direction: 'DEBIT', description: 'HOME DEPOT', display_name: 'Home Depot', category: 'Shopping' },
+    { id: 14, date: '2026-09-01', amount: 1000, direction: 'DEBIT', description: 'HOME DEPOT', display_name: 'Home Depot', category: 'Shopping', transfer_kind: 'internal' }
+  );
+  const vendors = buildMoneyFlowSignals({ transactions, today: TODAY, range: { months: 3, endYear: 2026, endMonth: 8 } }).vendors;
+  const depot = vendors.items.find(item => item.key === 'NAME:HOME DEPOT');
+  assert.equal(vendors.items.filter(item => item.key === depot.key).length, 1);
+  assert.deepEqual([depot.amount, depot.transactions, depot.credits, depot.creditTransactions, depot.net, depot.monthly],
+    [2232.27, 9, 90.6, 1, 2141.67, 744.09]);
+  assert.equal(depot.entries.length, 10);
+  const sumEntries = direction => Math.round(depot.entries.filter(entry => entry.direction === direction).reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100;
+  assert.equal(sumEntries('DEBIT'), depot.amount);
+  assert.equal(sumEntries('CREDIT'), depot.credits);
+  assert.deepEqual([depot.monthlyLow, depot.monthlyHigh], [95, 1740]);
+});
+
+test('raw Compass panels retain the first partial month and reconcile every selected debit', () => {
+  const transactions = [
+    { id: 1, date: '2026-07-20', amount: 123.45, direction: 'DEBIT', description: 'HOME DEPOT', category: 'Shopping' },
+    { id: 2, date: '2026-08-03', amount: 10.1, direction: 'DEBIT', description: 'HOME DEPOT', category: 'Shopping', is_fixed: true },
+    { id: 3, date: '2026-09-01', amount: 1000, direction: 'DEBIT', description: 'HOME DEPOT', category: 'Shopping' },
+    { id: 4, date: '2026-09-02', amount: 4000, direction: 'CREDIT', description: 'PAYROLL', category: 'Salary' },
+    { id: 5, date: '2026-08-01', amount: 800, direction: 'DEBIT', description: 'Transfer', transfer_kind: 'internal', category: 'Shopping' }
+  ];
+  const data = buildMoneyFlowSignals({ transactions, today: TODAY, range: { months: 3, endYear: 2026, endMonth: 8 } });
+  assert.equal(data.vendors.totalAmount, 1133.55);
+  assert.equal(data.vendors.items[0].amount, 1133.55);
+  assert.equal(data.vendors.items[0].transactions, 3);
+  assert.equal(data.vendors.months, 3);
+  assert.deepEqual(data.heatmap.rows[0].values, [123.45, 10.1, 1000]);
+  assert.equal(data.heatmap.rows[0].total, 1133.55);
+  assert.ok(Math.abs((data.flow.fixed.total + data.flow.everyday.total) * 3 - 1133.55) < 0.02);
+});
+
+test('merchant display limit never reduces ledger totals and blank or numeric descriptions still count', () => {
+  const transactions = Array.from({ length: 40 }, (_, i) => ({
+    id: i + 1, date: '2026-09-10', description: `BANK REFERENCE ${i}`, display_name: `Merchant ${i}`,
+    amount: i + 1, direction: 'DEBIT', category: 'Shopping'
+  }));
+  transactions.push(
+    { id: 41, date: '2026-09-10', description: '', amount: 50, direction: 'DEBIT', category: 'Other' },
+    { id: 42, date: '2026-09-10', description: '123456', amount: 60, direction: 'DEBIT', category: 'Other' },
+    { id: 43, date: '2026-09-10', description: 'CREDIT ONLY', amount: 999, direction: 'CREDIT', category: 'Other' }
+  );
+  const data = buildMoneyFlowSignals({ transactions, today: TODAY, range: { months: 3, endYear: 2026, endMonth: 8 } });
+  assert.equal(data.vendors.items.length, 36);
+  assert.equal(data.vendors.merchantCount, 42);
+  assert.equal(data.vendors.totalAmount, 930);
+  assert.equal(data.vendors.total, 310);
+  assert.equal(data.vendors.items.find(item => item.name === 'Unknown merchant').amount, 50);
+  assert.ok(data.vendors.items.some(item => item.amount === 60));
+  assert.ok(data.vendors.items.reduce((sum, item) => sum + item.amount, 0) < data.vendors.totalAmount);
 });

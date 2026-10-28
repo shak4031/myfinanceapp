@@ -2209,6 +2209,41 @@ test('category artwork uses meaningful word matches instead of car/care and ev s
   }
   assert.equal((html.match(/<span>🚗<\/span>/g) || []).length, 2);
 });
+test('category search filters cards, summaries and Pro detail without refetching on every keystroke', async () => {
+  let requests = 0;
+  const categories = ['Shopping', 'Home Improvement', 'Home Insurance', '<Empty>'].map((name, id) => ({ id: id + 1, name }));
+  const transactions = [
+    { date: '2026-09-02', direction: 'DEBIT', amount: 25, category: 'Shopping' },
+    { date: '2026-09-03', direction: 'DEBIT', amount: 120, category: 'Home Improvement' },
+    { date: '2026-09-04', direction: 'DEBIT', amount: 500, category: 'Home Improvement', transfer_kind: 'internal' }
+  ];
+  const f = fixture(async url => { requests++; return response(200, url === '/api/transactions/categorization-rules' ? { categories, rules: [] } : { transactions }); });
+  f.run('refresh.js');
+  f.node('category-filter-period').value = '';
+  const events = [];
+  f.context.emitFinanceEvent = (name, detail) => { if (name === 'categories:rendered') events.push(detail); };
+  await f.context.loadCategories();
+  f.node('category-filter-search').value = ' HOME   IMP ';
+  await f.node('category-filter-search').oninput();
+  assert.equal(requests, 2);
+  assert.match(f.node('category-cards').innerHTML, /data-open-category="Home Improvement"/);
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /data-open-category="Shopping"|data-open-category="Home Insurance"/);
+  assert.match(f.node('category-overview-summary').innerHTML, /\$120\.00/);
+  assert.match(f.node('category-filter-status').textContent, /1 matching categories · 2 transactions/);
+  assert.equal(events.at(-1).transactions.length, 2);
+  assert.equal(events.at(-1).categories.length, 1);
+  f.node('category-filter-search').value = '<empty>';
+  await f.node('category-filter-search').oninput();
+  assert.match(f.node('category-cards').innerHTML, /<details class="category-inactive" open>/);
+  assert.match(f.node('category-cards').innerHTML, /&lt;Empty&gt;/);
+  f.node('category-filter-search').value = 'does not exist';
+  await f.node('category-filter-search').oninput();
+  assert.match(f.node('category-cards').innerHTML, /No categories match/);
+  assert.match(f.node('category-overview-summary').innerHTML, /\$0\.00/);
+  await f.node('category-filter-reset').onclick();
+  assert.equal(f.node('category-filter-search').value, '');
+  assert.match(f.node('category-cards').innerHTML, /data-open-category="Shopping"/);
+});
 test('category surfaces keep depth, keyboard focus, responsive layout, and reduced-motion support', () => {
   const styles = source('categories.css');
   assert.match(source('index.html'), /href="categories\.css\?v=/);
@@ -3070,6 +3105,14 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.match(panel('heatmap'), /<label>Start month/);
   assert.match(panel('heatmap'), /<option value="custom" selected>/);
   assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
+  const beforeInvalidation = calls.filter(url => url.startsWith('/api/analytics/compass?')).length;
+  f.context.FinancePro.invalidateAnalytics();
+  f.listeners.get('document:finance:analytics-invalidated')();
+  await f.context.loadAnalyticsPage(false, 'compass');
+  html = f.node('analytics-content').innerHTML;
+  assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, beforeInvalidation + 1);
+  assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
+  assert.match(panel('heatmap'), /<option value="custom" selected>/);
   values.from.value = 'bad';
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
@@ -3140,8 +3183,10 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Swing: \(highest &minus; lowest monthly spending\) &divide; monthly average/);
   assert.match(html, /Widest spending swing/);
   assert.match(source('analytics.css'), /\.compass-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
-  assert.match(html, /Your top 5 merchants take <b>\d+%<\/b> of everyday spending/);
-  assert.match(html, /one-off purchase/, 'the demo TV is set aside');
+  assert.match(html, /Your top 5 merchants take <b>\d+%<\/b> of spending/);
+  assert.match(html, /All non-transfer payments count, including fixed bills and large purchases/);
+  assert.match(html, /Credits are shown separately, not deducted/);
+  assert.match(html, /Compare with Transactions using these exact months/);
   assert.match(html, /Hot and cold months/);
   assert.equal((html.match(/<tbody>[\s\S]*?<\/tbody>/g).find(b => b.includes('pro-heat-cell')).match(/<tr/g) || []).length, mf.heatmap.rows.length + 1);
   assert.match(html, /<b>[A-Z][a-z]{2} \d{4}<\/b> was your hottest month/);
@@ -3185,6 +3230,62 @@ const browserBits = (f, { reduced = true } = {}) => {
   });
   return store;
 };
+test('merchant bubble detail exposes precise debit and credit totals and the underlying ledger', async () => {
+  const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
+  const data = buildMoneyFlowSignals({ today: new Date(2026, 9, 20), range: { months: 3, endYear: 2026, endMonth: 8 }, transactions: [
+    { id: 1, date: '2026-07-12', amount: 1332.27, direction: 'DEBIT', description: 'HOME DEPOT <original>', display_name: 'Home Depot', category: 'Shopping' },
+    { id: 2, date: '2026-08-03', amount: 900, direction: 'DEBIT', description: 'HOME DEPOT 2', display_name: 'Home Depot', category: 'Shopping', is_fixed: true },
+    { id: 3, date: '2026-09-02', amount: 90.60, direction: 'CREDIT', description: 'HOME DEPOT RETURN', display_name: 'Home Depot', category: 'Shopping' }
+  ] });
+  const f = loadPro(async url => response(200, url === '/api/license' ? { active: true, plusActive: true, tier: 'pro' } : { moneyFlow: data }));
+  browserBits(f);
+  const el = f.context.document.getElementById('pro-bubbles');
+  const button = f.context.document.getElementById('depot-bubble');
+  button.dataset.bubble = '0';
+  el.isConnected = true; el.clientWidth = 800; el.clientHeight = 450;
+  el.querySelectorAll = () => [button];
+  await f.context.loadAnalyticsPage(true, 'compass');
+  el.listeners.click({ target: { closest: () => button } });
+  const html = f.node('pro-bubble-detail').innerHTML;
+  assert.match(html, /\$2,232\.27<\/b> money out/);
+  assert.match(html, /\$90\.60 money in \(1 credit\)/);
+  assert.match(html, /\$2,141\.67 net outflow/);
+  assert.match(html, /View counted transactions \(3\)/);
+  assert.match(html, /href="#transactions\/1">HOME DEPOT &lt;original&gt;/);
+  assert.doesNotMatch(html, /<original>|undefined|NaN|Infinity/);
+});
+
+test('analytics cache invalidation prevents an in-flight pre-rename result from being reused', async () => {
+  let finishOld, calls = 0;
+  const f = loadPro(url => {
+    assert.equal(url, '/api/analytics');
+    calls++;
+    return calls === 1 ? new Promise(resolve => { finishOld = resolve; }) : Promise.resolve(response(200, { marker: 'renamed and regrouped' }));
+  });
+  f.context.FinancePro.setEntitlement({ active: true, plusActive: true });
+  const pending = f.context.FinancePro.getAnalytics();
+  f.context.FinancePro.invalidateAnalytics();
+  finishOld(response(200, { marker: 'old name and totals' }));
+  assert.equal((await pending).marker, 'renamed and regrouped');
+  assert.equal((await f.context.FinancePro.getAnalytics()).marker, 'renamed and regrouped');
+  assert.equal(calls, 2);
+});
+test('successful financial mutations invalidate cached analytics, while reads and failed writes do not', async () => {
+  let invalidations = 0;
+  const f = fixture(async url => url === '/api/auth/me' ? response(200, { user: { id: 2, name: 'Customer' } })
+    : url.endsWith('/failed') ? response(400, { error: 'Not saved' }) : response(200, {}));
+  f.context.FinancePro = { invalidateAnalytics: () => { invalidations++; } };
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  await f.context.fetch('/api/analytics');
+  assert.equal(invalidations, 0);
+  for (const path of ['/api/transactions/name-rules', '/api/transactions/update-fixed', '/api/categories', '/api/import/import-csv']) {
+    await f.context.fetch(path, { method: 'POST' });
+  }
+  assert.equal(invalidations, 4);
+  await assert.rejects(f.context.fetch('/api/transactions/failed', { method: 'POST' }), /Not saved/);
+  assert.equal(invalidations, 4);
+});
 test('dashboard welcome greets, ranks insights, escapes text and offers the tour once', async () => {
   const insights = { asOf: '2026-10-15', insights: [
     { id: 'runway', tone: 'danger', icon: 'alert', title: 'Balance dips <below> zero on the 28th', detail: 'Move a payment.', action: { label: 'See upcoming', act: 'upcoming' } },

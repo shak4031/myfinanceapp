@@ -50,6 +50,11 @@ window.FinanceSession = (() => {
       }
       throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, code: body.code, entitlement: body.entitlement });
     }
+    const method = String(options.method || resource?.method || 'GET').toUpperCase();
+    if (!auth && response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)
+      && /^\/api\/(?:transactions|categories|categorizations|import|bulk-import|staging|accounts|debts|goals|analytics|plan)(?:\/|$)/.test(url.pathname)) {
+      window.FinancePro?.invalidateAnalytics?.();
+    }
     if (!auth) {
       const parse = response.json.bind(response);
       response.json = async () => {

@@ -355,7 +355,7 @@
       scenes: [
         { id: 'intro', title: 'Welcome', caption: 'Categories turn a long list of charges into a short story: what your money is for, and where it quietly adds up.',
           render: () => intro('TUTORIAL', 'Categories & smart rules', 'Know what your money is for.', ['🛒', '🍽️', '🏠', '🎬']) },
-        { id: 'overview', title: 'Your spending, grouped', caption: 'The Categories page groups every purchase into buckets like Housing, Groceries and Dining, with totals for the period you choose. Open any category for its merchants and month-by-month trend.',
+        { id: 'overview', title: 'Your spending, grouped', caption: 'The Categories page groups every purchase into buckets like Housing, Groceries and Dining, with totals for the period you choose. Search category names to narrow the cards and totals, or reset filters to return to three months. Open any category for its transactions and month-by-month trend.',
           render: () => `${chip(1, 'Your spending, grouped')}
             <div class="tm-cats">
               ${catCard('🏠', 'Housing', '$1,450', 100, 0.3, { note: '1 merchant · fixed' })}
@@ -598,7 +598,7 @@
                 <p class="tm-hint tut-in" ${at(10)}>Shaded: your usual range. Dot: last month. Diamond: similar households.</p>
               </div>
             </div>` },
-        { id: 'fair', title: 'One-offs and seasons', caption: 'The Compass keeps the reading fair. A big one-off, at least $250 and five times your usual charge, is set aside so it does not look like a habit. Seasonal bills like energy are compared with the same months last year, so a cold winter is not a false alarm.',
+        { id: 'fair', title: 'One-offs and seasons', caption: 'Behavioural signals set aside a big one-off, at least $250 and five times your usual charge, so it does not look like a habit. Raw money-flow, merchant and heatmap totals still include every non-transfer payment, including large and fixed payments. Select a merchant bubble to inspect exact payments and separate credits. Compass uses completed months; match those exact dates in Transactions. Seasonal bills like energy are compared with the same months last year.',
           render: () => `${chip(5, 'One-offs and seasons')}
             <div class="tm-split tm-split-tight">
               <div class="tm-panel tut-in" ${at(0.3)}><small>ONE-OFF PURCHASES</small>

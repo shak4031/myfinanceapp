@@ -189,6 +189,30 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(defaultCompass.vendors.months, 3);
     assert.equal(defaultCompass.heatmap.months.length, 3);
     assert.equal(defaultCompass.categories.find(row => row.id === 'dining').average3, 100);
+    const refreshedCompass = (await call(`/api/analytics/compass?from=${rangeMonths[0]}&to=${rangeMonths[2]}`, { cookie: customerCookie })).body;
+    assert.deepEqual(refreshedCompass.flow, defaultCompass.flow, 'applying the default range preserves the shared cash-flow basis');
+    const depotAmounts = [15, 30, 50, 40, 257.27, 100, 150, 700, 890];
+    for (const [i, amount] of depotAmounts.entries()) await database.query(`INSERT INTO transactions
+      (user_id,date,description,amount,direction,category,is_fixed,source) VALUES
+      ($1,$2,$3,$4,'DEBIT','Shopping',$5,'compass-ledger-test')`,
+    [customerId, `${rangeMonths[Math.floor(i / 3)]}-12`, i % 2 ? 'VISA DDA PUR AUDIT HOME DEPOT #1420' : 'AUDIT HOME DEPOT ONLINE', amount, i === 8]);
+    await database.query(`INSERT INTO transactions (user_id,date,description,amount,direction,category,source) VALUES
+      ($1,$2,'AUDIT HOME DEPOT RETURN',90.60,'CREDIT','Shopping','compass-ledger-test'),
+      (1,$2,'AUDIT HOME DEPOT OWNER',9999,'DEBIT','Shopping','compass-ledger-test')`, [customerId, `${rangeMonths[2]}-20`]);
+    const renamePreview = await call('/api/transactions/name-rules/preview', { body: { pattern: 'AUDIT HOME DEPOT' }, cookie: customerCookie });
+    assert.equal(renamePreview.body.count, 10, 'rename preview is tenant-scoped');
+    const renamedDepot = await call('/api/transactions/name-rules', { body: {
+      pattern: 'AUDIT HOME DEPOT', name: 'Home Depot', ids: renamePreview.body.transactions.map(tx => tx.id), remember: false
+    }, cookie: customerCookie });
+    assert.equal(renamedDepot.status, 200);
+    const ledgerCompass = (await call(`/api/analytics/compass?from=${rangeMonths[0]}&to=${rangeMonths[2]}`, { cookie: customerCookie })).body;
+    const depot = ledgerCompass.vendors.items.find(item => item.name === 'Home Depot');
+    assert.deepEqual([depot.amount, depot.transactions, depot.credits, depot.creditTransactions, depot.net, depot.entries.length],
+      [2232.27, 9, 90.6, 1, 2141.67, 10]);
+    const ledgerOverview = (await call('/api/analytics', { cookie: customerCookie })).body;
+    assert.equal(ledgerOverview.moneyFlow.vendors.items.filter(item => item.name === 'Home Depot').length, 1);
+    assert.equal(ledgerOverview.moneyFlow.vendors.items.find(item => item.name === 'Home Depot').amount, 2232.27);
+    await database.query("DELETE FROM transactions WHERE source='compass-ledger-test'");
     await database.query("DELETE FROM transactions WHERE source='compass-range-test'");
     const csv = await call('/api/analytics/export.csv?type=transactions', { cookie: customerCookie });
     assert.equal(csv.status, 200);

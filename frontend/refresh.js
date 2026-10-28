@@ -200,7 +200,7 @@
       .sort((a, b) => (b.sameAmount - a.sameAmount) || (transactionDate(b.transaction.date) - transactionDate(a.transaction.date)));
   };
   let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
-  let transactionCache = null, searchTimer = null;
+  let transactionCache = null, categoryCache = null, searchTimer = null;
   // Lets optional modules (e.g. Pro analytics) enhance views without coupling to their internals.
   window.emitFinanceEvent = (name, detail) => {
     if (typeof CustomEvent === 'function' && typeof document.dispatchEvent === 'function') document.dispatchEvent(new CustomEvent(name, { detail }));
@@ -265,7 +265,8 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); window.FinancePro?.invalidateAnalytics?.(); };
+  document.addEventListener('finance:analytics-invalidated', () => { categoryCache = null; });
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
     const alert = document.querySelector('dialog[open] [role="alert"]');
@@ -439,20 +440,25 @@
     return choices.find(([pattern]) => pattern.test(value))?.slice(1)
       || ['✨', 'other'];
   };
-  window.loadCategories = async function() {
+  window.loadCategories = async function(useCache = false) {
     const request = ++categoryRequest;
     $('category-filter-status').textContent = 'Loading category activity...';
     try {
-      const [data, activity] = await Promise.all([
-        json('/api/transactions/categorization-rules'),
-        json('/api/dashboard/all-transactions')
+      const [data, activity] = useCache === true && categoryCache ? categoryCache : await Promise.all([
+        json('/api/transactions/categorization-rules'), json('/api/dashboard/all-transactions')
       ]);
       if (request !== categoryRequest) return;
+      categoryCache = [data, activity];
       const finish = window.FinancePerformance?.begin('cpu', 'categories.render');
       rules = data.rules || []; categories = data.categories || [];
       categoryPeriod.sync(activity.transactions || []);
       const period = categoryPeriod.current();
-      const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', period.months);
+      const query = String($('category-filter-search').value || '').trim();
+      const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const visibleCategories = categories.filter(category => tokens.every(token => category.name.toLowerCase().includes(token)));
+      const names = new Set(visibleCategories.map(category => category.name));
+      const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', period.months)
+        .filter(transaction => !query || names.has(transaction.category || 'Uncategorized'));
       const counts = new Map();
       const spending = new Map();
       const received = new Map();
@@ -465,22 +471,22 @@
         else if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + amount);
         else if (String(transaction.direction).toUpperCase() === 'CREDIT') received.set(category, (received.get(category) || 0) + amount);
       }
-      $('category-filter-status').textContent = `${period.label} · ${filtered.length.toLocaleString()} transactions`;
+      $('category-filter-status').textContent = `${period.label}${query ? ` · “${query}” · ${visibleCategories.length} matching categories` : ''} · ${filtered.length.toLocaleString()} transactions`;
       $('rule-category').innerHTML = categoryOptions('');
       $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
         <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
         <button class="btn btn-secondary" type="submit">Rename</button>
         <button class="btn btn-secondary" type="button" data-delete-category="${Number(category.id)}" ${categories.length < 2 ? 'disabled title="Add another category before deleting this one"' : ''}>Delete</button>
       </form>`).join('');
-      const transactionCount = categories.reduce((total, category) => total + (counts.get(category.name) || 0), 0);
+      const transactionCount = filtered.length;
       const totalSpend = [...spending.values()].reduce((total, amount) => total + amount, 0);
-      const active = categories.filter(category => counts.has(category.name));
+      const active = visibleCategories.filter(category => counts.has(category.name));
       const spendingCategories = active.filter(category => (spending.get(category.name) || 0) > 0)
         .sort((a, b) => spending.get(b.name) - spending.get(a.name) || a.name.localeCompare(b.name));
       const otherCategories = active.filter(category => !(spending.get(category.name) > 0))
         .sort((a, b) => a.name.localeCompare(b.name));
-      const inactive = categories.filter(category => !counts.has(category.name)).sort((a, b) => a.name.localeCompare(b.name));
-      $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${categories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>Across your categories</small></span></div>`;
+      const inactive = visibleCategories.filter(category => !counts.has(category.name)).sort((a, b) => a.name.localeCompare(b.name));
+      $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded${query ? ' · matching categories' : ''}</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${visibleCategories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>${query ? 'Matching categories' : 'Across your categories'}</small></span></div>`;
       const renderCard = category => {
         const [icon, art] = categoryArtwork(category.name);
         const count = counts.get(category.name) || 0;
@@ -497,10 +503,10 @@
         </button>`;
       };
       const renderGroup = (list, title, description, id) => list.length ? `<section class="category-group" aria-labelledby="${id}"><div class="category-group-heading"><h2 id="${id}">${title} <span>${list.length}</span></h2><p>${description}</p></div><div class="category-card-grid">${list.map(renderCard).join('')}</div></section>` : '';
-      $('category-cards').innerHTML = categories.length
-        ? `${renderGroup(spendingCategories, 'Your spending', 'Largest first, so the important things stand out.', 'category-spending-title')}${renderGroup(otherCategories, 'Other money movement', 'Deposits and transfers, separate from spending. Open a category to see the breakdown.', 'category-movement-title')}${inactive.length ? `<details class="category-inactive"><summary>No activity this period <span>${inactive.length}</span></summary><div class="category-card-grid">${inactive.map(renderCard).join('')}</div></details>` : ''}`
-        : '<div class="category-empty">Your categories will appear here when they are ready.</div>';
-      window.emitFinanceEvent('categories:rendered', { period, transactions: filtered, allTransactions: activity.transactions || [], categories });
+      $('category-cards').innerHTML = visibleCategories.length
+        ? `${renderGroup(spendingCategories, 'Your spending', 'Largest first, so the important things stand out.', 'category-spending-title')}${renderGroup(otherCategories, 'Other money movement', 'Deposits and transfers, separate from spending. Open a category to see the breakdown.', 'category-movement-title')}${inactive.length ? `<details class="category-inactive"${query ? ' open' : ''}><summary>No activity this period <span>${inactive.length}</span></summary><div class="category-card-grid">${inactive.map(renderCard).join('')}</div></details>` : ''}`
+        : `<div class="category-empty">${query ? 'No categories match your search. Clear the search to see all categories.' : 'Your categories will appear here when they are ready.'}</div>`;
+      window.emitFinanceEvent('categories:rendered', { period: query ? { ...period, label: `${period.label} · “${query}”` } : period, transactions: filtered, allTransactions: activity.transactions || [], categories: visibleCategories });
       $('category-replacement').innerHTML = categories
         .filter(category => String(category.id) !== String(deletingCategory?.id))
         .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
@@ -513,6 +519,12 @@
       $('category-overview-summary').textContent = '';
       reportError(error);
     }
+  };
+  $('category-filter-search').oninput = () => window.loadCategories(true);
+  $('category-filter-reset').onclick = () => {
+    $('category-filter-search').value = '';
+    categoryPeriod.reset();
+    return window.loadCategories(true);
   };
   // `period` is a month/date string, or a resolved `{ months, label }` from a period control.
   window.openCategoryTransactions = async (category, period = window.resolvePeriod('last-3')) => {
@@ -888,6 +900,7 @@
   $('rename-cancel').onclick = () => renameDialog.close();
   const afterRename = async message => {
     window.FinancePlan?.invalidate?.();
+    window.FinancePro?.invalidateAnalytics?.();
     window.emitFinanceEvent?.('finance:names-changed', {});
     notify(message);
     if (FinanceSession.isAuthenticated()) await loadAllTransactions();

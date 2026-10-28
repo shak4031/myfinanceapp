@@ -297,6 +297,10 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 /* Hot and cold months heatmap */
 .pro-heat-lede, .pro-bubble-detail { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); }
 .pro-heat-lede b, .pro-bubble-detail b { color: var(--text-primary); }
+.pro-vendor-ledger { margin-top: 12px; }
+.pro-vendor-ledger summary { cursor: pointer; color: var(--primary); font-weight: 650; }
+.pro-vendor-ledger .pro-list { max-height: 360px; overflow-y: auto; margin-top: 8px; padding-right: 8px; }
+.pro-vendor-ledger li > strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pro-heatmap { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .pro-heatmap th { font-weight: 600; color: var(--text-secondary); text-align: center; white-space: nowrap; }
 .pro-heatmap thead th small { display: block; font-size: 10px; font-weight: 500; opacity: .7; }

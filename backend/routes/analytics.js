@@ -23,7 +23,7 @@ async function timed(res, name, callback) {
 async function loadInputs() {
   return db.transaction(async client => {
     const transactions = (await client.query(
-      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name FROM transactions ORDER BY date, id')).rows;
+      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name, account_id, pay_mode FROM transactions ORDER BY date, id')).rows;
     const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
     // Starting cash is checking accounts only, matching the dashboard.
@@ -71,7 +71,10 @@ router.get('/compass', async (req, res, next) => {
     }
     const inputs = await timed(res, 'inputs', loadInputs);
     const range = { from: req.query.from, to: req.query.to, months: to - from + 1, endYear: Math.floor(to / 12), endMonth: to % 12 };
-    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, range }));
+    const latestCompleted = now.getFullYear() * 12 + now.getMonth() - 1;
+    const typical = range.months === 3 && to === latestCompleted
+      ? typicalSurplus(await timed(res, 'plan', () => loadPlanInputs(db, now)), now) : null;
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range }));
     res.json({ ...moneyFlow, range });
   } catch (error) { next(error); }
 });
@@ -130,6 +133,7 @@ router.get('/export.csv', async (req, res, next) => {
       csv = toCsv(rows, [
         { label: 'Date', value: tx => tx.iso },
         { label: 'Description', value: tx => tx.description },
+        { label: 'Payee', value: tx => tx.display_name || tx.description },
         { label: 'Category', value: tx => tx.category || 'Other' },
         { label: 'Direction', value: tx => tx.direction },
         { label: 'Amount', value: tx => Number(tx.amount).toFixed(2) },

@@ -182,9 +182,10 @@
 
   function anomaliesCard(a) {
     const { money, esc } = pro().format;
+    const ratio = x => x.ratio == null ? `Above the usual ${money(x.typical, true)}` : `${x.ratio.toFixed(1)}&times; the usual ${money(x.typical, true)}`;
     const list = a.anomalies.slice(0, 8).map(x => x.type === 'charge'
       ? `<li><div><strong>${window.transactionLink(x.id, x.merchant)}</strong><small>${dateShort(x.date)} &middot; ${esc(x.category)}</small></div><div class="num"><strong>${money(x.amount)}</strong><small class="pro-move is-bad">${x.ratio.toFixed(1)}&times; the usual ${money(x.typical, true)}</small></div></li>`
-      : `<li><div><strong>${esc(x.category)}</strong><small>Category on pace for an unusual month</small></div><div class="num"><strong>${money(x.amount, true)}</strong><small class="pro-move is-bad">${x.ratio.toFixed(1)}&times; the usual ${money(x.typical, true)}</small></div></li>`).join('');
+      : `<li><div><strong>${esc(x.category)}</strong><small>Category on pace for an unusual month</small></div><div class="num"><strong>${money(x.amount, true)}</strong><small class="pro-move is-bad">${ratio(x)}</small></div></li>`).join('');
     return card('Unusual activity', 'Charges and categories well outside your normal pattern', list ? `<ul class="pro-list is-wrap">${list}</ul>` : `<p class="pro-empty is-good">${pro().ICONS.check} Nothing unusual. Your spending is within its normal range.</p>`);
   }
 
@@ -260,11 +261,11 @@
         const c = mf.categories.find(row => row.id === o.id);
         return `<li><span><b>${esc(shortLabel(o.label))}</b><small>${money(c?.average3 ?? o.target + o.monthly, true)} &rarr; ${money(o.target, true)} a month</small></span><strong>${money(o.monthly, true)}<small>/mo</small></strong></li>`;
       }).join('')}</ol>`
-      : `<p class="pro-hero-clear">${pro().ICONS.check} No category is both above typical and rising. Nothing to cut right now.</p>`;
+      : `<p class="pro-hero-clear">${pro().ICONS.check} No supported savings target found in the selected history. This does not mean every expense is necessary or affordable.</p>`;
     const figure = mf.opportunities.length ? `${money(mf.potentialMonthly, true)} a month` : 'On course';
     const sub = mf.opportunities.length
       ? `${money(mf.potentialAnnual, true)} a year &middot; ${money(mf.potentialAnnual * 5, true)} over 5 years, by returning to levels you have already reached.`
-      : 'Your everyday spending is in line with similar households and holding steady.';
+      : 'No category meets the evidence and minimum-savings criteria for this estimate.';
     return `<section class="pro-compass-hero panel"><div class="pro-hero-main"><p class="pro-hero-eyebrow">YOUR COMPASS FOUND</p><strong class="pro-hero-figure">${figure}</strong><p class="pro-hero-sub">${sub}</p>${household}</div>
       <div class="pro-hero-side"><p class="pro-hero-eyebrow">YOUR PLAN</p>${plan}</div></section>`;
   }
@@ -465,21 +466,23 @@
     const controls = `<div class="pro-bubble-controls">
       <div class="pro-seg" role="group" aria-label="Bubble size"><span>Size</span>${seg('size', 'spend', 'Total amount', bubbleSize === 'spend')}${seg('size', 'transactions', 'Transactions', bubbleSize === 'transactions')}</div>
       <div class="pro-seg" role="group" aria-label="Bubble colour"><span>Colour</span>${seg('color', 'category', 'Category', bubbleColor === 'category')}${seg('color', 'swing', 'Spending swing %', bubbleColor === 'swing')}${seg('color', 'change', 'Vs previous period', bubbleColor === 'change')}</div></div>`;
-    const said = item => `${esc(item.name)}: ${money(item.amount, true)} total, ${item.transactions} transaction${item.transactions === 1 ? '' : 's'}, ${money(item.monthly, true)} a month; ${swingText(item)}; monthly low ${money(item.monthlyLow, true)}, high ${money(item.monthlyHigh, true)}`;
+    const said = item => `${esc(item.name)}: ${money(item.amount)} money out, ${item.transactions} payment${item.transactions === 1 ? '' : 's'}, ${money(item.monthly)} a month; ${swingText(item)}; monthly low ${money(item.monthlyLow)}, high ${money(item.monthlyHigh)}`;
     const bubbles = v.items.map((item, i) => `<button type="button" class="pro-bubble" data-bubble="${i}" aria-label="${said(item)}"><b>${esc(item.name)}</b><small></small></button>`).join('');
-    const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of everyday spending.${widest && widest.swingPct > 0 ? ` Widest spending swing: <b>${esc(widest.name)}</b>, ${Math.round(widest.swingPct * 100)}% (${money(widest.monthlyLow, true)}&ndash;${money(widest.monthlyHigh, true)} per month).` : ''} Tap a bubble for its story.`;
-    const aside = v.setAside ? `<p class="pro-footnote">${v.setAside.count} one-off purchase${v.setAside.count === 1 ? '' : 's'} over ${money(v.setAside.over, true)} set aside so a single big buy does not swamp the picture.</p>` : '';
-    return card(`Who gets your money${how(`Your ${v.items.length} biggest everyday merchants over ${v.months} completed months. Fixed bills, transfers and identified one-off purchases are excluded. Size shows total amount spent or actual transaction count in the period, not store visits. Category uses one colour per category. Spending swing % is (highest monthly spend minus lowest monthly spend) divided by average monthly spend; zero-spend months within available history count. At least 2 months are needed. Vs previous period compares monthly average spend with the preceding period (${v.compareMonths} comparison months available); red is more and green is less. Drag bubbles to rearrange them.`)}`,
-      `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} months`} &middot; ${money(v.total, true)} a month across everyday merchants. Drag them around.`,
+    const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of spending.${widest && widest.swingPct > 0 ? ` Widest spending swing: <b>${esc(widest.name)}</b>, ${Math.round(widest.swingPct * 100)}% (${money(widest.monthlyLow, true)}&ndash;${money(widest.monthlyHigh, true)} per month).` : ''} Tap a bubble to see exact totals and counted transactions.`;
+    const aside = `<p class="pro-footnote">All non-transfer payments count, including fixed bills and large purchases. Credits are shown separately, not deducted from spending. Showing ${v.items.length} of ${v.merchantCount ?? v.items.length} merchants. Compare with Transactions using these exact months; its “Last 3 months” includes the current month, while Compass uses completed months.</p>`;
+    return card(`Who gets your money${how(`Your ${v.items.length} biggest merchants over ${v.months} completed months. All non-transfer debits count, including fixed bills and large purchases. Renamed payments with the same chosen name are combined. Credits are shown separately. Size shows total money out or actual payment count, not store visits. Category uses one colour per category. Spending swing % is (highest monthly spend minus lowest monthly spend) divided by average monthly spend across the selected period. At least 2 months are needed. Vs previous period compares monthly average spend with the preceding period (${v.compareMonths} comparison months available); red is more and green is less. Drag bubbles to rearrange them.`)}`,
+      `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} completed months`} &middot; ${money(v.totalAmount ?? v.total * v.months)} money out &middot; ${money(v.total)} a month. Drag them around.`,
       `${controls}<p class="pro-footnote">Size: total spending or transaction count in this period. Swing: (highest &minus; lowest monthly spending) &divide; monthly average. It measures variability, not whether spending is good or bad.</p><div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
-       <p class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</p><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
+       <div class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</div><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
   }
 
   function bubbleDetail(item) {
     const { money, esc } = pro().format;
     const change = item.isNew ? 'new in the selected period' : item.change == null ? '' : Math.abs(item.change) < 0.05 ? 'about the same as the preceding comparison period'
       : `${item.change > 0 ? 'up' : 'down'} ${money(Math.abs(climb(item)), true)} a month (${Math.abs(item.change) > 2 ? 'more than tripled' : `${Math.round(Math.abs(item.change) * 100)}%`}) on the preceding comparison period`;
-    return `<b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.amount, true)}</b> total &middot; ${item.transactions} transaction${item.transactions === 1 ? '' : 's'} at ${money(item.ticket, true)} on average &middot; ${money(item.monthly, true)}/month &middot; monthly low ${money(item.monthlyLow, true)}, high ${money(item.monthlyHigh, true)} &middot; ${swingText(item)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; transactions every month' : ''}`;
+    const credits = item.creditTransactions ? ` &middot; ${money(item.credits)} money in (${item.creditTransactions} credit${item.creditTransactions === 1 ? '' : 's'}) &middot; ${money(item.net)} net outflow` : '';
+    const ledger = item.entries?.length ? `<details class="pro-vendor-ledger"><summary>View counted transactions (${item.entries.length})</summary><ul class="pro-list is-wrap">${item.entries.map(entry => `<li><div>${window.transactionLink(entry.id, entry.description)}<small>${esc(entry.date)} &middot; ${entry.direction === 'DEBIT' ? 'Money out' : 'Money in'}</small></div><strong>${money(entry.amount)}</strong></li>`).join('')}</ul></details>` : '';
+    return `<p><b>${esc(item.name)}</b> &middot; ${esc(item.category)} &middot; <b>${money(item.amount)}</b> money out &middot; ${item.transactions} payment${item.transactions === 1 ? '' : 's'} at ${money(item.ticket)} on average${credits} &middot; ${money(item.monthly)}/month &middot; monthly low ${money(item.monthlyLow)}, high ${money(item.monthlyHigh)} &middot; ${swingText(item)}${change ? ` &middot; ${change}` : ''}${item.regular ? ' &middot; payments every month' : ''}</p>${ledger}`;
   }
 
   function stopField() {
@@ -722,11 +725,11 @@
     if (!entitlement.plusActive) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
       current = await pro().getAnalytics(force);
-      if (force) {
+      if (force || [...compassRanges.values()].some(state => state.stale)) {
         await Promise.all([...compassRanges].map(async ([key, state]) => {
           try {
             const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`);
-            if (compassRanges.get(key) === state) { state.data = data; state.error = ''; }
+            if (compassRanges.get(key) === state) { state.data = data; state.error = ''; state.stale = false; state.loading = false; }
           } catch (error) {
             if (compassRanges.get(key) === state) state.error = `Could not refresh this period: ${error.message}. Previous result shown.`;
           }
@@ -842,5 +845,9 @@
   });
   document.addEventListener('pro:entitlement', event => {
     if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; stopField(); }
+  });
+  document.addEventListener('finance:analytics-invalidated', () => {
+    request++;
+    for (const [key, state] of compassRanges) compassRanges.set(key, { ...state, stale: true, loading: false });
   });
 })();

@@ -1,11 +1,13 @@
 import { getCanonicalMerchant, parseTxDate } from './normalize.js';
-import { buildUpcomingPayments } from './fixedPayments.js';
+import { buildUpcomingPayments, isFixedPayment } from './fixedPayments.js';
 import { TRANSFER_CATEGORY, isTransferRow } from './transfers.js';
 
 // Money moved between your own accounts is not spending or income (see utils/transfers.js).
 export { TRANSFER_CATEGORY };
 const MERCHANT_NOISE = new Set('VISA MASTERCARD DEBIT CREDIT CARD CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY PAYMENT PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE AND APP'.split(' '));
 const PAYMENT_RAILS = new Set(['ZELLE', 'VENMO', 'PAYPAL', 'CASH']);
+const MERCHANT_PROCESSORS = new Set(['TST', 'TOAST', 'SQ', 'SQUARE']);
+const GROUP_NOISE = new Set('VISA MASTERCARD DEBIT CHECKCARD DDA ACH POS PUR PURCH PURCHASE RECURRING AUTOPAY PMT ONLINE ELECTRONIC WITHDRAWAL DEPOSIT TRANSFER XFER FROM WWW COM NET ORG INC LLC CORP THE APP SENT RECEIVED TO STORE AP REF'.split(' '));
 const DAY_MS = 86400000;
 const HISTORY_MONTHS = 12;
 
@@ -23,6 +25,7 @@ const stdev = values => {
 };
 const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
 const isoDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const daysAgo = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() - days);
 
 export function merchantKey(description) {
   const tokens = [...new Set(String(description ?? '').toUpperCase().split(/[^A-Z0-9]+/)
@@ -33,8 +36,21 @@ export function merchantKey(description) {
 
 // A user's rename (transactions.display_name, see utils/naming.js) decides both grouping and the label shown.
 const renamed = tx => String(tx?.display_name ?? '').replace(/\s+/g, ' ').trim();
-export const merchantGroup = tx => renamed(tx) ? `NAME:${renamed(tx).toUpperCase()}` : merchantKey(tx?.description);
-export const merchantLabel = tx => renamed(tx) || getCanonicalMerchant(tx?.description) || merchantKey(tx?.description);
+export function merchantGroup(tx) {
+  if (renamed(tx)) return `NAME:${renamed(tx).toUpperCase()}`;
+  const description = String(tx?.description || '');
+  const rail = description.search(/\b(?:ZELLE|VENMO|PAYPAL|CASH APP)\b/i);
+  const source = rail >= 0 ? description.slice(rail) : getCanonicalMerchant(description);
+  const tokens = String(source).toUpperCase().split(/[^A-Z0-9]+/)
+    .filter(token => token && !/\d/.test(token) && !GROUP_NOISE.has(token));
+  // Processor names and the first word of a payee are not a merchant identity.
+  if (MERCHANT_PROCESSORS.has(tokens[0])) {
+    while (MERCHANT_PROCESSORS.has(tokens[0])) tokens.shift();
+    return tokens.slice(0, 3).join(' ');
+  }
+  return tokens.join(' ') || description.trim().toUpperCase() || 'UNKNOWN';
+}
+export const merchantLabel = tx => renamed(tx) || getCanonicalMerchant(tx?.description) || merchantKey(tx?.description) || 'Unknown merchant';
 
 // Least-squares slope relative to the mean: +0.05 means spending rises ~5% per month.
 export function trendSlope(values) {
@@ -57,12 +73,15 @@ function normalize(transactions, today) {
     if (date > end) return null;
     const transfer = isTransferRow(tx);
     // Transfers are grouped under a transfer category so they can be listed but never counted.
-    const category = transfer && !TRANSFER_CATEGORY.test(tx.category || '') ? 'Transfer' : tx.category || 'Other';
+    const category = transfer ? (TRANSFER_CATEGORY.test(tx.category || '') ? tx.category : 'Transfer')
+      : TRANSFER_CATEGORY.test(tx.category || '') ? 'Other' : tx.category || 'Other';
+    const direction = String(tx.direction).toUpperCase();
+    if (!['DEBIT', 'CREDIT'].includes(direction)) return null;
     return {
       id: tx.id, description: tx.description || '', amount, date, iso: parsed.iso, category,
       monthIndex: parsed.year * 12 + parsed.month, day: parsed.day,
-      debit: String(tx.direction).toUpperCase() === 'DEBIT',
-      fixed: tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true',
+      debit: direction === 'DEBIT',
+      fixed: isFixedPayment(tx),
       transfer, merchant: merchantGroup(tx), raw: tx
     };
   }).filter(Boolean);
@@ -244,15 +263,14 @@ function buildRecurring(rows, context) {
 }
 
 function buildMerchants(rows, context) {
-  const now = context.end.getTime();
+  const recentStart = daysAgo(context.end, 89), priorStart = daysAgo(context.end, 179);
   const groups = new Map();
   for (const tx of rows) {
     if (!tx.debit || tx.transfer || !tx.merchant) continue;
-    const age = now - tx.date.getTime();
-    if (age > 180 * DAY_MS) continue;
+    if (tx.date < priorStart) continue;
     if (!groups.has(tx.merchant)) groups.set(tx.merchant, { recent: 0, prior: 0, count: 0, latest: tx });
     const group = groups.get(tx.merchant);
-    if (age <= 90 * DAY_MS) {
+    if (tx.date >= recentStart) {
       group.recent += tx.amount;
       group.count++;
       if (tx.date >= group.latest.date) group.latest = tx;
@@ -291,9 +309,8 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
   const movers = categories.filter(category => !category.transfer && (category.mtd || category.lastMonthToDate));
   const biggestMover = movers.sort((a, b) => Math.abs(b.deltaMtd) - Math.abs(a.deltaMtd))[0] || null;
 
-  let upcoming = [];
-  try { upcoming = buildUpcomingPayments(transactions.filter(tx => Number(tx.amount) > 0), end); } catch { upcoming = []; }
-  const remainingFixed = sum(upcoming.filter(item => item.status === 'projected' && item.dayOfMonth >= day).map(item => item.amount));
+  const upcoming = buildUpcomingPayments(rows.filter(tx => !tx.transfer).map(tx => ({ ...tx.raw, amount: tx.amount })), end);
+  const remainingFixed = sum(upcoming.filter(item => item.status === 'projected').map(item => item.amount));
   const variableMtd = variable[HISTORY_MONTHS - 1];
   const remainingVariable = avgVariable != null ? avgVariable * (1 - context.elapsed) : (variableMtd / day) * (daysInMonth - day);
   const projectedTotal = mtdSpend + remainingFixed + Math.max(0, remainingVariable);
@@ -345,7 +362,7 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
     recurring: buildRecurring(rows, context),
     merchants: buildMerchants(rows, context),
     weekdays: [0, 1, 2, 3, 4, 5, 6].map(weekday => round(sum(rows
-      .filter(tx => tx.debit && !tx.transfer && end - tx.date <= 90 * DAY_MS && tx.date.getDay() === weekday)
+      .filter(tx => tx.debit && !tx.transfer && tx.date >= daysAgo(end, 89) && tx.date.getDay() === weekday)
       .map(tx => tx.amount))))
   };
 }

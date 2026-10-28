@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildAnalytics, merchantKey, trendSlope, toCsv } from './analytics.js';
+import { buildAnalytics, merchantKey, merchantGroup, trendSlope, toCsv } from './analytics.js';
+import { buildMoneyFlowSignals } from './benchmarks.js';
 import { entitlementFromRow } from './license.js';
 import { getCanonicalMerchant } from './normalize.js';
 
@@ -174,4 +175,115 @@ test('a fixed bill already paid this month is not projected again', () => {
   assert.equal(mortgage.mtd, 1500);
   assert.equal(mortgage.projected, 1500);
   assert.equal(mortgage.signal, 'inline');
+});
+
+test('merchant identities distinguish first-word and processor collisions and obey explicit rename selections', () => {
+  const key = description => merchantGroup({ description });
+  assert.notEqual(key('HOME DEPOT #123'), key('HOME GOODS #123'));
+  assert.equal(key('HOME DEPOT #123'), key('THE HOME DEPOT #987'));
+  assert.notEqual(key('TST PERI PERI 123'), key('TST CHAI CHENAK 123'));
+  assert.notEqual(key('ZELLE TO JOHN SMITH'), key('ZELLE TO JOHN JONES'));
+  assert.notEqual(key('CREDIT ONE PAYMENT'), key('CAPITAL ONE PAYMENT'));
+  assert.equal(merchantGroup({ description: 'Bank variant A', display_name: ' My   Payee ' }),
+    merchantGroup({ description: 'Bank variant B', display_name: 'my payee' }));
+  assert.notEqual(merchantGroup({ description: 'HOME DEPOT', display_name: 'My project' }), key('HOME DEPOT'),
+    'a selected-only rename must not silently rename unchecked payments');
+});
+
+test('forecast counts overdue unpaid bills and excludes transfer templates', () => {
+  const transactions = [
+    tx(-1, 2, 100, 'Utilities', 'BILL ONE', { is_fixed: true }),
+    tx(-1, 25, 200, 'Utilities', 'BILL TWO', { is_fixed: true }),
+    tx(-1, 20, 900, 'Savings', 'TRANSFER TO SAVINGS', { is_fixed: true, transfer_kind: 'savings' }),
+    tx(0, 3, 10, 'Groceries', 'SHOP')
+  ];
+  const result = buildAnalytics({ transactions, today });
+  assert.equal(result.forecast.remainingFixed, 300, 'the unpaid day-2 bill is still owed after its due date');
+  assert.equal(result.forecast.projected, Math.round((result.forecast.mtd + 300 + result.forecast.remainingVariable) * 100) / 100);
+});
+
+test('Overview and Compass raw totals reconcile to independent ledger calculations across periods', () => {
+  let id = 0;
+  const transactions = [];
+  for (let offset = -24; offset <= 0; offset++) {
+    transactions.push(
+      tx(offset, 2, 3500.25, 'Salary', 'PAYROLL', { id: ++id, direction: 'CREDIT', transfer_kind: null }),
+      tx(offset, 3, 1450.10, 'Mortgage', 'MORTGAGE', { id: ++id, is_fixed: true, transfer_kind: null }),
+      tx(offset, 4, 51.27 + Math.abs(offset), 'Shopping', 'HOME DEPOT', { id: ++id, display_name: 'Home Depot', transfer_kind: null }),
+      tx(offset, 5, 6.35, 'Dining', 'CAFE', { id: ++id, transfer_kind: null }),
+      tx(offset, 6, 200, 'Shopping', 'MOVE MONEY', { id: ++id, transfer_kind: 'internal' })
+    );
+  }
+  const cents = n => Math.round(n * 100);
+  const total = (list, direction) => list.filter(t => t.direction === direction && t.transfer_kind === null).reduce((sum, t) => sum + cents(t.amount), 0);
+  const overview = buildAnalytics({ transactions, today, latestBalance: 1000 });
+  for (const [i, month] of overview.months.entries()) {
+    const ledger = transactions.filter(t => t.date.startsWith(month) && t.date <= '2026-06-15');
+    assert.equal(cents(overview.series.spend[i]), total(ledger, 'DEBIT'));
+    assert.equal(cents(overview.series.income[i]), total(ledger, 'CREDIT'));
+    assert.equal(cents(overview.series.fixed[i]) + cents(overview.series.variable[i]), total(ledger, 'DEBIT'));
+    assert.equal(overview.categories.filter(c => !c.transfer).reduce((sum, c) => sum + cents(c.series[i]), 0), total(ledger, 'DEBIT'));
+  }
+  const last3 = transactions.filter(t => t.date >= '2026-03-01' && t.date < '2026-06-01');
+  assert.equal(cents(overview.kpis.avgMonthlySpend), Math.round(total(last3, 'DEBIT') / 3));
+  assert.equal(cents(overview.kpis.avgMonthlyIncome), Math.round(total(last3, 'CREDIT') / 3));
+  const recent = transactions.filter(t => (new Date(2026, 5, 15) - new Date(`${t.date}T00:00:00`)) / 86400000 < 90 && t.date <= '2026-06-15');
+  assert.equal(overview.merchants.reduce((sum, m) => sum + cents(m.total), 0), total(recent, 'DEBIT'));
+  assert.equal(overview.weekdays.reduce((sum, n) => sum + cents(n), 0), total(recent, 'DEBIT'));
+  for (const months of [1, 3, 6, 12, 24]) {
+    const from = new Date(2026, 5 - months, 1);
+    const lower = iso(from.getFullYear(), from.getMonth(), 1);
+    const ledger = transactions.filter(t => t.date >= lower && t.date < '2026-06-01');
+    const compass = buildMoneyFlowSignals({ transactions, today, range: { months, endYear: 2026, endMonth: 4 } });
+    assert.equal(cents(compass.vendors.totalAmount), total(ledger, 'DEBIT'));
+    assert.equal(compass.vendors.items.reduce((sum, m) => sum + cents(m.amount), 0), total(ledger, 'DEBIT'));
+    assert.equal(compass.heatmap.rows.reduce((sum, row) => sum + cents(row.total), 0), total(ledger, 'DEBIT'));
+    assert.ok(Math.abs(cents(compass.flow.fixed.total + compass.flow.everyday.total) - Math.round(total(ledger, 'DEBIT') / months)) <= 1);
+    assert.equal(cents(compass.flow.income), Math.round(total(ledger, 'CREDIT') / months));
+    assert.ok(Math.abs(compass.flow.income - compass.flow.fixed.total - compass.flow.everyday.total - compass.flow.debt - compass.flow.left) < 0.02);
+  }
+});
+
+test('explicit non-transfer rows in a legacy transfer category count consistently and invalid directions are not income', () => {
+  const result = buildAnalytics({ transactions: [
+    tx(0, 1, 100, 'Savings', 'PAYEE', { transfer_kind: null }),
+    tx(0, 2, 500, 'Other', 'UNKNOWN', { direction: 'UNKNOWN' })
+  ], today });
+  assert.equal(result.kpis.mtdSpend, 100);
+  assert.equal(result.categories.find(c => c.name === 'Other').mtd, 100);
+  assert.equal(result.series.income.at(-1), 0);
+});
+
+test('merchant and weekday windows use exactly 90 calendar dates across the daylight-saving boundary', () => {
+  const end = new Date(2026, 11, 15);
+  const transactions = [0, 89, 90, 179, 180].map((days, i) => {
+    const date = new Date(end.getFullYear(), end.getMonth(), end.getDate() - days);
+    return { date: iso(date.getFullYear(), date.getMonth(), date.getDate()), amount: 2 ** i,
+      direction: 'DEBIT', description: 'Boundary merchant', display_name: 'Boundary merchant', category: 'Shopping' };
+  });
+  const data = buildAnalytics({ transactions, today: end });
+  assert.equal(data.merchants[0].total, 3);
+  assert.equal(data.merchants[0].count, 2);
+  assert.equal(data.merchants[0].change, -0.75);
+  assert.equal(data.weekdays.reduce((sum, n) => sum + n, 0), 3);
+});
+
+test('selected rename identities are shared by recurring charges, merchant totals and unusual-charge detection', () => {
+  const subscriptions = Array.from({ length: 6 }, (_, i) => tx(i - 5, 5, 15, 'Subscriptions', `BANK NETWORK ${i}`, {
+    display_name: i === 5 ? 'Our Streaming' : ' our   streaming '
+  }));
+  subscriptions.push(tx(0, 7, 7, 'Subscriptions', 'BANK NETWORK 5'));
+  const recurring = buildAnalytics({ transactions: subscriptions, today });
+  assert.equal(recurring.recurring.length, 1);
+  assert.equal(recurring.recurring[0].merchant, 'Our Streaming');
+  assert.equal(recurring.recurring[0].charges, 6, 'unselected payments are not silently renamed or merged');
+  assert.equal(recurring.merchants.find(m => m.merchant === 'Our Streaming').total, 45);
+  const coffee = Array.from({ length: 6 }, (_, i) => tx(i - 5, 5, i === 5 ? 90 : 6, 'Dining', `BANK COFFEE ${i}`, {
+    display_name: 'Our Coffee'
+  }));
+  const anomaly = buildAnalytics({ transactions: coffee, today }).anomalies.find(a => a.type === 'charge');
+  assert.equal(anomaly.merchant, 'Our Coffee');
+  assert.equal(anomaly.amount, 90);
+  assert.equal(anomaly.typical, 6);
+  assert.equal(anomaly.ratio, 15);
 });
