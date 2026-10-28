@@ -1122,6 +1122,16 @@ test('public About and Contact links are visible and the Knowledge Base sits abo
   assert.match(source('marketing.css'), /marketing-links a:not\(\[data-marketing-jump="marketing-pricing"\]\):not\(\[data-marketing-jump="marketing-contact"\]\) \{ display: none; \}/);
   assert.match(html, /Settings &amp; support/);
 });
+test('admin account deletion requires typed email and an explicit acknowledgement', () => {
+  const html = source('admin.html');
+  const script = source('admin.js');
+  assert.match(html, /id="delete-account-dialog"/);
+  assert.match(html, /id="delete-account-email" type="email"/);
+  assert.match(html, /id="delete-account-check" type="checkbox"/);
+  assert.match(html, /id="delete-account-submit" disabled/);
+  assert.match(script, /deleteSubmit\.disabled = !deleteTarget \|\| !deleteCheck\.checked/);
+  assert.match(script, /method: 'DELETE', body: JSON\.stringify\(\{ confirmEmail:/);
+});
 test('Financial Checkup combines cash flow, debt, goal timelines and actionable Analytics signals', async () => {
   const plan = {
     monthsUsed: 3, avgMonthlyIncome: 5000, avgMonthlyExpenses: 4700, monthlySurplus: 300,

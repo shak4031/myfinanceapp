@@ -25,6 +25,29 @@ async function loadUser(client, id) {
   return (await client.query('SELECT id,name,email,role FROM users WHERE id=$1 AND password_hash IS NOT NULL', [id])).rows[0];
 }
 
+async function loadDeletionTarget(client, id, lock = false) {
+  return (await client.query(`SELECT u.id,u.name,u.email,u.role,m.role AS household_role,m.household_id,
+      h.owner_user_id,(SELECT COUNT(*)::int FROM household_members members WHERE members.household_id=m.household_id) AS household_members,
+      s.stripe_customer_id,s.stripe_subscription_id,s.checkout_session_id
+    FROM users u
+    LEFT JOIN household_members m ON m.user_id=u.id
+    LEFT JOIN households h ON h.id=m.household_id
+    LEFT JOIN household_subscriptions s ON s.household_id=m.household_id
+    WHERE u.id=$1 AND u.password_hash IS NOT NULL${lock ? ' FOR UPDATE OF u' : ''}`, [id])).rows[0];
+}
+
+function deletionConflict(target) {
+  if (target.id === OWNER_USER_ID || String(target.role).toLowerCase() === 'admin') return 'Administrator accounts cannot be deleted here.';
+  if (isDemoEmail(target.email)) return 'The demo account cannot be deleted.';
+  if (target.household_role === 'owner' && Number(target.household_members) > 1) {
+    return 'This account owns a household with other members. Remove or transfer household members before deleting it.';
+  }
+  if (target.household_role === 'owner' && (target.stripe_customer_id || target.stripe_subscription_id || target.checkout_session_id)) {
+    return 'This household has Stripe billing history or a checkout in progress. Resolve billing before deleting its owner account.';
+  }
+  return null;
+}
+
 router.get('/openapi.json', (req, res) => res.json(openApiSpec()));
 
 router.get('/overview', async (req, res, next) => {
@@ -96,6 +119,88 @@ router.get('/users', async (req, res, next) => {
       const { tier, source, daysLeft, trialEndsAt, plusActive, request } = entitlementFromRow(household_owner_id || user.id, row, new Date(), user.email);
       return { ...user, license: { tier, source, daysLeft, trialEndsAt, plusActive, request } };
     }));
+  } catch (error) { next(error); }
+});
+
+router.delete('/users/:id', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'A valid user ID is required' });
+    const confirmEmail = typeof req.body?.confirmEmail === 'string' ? req.body.confirmEmail.trim() : '';
+    if (!confirmEmail) return res.status(400).json({ error: 'Type the account email to confirm deletion' });
+
+    const target = await administrativeTransaction(client => loadDeletionTarget(client, id));
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (confirmEmail.toLowerCase() !== target.email.toLowerCase()) {
+      return res.status(400).json({ error: 'The confirmation email does not match this account' });
+    }
+    const conflict = deletionConflict(target);
+    if (conflict) return res.status(409).json({ error: conflict });
+
+    const connections = await administrativeTransaction(async client => (await client.query(
+      'SELECT id FROM plaid_connections WHERE user_id=$1', [id]
+    )).rows);
+    if (connections.length) {
+      return res.status(409).json({ error: 'Disconnect this account’s Plaid bank connections in the app before deleting the account.' });
+    }
+
+    const deleted = await administrativeTransaction(async client => {
+      let current = await loadDeletionTarget(client, id, true);
+      if (!current) return null;
+      if (current.email.toLowerCase() !== confirmEmail.toLowerCase()) {
+        return { conflict: 'The account email changed. Search for the account again and confirm with its current email.' };
+      }
+      if (current.household_role === 'owner') {
+        await client.query('SELECT id FROM households WHERE id=$1 FOR UPDATE', [current.household_id]);
+        await client.query('SELECT household_id FROM household_subscriptions WHERE household_id=$1 FOR UPDATE', [current.household_id]);
+        current = await loadDeletionTarget(client, id);
+      }
+      const currentConflict = deletionConflict(current);
+      if (currentConflict) return { conflict: currentConflict };
+      const plaid = await client.query('SELECT 1 FROM plaid_connections WHERE user_id=$1 LIMIT 1', [id]);
+      if (plaid.rowCount) return { conflict: 'Disconnect this account’s Plaid bank connections in the app before deleting the account.' };
+
+      const counts = {};
+      const remove = async (table, sql = `DELETE FROM ${table} WHERE user_id=$1`) => {
+        counts[table] = (await client.query(sql, [id])).rowCount;
+      };
+
+      await remove('transaction_import_reviews');
+      await remove('transactions');
+      await remove('transaction_labels');
+      await remove('accounts');
+      await remove('import_batches');
+      await remove('plaid_accounts');
+      await remove('plaid_connections');
+      await remove('staging_transactions');
+      await remove('credit_cards');
+      await remove('savings_goals');
+      await remove('categories');
+      await remove('category_budgets');
+      await remove('money_plans');
+      await remove('household_profiles');
+      await remove('name_rules');
+      await remove('import_reviews');
+      await client.query('DELETE FROM household_invitations WHERE invited_by=$1', [id]);
+      await client.query('DELETE FROM auth_attempts WHERE key = ANY($1)', [attemptKeysForEmail(current.email)]);
+      if (current.household_role === 'owner') {
+        await client.query('DELETE FROM household_invitations WHERE household_id=$1', [current.household_id]);
+        await client.query('DELETE FROM household_subscriptions WHERE household_id=$1', [current.household_id]);
+        await client.query('DELETE FROM households WHERE id=$1', [current.household_id]);
+      } else {
+        await client.query('DELETE FROM household_members WHERE user_id=$1', [id]);
+      }
+      const result = await client.query('DELETE FROM users WHERE id=$1 AND email=$2 RETURNING id', [id, current.email]);
+      if (!result.rowCount) throw new Error('The account changed during deletion.');
+      return { id: result.rows[0].id, email: current.email, counts };
+    });
+
+    if (!deleted) return res.status(404).json({ error: 'User not found' });
+    if (deleted.conflict) return res.status(409).json({ error: deleted.conflict });
+    await recordAudit(req, 'admin.account_deleted', 'success', {
+      subjectUserId: deleted.id, status: 200, detail: { removedRecords: deleted.counts }
+    });
+    res.json({ success: true, deleted: true, email: deleted.email });
   } catch (error) { next(error); }
 });
 

@@ -91,6 +91,11 @@ support**. Normal admin financial requests stay in the admin's own workspace;
 operational audit metadata and privileged infrastructure access have separate
 trust boundaries, as explained in the privacy documentation. See
 [DEPLOYMENT.md](./DEPLOYMENT.md) for required environment variables.
+Eligible non-admin accounts can be permanently deleted from the Users tab after
+the administrator types the account email and checks an explicit confirmation.
+Deletion is blocked for the owner/demo account, shared household owners, Stripe
+billing records, and accounts with connected Plaid items; disconnect Plaid or
+resolve household/billing dependencies first. Successful deletions are audited.
 
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.

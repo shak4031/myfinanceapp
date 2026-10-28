@@ -112,6 +112,10 @@
       ${license.tier !== 'pro' && wanted !== 'pro' ? `<button class="btn ${wanted ? 'btn-secondary' : 'btn-primary'}" data-action="license-grant" data-plan="pro" ${attrs}>Grant Pro</button>` : ''}
       ${license.active || license.tier === 'trial' ? `<button class="btn btn-secondary" data-action="license-revoke" ${attrs}>Revoke paid access</button>` : ''}`;
   }
+  function deleteButton(user) {
+    if (Number(user.id) === 1 || user.role === 'admin' || user.email?.toLowerCase() === 'demo@myfinance.app') return '';
+    return `<button class="btn btn-danger" data-action="delete-account" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Delete account</button>`;
+  }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
     $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
@@ -123,14 +127,66 @@
           <button class="btn btn-secondary" data-action="unlock" data-id="${esc(user.id)}">Unlock</button>
           <button class="btn btn-secondary" data-action="revoke-sessions" data-id="${esc(user.id)}">Sign out everywhere</button>
           <button class="btn btn-secondary" data-action="audit" data-id="${esc(user.id)}">Activity</button>
+          ${deleteButton(user)}
         </td></tr>`).join('')
     }</tbody></table>`;
   }
   $('user-search').onclick = () => loadUsers().catch(error => toast(error.message));
+  let deleteTarget = null;
+  const deleteDialog = $('delete-account-dialog');
+  const deleteEmailInput = $('delete-account-email');
+  const deleteCheck = $('delete-account-check');
+  const deleteSubmit = $('delete-account-submit');
+  const updateDeleteConfirmation = () => {
+    deleteSubmit.disabled = !deleteTarget || !deleteCheck.checked
+      || deleteEmailInput.value.trim().toLowerCase() !== deleteTarget.email.toLowerCase();
+  };
+  const closeDeleteDialog = () => {
+    deleteDialog.close();
+    deleteTarget = null;
+    deleteEmailInput.value = '';
+    deleteCheck.checked = false;
+    $('delete-account-error').hidden = true;
+    updateDeleteConfirmation();
+  };
+  deleteEmailInput.addEventListener('input', updateDeleteConfirmation);
+  deleteCheck.addEventListener('change', updateDeleteConfirmation);
+  $('delete-account-cancel').addEventListener('click', closeDeleteDialog);
+  $('delete-account-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (deleteSubmit.disabled || !deleteTarget) return;
+    deleteSubmit.disabled = true;
+    $('delete-account-error').hidden = true;
+    try {
+      const { id, email } = deleteTarget;
+      const result = await api(`/api/admin/users/${encodeURIComponent(id)}`, {
+        method: 'DELETE', body: JSON.stringify({ confirmEmail: deleteEmailInput.value.trim() })
+      });
+      closeDeleteDialog();
+      toast(`Deleted ${result.email || email}. The action was recorded in the audit log.`);
+      await loadUsers();
+    } catch (error) {
+      $('delete-account-error').textContent = error.message;
+      $('delete-account-error').hidden = false;
+      updateDeleteConfirmation();
+    }
+  });
   $('users').addEventListener('click', async event => {
-    const { action, id, email, plan = 'pro' } = event.target.dataset;
-    if (!action) return;
+    const button = event.target.closest('[data-action]');
+    if (!button) return;
+    const { action, id, email, plan = 'pro' } = button.dataset;
     if (action === 'audit') { $('f-user').value = id; $('f-type').value = ''; $('f-outcome').value = ''; return openTab('audit'); }
+    if (action === 'delete-account') {
+      deleteTarget = { id, email };
+      $('delete-account-target').textContent = email;
+      deleteEmailInput.value = '';
+      deleteCheck.checked = false;
+      $('delete-account-error').hidden = true;
+      updateDeleteConfirmation();
+      deleteDialog.showModal();
+      deleteEmailInput.focus();
+      return;
+    }
     const prompts = {
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
       'revoke-sessions': 'Sign this user out of every device?',

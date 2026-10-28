@@ -217,6 +217,56 @@ test('audit logging, password reset, admin console and consented support access'
     const keys = await database.query('SELECT COUNT(*)::int AS count FROM auth_attempts WHERE key = ANY($1)', [attemptKeysForEmail('customer@example.com')]);
     assert.equal(keys.rows[0].count, 0);
 
+    // Account deletion requires the exact account email, protects the owner, and removes personal data.
+    await database.query(`INSERT INTO transactions(user_id,date,description,amount,direction,source)
+      VALUES(2,'2026-10-01','Test transaction',25,'DEBIT','manual')`);
+    assert.equal((await call('/api/admin/users/1', {
+      method: 'DELETE', body: { confirmEmail: 'owner@example.com' }, cookie: adminCookie
+    })).status, 409);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: {}, cookie: adminCookie
+    })).status, 400);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'someone-else@example.com' }, cookie: adminCookie
+    })).status, 400);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: customerCookie
+    })).status, 403);
+    const household = await database.query('SELECT id FROM households WHERE owner_user_id=2');
+    const member = await database.query(`INSERT INTO users(name,email,password_hash) VALUES('Housemate','housemate@example.com','test-hash') RETURNING id`);
+    await database.query(`INSERT INTO household_members(user_id,household_id,role) VALUES($1,$2,'member')`, [member.rows[0].id, household.rows[0].id]);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
+    })).status, 409);
+    await database.query('DELETE FROM household_members WHERE user_id=$1', [member.rows[0].id]);
+    await database.query('DELETE FROM users WHERE id=$1', [member.rows[0].id]);
+    await database.query(`INSERT INTO household_subscriptions(household_id,stripe_customer_id)
+      VALUES($1,'cus_test_delete_guard') ON CONFLICT(household_id) DO UPDATE SET stripe_customer_id=EXCLUDED.stripe_customer_id`, [household.rows[0].id]);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
+    })).status, 409);
+    await database.query('DELETE FROM household_subscriptions WHERE household_id=$1', [household.rows[0].id]);
+    await database.query(`INSERT INTO plaid_connections(item_id,access_token_ciphertext,user_id)
+      VALUES('item-test-delete-guard','not-a-real-token',2)`);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
+    })).status, 409);
+    await database.query("DELETE FROM plaid_connections WHERE item_id='item-test-delete-guard'");
+    const deleted = await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'CUSTOMER@example.com' }, cookie: adminCookie
+    });
+    assert.equal(deleted.status, 200);
+    assert.equal(deleted.body.deleted, true);
+    assert.equal(deleted.body.email, 'customer@example.com');
+    assert.equal((await call('/api/auth/me', { cookie: customerCookie })).status, 401);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM transactions WHERE user_id=2')).rows[0].count, 0);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM savings_goals WHERE user_id=2')).rows[0].count, 0);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM households WHERE owner_user_id=2')).rows[0].count, 0);
+    assert.equal((await call('/api/admin/users?q=customer%40example.com', { cookie: adminCookie })).body.length, 0);
+    const deletionAudit = await call('/api/admin/audit?eventType=admin.', { cookie: adminCookie });
+    assert.ok(deletionAudit.body.some(row => row.event_type === 'admin.account_deleted'
+      && Number(row.subject_user_id) === 2 && row.outcome === 'success'));
+
     // Audit rows cannot be altered.
     await assert.rejects(database.query("UPDATE audit_events SET outcome='success'"), /append-only/);
   } finally {
