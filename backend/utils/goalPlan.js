@@ -18,11 +18,13 @@ export function normalizeGoal(row, now = new Date()) {
   const target = Math.max(0, Number(row.target_amount) || 0), current = Math.max(0, Number(row.current_amount) || 0);
   const parsed = row.target_date ? parseTxDate(row.target_date) : null;
   const monthIndex = now.getFullYear() * 12 + now.getMonth();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const deadline = parsed ? new Date(parsed.year, parsed.month, parsed.day) : null;
   return {
     id: row.id, name: row.name, icon: row.icon, color: row.color, notes: row.notes, kind: kindOf(row),
     target: cents(target), current: cents(current), remaining: cents(Math.max(0, target - current)),
     targetDate: parsed ? parsed.iso || row.target_date : null,
-    targetMonth: parsed ? parsed.year * 12 + parsed.month - monthIndex : null,
+    targetMonth: parsed ? (deadline < today ? -1 : parsed.year * 12 + parsed.month - monthIndex) : null,
     priority: Number(row.priority) || 1, included: row.included !== false,
     manual: row.monthly_contribution == null || row.monthly_contribution === '' ? null : cents(Math.max(0, Number(row.monthly_contribution) || 0)),
     contributionDay: Number(row.contribution_day) || null
@@ -34,7 +36,7 @@ const orderGoals = (goals, strategy) => [...goals].sort(strategy === 'deadline'
   : (a, b) => a.priority - b.priority || (a.targetMonth ?? 1e9) - (b.targetMonth ?? 1e9) || a.id - b.id);
 
 // The amount a dated goal needs this month to land on its date (re-evaluated monthly, so shortfalls catch up).
-const needed = (goal, month) => goal.targetMonth == null ? null
+const needed = (goal, month) => goal.targetMonth == null || goal.targetMonth < 0 ? null
   : cents(goal.left / Math.max(1, goal.targetMonth - (month - 1)));
 
 export function simulateGoals(goals, { budget = 0, strategy = 'priority', start = new Date() } = {}) {
@@ -51,7 +53,7 @@ export function simulateGoals(goals, { budget = 0, strategy = 'priority', start 
     const active = state.filter(goal => goal.left > 0.005);
     for (const goal of active.filter(item => item.manual != null)) give(goal, goal.manual);
     const automatic = active.filter(goal => goal.manual == null);
-    const dated = automatic.filter(goal => goal.targetMonth != null);
+    const dated = automatic.filter(goal => goal.targetMonth != null && goal.targetMonth >= 0);
     if (strategy === 'balanced') {
       const weights = automatic.map(goal => needed(goal, month) ?? goal.left / 24);
       const total = weights.reduce((sum, weight) => sum + weight, 0);
@@ -61,7 +63,7 @@ export function simulateGoals(goals, { budget = 0, strategy = 'priority', start 
       for (const goal of dated) give(goal, needed(goal, month));
     }
     // Whatever is left goes to goals without a date, in order; any remainder stays as a buffer.
-    for (const goal of automatic.filter(item => item.targetMonth == null)) give(goal, goal.left);
+    for (const goal of automatic.filter(item => item.targetMonth == null || item.targetMonth < 0)) give(goal, goal.left);
     for (const goal of state) if (goal.finishMonth == null && goal.left <= 0.005) { goal.left = 0; goal.finishMonth = month; }
     if (pool >= budget - 0.005) break; // nothing could be funded; more months will not change that
   }
@@ -77,7 +79,7 @@ export function buildGoalPlan({ goals: rows = [], settings = {}, available = nul
   const locked = GOAL_STRATEGIES.find(item => item.id === requested)?.pro && !pro;
   const strategy = locked ? 'priority' : requested;
   const open = included.filter(goal => goal.remaining > 0);
-  const requiredTotal = cents(open.reduce((sum, goal) => sum + (goal.manual ?? (goal.targetMonth == null ? 0 : goal.remaining / Math.max(1, goal.targetMonth))), 0));
+  const requiredTotal = cents(open.reduce((sum, goal) => sum + (goal.manual ?? (goal.targetMonth == null || goal.targetMonth < 0 ? 0 : goal.remaining / Math.max(1, goal.targetMonth))), 0));
   const savedBudget = settings.goal_budget == null ? null : Number(settings.goal_budget);
   // By default every spare dollar after bills and the debt-free program is available to goals.
   const defaultBudget = cents(Math.max(0, available == null ? requiredTotal : available));
@@ -86,7 +88,7 @@ export function buildGoalPlan({ goals: rows = [], settings = {}, available = nul
   const goals = all.map(goal => {
     const result = results.get(goal.id);
     const finishMonth = goal.remaining === 0 ? 0 : result?.finishMonth ?? null;
-    const required = goal.remaining === 0 ? 0 : goal.manual ?? (goal.targetMonth == null ? null : cents(goal.remaining / Math.max(1, goal.targetMonth)));
+    const required = goal.remaining === 0 ? 0 : goal.manual ?? (goal.targetMonth == null || goal.targetMonth < 0 ? null : cents(goal.remaining / Math.max(1, goal.targetMonth)));
     const allocated = goal.included ? result?.first ?? 0 : 0;
     const status = !goal.included ? 'paused' : goal.remaining === 0 ? 'funded' : goal.targetMonth != null && goal.targetMonth < 0 ? 'overdue'
       : finishMonth == null ? 'unfunded' : goal.targetMonth == null ? 'no-date' : finishMonth <= Math.max(1, goal.targetMonth) ? 'on-track' : 'behind';

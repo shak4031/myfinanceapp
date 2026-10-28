@@ -142,6 +142,21 @@ test('goal plan funds dated goals on schedule, flags goals that fall behind and 
   assert.ok(buildGoalPlan({ goals: [goals[1]], available: 500, now }).guidance.some(item => /emergency fund/i.test(item.title)));
 });
 
+test('goal plan does not treat an expired date as due this month but preserves an explicit monthly commitment', () => {
+  const now = new Date('2026-10-15T12:00:00Z');
+  const overdue = { id: 21, name: 'Long-term goal', target_amount: 15500, current_amount: 0, target_date: '2026-10-01' };
+  const automatic = buildGoalPlan({ goals: [overdue], available: 500, now });
+  assert.equal(automatic.requiredTotal, 0);
+  assert.equal(automatic.goals[0].status, 'overdue');
+  assert.equal(automatic.goals[0].required, null);
+  assert.equal(automatic.goals[0].remaining, 15500);
+
+  const manual = buildGoalPlan({ goals: [{ ...overdue, monthly_contribution: 100 }], available: 500, now });
+  assert.equal(manual.goals[0].status, 'overdue');
+  assert.equal(manual.goals[0].required, 100);
+  assert.equal(manual.requiredTotal, 100);
+});
+
 test('the monthly plan feeds flexible debt and goal entries into the payment calendar with per-month overrides', () => {
   const now = new Date('2026-10-15T12:00:00Z');
   const history = ['07', '08', '09'].flatMap(month => [

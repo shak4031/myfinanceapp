@@ -1096,13 +1096,29 @@
     root.setAttribute('aria-busy', 'true');
     root.innerHTML = '<div class="checkup-loading-card" role="status"><span class="checkup-loading-spinner" aria-hidden="true"></span><div><strong>Putting the pieces together…</strong><p>Taking a careful look at your recorded months and the goals you’ve set.</p></div></div>';
     try {
-      const plan = await json('/api/goals/funding-analysis');
+      const [plan, moneyPlan, analytics] = await Promise.all([
+        json('/api/goals/funding-analysis'),
+        json('/api/plan'),
+        json('/api/analytics')
+      ]);
+      const debtPlan = moneyPlan.debtPlan || {};
+      const goalPlan = moneyPlan.goalPlan || {};
+      const goalRows = (goalPlan.goals || plan.goals || []).filter(goal => goal.included !== false);
       const months = Number(plan.monthsUsed) || 0;
       const hasHistory = months > 0;
       const surplus = plan.monthlySurplus == null ? null : Number(plan.monthlySurplus);
-      const afterGoals = plan.availableAfterGoals == null ? null : Number(plan.availableAfterGoals);
-      const noRoom = hasHistory && surplus !== null && surplus <= 0;
-      const goalsOverBudget = hasHistory && afterGoals !== null && afterGoals < 0;
+      const debtExtra = Number(debtPlan.extra) || 0;
+      const availableForGoals = moneyPlan.summary?.available ?? (surplus == null ? null : surplus - debtExtra);
+      const monthlyGoalNeed = goalPlan.requiredTotal ?? plan.requiredMonthlySavings ?? 0;
+      const remainingGoalBalance = goalRows.reduce((total, goal) => total + Number(goal.remaining || 0), 0);
+      const afterGoals = availableForGoals == null ? null : Number(availableForGoals) - Number(monthlyGoalNeed);
+      const noRoom = hasHistory && availableForGoals !== null && Number(availableForGoals) <= 0;
+      const goalsOverBudget = hasHistory && Number(monthlyGoalNeed) > 0 && afterGoals !== null && afterGoals < 0;
+      plan.monthlySurplus = availableForGoals;
+      plan.availableAfterGoals = afterGoals;
+      plan.requiredMonthlySavings = monthlyGoalNeed;
+      plan.total_remaining = remainingGoalBalance;
+      plan.goals = goalRows;
       const firstName = ($('account-name').textContent || '').trim().split(/\s+/)[0];
       const greeting = firstName && !firstName.includes('@') ? `, ${escape(firstName)}` : '';
       const headline = !hasHistory ? 'Let’s start with a clearer picture'
@@ -1112,10 +1128,10 @@
       const summary = !hasHistory
         ? 'We need a few complete months of income and spending before we can make a useful estimate. Missing history is unknown—not zero.'
         : noRoom
-          ? `The months we can see show about ${money(plan.avgMonthlyExpenses)} in outflows against ${money(plan.avgMonthlyIncome)} in recorded income. That’s a cue to pause new commitments and explore what is driving the pressure.`
+          ? `The months we can see show about ${money(plan.avgMonthlyExpenses)} in outflows against ${money(plan.avgMonthlyIncome)} in recorded income. After the debt plan’s extra payment, there is about ${money(availableForGoals)} left for goals. Let’s protect your breathing room before adding commitments.`
           : goalsOverBudget
-            ? `Your dated goals need about ${money(plan.requiredMonthlySavings)} each month, compared with ${money(surplus)} of observed surplus. The difference is ${money(Math.abs(afterGoals))} a month. That’s a planning gap—not a personal failure—and changing a date or target can make the plan more realistic.`
-            : `The observed surplus is about ${money(surplus)} a month. Your dated goals use ${money(plan.requiredMonthlySavings)}, leaving a modeled ${money(afterGoals)}. Treat that as a starting estimate, not a promise or a safe-to-spend amount.`;
+            ? `After the debt plan’s extra payment, about ${money(availableForGoals)} a month is available for goals. Your future deadlines call for roughly ${money(monthlyGoalNeed)} a month. That’s a planning gap—not a personal failure. The total remaining goal balance is ${money(remainingGoalBalance)}, not a bill due today.`
+            : `After recorded outflows${debtExtra ? ` and the debt plan’s ${money(debtExtra)} extra payment` : ''}, about ${money(availableForGoals)} a month is available for goals. Their modeled monthly pace is ${money(monthlyGoalNeed)}. Your remaining goal balance is ${money(remainingGoalBalance)}—a target to work toward over time, not a one-time payment.`;
       const income = Number(plan.avgMonthlyIncome) || 0;
       const outflows = Number(plan.avgMonthlyExpenses) || 0;
       const maxFlow = Math.max(income, outflows, 1);
@@ -1123,12 +1139,22 @@
       const outflowWidth = `${Math.max(3, Math.round(outflows / maxFlow * 100))}%`;
       const value = amount => amount == null ? '—' : money(amount);
       const monthCaption = months === 1 ? '1 complete month' : `${months} of 3 complete months`;
-      const goals = (plan.goals || []).map(goal => {
-        const status = { 'on-track': 'On this plan', shortfall: `Needs ${money(goal.monthly_shortfall)} more / month`, funded: 'You reached it', overdue: 'Date has passed', 'needs-deadline': 'Choose a date', 'insufficient-data': 'More history needed' }[goal.status] || 'Review this goal';
-        const progress = Number(goal.target) > 0 ? Math.max(0, Math.min(100, Number(goal.current) / Number(goal.target) * 100)) : 0;
-        const monthly = goal.requiredMonthly == null ? 'Add a date to estimate monthly savings' : `${money(goal.allocatedMonthly)} of ${money(goal.requiredMonthly)} / month in this plan`;
-        return `<li class="checkup-goal"><div class="checkup-goal-top"><span class="checkup-goal-icon" aria-hidden="true">${escape(goal.icon || '✦')}</span><div class="checkup-goal-name"><strong>${escape(goal.name)}</strong><span>${escape(status)}</span></div><strong class="checkup-goal-percent">${Math.round(progress)}%</strong></div><div class="checkup-progress" role="progressbar" aria-label="${escape(goal.name)} progress" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><p>${money(goal.current)} saved of ${money(goal.target)} · ${monthly}</p></li>`;
+      const goalCards = goalRows.map(goal => {
+        const status = { 'on-track': 'On this plan', shortfall: `Needs ${money(goal.gap ?? goal.monthly_shortfall)} more / month`, funded: 'You reached it', overdue: 'Date passed · reset to plan', 'needs-deadline': 'Choose a date', 'insufficient-data': 'More history needed', behind: 'Timeline needs a reset', paused: 'Paused' }[goal.status] || 'Review this goal';
+        const target = Number(goal.target ?? goal.target_amount) || 0;
+        const current = Number(goal.current ?? goal.current_amount) || 0;
+        const progress = target > 0 ? Math.max(0, Math.min(100, Number(goal.progress ?? (current / target * 100)))) : 0;
+        const monthlyNeed = goal.required ?? goal.requiredMonthly;
+        const monthly = goal.status === 'overdue' && monthlyNeed == null
+          ? 'No monthly deadline target until you choose a new date'
+          : monthlyNeed == null ? 'No monthly target set'
+            : `${money(monthlyNeed)} / month modeled to meet the date`;
+        const remaining = Number(goal.remaining ?? (target - current)) || 0;
+        return `<li class="checkup-goal"><div class="checkup-goal-top"><span class="checkup-goal-icon" aria-hidden="true">${escape(goal.icon || '✦')}</span><div class="checkup-goal-name"><strong>${escape(goal.name)}</strong><span>${escape(status)}</span></div><strong class="checkup-goal-percent">${Math.round(progress)}%</strong></div><div class="checkup-progress" role="progressbar" aria-label="${escape(goal.name)} progress" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><p>${money(remaining)} left toward this goal · ${monthly}</p></li>`;
       }).join('');
+      const goals = goalRows.length
+        ? `<li class="checkup-goal-summary"><div><strong>${money(remainingGoalBalance)} still to save</strong><span>Combined remaining goal balance—not a bill due today.</span></div><p>Modeled contribution pace for future dates: <strong>${money(monthlyGoalNeed)} / month</strong></p></li>${goalCards}`
+        : '';
       const action = (symbol, title, detail, route, link, tone) => `<article class="checkup-action is-${tone}"><span class="checkup-action-icon" aria-hidden="true">${symbol}</span><div><h3>${title}</h3><p>${detail}</p></div><a href="#${route}" data-view="${route}">${link}<span aria-hidden="true"> &rarr;</span></a></article>`;
       const firstAction = !hasHistory
         ? action('↗', 'Start with the basics', 'Import a few complete statements so we can work from your real activity.', 'transactions', 'Import or review', 'mint')
@@ -1137,13 +1163,46 @@
           : goalsOverBudget
             ? action('◎', 'Give your goals more room', 'Adjust a target or move its date to see a timeline that better fits your observed surplus.', 'goals', 'Review my goals', 'lavender')
             : action('↗', 'See what your debt plan can do', 'Compare payoff strategies with your balances and rates before choosing a next step.', 'payoff', 'Open debt-free plan', 'mint');
-      const categories = (plan.categorySpending || []).slice(0, 4).map(category => `<li><span>${escape(category.category || 'Uncategorized')}</span><strong>${money(category.monthlyAverage)}<small> / mo</small></strong></li>`).join('');
+      const debtTotals = debtPlan.totals || {};
+      const includedDebts = (debtPlan.debts || []).filter(debt => debt.included && Number(debt.balance) > 0);
+      const highestAprDebt = [...includedDebts].sort((a, b) => Number(b.apr) - Number(a.apr))[0];
+      const analyticsInsights = [];
+      const mover = analytics.kpis?.biggestMover;
+      if (mover && Number(mover.deltaMtd) > 0) analyticsInsights.push({
+        icon: '↗', tone: 'amber', title: 'A category is picking up pace',
+        text: `${mover.name} is ${money(mover.deltaMtd)} above the same point last month. Check whether it’s a one-off or a pattern worth adjusting.`
+      });
+      const priceChange = (analytics.recurring || []).find(item => Number(item.priceChange) > 0 && item.active);
+      if (priceChange) analyticsInsights.push({
+        icon: '↗', tone: 'rose', title: 'A repeat charge may have changed',
+        text: `${priceChange.merchant} is about ${money(priceChange.priceChange)} higher than its previous typical charge. Confirm the latest bill before deciding what to do.`
+      });
+      const anomaly = (analytics.anomalies || []).find(item => item.type === 'charge');
+      if (anomaly) analyticsInsights.push({
+        icon: '!', tone: 'blue', title: 'One charge may be worth checking',
+        text: `${anomaly.merchant} was ${money(anomaly.amount)} on ${anomaly.date}, compared with a typical ${money(anomaly.typical)}. It may be legitimate; review it if you don’t recognize it.`
+      });
+      const forecast = analytics.forecast;
+      if (forecast && Number(forecast.projected) > Number(forecast.lastMonth) * 1.05
+        && Number(forecast.projected) - Number(forecast.lastMonth) >= 100) analyticsInsights.push({
+        icon: '⌁', tone: 'green', title: 'This month could finish higher',
+        text: `The current pace points to about ${money(Number(forecast.projected) - Number(forecast.lastMonth))} more spending than last month. The forecast is a prompt to review—not a prediction of what you must spend.`
+      });
+      const analyticsCallouts = analyticsInsights.slice(0, 3).map(item =>
+        `<article class="checkup-insight is-${item.tone}"><span aria-hidden="true">${item.icon}</span><div><h4>${escape(item.title)}</h4><p>${escape(item.text)}</p></div><a href="#analytics" data-view="analytics">Explore in Analytics <span aria-hidden="true">&rarr;</span></a></article>`
+      ).join('') || '<p class="checkup-panel-intro">No standout signal to call out right now. That can be good news. Open Analytics to explore your spending pace, recurring charges, and unusual activity when you’re ready.</p>';
+      const debtSnapshot = Number(debtTotals.balance) > 0
+        ? `<div class="checkup-debt-stats"><div><span>Balances in this plan</span><strong>${money(debtTotals.balance)}</strong></div><div><span>Interest at current rates</span><strong>${money(debtTotals.monthlyInterest)} / mo</strong></div><div><span>Weighted APR</span><strong>${Number(debtTotals.weightedApr || 0).toFixed(1)}%</strong></div><div><span>Planned monthly payment</span><strong>${money(debtPlan.budget)}</strong><small>${money(debtPlan.minimums)} minimums${debtPlan.extra > 0 ? ` + ${money(debtPlan.extra)} extra` : ''}</small></div></div>
+          ${highestAprDebt && Number(highestAprDebt.apr) >= 15 ? `<p class="checkup-debt-note"><strong>Worth a closer look:</strong> ${escape(highestAprDebt.name)} has the highest listed rate at ${Number(highestAprDebt.apr).toFixed(1)}% APR. At today’s balance, that’s about ${money(highestAprDebt.monthlyInterest)} in monthly interest. Compare payoff options and lender terms before moving or opening credit.</p>` : ''}
+          ${debtPlan.plan?.debtFreeDate ? `<p class="checkup-debt-note">At the current plan and rates, the modeled debt-free date is ${escape(debtPlan.plan.debtFreeDate)}. This assumes no new borrowing and payments arrive as planned.</p>` : ''}`
+        : '<p class="checkup-panel-intro">No active balances are included in your debt plan right now. If you have debts, add or review them so goals and payoff choices can be considered together.</p>';
+      const categories = `<li class="checkup-debt-summary">${debtSnapshot}</li><li class="checkup-analytics-summary">${analyticsCallouts}</li>`;
       const artwork = '<svg class="checkup-illustration" viewBox="0 0 300 220" aria-hidden="true" focusable="false"><ellipse cx="153" cy="199" rx="119" ry="12" fill="#204b3b" opacity=".11"/><circle cx="223" cy="53" r="31" fill="#e2ecb8"/><path d="M66 180c12-30 13-65 3-99" fill="none" stroke="#36795e" stroke-width="8" stroke-linecap="round"/><path d="M70 121c-30 2-38-16-37-35 22 0 39 9 40 31M67 98c3-29 21-40 42-38 0 21-13 39-41 45M67 147c-23 4-36-8-40-26 19-4 34 3 42 21" fill="#83b28a"/><rect x="126" y="106" width="100" height="76" rx="19" fill="#fffdf7" stroke="#2d684f" stroke-width="4"/><path d="M145 105v-10h62v10" fill="#d9e8c1" stroke="#2d684f" stroke-width="4" stroke-linejoin="round"/><path d="M140 145h72" stroke="#e4edda" stroke-width="3" stroke-dasharray="4 7"/><path d="M153 165v-12m0 0c-8-1-11-6-10-12 8 0 12 4 12 11m0 1c1-8 6-11 13-10 0 7-5 11-13 11" fill="none" stroke="#368163" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="m248 103 4 10 10 4-10 4-4 10-4-10-10-4 10-4zM117 50l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#d3a950"/><path d="M222 151h17a10 10 0 0 1 0 20h-17" fill="none" stroke="#2d684f" stroke-width="4"/></svg>';
       root.innerHTML = `<section class="checkup-hero is-result"><div class="checkup-hero-copy"><p class="checkup-kicker">YOUR MONEY, YOUR PACE <span>${escape(monthCaption)}</span></p><h2>Hey${greeting}. ${headline}</h2><p>${summary}</p><button type="button" class="checkup-refresh" onclick="generateInsights()" aria-label="Refresh your checkup">↻ <span>Refresh</span></button></div>${artwork}</section>
         <div class="checkup-tabs" role="tablist" aria-label="Your financial checkup"><button id="checkup-tab-snapshot" type="button" role="tab" data-checkup-tab="snapshot" aria-controls="checkup-panel-snapshot" aria-selected="true">Your snapshot</button><button id="checkup-tab-goals" type="button" role="tab" data-checkup-tab="goals" aria-controls="checkup-panel-goals" aria-selected="false" tabindex="-1">Goals in real life</button><button id="checkup-tab-next" type="button" role="tab" data-checkup-tab="next" aria-controls="checkup-panel-next" aria-selected="false" tabindex="-1">Your next steps</button></div>
         <section id="checkup-panel-snapshot" class="checkup-panel" role="tabpanel" data-checkup-panel="snapshot" aria-labelledby="checkup-tab-snapshot"><div class="checkup-section-head"><div><p class="checkup-kicker">THE MONTHLY PICTURE</p><h3>What comes in, what goes out</h3></div><span class="checkup-note-badge">A guide, not a grade</span></div><div class="checkup-flow"><div class="checkup-flow-row"><span><i class="flow-dot is-income"></i>Average recorded income</span><strong>${value(plan.avgMonthlyIncome)}</strong></div><div class="checkup-flow-track" aria-hidden="true"><span class="is-income" style="width:${incomeWidth}"></span></div><div class="checkup-flow-row"><span><i class="flow-dot is-outflow"></i>Modeled monthly outflows</span><strong>${value(plan.avgMonthlyExpenses)}</strong></div><div class="checkup-flow-track" aria-hidden="true"><span class="is-outflow" style="width:${outflowWidth}"></span></div><div class="checkup-balance-pair"><div><span>Left before goals</span><strong class="${noRoom ? 'is-negative' : ''}">${value(plan.monthlySurplus)}</strong></div><div><span>After dated goals</span><strong class="${goalsOverBudget ? 'is-negative' : ''}">${value(plan.availableAfterGoals)}</strong></div></div><div class="checkup-takeaway ${noRoom || goalsOverBudget ? 'is-watch' : 'is-hopeful'}"><span aria-hidden="true">${noRoom || goalsOverBudget ? '↗' : '✦'}</span><p><strong>${noRoom ? 'Let’s protect your breathing room.' : goalsOverBudget ? 'A plan can change when life does.' : 'Small steps are still progress.'}</strong><br>${goalsOverBudget ? `There’s ${money(Math.abs(afterGoals))} between today’s goal pace and this estimate. You can move a deadline, adjust a target, or revisit after more complete months.` : noRoom ? 'Before taking on a new payment, review essentials and recurring costs. If bills feel hard to manage, contact providers about available support.' : hasHistory ? 'This is only an estimate from recorded months. Keep a cushion for irregular costs and anything missing from your statements.' : 'Import complete statements to see a meaningful comparison. We won’t treat missing months as zero.'}</p></div></div><div class="checkup-snapshot-foot"><span>Using ${escape(monthCaption)} of imported history</span><button type="button" onclick="selectCheckupTab('goals')" class="checkup-text-link">See how goals fit <span aria-hidden="true"> &rarr;</span></button></div>${plan.additionalDebtPayments > 0 ? `<p class="coach-note">We reserved ${money(plan.additionalDebtPayments)} a month for minimum debt payments you marked as not yet included in your spending history.</p>` : ''}</section>
-        <section id="checkup-panel-goals" class="checkup-panel" role="tabpanel" data-checkup-panel="goals" aria-labelledby="checkup-tab-goals" hidden><div class="checkup-section-head"><div><p class="checkup-kicker">YOUR PRIORITIES MATTER</p><h3>Goals in real life</h3></div><a class="checkup-small-link" href="#goals" data-view="goals">Edit goals <span aria-hidden="true">&rarr;</span></a></div><p class="checkup-panel-intro">Goals share the same observed surplus. Here’s what the current timeline asks of you—without counting the same dollar twice.</p>${goals ? `<ul class="checkup-goals">${goals}</ul>` : '<div class="checkup-empty"><span aria-hidden="true">✦</span><h4>What matters to you?</h4><p>Add a savings goal and a target date. We’ll show how it fits with the rest of your plan.</p><a class="btn btn-primary" href="#goals" data-view="goals">Create a goal</a></div>'}${(plan.goals || []).some(goal => goal.requiredMonthly == null && goal.remaining > 0) ? '<p class="coach-note">Goals without a deadline are not included in this monthly estimate. Adding a date makes it easier to plan realistically.</p>' : ''}</section>
-        <section id="checkup-panel-next" class="checkup-panel" role="tabpanel" data-checkup-panel="next" aria-labelledby="checkup-tab-next" hidden><div class="checkup-section-head"><div><p class="checkup-kicker">ONE THING AT A TIME</p><h3>Your next steps</h3></div></div><p class="checkup-panel-intro">You don’t have to do everything today. Start with the one that feels most useful.</p><div class="checkup-actions">${firstAction}${action('⌕', 'Spot a spending pattern', 'Review category trends and recurring charges to find something worth a closer look.', 'analytics', 'Explore Analytics', 'lavender')}${action('↗', 'Explore debt options', 'Compare balances, APRs, fees and promotional terms. Consolidation or a lower-rate card may not be available or worthwhile for everyone.', 'payoff', 'Compare payoff scenarios', 'peach')}</div>${categories ? `<div class="checkup-category-peek"><div><p class="checkup-kicker">A PLACE TO GET CURIOUS</p><h4>Your largest categories</h4></div><ul>${categories}</ul></div>` : ''}<details class="checkup-assumptions"><summary>How we made this estimate</summary><p>${escape(plan.basis || 'Based on imported records and saved goals.')} ${months} completed month(s) were used. Historical averages are not a guarantee of future income. Verify irregular costs, debt minimums and obligations not represented in your records. Transfers and consolidation can include fees, eligibility limits and promotional terms; compare total costs before acting.</p></details><p class="checkup-disclaimer">Private by design: this checkup uses local calculations, not generative AI. It is educational planning support—not professional financial advice or a recommendation to open or transfer credit.</p></section>`;
+        <section id="checkup-panel-goals" class="checkup-panel" role="tabpanel" data-checkup-panel="goals" aria-labelledby="checkup-tab-goals" hidden><div class="checkup-section-head"><div><p class="checkup-kicker">YOUR PRIORITIES MATTER</p><h3>Goals in real life</h3></div><a class="checkup-small-link" href="#goals" data-view="goals">Edit goals <span aria-hidden="true">&rarr;</span></a></div><p class="checkup-panel-intro">We separate what’s left to save from the monthly pace that could meet future dates. An overdue date needs a reset; it does not turn the full balance into a bill due today.</p>${goals ? `<ul class="checkup-goals">${goals}</ul>` : '<div class="checkup-empty"><span aria-hidden="true">✦</span><h4>What matters to you?</h4><p>Add a savings goal and a target date. We’ll show how it fits with the rest of your plan.</p><a class="btn btn-primary" href="#goals" data-view="goals">Create a goal</a></div>'}${(plan.goals || []).some(goal => (goal.required ?? goal.requiredMonthly) == null && goal.remaining > 0) ? '<p class="coach-note">Goals without a future deadline are excluded from the monthly pace estimate. Choose a new date to explore a realistic timeline.</p>' : ''}</section>
+        <section id="checkup-panel-next" class="checkup-panel" role="tabpanel" data-checkup-panel="next" aria-labelledby="checkup-tab-next" hidden><div class="checkup-section-head"><div><p class="checkup-kicker">ONE THING AT A TIME</p><h3>Your next steps</h3></div></div><p class="checkup-panel-intro">You don’t have to do everything today. Start with the one that feels most useful.</p><div class="checkup-actions">${firstAction}${action('⌕', 'Spot a spending pattern', 'Review category trends and recurring charges to find something worth a closer look.', 'analytics', 'Explore Analytics', 'lavender')}${action('↗', 'Explore debt options', 'Compare balances, APRs, fees and promotional terms. Consolidation or a lower-rate card may not be available or worthwhile for everyone.', 'payoff', 'Compare payoff scenarios', 'peach')}</div>${categories ? `<div class="checkup-category-peek"><div><p class="checkup-kicker">PERSONALIZED MONEY SIGNALS</p><h4>Debt context and what’s worth a closer look</h4></div><ul>${categories}</ul></div>` : ''}<details class="checkup-assumptions"><summary>How we made this estimate</summary><p>${escape(plan.basis || 'Based on imported records and saved goals.')} ${months} completed month(s) were used. Historical averages are not a guarantee of future income. Verify irregular costs, debt minimums and obligations not represented in your records. Transfers and consolidation can include fees, eligibility limits and promotional terms; compare total costs before acting.</p></details><p class="checkup-disclaimer">Private by design: this checkup uses local calculations, not generative AI. It is educational planning support—not professional financial advice or a recommendation to open or transfer credit.</p></section>`;
       window.selectCheckupTab('snapshot');
     } catch (error) {
       if (error.code === 'PRO_PLUS_REQUIRED') {

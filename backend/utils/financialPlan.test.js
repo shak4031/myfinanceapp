@@ -37,7 +37,31 @@ test('missing history, missing deadlines, overdue and funded goals remain explic
   assert.equal(plan.goals[0].status, 'insufficient-data');
   assert.equal(plan.goals[1].requiredMonthly, null);
   assert.equal(plan.goals[2].status, 'overdue');
+  assert.equal(plan.goals[2].requiredMonthly, null);
   assert.equal(plan.goals[3].status, 'funded');
+});
+
+test('overdue goal balances are not treated as an immediate monthly bill and excluded goals do not add requirements', () => {
+  const plan = buildFinancialPlan(history, [
+    { id: 1, name: 'Late', target_amount: 15500, current_amount: 0, target_date: '2026-09-01', priority: 1 },
+    { id: 2, name: 'Paused', target_amount: 9000, current_amount: 1000, target_date: '2027-04-14', priority: 2, included: false, monthly_contribution: 200 }
+  ], today);
+  assert.equal(plan.goals[0].remaining, 15500);
+  assert.equal(plan.goals[0].requiredMonthly, null);
+  assert.equal(plan.goals[1].requiredMonthly, null);
+  assert.equal(plan.requiredMonthlySavings, 0);
+  assert.equal(plan.total_remaining, 15500);
+  assert.equal(plan.availableAfterGoals, 1000);
+});
+
+test('overdue goal with an explicit manual contribution keeps that monthly commitment', () => {
+  const plan = buildFinancialPlan(history, [
+    { id: 1, name: 'Late but ongoing', target_amount: 2000, current_amount: 500, target_date: '2026-09-01', monthly_contribution: 75 }
+  ], today);
+  assert.equal(plan.goals[0].status, 'overdue');
+  assert.equal(plan.goals[0].requiredMonthly, 75);
+  assert.equal(plan.requiredMonthlySavings, 75);
+  assert.equal(plan.total_remaining, 1500);
 });
 
 test('coaching identifies income increases consumed by spending without claiming a salary increase', () => {

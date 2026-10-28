@@ -1116,7 +1116,7 @@ test('public About and Contact links are visible and the Knowledge Base sits abo
   assert.match(html, /id="marketing-contact"[\s\S]*?href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
   assert.match(html, /Settings &amp; support/);
 });
-test('Financial Checkup gives a realistic cash-flow and goal assessment with relevant next steps', async () => {
+test('Financial Checkup combines cash flow, debt, goal timelines and actionable Analytics signals', async () => {
   const plan = {
     monthsUsed: 3, avgMonthlyIncome: 5000, avgMonthlyExpenses: 4700, monthlySurplus: 300,
     requiredMonthlySavings: 450, availableAfterGoals: -150, additionalDebtPayments: 0,
@@ -1124,7 +1124,28 @@ test('Financial Checkup gives a realistic cash-flow and goal assessment with rel
     goals: [{ name: '<Emergency fund>', icon: '🌱', target: 10000, current: 4000, requiredMonthly: 450, allocatedMonthly: 300, monthly_shortfall: 150, remaining: 6000, status: 'shortfall' }],
     categorySpending: [{ category: '<Dining>', monthlyAverage: 400, total: 1200 }]
   };
-  const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan) : response(200, {}));
+  const moneyPlan = {
+    summary: { available: 200 },
+    debtPlan: {
+      totals: { balance: 2500, monthlyInterest: 31.25, weightedApr: 15 },
+      minimums: 100, extra: 100, budget: 200,
+      debts: [{ name: 'Card', balance: 2500, apr: 15, monthlyInterest: 31.25, included: true }],
+      plan: { debtFreeDate: '2028-04' }
+    },
+    goalPlan: {
+      requiredTotal: 450,
+      goals: [{ name: '<Emergency fund>', icon: '🌱', target: 10000, current: 4000, remaining: 6000, required: 450, allocated: 300, gap: 150, progress: 40, status: 'behind', included: true }]
+    }
+  };
+  const analytics = {
+    kpis: { biggestMover: { name: '<Dining>', deltaMtd: 125 } },
+    recurring: [{ merchant: 'Phone plan', priceChange: 8, active: true }],
+    anomalies: [{ type: 'charge', merchant: 'Electronics shop', amount: 350, typical: 50, date: '2026-10-12' }],
+    forecast: { projected: 3000, lastMonth: 2800 }
+  };
+  const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan)
+    : url === '/api/plan' ? response(200, moneyPlan)
+      : url === '/api/analytics' ? response(200, analytics) : response(200, {}));
   f.run('refresh.js');
   f.node('account-name').textContent = 'Asha Shah';
   const generate = f.context.generateInsights;
@@ -1135,14 +1156,28 @@ test('Financial Checkup gives a realistic cash-flow and goal assessment with rel
   await generate();
   const html = f.node('insights-container').innerHTML;
   assert.match(html, /Hey, Asha\. Your goals are asking a lot of your monthly surplus/);
-  assert.match(html, /difference is \$150\.00 a month/);
+  assert.match(html, /about \$200\.00 a month is available for goals/);
+  assert.match(html, /future deadlines call for roughly \$450\.00 a month/);
+  assert.match(html, /remaining goal balance is \$6,000\.00, not a bill due today/);
+  assert.match(html, /Balances in this plan<\/span><strong>\$2,500\.00/);
+  assert.match(html, /Interest at current rates<\/span><strong>\$31\.25 \/ mo/);
+  assert.match(html, /Weighted APR<\/span><strong>15\.0%/);
+  assert.match(html, /Planned monthly payment<\/span><strong>\$200\.00/);
+  assert.match(html, /\$6,000\.00 still to save/);
+  assert.match(html, /Combined remaining goal balance—not a bill due today/);
+  assert.match(html, /\$450\.00 \/ month/);
+  assert.match(html, /A category is picking up pace/);
+  assert.match(html, /Phone plan is about \$8\.00 higher/);
+  assert.match(html, /Electronics shop was \$350\.00/);
+  assert.match(html, /href="#analytics" data-view="analytics">Explore in Analytics/);
+  assert.doesNotMatch(html, /<Dining>|<li><span>.*\/ mo/);
   assert.match(html, /data-view="goals">Edit goals/);
   assert.match(html, /data-view="analytics">Explore Analytics/);
   assert.match(html, /data-view="payoff">Compare payoff scenarios/);
   assert.match(html, /Compare balances, APRs, fees and promotional terms/);
   assert.match(html, /&lt;Emergency fund&gt;/);
-  assert.match(html, /&lt;Dining&gt;/);
-  assert.doesNotMatch(html, /<Emergency fund>|<Dining>/);
+  assert.match(html, /&lt;Dining&gt; is \$125\.00 above/);
+  assert.doesNotMatch(html, /<Emergency fund>|<Dining>|Your largest categories/);
   assert.match(html, /not generative AI/);
   assert.match(html, /role="tablist"/);
   assert.match(html, /role="tabpanel" data-checkup-panel="goals"[^>]*hidden/);

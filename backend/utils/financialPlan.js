@@ -42,18 +42,20 @@ export function buildFinancialPlan(transactions, goals, today = new Date(), debt
   const sortedGoals = [...goals].sort((a, b) => Number(a.priority) - Number(b.priority) || Number(a.id) - Number(b.id));
   const plannedGoals = sortedGoals.map(goal => {
     const remaining = cents(Math.max(0, Number(goal.target_amount) - Number(goal.current_amount)));
+    const included = goal.included !== false;
     const date = parseTxDate(goal.target_date);
     const deadline = date ? new Date(date.year, date.month, date.day) : null;
     const expired = deadline && deadline < new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const monthsRemaining = date ? Math.max(1, (date.year * 12 + date.month) - month) : null;
-    const requiredMonthly = remaining === 0 ? 0 : monthsRemaining ? cents(Math.ceil(remaining * 100 / monthsRemaining) / 100) : null;
-    const allocatedMonthly = cents(Math.min(allocatable, requiredMonthly || 0));
+    const manualMonthly = goal.monthly_contribution == null ? null : cents(Math.max(0, Number(goal.monthly_contribution) || 0));
+    const requiredMonthly = remaining === 0 ? 0 : !included ? null : manualMonthly ?? (expired || !monthsRemaining ? null : cents(Math.ceil(remaining * 100 / monthsRemaining) / 100));
+    const allocatedMonthly = included && !expired ? cents(Math.min(allocatable, requiredMonthly || 0)) : 0;
     allocatable = cents(allocatable - allocatedMonthly);
-    const status = remaining === 0 ? 'funded' : !deadline ? 'needs-deadline' : expired ? 'overdue'
+    const status = remaining === 0 ? 'funded' : !included ? 'paused' : !deadline ? 'needs-deadline' : expired ? 'overdue'
       : !monthsUsed ? 'insufficient-data' : allocatedMonthly >= requiredMonthly ? 'on-track' : 'shortfall';
     const shortfall = requiredMonthly === null ? null : cents(Math.max(0, requiredMonthly - allocatedMonthly));
     return {
-      id: goal.id, name: goal.name, remaining, monthsRemaining, requiredMonthly, allocatedMonthly, status,
+      id: goal.id, name: goal.name, remaining, monthsRemaining, requiredMonthly, allocatedMonthly, status, included,
       target: Number(goal.target_amount), current: Number(goal.current_amount), target_date: goal.target_date,
       suggested_monthly: requiredMonthly, achievable: status === 'on-track' || status === 'funded',
       monthly_shortfall: shortfall, monthly_discretionary: monthlySurplus, months_until_target: monthsRemaining,
@@ -64,6 +66,7 @@ export function buildFinancialPlan(transactions, goals, today = new Date(), debt
   });
   const requiredMonthlySavings = cents(plannedGoals.reduce((sum, g) => sum + (g.requiredMonthly || 0), 0));
   const availableAfterGoals = monthsUsed ? cents(monthlySurplus - requiredMonthlySavings) : null;
+  const totalGoalRemaining = cents(plannedGoals.filter(goal => goal.included).reduce((sum, goal) => sum + goal.remaining, 0));
   const categorySpending = [...categories].map(([category, total]) => ({
     category, total: cents(total), monthlyAverage: cents(total / monthsUsed)
   })).sort((a, b) => b.monthlyAverage - a.monthlyAverage);
@@ -116,7 +119,7 @@ export function buildFinancialPlan(transactions, goals, today = new Date(), debt
     avgMonthlyIncome, avgMonthlyExpenses, monthlySurplus, requiredMonthlySavings, availableAfterGoals,
     monthsUsed, savingsRate, monthlyHistory, recordedAvgMonthlyExpenses, additionalDebtPayments, goals: plannedGoals, categorySpending, advice,
     basis: 'Local calculations from up to three completed calendar months with imported records. Transfers excluded; missing months are not assumed to be zero. Income is recorded cash inflow, not gross salary. Partial data can overstate affordability. Debt minimums marked as not included in history are reserved separately; other debt payments are assumed to be in imported spending. Other unrecorded obligations are not included.',
-    total_goals: goals.length, total_remaining: cents(plannedGoals.reduce((sum, g) => sum + g.remaining, 0)),
+    total_goals: plannedGoals.filter(goal => goal.included).length, total_remaining: totalGoalRemaining,
     total_suggested_monthly: requiredMonthlySavings, total_discretionary: monthlySurplus,
     gap: availableAfterGoals === null ? null : -availableAfterGoals,
     summary: !monthsUsed ? 'Import completed-month history to assess your plan.'
