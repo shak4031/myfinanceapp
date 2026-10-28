@@ -54,9 +54,10 @@ entered in the app. No financial records are sent to an external AI service.
 It is planning support, not individualized financial, tax, or investment advice
 or a recommendation to open or transfer credit.
 
-The public sign-in page includes About and Contact sections. Customers can reach
-MyFinance at ashak4031@gmail.com or use the signed-in support options in
-Settings & support.
+The public sign-in page explains the optional Plaid connection, how to disconnect
+it, and what happens to imported history. Customers can contact MyFinance at
+ashak4031@gmail.com or use the signed-in support options in Settings & support.
+Do not email passwords, verification codes, or full account numbers.
 
 Goal planning includes competing car, college, emergency, and other savings
 targets. Dated goals share one observed monthly surplus in priority order;

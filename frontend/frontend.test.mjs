@@ -1112,8 +1112,14 @@ test('public About and Contact links are visible and the Knowledge Base sits abo
   assert.ok(mainNavigation.indexOf('Knowledge Base') < mainNavigation.indexOf('Tutorials'));
   assert.match(html, /data-marketing-jump="marketing-about">About/);
   assert.match(html, /data-marketing-jump="marketing-contact">Contact/);
-  assert.match(html, /id="marketing-about"[\s\S]*?MyFinance is a personal finance workspace/);
+  assert.match(html, /id="marketing-about"[\s\S]*?Your finances, easier to understand/);
+  assert.match(html, /eligible U\.S\. bank through Plaid/);
+  assert.match(html, /Disconnect any time to stop future bank updates/);
   assert.match(html, /id="marketing-contact"[\s\S]*?href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
+  assert.match(html, /Never email passwords, verification codes, or full account numbers/);
+  assert.match(html, /MyFinance stores an encrypted Plaid access token/);
+  assert.doesNotMatch(html, /MyFinance does not connect to your bank/);
+  assert.match(source('marketing.css'), /marketing-links a:not\(\[data-marketing-jump="marketing-pricing"\]\):not\(\[data-marketing-jump="marketing-contact"\]\) \{ display: none; \}/);
   assert.match(html, /Settings &amp; support/);
 });
 test('Financial Checkup combines cash flow, debt, goal timelines and actionable Analytics signals', async () => {
