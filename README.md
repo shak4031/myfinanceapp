@@ -46,9 +46,17 @@ Matching is always limited to the current household; later uploads match its
 saved accounts automatically when possible.
 Each account receives its own import-history batch. See
 [import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
-Spending coaching uses local, evidence-based calculations: no financial records
-are sent to an external AI service. It is budgeting guidance, not a licensed
-adviser's financial, tax, or investment advice.
+Financial Checkup uses local calculations to compare up to three completed
+months of recorded cash flow with dated savings goals and link users to the
+relevant analytics and debt-planning views. Missing months are not treated as
+zero spending; results remain estimates and do not account for obligations not
+entered in the app. No financial records are sent to an external AI service.
+It is planning support, not individualized financial, tax, or investment advice
+or a recommendation to open or transfer credit.
+
+The public sign-in page includes About and Contact sections. Customers can reach
+MyFinance at ashak4031@gmail.com or use the signed-in support options in
+Settings & support.
 
 Goal planning includes competing car, college, emergency, and other savings
 targets. Dated goals share one observed monthly surplus in priority order;

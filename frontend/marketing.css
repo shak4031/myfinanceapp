@@ -139,6 +139,13 @@ body.auth-pending { height: auto; overflow: visible; }
 .marketing-footer { text-align: center; padding: 35px 0; }
 .marketing-footer strong { font-family: Georgia, serif; font-style: italic; font-size: 22px; font-weight: 500; }
 .marketing-footer p { font-size: 11px; line-height: 1.7; color: var(--muted-ink); margin: 14px auto 0; max-width: 700px; }
+.marketing-footer nav { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px 24px; margin-top: 12px; }
+.marketing-footer nav a, .marketing-info a { color: var(--leaf); font-size: 13px; font-weight: 700; }
+.marketing-footer .marketing-top-link { margin-top: 0; }
+.marketing-info { width: min(100%, 900px); margin: 0 auto 28px; padding: clamp(24px, 5vw, 48px); border: 1px solid #dce1d4; border-radius: 22px; background: #fffdf9; }
+.marketing-info h2 { max-width: 700px; margin: 0 0 16px; color: var(--ink); font-size: clamp(26px, 3.5vw, 38px); line-height: 1.15; letter-spacing: -1px; }
+.marketing-info p:not(.marketing-kicker) { max-width: 760px; margin: 12px 0 0; color: var(--muted-ink); font-size: 14px; line-height: 1.8; }
+.marketing-contact { background: #edf2df; }
 .marketing-page :focus-visible { outline: 3px solid #697d36; outline-offset: 4px; }
 .marketing-pricing-nav { display: flex; justify-content: center; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 30px; }
 .marketing-pricing-nav a:not(.btn) { font-size: 14px; font-weight: 650; }

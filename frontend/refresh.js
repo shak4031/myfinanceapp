@@ -324,7 +324,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { subscription: 'Household subscription', dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Spending coach', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { subscription: 'Household subscription', dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
@@ -1064,28 +1064,67 @@
     return window.loadAllTransactions();
   };
 
-  function fundingMarkup(plan) {
-    const metrics = [['Average monthly income',plan.avgMonthlyIncome],['Average monthly spending',plan.avgMonthlyExpenses],['Available before goals',plan.monthlySurplus],['All dated goals / month',plan.requiredMonthlySavings],['Left after dated goals',plan.availableAfterGoals]];
-    return `<div class="metrics-grid">${metrics.map(([label,value]) => `<div><div class="metric-label">${label}</div><div class="metric-value" style="font-size:23px">${money(value)}</div></div>`).join('')}</div>
-      ${plan.additionalDebtPayments > 0 ? `<p class="coach-note">Spending includes ${money(plan.additionalDebtPayments)} per month reserved for loan payments not yet in your imported history. Recorded spending alone averages ${money(plan.recordedAvgMonthlyExpenses)}.</p>` : ''}
-      <p class="muted">${escape(plan.basis || 'Based on your imported history.')} ${Number(plan.monthsUsed) || 0} month(s) used. Historical averages are not a guarantee of future income; verify irregular costs and minimum debt payments before committing.</p>
-      ${(plan.goals || []).some(goal => goal.requiredMonthly == null && goal.remaining > 0) ? '<p class="coach-note">Goals without a deadline are not included in the monthly requirement. Add dates before treating this plan as affordable.</p>' : ''}
-      ${(plan.advice || []).map(item => `<div class="coach-note ${['warning','danger'].includes(item.severity) ? item.severity : ''}"><strong>${escape(item.title)}</strong><p>${escape(item.detail)}</p></div>`).join('')}`;
-  }
   window.generateInsights = async function() {
     const button = $('run-insights-btn');
-    button.disabled = true; $('insights-container').textContent = 'Reviewing your recorded history and goals…';
+    button.disabled = true; $('insights-container').textContent = 'Reviewing recorded cash flow and goals…';
     try {
       const plan = await json('/api/goals/funding-analysis');
-      $('insights-container').innerHTML = `<p class="eyebrow">A PLAN BUILT FROM YOUR NUMBERS</p><h2>Make the next dollar count</h2>${fundingMarkup(plan)}
-        <h3>Where the money goes</h3><p class="muted">Monthly averages across the same analysis period. These are categories to review, not assumptions that every expense is optional.</p>
-        <div class="table-scroll"><table class="review-table"><thead><tr><th>Category</th><th>Monthly average</th><th>Period total</th></tr></thead><tbody>${(plan.categorySpending || []).map(c => `<tr><td>${escape(c.category || 'Uncategorized')}</td><td>${money(c.monthlyAverage)}</td><td>${money(c.total)}</td></tr>`).join('') || '<tr><td colspan="3">Import statements to see your spending breakdown.</td></tr>'}</tbody></table></div>
-        <div class="coach-note"><strong>Your next move</strong><p>If the combined plan is short, change an amount or deadline rather than pretending the gap will disappear. Review a flexible category, set a realistic cap, and check actual spending next month. Protect essential bills and a starter emergency buffer.</p></div>
-        <p class="muted">Local, deterministic guidance—not a generative AI integration, investment recommendation, or professional financial advice. No financial data is sent to third-party AI services.</p>`;
+      const months = Number(plan.monthsUsed) || 0;
+      const hasHistory = months > 0;
+      const surplus = plan.monthlySurplus == null ? null : Number(plan.monthlySurplus);
+      const afterGoals = plan.availableAfterGoals == null ? null : Number(plan.availableAfterGoals);
+      const noRoom = hasHistory && surplus !== null && surplus <= 0;
+      const goalsOverBudget = hasHistory && afterGoals !== null && afterGoals < 0;
+      const headline = !hasHistory ? 'Add complete-month history before making commitments'
+        : noRoom ? 'Recorded outflows are using all available income'
+          : goalsOverBudget ? 'Your dated goals need more than this history supports'
+            : 'Dated goals fit this recorded surplus';
+      const summary = !hasHistory
+        ? 'There is not enough completed-month history to estimate affordability. Import complete statements first; missing history is unknown, not zero spending.'
+        : noRoom
+          ? `Modeled monthly outflows average ${money(plan.avgMonthlyExpenses)} against ${money(plan.avgMonthlyIncome)} in recorded inflows. This history shows no reliable room for new savings targets or extra debt payments.`
+          : goalsOverBudget
+            ? `Dated goals ask for ${money(plan.requiredMonthlySavings)} per month, while the observed surplus is ${money(surplus)}. That leaves a modeled gap of ${money(Math.abs(afterGoals))} per month; change goals or dates rather than assuming the gap will disappear.`
+            : `After average recorded outflows, the observed surplus is ${money(surplus)} per month. Dated goals use ${money(plan.requiredMonthlySavings)} of it, leaving ${money(afterGoals)} in this simplified estimate—not a guarantee that the amount is safe to commit.`;
+      const metrics = [
+        ['Recorded monthly income', plan.avgMonthlyIncome],
+        ['Modeled monthly outflows', plan.avgMonthlyExpenses],
+        ['Observed surplus before goals', plan.monthlySurplus],
+        ['Dated goals required / month', plan.requiredMonthlySavings],
+        ['Modeled amount after goals', plan.availableAfterGoals]
+      ];
+      const value = amount => amount == null ? 'Not available' : money(amount);
+      const action = (title, detail, route, link) => `<article class="checkup-action"><h3>${title}</h3><p>${detail}</p><a class="btn btn-secondary" href="#${route}" data-view="${route}">${link}</a></article>`;
+      const firstAction = !hasHistory
+        ? action('Start with complete records', 'Import complete statements and review your accounts so the next estimate is based on actual activity.', 'transactions', 'Import or review transactions')
+        : noRoom
+          ? action('Find the pressure points', 'Inspect category trends and recurring charges first. A category signal is a reason to investigate, not proof that the expense is optional.', 'analytics', 'Review Analytics')
+          : goalsOverBudget
+            ? action('Make goal dates workable', 'Review each target and deadline. Lowering a target or moving a date changes the plan without counting the same surplus twice.', 'goals', 'Review savings goals')
+            : action('Test the debt timeline', 'Compare payoff strategies using your balances, rates and payment budget. Consider any savings goal and cash reserve before committing more.', 'payoff', 'Open the debt-free plan');
+      const goals = (plan.goals || []).map(goal => {
+        const status = { 'on-track': 'Fits this observed plan', shortfall: `Short by ${money(goal.monthly_shortfall)} / month`, funded: 'Target funded', overdue: 'Deadline has passed', 'needs-deadline': 'Add a target date', 'insufficient-data': 'More history needed' }[goal.status] || 'Review plan';
+        const monthly = goal.requiredMonthly == null ? 'No dated monthly target' : `${money(goal.allocatedMonthly)} of ${money(goal.requiredMonthly)} / month modeled`;
+        return `<li><strong>${escape(goal.name)}</strong><span>${escape(status)} · ${monthly}</span></li>`;
+      }).join('');
+      const categories = (plan.categorySpending || []).slice(0, 5).map(category => `<tr><td>${escape(category.category || 'Uncategorized')}</td><td>${money(category.monthlyAverage)}</td></tr>`).join('');
+      $('insights-container').innerHTML = `<section class="checkup-verdict" aria-live="polite"><p class="eyebrow">YOUR CURRENT PICTURE · ${months} OF 3 COMPLETED MONTHS</p><h2>${headline}</h2><p>${summary}</p></section>
+        <section class="checkup-section" aria-labelledby="checkup-cashflow-title"><h3 id="checkup-cashflow-title">Cash flow and goal math</h3><div class="checkup-metrics">${metrics.map(([label, amount]) => `<article><span>${label}</span><strong>${value(amount)}</strong></article>`).join('')}</div>
+          ${plan.additionalDebtPayments > 0 ? `<p class="coach-note">This estimate reserves ${money(plan.additionalDebtPayments)} per month for minimum payments marked as not yet included in imported spending. Update that setting after those payments appear in your history to avoid counting them twice.</p>` : ''}
+          ${goals ? `<h4>Dated savings goals</h4><ul class="checkup-goals">${goals}</ul>` : '<p class="muted">No savings goals are set yet. Add a target and deadline to include it in this comparison.</p>'}
+          ${(plan.goals || []).some(goal => goal.requiredMonthly == null && goal.remaining > 0) ? '<p class="coach-note">Goals without a deadline are not included in the monthly requirement. Add dates before treating this plan as affordable.</p>' : ''}
+        </section>
+        <section class="checkup-section" aria-labelledby="checkup-actions-title"><h3 id="checkup-actions-title">Where to go next</h3><div class="checkup-actions">${firstAction}
+          ${action('Look for spending patterns', 'Use category trends, projections and recurring-charge signals to identify what deserves a closer review.', 'analytics', 'Open Analytics')}
+          ${action('Compare debt choices carefully', 'Review balances, APRs, fees, promotional expiry and eligibility before considering a balance transfer or consolidation. This checkup cannot judge whether an offer is available or worthwhile.', 'payoff', 'Compare payoff scenarios')}
+        </div></section>
+        <details class="checkup-assumptions"><summary>How to read this estimate</summary><p>${escape(plan.basis || 'Based on imported records and saved goals.')} ${months} completed month(s) were used. Historical averages are not a guarantee of future income. Verify irregular costs, debt minimums and obligations not represented in your records. Any debt transfer or consolidation can have fees, eligibility limits and promotional terms; compare total costs before acting.</p></details>
+        ${categories ? `<section class="checkup-section"><h3>Largest recorded spending categories</h3><p class="muted">These are starting points for investigation, not assumptions that every expense is optional.</p><div class="table-scroll"><table class="review-table"><thead><tr><th>Category</th><th>Monthly average</th></tr></thead><tbody>${categories}</tbody></table></div></section>` : ''}
+        <p class="checkup-disclaimer">This is local, deterministic planning support—not generative AI, individualized professional advice, or a recommendation to open or transfer credit. Financial records are not sent to third-party AI services.</p>`;
     } catch (error) {
       if (error.code === 'PRO_PLUS_REQUIRED') {
-        $('insights-container').innerHTML = '<div class="coach-note"><h3>Put your goals in the bigger picture.</h3><p>All analytics, budgets, debt planning and savings goals are included with Pro (USD 14.99/month per household).</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro</button></div>';
-        $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Combined debt and savings coaching requires Pro.', 'pro');
+        $('insights-container').innerHTML = '<div class="coach-note"><h3>Bring your goals into the bigger picture.</h3><p>Analytics, debt planning and savings goals are included with Pro (USD 14.99/month per household).</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro</button></div>';
+        $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Financial Checkup requires Pro.', 'pro');
       } else $('insights-container').textContent = error.message;
     }
     finally { button.disabled = false; }

@@ -831,6 +831,33 @@ body .view .acct-card {
 .acct-freshness .acct-badge { display: inline-block; margin: 3px 0; }
 .acct-freshness.is-stale { border-color: #d9b465; background: #fff8e8; color: #783f0c; }
 body .view .acct-stale { border-color: #d9b465; }
+.financial-checkup { display: grid; gap: 28px; padding: clamp(20px, 4vw, 36px); line-height: 1.7; }
+.checkup-verdict { padding: clamp(20px, 3vw, 30px); border: 1px solid #dfe8d7; border-radius: 16px; background: linear-gradient(135deg, #f3f7ef, #fff); }
+.checkup-verdict h2 { margin: 0 0 8px; color: #203d30; font-size: clamp(21px, 2.5vw, 28px); letter-spacing: -.5px; }
+.checkup-verdict p:last-child { max-width: 850px; margin: 0; color: #52637a; }
+.checkup-section { display: grid; gap: 14px; }
+.checkup-section > h3 { margin: 0; color: #203d30; font-size: 19px; }
+.checkup-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; }
+.checkup-metrics article { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 16px; border: 1px solid #e2e7df; border-radius: 12px; background: #fff; }
+.checkup-metrics span { color: #63716a; font-size: 11px; font-weight: 700; line-height: 1.45; }
+.checkup-metrics strong { color: #203d30; font-size: clamp(17px, 2vw, 22px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.checkup-goals { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.checkup-goals li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #e8ece6; }
+.checkup-goals li strong { overflow-wrap: anywhere; }
+.checkup-goals li span { color: #52637a; text-align: right; }
+.checkup-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.checkup-action { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 18px; border: 1px solid #e2e7df; border-radius: 14px; background: #fff; }
+.checkup-action h3 { margin: 0; font-size: 16px; }
+.checkup-action p { flex: 1; margin: 0; color: #52637a; font-size: 12px; line-height: 1.7; }
+.checkup-assumptions { padding: 16px 18px; border: 1px solid #e2e7df; border-radius: 12px; background: #f8faf7; }
+.checkup-assumptions summary { color: #304c3d; font-weight: 700; cursor: pointer; }
+.checkup-assumptions p, .checkup-disclaimer { margin: 10px 0 0; color: #63716a; font-size: 12px; line-height: 1.75; }
+.checkup-disclaimer { padding-top: 16px; border-top: 1px solid #e8ece6; }
+@media (max-width: 900px) { .checkup-actions { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .checkup-goals li { flex-direction: column; gap: 3px; }
+  .checkup-goals li span { text-align: left; }
+}
 @media (prefers-reduced-motion: reduce) {
   body .view .metric-card:not(.mtd-category-card),
   body .view .acct-card,

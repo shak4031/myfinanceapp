@@ -139,9 +139,9 @@ and [audit recording](backend/utils/audit.js).
 
 Statements are processed on the application server. This import-based workflow
 does not require bank credentials, connect to a bank, or initiate money movement.
-Spending coaching is computed locally by the application, not by sending records
-to an external AI service. Hosting, database, and configured email providers
-still process the data needed for their roles.
+The Financial Checkup is computed locally by the application, not by sending
+records to an external AI service. Hosting, database, and configured email
+providers still process the data needed for their roles.
 
 Financial records and import-recovery backups are not encrypted at the field
 level by this application. Database volume encryption, backup encryption,

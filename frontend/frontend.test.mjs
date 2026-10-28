@@ -1105,6 +1105,45 @@ test('Knowledge Base has a direct route and explains both analytics offerings', 
     assert.ok(html.includes(text), `Knowledge Base should explain ${text}`);
   }
 });
+test('public About and Contact links are visible and the Knowledge Base sits above Tutorials', () => {
+  const html = source('index.html');
+  const mainNavigation = html.match(/<nav aria-label="Main navigation">([\s\S]*?)<\/nav>/)?.[1] || '';
+  assert.ok(mainNavigation.indexOf('Financial Checkup') < mainNavigation.indexOf('Knowledge Base'));
+  assert.ok(mainNavigation.indexOf('Knowledge Base') < mainNavigation.indexOf('Tutorials'));
+  assert.match(html, /data-marketing-jump="marketing-about">About/);
+  assert.match(html, /data-marketing-jump="marketing-contact">Contact/);
+  assert.match(html, /id="marketing-about"[\s\S]*?MyFinance is a personal finance workspace/);
+  assert.match(html, /id="marketing-contact"[\s\S]*?href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
+  assert.match(html, /Settings &amp; support/);
+});
+test('Financial Checkup gives a realistic cash-flow and goal assessment with relevant next steps', async () => {
+  const plan = {
+    monthsUsed: 3, avgMonthlyIncome: 5000, avgMonthlyExpenses: 4700, monthlySurplus: 300,
+    requiredMonthlySavings: 450, availableAfterGoals: -150, additionalDebtPayments: 0,
+    basis: 'Local calculations from completed months.', total_goals: 1,
+    goals: [{ name: '<Emergency fund>', requiredMonthly: 450, allocatedMonthly: 300, monthly_shortfall: 150, remaining: 6000, status: 'shortfall' }],
+    categorySpending: [{ category: '<Dining>', monthlyAverage: 400, total: 1200 }]
+  };
+  const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan) : response(200, {}));
+  f.run('refresh.js');
+  const generate = f.context.generateInsights;
+  f.context.generateInsights = () => Promise.resolve();
+  f.context.showView('insights');
+  assert.equal(f.node('current-page').textContent, 'Financial Checkup');
+  f.context.generateInsights = generate;
+  await generate();
+  const html = f.node('insights-container').innerHTML;
+  assert.match(html, /Your dated goals need more than this history supports/);
+  assert.match(html, /modeled gap of \$150\.00 per month/);
+  assert.match(html, /data-view="goals">Review savings goals/);
+  assert.match(html, /data-view="analytics">Open Analytics/);
+  assert.match(html, /data-view="payoff">Compare payoff scenarios/);
+  assert.match(html, /fees, promotional expiry and eligibility/);
+  assert.match(html, /&lt;Emergency fund&gt;/);
+  assert.match(html, /&lt;Dining&gt;/);
+  assert.doesNotMatch(html, /<Emergency fund>|<Dining>/);
+  assert.match(html, /not generative AI/);
+});
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'
     ? response(200, { transactions: [
