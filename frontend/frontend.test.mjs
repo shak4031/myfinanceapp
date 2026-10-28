@@ -1121,11 +1121,12 @@ test('Financial Checkup gives a realistic cash-flow and goal assessment with rel
     monthsUsed: 3, avgMonthlyIncome: 5000, avgMonthlyExpenses: 4700, monthlySurplus: 300,
     requiredMonthlySavings: 450, availableAfterGoals: -150, additionalDebtPayments: 0,
     basis: 'Local calculations from completed months.', total_goals: 1,
-    goals: [{ name: '<Emergency fund>', requiredMonthly: 450, allocatedMonthly: 300, monthly_shortfall: 150, remaining: 6000, status: 'shortfall' }],
+    goals: [{ name: '<Emergency fund>', icon: '🌱', target: 10000, current: 4000, requiredMonthly: 450, allocatedMonthly: 300, monthly_shortfall: 150, remaining: 6000, status: 'shortfall' }],
     categorySpending: [{ category: '<Dining>', monthlyAverage: 400, total: 1200 }]
   };
   const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan) : response(200, {}));
   f.run('refresh.js');
+  f.node('account-name').textContent = 'Asha Shah';
   const generate = f.context.generateInsights;
   f.context.generateInsights = () => Promise.resolve();
   f.context.showView('insights');
@@ -1133,16 +1134,38 @@ test('Financial Checkup gives a realistic cash-flow and goal assessment with rel
   f.context.generateInsights = generate;
   await generate();
   const html = f.node('insights-container').innerHTML;
-  assert.match(html, /Your dated goals need more than this history supports/);
-  assert.match(html, /modeled gap of \$150\.00 per month/);
-  assert.match(html, /data-view="goals">Review savings goals/);
-  assert.match(html, /data-view="analytics">Open Analytics/);
+  assert.match(html, /Hey, Asha\. Your goals are asking a lot of your monthly surplus/);
+  assert.match(html, /difference is \$150\.00 a month/);
+  assert.match(html, /data-view="goals">Edit goals/);
+  assert.match(html, /data-view="analytics">Explore Analytics/);
   assert.match(html, /data-view="payoff">Compare payoff scenarios/);
-  assert.match(html, /fees, promotional expiry and eligibility/);
+  assert.match(html, /Compare balances, APRs, fees and promotional terms/);
   assert.match(html, /&lt;Emergency fund&gt;/);
   assert.match(html, /&lt;Dining&gt;/);
   assert.doesNotMatch(html, /<Emergency fund>|<Dining>/);
   assert.match(html, /not generative AI/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /role="tabpanel" data-checkup-panel="goals"[^>]*hidden/);
+
+  const tabs = ['snapshot', 'goals', 'next'].map(key => ({ dataset: { checkupTab: key }, tabIndex: -1, setAttribute() {}, focus() {} }));
+  const panels = ['snapshot', 'goals', 'next'].map(key => ({ dataset: { checkupPanel: key }, hidden: true }));
+  f.node('insights-container').querySelectorAll = selector => selector === '[data-checkup-tab]' ? tabs : panels;
+  f.context.selectCheckupTab('goals');
+  assert.equal(tabs[1].tabIndex, 0);
+  assert.equal(panels[0].hidden, true);
+  assert.equal(panels[1].hidden, false);
+  assert.equal(panels[2].hidden, true);
+  f.node('insights-container').listeners.click({ target: { closest: () => tabs[2] } });
+  assert.equal(tabs[2].tabIndex, 0);
+  assert.equal(panels[2].hidden, false);
+  let focused = false;
+  tabs[1].focus = () => { focused = true; };
+  f.node('insights-container').listeners.keydown({
+    key: 'ArrowLeft', target: { closest: () => tabs[2] }, preventDefault() {}
+  });
+  assert.equal(focused, true);
+  assert.equal(tabs[1].tabIndex, 0);
+  assert.equal(panels[1].hidden, false);
 });
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'

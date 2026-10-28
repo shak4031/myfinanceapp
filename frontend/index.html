@@ -834,13 +834,23 @@
           <button class="btn btn-primary" id="run-insights-btn" onclick="generateInsights()">Refresh checkup</button>
         </header>
 
-        <div id="insights-container" class="panel financial-checkup">
-          <div class="checkup-welcome">
-            <p class="eyebrow">A REALITY CHECK, NOT A PROMISE</p>
-            <h2>Bring your goals into the bigger picture.</h2>
-            <p>Review your completed-month income and spending alongside dated savings goals. Then use the links below to investigate a trend or adjust a plan. The checkup uses local calculations—not generative AI—and does not send financial records to third-party AI services.</p>
-            <button type="button" class="btn btn-primary" onclick="generateInsights()">Review my finances</button>
-          </div>
+        <div id="insights-container" class="financial-checkup">
+          <section class="checkup-hero">
+            <div class="checkup-hero-copy"><p class="checkup-kicker">A LITTLE CLARITY GOES A LONG WAY</p><h2>Let’s take an honest look at your money.</h2><p>No judgment, no perfect-budget expectations. Just your real numbers, your goals, and a thoughtful next step.</p><button type="button" class="btn btn-primary checkup-review" onclick="generateInsights()">Take my checkup <span aria-hidden="true">&rarr;</span></button></div>
+            <svg class="checkup-illustration" viewBox="0 0 300 220" role="img" aria-label="Illustration of a growing plant beside a savings jar">
+              <ellipse cx="153" cy="199" rx="119" ry="12" fill="#204b3b" opacity=".11"/>
+              <circle cx="223" cy="53" r="31" fill="#e2ecb8"/>
+              <path d="M66 180c12-30 13-65 3-99" fill="none" stroke="#36795e" stroke-width="8" stroke-linecap="round"/>
+              <path d="M70 121c-30 2-38-16-37-35 22 0 39 9 40 31M67 98c3-29 21-40 42-38 0 21-13 39-41 45M67 147c-23 4-36-8-40-26 19-4 34 3 42 21" fill="#83b28a"/>
+              <rect x="126" y="106" width="100" height="76" rx="19" fill="#fffdf7" stroke="#2d684f" stroke-width="4"/>
+              <path d="M145 105v-10h62v10" fill="#d9e8c1" stroke="#2d684f" stroke-width="4" stroke-linejoin="round"/>
+              <path d="M140 145h72" stroke="#e4edda" stroke-width="3" stroke-dasharray="4 7"/>
+              <path d="M153 165v-12m0 0c-8-1-11-6-10-12 8 0 12 4 12 11m0 1c1-8 6-11 13-10 0 7-5 11-13 11" fill="none" stroke="#368163" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="m248 103 4 10 10 4-10 4-4 10-4-10-10-4 10-4zM117 50l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#d3a950"/>
+              <path d="M222 151h17a10 10 0 0 1 0 20h-17" fill="none" stroke="#2d684f" stroke-width="4"/>
+            </svg>
+          </section>
+          <div class="checkup-loading"><span class="checkup-loading-dot" aria-hidden="true"></span>Your personal checkup is ready when you are. <button type="button" class="link-button" onclick="generateInsights()">Let’s begin</button></div>
         </div>
       </section>
 
