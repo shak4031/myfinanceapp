@@ -240,12 +240,26 @@ test('audit logging, password reset, admin console and consented support access'
     })).status, 409);
     await database.query('DELETE FROM household_members WHERE user_id=$1', [member.rows[0].id]);
     await database.query('DELETE FROM users WHERE id=$1', [member.rows[0].id]);
-    await database.query(`INSERT INTO household_subscriptions(household_id,stripe_customer_id)
-      VALUES($1,'cus_test_delete_guard') ON CONFLICT(household_id) DO UPDATE SET stripe_customer_id=EXCLUDED.stripe_customer_id`, [household.rows[0].id]);
+    await database.query(`INSERT INTO household_subscriptions(household_id,stripe_customer_id,stripe_subscription_id,status)
+      VALUES($1,'cus_test_delete_guard','sub_test_delete_guard','active')
+      ON CONFLICT(household_id) DO UPDATE SET stripe_customer_id=EXCLUDED.stripe_customer_id,
+        stripe_subscription_id=EXCLUDED.stripe_subscription_id,status=EXCLUDED.status`, [household.rows[0].id]);
     assert.equal((await call('/api/admin/users/2', {
       method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
     })).status, 409);
-    await database.query('DELETE FROM household_subscriptions WHERE household_id=$1', [household.rows[0].id]);
+    await database.query(`UPDATE household_subscriptions SET status='canceled',
+      checkout_session_id=NULL,checkout_expires_at=NULL WHERE household_id=$1`, [household.rows[0].id]);
+    await database.query(`UPDATE household_subscriptions SET checkout_session_id='cs_test_in_progress',
+      checkout_expires_at=NOW() + INTERVAL '5 minutes' WHERE household_id=$1`, [household.rows[0].id]);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
+    })).status, 409);
+    await database.query(`UPDATE household_subscriptions SET checkout_expires_at=NULL WHERE household_id=$1`, [household.rows[0].id]);
+    assert.equal((await call('/api/admin/users/2', {
+      method: 'DELETE', body: { confirmEmail: 'customer@example.com' }, cookie: adminCookie
+    })).status, 409);
+    await database.query(`UPDATE household_subscriptions SET checkout_expires_at=NOW() - INTERVAL '1 minute'
+      WHERE household_id=$1`, [household.rows[0].id]);
     await database.query(`INSERT INTO plaid_connections(item_id,access_token_ciphertext,user_id)
       VALUES('item-test-delete-guard','not-a-real-token',2)`);
     assert.equal((await call('/api/admin/users/2', {

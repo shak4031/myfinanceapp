@@ -28,7 +28,7 @@ async function loadUser(client, id) {
 async function loadDeletionTarget(client, id, lock = false) {
   return (await client.query(`SELECT u.id,u.name,u.email,u.role,m.role AS household_role,m.household_id,
       h.owner_user_id,(SELECT COUNT(*)::int FROM household_members members WHERE members.household_id=m.household_id) AS household_members,
-      s.stripe_customer_id,s.stripe_subscription_id,s.checkout_session_id
+      s.stripe_subscription_id,s.status AS subscription_status,s.checkout_session_id,s.checkout_expires_at
     FROM users u
     LEFT JOIN household_members m ON m.user_id=u.id
     LEFT JOIN households h ON h.id=m.household_id
@@ -42,8 +42,13 @@ function deletionConflict(target) {
   if (target.household_role === 'owner' && Number(target.household_members) > 1) {
     return 'This account owns a household with other members. Remove or transfer household members before deleting it.';
   }
-  if (target.household_role === 'owner' && (target.stripe_customer_id || target.stripe_subscription_id || target.checkout_session_id)) {
-    return 'This household has Stripe billing history or a checkout in progress. Resolve billing before deleting its owner account.';
+  if (target.household_role === 'owner' && target.stripe_subscription_id
+    && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'].includes(target.subscription_status)) {
+    return 'This household has an active or unresolved Stripe subscription. Cancel or resolve the subscription before deleting its owner account.';
+  }
+  if (target.household_role === 'owner' && target.checkout_session_id
+    && (!target.checkout_expires_at || new Date(target.checkout_expires_at).getTime() > Date.now())) {
+    return 'This household has a Stripe checkout in progress. Complete or allow the checkout session to expire before deleting its owner account.';
   }
   return null;
 }

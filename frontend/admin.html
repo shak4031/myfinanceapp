@@ -103,7 +103,7 @@
       <section data-panel="users" hidden>
         <div class="card">
           <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>
-          <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead. Account deletion permanently removes that user's MyFinance data and cannot be undone. Disconnect Plaid and resolve Stripe billing or other household members first.</p>
+          <p class="muted">Account metadata only. Financial data is never shown here; use a customer-approved support session instead. Account deletion permanently removes that user's MyFinance data and cannot be undone. Disconnect Plaid, resolve an active Stripe subscription or checkout, and remove other household members first. Historical Stripe billing records are not deleted by this action.</p>
           <div id="users" class="table-scroll"></div>
         </div>
       </section>
@@ -167,7 +167,7 @@
     <dialog id="delete-account-dialog" class="delete-account-dialog" aria-labelledby="delete-account-title">
       <form id="delete-account-form" novalidate>
         <h2 id="delete-account-title">Permanently delete account?</h2>
-        <p>This removes the user's login, imported transactions, planning data, and personal settings. This action cannot be undone.</p>
+        <p>This removes the user's login, imported transactions, planning data, and personal settings. This action cannot be undone and does not cancel subscriptions or delete billing records held by Stripe. An active or unresolved subscription, an unexpired checkout, connected Plaid items, or other household members must be resolved first.</p>
         <p class="delete-target-email" id="delete-account-target"></p>
         <label for="delete-account-email">Type the account email to confirm
           <input id="delete-account-email" type="email" autocomplete="off" spellcheck="false" required>
