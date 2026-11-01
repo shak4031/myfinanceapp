@@ -247,7 +247,7 @@ router.get('/income-sources', route(async (req, res) => {
   const today = new Date();
   const since = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 400);
   const day = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  const rows = await db.all(`SELECT id,date,description,amount,direction,category,is_fixed,income_role FROM transactions
+  const rows = await db.all(`SELECT id,date,description,amount,direction,category,is_fixed,income_role,transfer_kind FROM transactions
     WHERE ${TENANT} AND UPPER(direction)='CREDIT' AND date::date >= $1::date ORDER BY date DESC, id DESC`, [day(since)]);
   res.json({ sources: incomeSources(rows, today) });
 }));

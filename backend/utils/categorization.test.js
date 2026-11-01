@@ -87,7 +87,8 @@ async function fixture() {
       label_id INT REFERENCES transaction_labels(id), is_fixed BOOLEAN DEFAULT FALSE,
       plaid_transaction_id TEXT, plaid_account_id TEXT, is_pending BOOLEAN DEFAULT FALSE,
       pay_mode TEXT CHECK (pay_mode IN ('auto','manual')), income_role TEXT CHECK (income_role IN ('income','other')),
-      account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE, import_batch_id INT);
+      account_id INT, display_name TEXT, name_override BOOLEAN NOT NULL DEFAULT FALSE, import_batch_id INT,
+      transfer_kind TEXT);
     CREATE TABLE transaction_import_reviews (id SERIAL PRIMARY KEY, user_id INT, source TEXT, date TEXT,
       description TEXT, amount NUMERIC, direction TEXT, balance NUMERIC, category TEXT, plaid_transaction_id TEXT,
       plaid_account_id TEXT, is_pending BOOLEAN, candidate_transaction_ids INTEGER[], status TEXT DEFAULT 'pending');

@@ -25,7 +25,9 @@ test('cleanup filters both date types, paginates, and deletes only owned selecti
     return { ...result, rowCount: result.affectedRows ?? result.rows.length };
   } };
   try {
+    await client.query('BEGIN');
     await migratePrivateSchema(client);
+    await client.query('COMMIT');
     await pg.exec(`
       SELECT set_config('app.user_id','1',false);
       INSERT INTO users(id,name) VALUES (2,'Other customer');

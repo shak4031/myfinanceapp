@@ -1,7 +1,82 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { decryptPlaidToken, encryptPlaidToken, verifyPlaidWebhook } from './plaid.js';
+import { decryptPlaidToken, encryptPlaidToken, plaidTransaction, verifyPlaidWebhook } from './plaid.js';
+import { isIncomeTransaction, incomeSources } from './income.js';
+import { classify } from './categorization.js';
+import { validateImportedTransaction } from './transactionImport.js';
+
+test('Plaid amounts have consistent directions across banks and account types, regardless of wording', () => {
+  const cases = [
+    ['PENNYMAC MORTGAGE', 2325.69, 'DEBIT'],
+    ['STATE FARM INSURANCE', 574.25, 'DEBIT'],
+    ['HYUNDAI LEASE', 443, 'DEBIT'],
+    ['SANTANDER AUTO PAYMENT', 513, 'DEBIT'],
+    ['AT&T AUTOPAY', 80, 'DEBIT'],
+    ['VISA PURCHASE', 37.15, 'DEBIT'],
+    ['WELLS FARGO BANK PAYROLL', -2623.89, 'CREDIT'],
+    ['CHASE DIRECT DEPOSIT', -3000, 'CREDIT'],
+    ['AMAZON REFUND', -37.15, 'CREDIT'],
+    ['CREDIT CARD PAYMENT THANK YOU', -120, 'CREDIT'],
+    ['TRANSFER FROM SAVINGS', -500, 'CREDIT'],
+    ['DEBIT REVERSAL REFUND', -10, 'CREDIT'],
+    ['PAYROLL ADJUSTMENT', 25, 'DEBIT']
+  ];
+  for (const [name, amount, direction] of cases) {
+    const raw = { transaction_id: name, account_id: 'account-1', date: '2026-10-15', name, amount, pending: false };
+    const original = { ...raw };
+    const tx = validateImportedTransaction(plaidTransaction(raw));
+    assert.equal(tx.direction, direction, name);
+    assert.equal(tx.amount, Math.abs(amount), name);
+    assert.deepEqual(raw, original, 'normalization does not mutate the provider record');
+    tx.is_fixed = true;
+    tx.category = classify(tx, [], new Set(['Salary', 'Other'])).category;
+    assert.equal(isIncomeTransaction(tx), /PAYROLL|DIRECT DEPOSIT/.test(name) && direction === 'CREDIT', name);
+    if (direction === 'DEBIT') {
+      assert.deepEqual(incomeSources([tx], new Date(2026, 9, 20)), [], 'bills never appear in income review');
+    }
+  }
+});
+
+test('Plaid normalization preserves bank wording and pending-to-posted identifiers', () => {
+  const tx = plaidTransaction({
+    transaction_id: 'posted-1', account_id: 'checking-1', date: '2026-10-15',
+    merchant_name: 'Wells Fargo', name: 'WELLS FARGO BANK PAYROLL', amount: -2623.89,
+    pending: false, pending_transaction_id: 'pending-1'
+  });
+  assert.deepEqual(tx, {
+    date: '2026-10-15', description: 'WELLS FARGO BANK PAYROLL', amount: 2623.89, direction: 'CREDIT',
+    balance: null, plaidTransactionId: 'posted-1', plaidAccountId: 'checking-1',
+    isPending: false, pendingTransactionId: 'pending-1'
+  });
+  assert.equal(plaidTransaction({
+    transaction_id: 'pending-2', account_id: 'card-1', date: '2026-10-15', merchant_name: 'Market', amount: 12.50, pending: true
+  }).isPending, true);
+  assert.equal(plaidTransaction({
+    transaction_id: 'tx-3', account_id: 'card-1', date: '2026-10-15', merchant_name: 'Market', amount: 12.50
+  }).description, 'Market');
+  for (const row of [null, {}, { transaction_id: 't', account_id: 'a', amount: '12' },
+    { transaction_id: 't', account_id: 'a', amount: NaN },
+    { transaction_id: 't', account_id: 'a', amount: Infinity }]) {
+    assert.throws(() => plaidTransaction(row), /invalid transaction record/);
+  }
+  for (const extra of [{ date: '2026-02-30' }, { amount: 1.001 }, { name: '' }]) {
+    assert.throws(() => plaidTransaction({
+      transaction_id: 'invalid', account_id: 'a', date: '2026-10-15', name: 'Market', amount: 12.50, ...extra
+    }), { status: 400 });
+  }
+});
+
+test('income detection rejects fixed bill credits and transfers without losing explicit deposit choices', () => {
+  for (const description of ['PENNYMAC', 'STATE FARM', 'HYUNDAI LEASE', 'SANTANDER AUTO PAYMENT', 'AT&T AUTOPAY',
+    'CREDIT CARD PAYMENT THANK YOU', 'REFUND', 'TRANSFER FROM SAVINGS']) {
+    assert.equal(isIncomeTransaction({ direction: 'CREDIT', description, category: 'Other', is_fixed: true }), false, description);
+  }
+  assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'RENT PAYMENT', income_role: 'income' }), true);
+  assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'STATE FARM PAYROLL', is_fixed: true }), true);
+  assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'ACME PAYROLL', category: 'Salary', transfer_kind: 'internal' }), false);
+  assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'ACME PAYROLL', income_role: 'other' }), false);
+});
 
 test('Plaid access tokens are encrypted with authenticated encryption', () => {
   const previous = process.env.PLAID_TOKEN_ENCRYPTION_KEY;

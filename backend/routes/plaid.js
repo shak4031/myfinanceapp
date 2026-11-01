@@ -2,10 +2,10 @@ import express from 'express';
 import { administrativeTransaction } from '../db.js';
 import Database from '../db.js';
 import { withUser, currentUserId } from '../utils/tenant.js';
-import { failure, loadCategorization } from '../utils/categorization.js';
-import { importTransactions } from '../utils/transactionImport.js';
+import { classify, failure, loadCategorization } from '../utils/categorization.js';
+import { importTransactions, refreshImportReviewCandidates } from '../utils/transactionImport.js';
 import {
-  decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, verifyPlaidWebhook
+  decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook
 } from '../utils/plaid.js';
 
 const plaidRouter = express.Router();
@@ -21,25 +21,6 @@ function plaidWebhookUrl() {
     throw failure(503, 'Set APP_ORIGIN to the public application origin before enabling Plaid');
   }
   return `${origin.origin}/api/plaid/webhook`;
-}
-
-function plaidTransaction(row) {
-  if (!row || typeof row.transaction_id !== 'string' || !row.transaction_id
-    || typeof row.account_id !== 'string' || !row.account_id
-    || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
-    throw new Error('Plaid returned an invalid transaction record');
-  }
-  return {
-    date: row.date,
-    description: row.merchant_name || row.name,
-    amount: Math.abs(row.amount),
-    direction: row.amount < 0 ? 'DEBIT' : 'CREDIT',
-    balance: null,
-    plaidTransactionId: row.transaction_id,
-    plaidAccountId: row.account_id,
-    isPending: row.pending === true,
-    pendingTransactionId: row.pending_transaction_id || null
-  };
 }
 
 async function saveAccounts(client, connectionId, accounts) {
@@ -98,32 +79,44 @@ async function refreshPlaidAccountBalances(client, connectionId, accessToken, pl
   await saveAccounts(client, connectionId, accounts);
 }
 
-async function reconcilePostedTransaction(client, posted) {
+async function updateSyncedTransaction(client, previous, row, config) {
+  const directionChanged = previous.direction !== row.direction;
+  const category = directionChanged && !previous.category_corrected
+    ? classify(row, config.compiled, config.names).category : previous.category;
+  await client.query(`UPDATE transactions SET plaid_transaction_id=$1,plaid_account_id=$2,
+      date=$3,description=$4,amount=$5,direction=$6,is_pending=$7,category=$8,
+      income_role=CASE WHEN $6='DEBIT' THEN NULL ELSE income_role END,
+      pay_mode=CASE WHEN $6='CREDIT' THEN NULL ELSE pay_mode END,
+      transfer_checked=CASE WHEN direction IS DISTINCT FROM $6 THEN FALSE ELSE transfer_checked END
+    WHERE id=$9 AND user_id=current_setting('app.user_id')::integer`,
+  [row.plaidTransactionId, row.plaidAccountId, row.date, row.description, row.amount,
+    row.direction, row.isPending, category, previous.id]);
+}
+
+async function reconcilePostedTransaction(client, posted, config) {
   if (!posted.pendingTransactionId) return false;
-  const pending = (await client.query(`SELECT id FROM transactions
+  const pending = (await client.query(`SELECT id,direction,category,category_corrected FROM transactions
     WHERE plaid_transaction_id=$1 AND user_id=current_setting('app.user_id')::integer
     FOR UPDATE`, [posted.pendingTransactionId])).rows[0];
   if (pending) {
-    await client.query(`UPDATE transactions SET plaid_transaction_id=$1, plaid_account_id=$2,
-        date=$3,description=$4,amount=$5,direction=$6,is_pending=FALSE
-      WHERE id=$7`, [posted.plaidTransactionId, posted.plaidAccountId, posted.date, posted.description,
-      posted.amount, posted.direction, pending.id]);
+    await updateSyncedTransaction(client, pending, posted, config);
     return true;
   }
   const review = (await client.query(`SELECT id FROM transaction_import_reviews
     WHERE plaid_transaction_id=$1 AND user_id=current_setting('app.user_id')::integer
       AND status IN ('pending','duplicate') FOR UPDATE`, [posted.pendingTransactionId])).rows[0];
   if (review) {
-    await client.query(`UPDATE transaction_import_reviews SET plaid_transaction_id=$1, plaid_account_id=$2,
+    const updated = (await client.query(`UPDATE transaction_import_reviews SET plaid_transaction_id=$1, plaid_account_id=$2,
         date=$3,description=$4,amount=$5,direction=$6,is_pending=FALSE
-      WHERE id=$7`, [posted.plaidTransactionId, posted.plaidAccountId, posted.date,
-      posted.description, posted.amount, posted.direction, review.id]);
+      WHERE id=$7 RETURNING *`, [posted.plaidTransactionId, posted.plaidAccountId, posted.date,
+      posted.description, posted.amount, posted.direction, review.id])).rows[0];
+    if (updated.status === 'pending') await refreshImportReviewCandidates(client, updated);
     return true;
   }
   return false;
 }
 
-async function syncConnection(client, connectionId, onlyIfDue = false) {
+export async function syncConnection(client, connectionId, onlyIfDue = false) {
   const connection = (await client.query(`SELECT * FROM plaid_connections
     WHERE id=$1 AND user_id=current_setting('app.user_id')::integer
     FOR UPDATE`, [connectionId])).rows[0];
@@ -142,14 +135,12 @@ async function syncConnection(client, connectionId, onlyIfDue = false) {
   const postedPendingIds = new Set([...added, ...modified].map(row => row.pendingTransactionId).filter(Boolean));
 
   for (const row of [...added, ...modified]) {
-    if (row.pendingTransactionId) await reconcilePostedTransaction(client, row);
-    const previousTransaction = (await client.query(`SELECT id FROM transactions
+    if (row.pendingTransactionId) await reconcilePostedTransaction(client, row, config);
+    const previousTransaction = (await client.query(`SELECT id,direction,category,category_corrected FROM transactions
       WHERE plaid_transaction_id=$1 AND user_id=current_setting('app.user_id')::integer`,
     [row.plaidTransactionId])).rows[0];
     if (previousTransaction) {
-      await client.query(`UPDATE transactions SET plaid_account_id=$1,date=$2,description=$3,
-        amount=$4,direction=$5,is_pending=$6 WHERE id=$7`,
-      [row.plaidAccountId, row.date, row.description, row.amount, row.direction, row.isPending, previousTransaction.id]);
+      await updateSyncedTransaction(client, previousTransaction, row, config);
       continue;
     }
     const existingReview = (await client.query(`SELECT id,status FROM transaction_import_reviews
@@ -157,9 +148,10 @@ async function syncConnection(client, connectionId, onlyIfDue = false) {
     [row.plaidTransactionId])).rows[0];
     if (existingReview && existingReview.status !== 'removed') {
       if (existingReview.status === 'pending') {
-        await client.query(`UPDATE transaction_import_reviews SET date=$1,description=$2,amount=$3,
-          direction=$4,plaid_account_id=$5,is_pending=$6 WHERE id=$7`,
-        [row.date, row.description, row.amount, row.direction, row.plaidAccountId, row.isPending, existingReview.id]);
+        const updated = (await client.query(`UPDATE transaction_import_reviews SET date=$1,description=$2,amount=$3,
+          direction=$4,plaid_account_id=$5,is_pending=$6 WHERE id=$7 RETURNING *`,
+        [row.date, row.description, row.amount, row.direction, row.plaidAccountId, row.isPending, existingReview.id])).rows[0];
+        await refreshImportReviewCandidates(client, updated);
       }
       continue;
     }

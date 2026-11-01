@@ -90,6 +90,29 @@ their last app-check time and warns users to verify the bank balance before
 relying on projections. It does not call a separate paid real-time balance
 endpoint.
 
+Plaid amounts use the same convention across institutions: positive amounts are
+money out (DEBIT), negative amounts are money in (CREDIT). The app stores positive
+magnitudes and preserves the transaction name for payroll and transfer detection.
+This also applies to credit-card purchases, payments and refunds; a credit is not
+automatically salary.
+Income review excludes money moving between accounts; recognizable bill payments,
+refunds and card-payment credits are not automatically treated as pay merely
+because a merchant is marked fixed. Explicit income choices still apply to
+non-transfer deposits.
+
+On the first startup with the direction fix, a transactional, one-time migration
+repairs existing `source='plaid'` transactions and import-review records for every
+household, including disconnected banks. It preserves transaction IDs, amounts,
+fixed flags and manually corrected categories. Income overrides on corrected
+outflows and payment modes on corrected inflows are cleared. Automatic categories,
+transfer classifications and pending review candidates are recalculated.
+Statement/manual entries and resolved review decisions are not changed.
+Back up the database and stop old app instances before deploying this update so
+they cannot import with the old convention during migration. Reload the app after
+deployment to refresh totals and forecasts; no bank reconnection is required.
+If the faulty imports already overlapped statement history, review those existing
+duplicates explicitly; the migration does not delete previously accepted records.
+
 CSV, PDF and Plaid imports share the same server-side validation and overlap
 checks. Possible overlaps with the same amount and direction within three days
 are held in **Import Review**, regardless of description, and are not counted

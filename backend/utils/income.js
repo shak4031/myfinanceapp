@@ -1,4 +1,6 @@
 import { parseTxDate } from './normalize.js';
+import { getFixedBillCategory } from './fixedPayments.js';
+import { hasCardPaymentWording, isTransferRow } from './transfers.js';
 
 // Pay-cycle detection: salary-like credits are grouped by employer, their spacing tells us the cadence,
 // and the cadence projects the paychecks still to come this month. Salary is always treated as fixed income.
@@ -22,14 +24,16 @@ export const isIncomeRole = value => value === null || value === 'income' || val
 // Whether a deposit counts as pay, and a plain-language reason the income review can show.
 export function incomeReason(tx) {
   if (String(tx.direction).toUpperCase() !== 'CREDIT') return { counted: false, by: 'direction', reason: 'Money out' };
+  if (isTransferRow(tx)) return { counted: false, by: 'wording', reason: 'Money moving between accounts' };
   if (tx.income_role === 'income') return { counted: true, by: 'you', reason: 'You marked this as income' };
   if (tx.income_role === 'other') return { counted: false, by: 'you', reason: 'You marked this as not income' };
   const text = tx.description || '';
   const category = String(tx.category || '').trim();
   if (INCOME_CATEGORY.test(category)) return { counted: true, by: 'category', reason: `Category is ${category}` };
   if (NOT_INCOME.test(text)) return { counted: false, by: 'wording', reason: 'Looks like a transfer, refund or interest' };
-  if (tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true') return { counted: true, by: 'fixed', reason: 'Marked as fixed' };
   if (INCOME_TEXT.test(text)) return { counted: true, by: 'wording', reason: 'Payroll wording in the description' };
+  if (hasCardPaymentWording(tx) || getFixedBillCategory(text)) return { counted: false, by: 'wording', reason: 'Looks like a bill payment or refund' };
+  if (tx.is_fixed === true || tx.is_fixed === 1 || tx.is_fixed === 'true') return { counted: true, by: 'fixed', reason: 'Marked as fixed' };
   return { counted: false, by: 'auto', reason: 'Not recognised as pay' };
 }
 

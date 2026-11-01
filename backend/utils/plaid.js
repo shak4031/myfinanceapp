@@ -1,5 +1,6 @@
 import { createDecipheriv, createCipheriv, createHash, createPublicKey, randomBytes, timingSafeEqual, verify } from 'node:crypto';
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import { validateImportedTransaction } from './transactionImport.js';
 
 const webhookKeys = new Map();
 const KEY_TTL_MS = 60 * 60 * 1000;
@@ -7,6 +8,26 @@ const ALLOWED_ENVIRONMENTS = {
   sandbox: PlaidEnvironments.sandbox,
   production: PlaidEnvironments.production
 };
+
+export function plaidTransaction(row) {
+  if (!row || typeof row.transaction_id !== 'string' || !row.transaction_id
+    || typeof row.account_id !== 'string' || !row.account_id
+    || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
+    throw new Error('Plaid returned an invalid transaction record');
+  }
+  return validateImportedTransaction({
+    date: row.date,
+    description: row.name || row.merchant_name,
+    amount: Math.abs(row.amount),
+    // Plaid normalizes all institutions: positive amounts are outflows, negative amounts are inflows.
+    direction: row.amount < 0 ? 'CREDIT' : 'DEBIT',
+    balance: null,
+    plaidTransactionId: row.transaction_id,
+    plaidAccountId: row.account_id,
+    isPending: row.pending === true,
+    pendingTransactionId: row.pending_transaction_id || null
+  });
+}
 
 function encryptionKey() {
   const encoded = process.env.PLAID_TOKEN_ENCRYPTION_KEY || '';

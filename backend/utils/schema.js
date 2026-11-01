@@ -1,4 +1,6 @@
 import { reconcileTransfers } from './transfers.js';
+import { classify, loadCategorization } from './categorization.js';
+import { refreshImportReviewCandidates } from './transactionImport.js';
 
 export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
@@ -423,6 +425,7 @@ export async function migratePrivateSchema(client) {
       FROM PUBLIC, finance_app_runtime;
   `);
   await normalizeStoredDates(client);
+  await repairLegacyPlaidDirections(client);
   await backfillTransfers(client);
   // Old imports shared one transaction timestamp. Never guess boundaries for undated/manual rows.
   await client.query(`
@@ -460,6 +463,47 @@ export async function migratePrivateSchema(client) {
       GRANT USAGE, SELECT ON SEQUENCE ${table}_id_seq TO finance_app_runtime;
     `);
   }
+}
+
+// Runs only at startup inside the schema transaction, before FORCE RLS is restored.
+export async function repairLegacyPlaidDirections(client) {
+  await client.query('LOCK TABLE app_migrations IN EXCLUSIVE MODE');
+  const migrationId = 'plaid-transaction-directions-v1';
+  if ((await client.query('SELECT id FROM app_migrations WHERE id=$1', [migrationId])).rows.length) return;
+  for (const table of ['transactions', 'transaction_import_reviews', 'categories', 'transaction_labels']) {
+    await client.query(`ALTER TABLE ${table} NO FORCE ROW LEVEL SECURITY`);
+  }
+  const repaired = (await client.query(`UPDATE transactions SET
+      direction=CASE UPPER(direction) WHEN 'CREDIT' THEN 'DEBIT' ELSE 'CREDIT' END,
+      income_role=CASE WHEN UPPER(direction)='CREDIT' THEN NULL ELSE income_role END,
+      pay_mode=CASE WHEN UPPER(direction)='DEBIT' THEN NULL ELSE pay_mode END,
+      transfer_checked=FALSE
+    WHERE source=$1 AND UPPER(direction) IN ('CREDIT','DEBIT')
+    RETURNING id,user_id,description,direction,category,category_corrected`, ['plaid'])).rows;
+  await client.query(`UPDATE transaction_import_reviews SET
+      direction=CASE UPPER(direction) WHEN 'CREDIT' THEN 'DEBIT' ELSE 'CREDIT' END
+    WHERE source='plaid' AND UPPER(direction) IN ('CREDIT','DEBIT')`);
+  const previousUser = (await client.query('SELECT current_setting($1,true) AS id', ['app.user_id'])).rows[0].id;
+  for (const userId of new Set(repaired.map(row => row.user_id))) {
+    await client.query("SELECT set_config('app.user_id',$1,true)", [String(userId)]);
+    const config = await loadCategorization(client);
+    for (const row of repaired.filter(row => row.user_id === userId && !row.category_corrected)) {
+      const suggestion = classify(row, config.compiled, config.names);
+      if (suggestion.category !== row.category) {
+        await client.query('UPDATE transactions SET category=$1 WHERE id=$2 AND user_id=$3',
+          [suggestion.category, row.id, userId]);
+      }
+    }
+  }
+  await client.query("SELECT set_config('app.user_id',$1,true)", [previousUser || '']);
+  const reviews = (await client.query(`SELECT * FROM transaction_import_reviews
+    WHERE source=$1 AND status='pending' ORDER BY user_id,id`, ['plaid'])).rows;
+  for (const review of reviews) {
+    await client.query("SELECT set_config('app.user_id',$1,true)", [String(review.user_id)]);
+    await refreshImportReviewCandidates(client, review);
+  }
+  await client.query("SELECT set_config('app.user_id',$1,true)", [previousUser || '']);
+  await client.query('INSERT INTO app_migrations(id) VALUES($1)', [migrationId]);
 }
 
 // Transaction dates are TEXT and older CSV imports stored MM/DD/YYYY. One unreadable value (e.g. '') makes every
