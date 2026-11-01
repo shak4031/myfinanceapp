@@ -13,9 +13,17 @@
     the extra Plaid entry is permanently removed and its bank identity is attached to the retained record for future sync.</p>
     <p class="muted">Separate accounts and genuine split deposits must stay separate. Leave uncertain matches unmerged.
     Totals include both entries until you approve a merge. There is no Undo.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-secondary" data-duplicates-select-page>Select unambiguous on page</button>
+      <button type="button" class="btn btn-secondary" data-duplicates-select-all>Select all unambiguous (max 500)</button>
+      <button type="button" class="btn btn-secondary" data-duplicates-clear>Clear selection</button>
+      <button type="button" class="btn btn-primary" data-duplicates-merge-selected>Merge selected (0)</button>
+    </div>
+    <p class="muted">Selections stay across pages. Select-all includes only one-to-one matches, not proof of duplication.
+    Review selected pairs before confirming; competing matches must be chosen individually.</p>
     <p id="duplicates-status" role="status" aria-live="polite"></p>
     <div class="table-scroll"><table style="width:100%"><thead><tr>
-      <th>Extra Plaid record</th><th>Existing record to keep</th><th>Decision</th>
+      <th>Select</th><th>Extra Plaid record</th><th>Existing record to keep</th><th>Decision</th>
     </tr></thead><tbody id="duplicates-rows"></tbody></table></div>
     <div style="display:flex;gap:12px;margin-top:16px;">
       <button type="button" class="btn btn-secondary" data-duplicates-prev>Previous</button>
@@ -27,6 +35,10 @@
   const statusNode = dialog.querySelector('#duplicates-status');
   const body = dialog.querySelector('#duplicates-rows');
   let rows = [], offset = 0, total = 0, busy = false, generation = 0;
+  const selected = new Map();
+  const pairKey = pair => `${pair.plaid.id}:${pair.existing.id}`;
+  const conflicts = pair => [...selected.values()].some(item => pairKey(item) !== pairKey(pair)
+    && (item.plaid.id === pair.plaid.id || item.existing.id === pair.existing.id));
   function status(message, error = false) {
     statusNode.textContent = message;
     statusNode.setAttribute('role', error ? 'alert' : 'status');
@@ -35,6 +47,18 @@
     dialog.querySelectorAll('button').forEach(button => { button.disabled = busy; });
     dialog.querySelector('[data-duplicates-prev]').disabled = busy || offset === 0;
     dialog.querySelector('[data-duplicates-next]').disabled = busy || offset + 50 >= total;
+    dialog.querySelector('[data-duplicates-select-page]').disabled = busy || !rows.some(pair => pair.bulkEligible);
+    dialog.querySelector('[data-duplicates-select-all]').disabled = busy || !total;
+    dialog.querySelector('[data-duplicates-clear]').disabled = busy || !selected.size;
+    const mergeButton = dialog.querySelector('[data-duplicates-merge-selected]');
+    mergeButton.disabled = busy || !selected.size;
+    mergeButton.textContent = `Merge selected (${selected.size})`;
+    dialog.querySelectorAll('[data-duplicates-select]').forEach(box => {
+      const pair = rows[Number(box.dataset.duplicatesSelect)];
+      if (!pair) return;
+      box.checked = selected.has(pairKey(pair));
+      box.disabled = busy || conflicts(pair) || (!box.checked && selected.size >= 500);
+    });
   }
   async function request(url, data) {
     const response = await fetch(url, data === undefined ? {} : {
@@ -56,12 +80,18 @@
     const data = await request(`/api/import-review/duplicates?offset=${pageOffset}`);
     if (current !== generation) return;
     rows = data.rows; total = data.total; offset = data.offset;
+    for (const pair of rows) {
+      if (selected.has(pairKey(pair)) && selected.get(pairKey(pair)).revision !== pair.revision) {
+        selected.delete(pairKey(pair));
+      }
+    }
     body.innerHTML = rows.map((pair, index) => `<tr>
+      <td><input type="checkbox" data-duplicates-select="${index}" aria-label="Select Plaid #${pair.plaid.id} and existing #${pair.existing.id}"></td>
       <td style="padding:12px;vertical-align:top">${cell(pair.plaid)}</td>
       <td style="padding:12px;vertical-align:top">${cell(pair.existing)}</td>
       <td><button type="button" class="btn btn-secondary" data-duplicates-merge="${index}">Merge into existing</button></td>
-    </tr>`).join('') || '<tr><td colspan="3">No possible Plaid / statement matches on this page.</td></tr>';
-    status(`${total ? offset + 1 : 0}-${Math.min(offset + rows.length, total)} of ${total} possible pairs. Nothing is merged automatically.`);
+    </tr>`).join('') || '<tr><td colspan="4">No possible Plaid / statement matches on this page.</td></tr>';
+    status(`${total ? offset + 1 : 0}-${Math.min(offset + rows.length, total)} of ${total} possible pairs. ${selected.size} selected across pages. Nothing is merged automatically.`);
   }
   async function runLoad(pageOffset = 0) {
     if (busy) return;
@@ -69,25 +99,45 @@
     const current = generation;
     try { await load(pageOffset); }
     catch (error) {
-      if (current === generation) { rows = []; body.innerHTML = ''; status(`Could not load matches: ${error.message}`, true); }
+      if (current === generation) { selected.clear(); rows = []; body.innerHTML = ''; status(`Could not load matches: ${error.message}`, true); }
     } finally { if (current === generation) { busy = false; update(); } }
   }
-  async function merge(index) {
-    if (busy || !rows[index]) return;
+  async function selectAll() {
+    if (busy) return;
+    const current = generation;
+    busy = true; update();
+    try {
+      const data = await request('/api/import-review/duplicates?selection=all');
+      if (current !== generation) return;
+      selected.clear();
+      for (const pair of data.rows) selected.set(pairKey(pair), pair);
+      status(`${selected.size} one-to-one pairs selected across all pages. Review them before merging; ambiguous matches were excluded.`);
+    } catch (error) {
+      if (current === generation) status(`Could not select all: ${error.message}`, true);
+    } finally { if (current === generation) { busy = false; update(); } }
+  }
+  async function merge(index, bulk = false) {
+    const pairs = bulk ? [...selected.values()] : rows[index] ? [rows[index]] : [];
+    if (busy || !pairs.length) return;
     if (window.importIsBusy?.()) { status('Wait for the current import or recovery to finish.', true); return; }
-    const pair = rows[index], current = generation;
+    const pair = pairs[0], current = generation;
     busy = true; update();
     try {
       const accepted = await window.FinanceUI.confirm(
-        `Confirm these are the same real transaction: Plaid #${pair.plaid.id} (${pair.plaid.date}, ${money(pair.plaid)}) and existing #${pair.existing.id} (${pair.existing.date}, ${money(pair.existing)}). Keep the existing record and its settings; permanently remove only the extra Plaid record. There is no Undo.`,
-        { title: 'Merge one duplicate pair', action: 'Merge into existing' });
+        bulk
+          ? `Merge ${pairs.length} selected pairs across pages? Confirm every pair is the same real transaction, not separate accounts or split deposits. Keep each existing record and its settings; permanently remove ${pairs.length} extra Plaid records. The entire batch is rejected if any pair changed. There is no Undo.`
+          : `Confirm these are the same real transaction: Plaid #${pair.plaid.id} (${pair.plaid.date}, ${money(pair.plaid)}) and existing #${pair.existing.id} (${pair.existing.date}, ${money(pair.existing)}). Keep the existing record and its settings; permanently remove only the extra Plaid record. There is no Undo.`,
+        { title: bulk ? 'Merge selected duplicate pairs' : 'Merge one duplicate pair', action: bulk ? `Merge ${pairs.length} pairs` : 'Merge into existing' });
       if (!accepted || current !== generation) return;
-      const result = await request('/api/import-review/duplicates/merge', {
-        plaidId: pair.plaid.id, existingId: pair.existing.id, revision: pair.revision, acknowledged: true
-      });
+      const choices = pairs.map(item => ({
+        plaidId: item.plaid.id, existingId: item.existing.id, revision: item.revision
+      }));
+      const result = await request(`/api/import-review/duplicates/${bulk ? 'merge-bulk' : 'merge'}`,
+        bulk ? { pairs: choices, acknowledged: true } : { ...choices[0], acknowledged: true });
       if (current !== generation) return;
-      rows = []; body.innerHTML = '';
-      status(`Merged into transaction #${result.keptTransactionId}. Refreshing totals...`);
+      selected.clear(); rows = []; body.innerHTML = '';
+      const success = bulk ? `Merged ${result.merged} duplicate pairs.` : `Merged into #${result.keptTransactionId}.`;
+      status(`${success} Refreshing totals...`);
       window.FinancePlan?.invalidate?.();
       window.FinancePro?.invalidateAnalytics?.();
       window.FinanceReviewTools?.invalidateImports?.();
@@ -98,12 +148,12 @@
       ]);
       if (current !== generation) return;
       const failed = refreshed.some(item => item.status === 'rejected' || item.value === false);
-      await load(Math.max(0, offset >= total - 1 ? offset - 50 : offset));
+      await load(0);
       if (current !== generation) return;
-      status(`Merged into #${result.keptTransactionId}. ${failed ? 'Some views could not refresh; reload the app.' : 'Totals and forecasts refreshed.'} ${total} possible pairs remain.`, failed);
+      status(`${success} ${failed ? 'Some views could not refresh; reload the app.' : 'Totals and forecasts refreshed.'} ${total} possible pairs remain.`, failed);
     } catch (error) {
       if (current === generation) {
-        rows = []; body.innerHTML = '';
+        selected.clear(); rows = []; body.innerHTML = '';
         status(`Merge could not be confirmed: ${error.message} Refresh matches before retrying.`, true);
       }
     } finally { if (current === generation) { busy = false; update(); } }
@@ -114,8 +164,24 @@
     if (button.hasAttribute('data-duplicates-close')) dialog.close();
     else if (button.hasAttribute('data-duplicates-prev')) runLoad(Math.max(0, offset - 50));
     else if (button.hasAttribute('data-duplicates-next')) runLoad(offset + 50);
-    else if (button.hasAttribute('data-duplicates-reload')) runLoad(0);
+    else if (button.hasAttribute('data-duplicates-reload')) { selected.clear(); runLoad(0); }
+    else if (button.hasAttribute('data-duplicates-select-all')) selectAll();
+    else if (button.hasAttribute('data-duplicates-select-page')) {
+      for (const pair of rows) if (pair.bulkEligible && !conflicts(pair) && selected.size < 500) selected.set(pairKey(pair), pair);
+      update(); status(`${selected.size} pairs selected across pages.`);
+    }
+    else if (button.hasAttribute('data-duplicates-clear')) { selected.clear(); update(); status('Selection cleared.'); }
+    else if (button.hasAttribute('data-duplicates-merge-selected')) merge(null, true);
     else if (button.hasAttribute('data-duplicates-merge')) merge(Number(button.dataset.duplicatesMerge));
+  });
+  dialog.addEventListener('change', event => {
+    const box = event.target.closest('[data-duplicates-select]');
+    if (!box || busy) return;
+    const pair = rows[Number(box.dataset.duplicatesSelect)];
+    if (!pair) return;
+    if (!box.checked) selected.delete(pairKey(pair));
+    else if (!conflicts(pair) && selected.size < 500) selected.set(pairKey(pair), pair);
+    update(); status(`${selected.size} pairs selected across pages.`);
   });
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   dialog.addEventListener('keydown', event => {
@@ -126,7 +192,7 @@
     dialog.showModal(); runLoad(0);
   });
   window.FinanceTransactionDuplicates = { reset() {
-    generation++; rows = []; offset = 0; total = 0; busy = false; body.innerHTML = ''; status('');
+    generation++; selected.clear(); rows = []; offset = 0; total = 0; busy = false; body.innerHTML = ''; status('');
     if (dialog.open) dialog.close();
     update();
   } };

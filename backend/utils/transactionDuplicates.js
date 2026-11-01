@@ -23,17 +23,57 @@ const MATCH = `FROM transactions p
     AND (pa.iso_currency_code IS NULL OR pa.iso_currency_code='USD')
     AND (pa.mask IS NULL OR a.last4 IS NULL OR pa.mask=a.last4)`;
 const revision = pair => createHash('sha256').update(JSON.stringify([pair.plaid, pair.existing])).digest('hex');
+export const MAX_DUPLICATE_MERGES = 500;
 
 export async function listTransactionDuplicates(client, input = {}) {
   const offset = input.offset === undefined ? 0 : Number(input.offset);
   if (!Number.isSafeInteger(offset) || offset < 0) throw failure(400, 'Invalid duplicate review page');
+  if (input.selection !== undefined && input.selection !== 'all') throw failure(400, 'Invalid duplicate selection');
   const total = (await client.query(`SELECT COUNT(*)::int AS count ${MATCH}`, [currentUserId()])).rows[0].count;
-  const rows = (await client.query(`SELECT ${snapshot('p')} AS plaid,${snapshot('e')} AS existing
-    ${MATCH} ORDER BY p.date DESC,p.id,e.id LIMIT 50 OFFSET $2`, [currentUserId(), offset])).rows;
-  return { rows: rows.map(pair => ({ ...pair, revision: revision(pair) })), total, offset, limit: 50 };
+  const pairs = `SELECT ${snapshot('p')} AS plaid,${snapshot('e')} AS existing,
+    (COUNT(*) OVER (PARTITION BY p.id)=1 AND COUNT(*) OVER (PARTITION BY e.id)=1
+      AND p.import_batch_id IS NULL) AS bulk_eligible ${MATCH}`;
+  const all = input.selection === 'all';
+  const rows = (await client.query(`SELECT * FROM (${pairs}) matches
+    ${all ? 'WHERE bulk_eligible' : ''}
+    ORDER BY plaid->>'date' DESC,(plaid->>'id')::integer,(existing->>'id')::integer LIMIT $2 OFFSET $3`,
+  [currentUserId(), all ? MAX_DUPLICATE_MERGES + 1 : 50, all ? 0 : offset])).rows;
+  if (all && rows.length > MAX_DUPLICATE_MERGES) {
+    throw failure(422, `More than ${MAX_DUPLICATE_MERGES} unambiguous pairs are available. Select reviewed pages in batches; nothing was selected automatically.`);
+  }
+  return { rows: rows.map(({ bulk_eligible, ...pair }) => ({
+    ...pair, revision: revision(pair), bulkEligible: bulk_eligible
+  })), total, offset: all ? 0 : offset, limit: all ? MAX_DUPLICATE_MERGES : 50 };
 }
 
 export async function mergeTransactionDuplicate(client, input) {
+  return mergeDuplicate(client, input, true);
+}
+
+export async function mergeTransactionDuplicates(client, input) {
+  if (!input || input.acknowledged !== true || !Array.isArray(input.pairs)
+    || !input.pairs.length || input.pairs.length > MAX_DUPLICATE_MERGES) {
+    throw failure(400, `Review and confirm between 1 and ${MAX_DUPLICATE_MERGES} duplicate pairs`);
+  }
+  const ids = new Set();
+  for (const pair of input.pairs) {
+    validatePair({ ...pair, acknowledged: true });
+    for (const id of [pair.plaidId, pair.existingId]) {
+      if (ids.has(id)) throw failure(400, 'Each transaction can appear in only one selected pair. Resolve conflicting matches before merging.');
+      ids.add(id);
+    }
+  }
+  const userId = currentUserId();
+  await client.query('SELECT pg_advisory_xact_lock($1::integer,193647)', [userId]);
+  await client.query(`SELECT id FROM transactions WHERE user_id=$1 AND id=ANY($2::integer[])
+    ORDER BY id FOR UPDATE`, [userId, [...ids]]);
+  const results = [];
+  for (const pair of input.pairs) results.push(await mergeDuplicate(client, { ...pair, acknowledged: true }, false));
+  await reconcileTransfers(client, userId);
+  return { success: true, merged: results.length, results };
+}
+
+function validatePair(input) {
   if (!input || input.acknowledged !== true
     || !Number.isSafeInteger(input.plaidId) || input.plaidId < 1
     || !Number.isSafeInteger(input.existingId) || input.existingId < 1
@@ -41,6 +81,10 @@ export async function mergeTransactionDuplicate(client, input) {
     || !/^[a-f0-9]{64}$/.test(input.revision)) {
     throw failure(400, 'Review and confirm one Plaid transaction and its existing match before merging');
   }
+}
+
+async function mergeDuplicate(client, input, reconcile) {
+  validatePair(input);
   const userId = currentUserId();
   await client.query('SELECT pg_advisory_xact_lock($1::integer,193647)', [userId]);
   const locked = (await client.query(`SELECT id FROM transactions
@@ -69,6 +113,6 @@ export async function mergeTransactionDuplicate(client, input) {
   await client.query('DELETE FROM transactions WHERE user_id=$1 AND id=$2', [userId, removeId]);
   await client.query(`UPDATE transactions SET plaid_transaction_id=$3,plaid_account_id=$4,is_pending=FALSE
     WHERE user_id=$1 AND id=$2`, [userId, keepId, pair.plaid.plaid_transaction_id, pair.plaid.plaid_account_id]);
-  await reconcileTransfers(client, userId);
+  if (reconcile) await reconcileTransfers(client, userId);
   return { success: true, keptTransactionId: keepId, removedTransactionId: removeId };
 }

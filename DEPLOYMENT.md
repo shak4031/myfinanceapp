@@ -138,6 +138,19 @@ import restore history cannot be merged. There is no Undo. Leave uncertain match
 and genuine separate deposits unmerged. Totals and forecasts refresh after merging.
 This review does not find statement-only or Plaid-only duplicate pairs.
 
+Duplicate review supports individual checkboxes, **Select unambiguous on page**,
+**Select all unambiguous (max 500)**, and **Merge selected** with one confirmation.
+Selection persists across pages; **Clear selection** or **Refresh matches** clears
+it. Select-all includes only globally one-to-one matches, never competing pairs or
+Plaid rows with restore history. These are still possible matches, not guaranteed
+duplicates: review the selected account/date/description pairs before confirming.
+Ambiguous matches may be selected individually, but a transaction may belong to
+only one selected pair. A batch contains at most 500 pairs. Larger select-all
+requests fail explicitly; select reviewed pages in batches instead.
+Bulk merging is atomic: one stale, missing, foreign, or conflicting pair rejects
+the entire batch. No partial cleanup is committed. Totals refresh once per batch.
+Selections clear on merge completion/failure and household changes.
+
 CSV, PDF and Plaid imports share the same server-side validation and overlap
 checks. Possible overlaps with the same amount and direction within three days
 are held in **Import Review**, regardless of description, and are not counted

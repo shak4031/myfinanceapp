@@ -9,7 +9,7 @@ const pair = {
     source: 'plaid', account_name: 'Checking', account_mask: '5237', category: 'Salary' },
   existing: { id: 1, description: 'BANK PAYROLL', display_name: 'My paycheck', date: '2026-10-21',
     amount: 6200, direction: 'CREDIT', source: 'october.csv', account_name: 'Checking', account_mask: '5237', category: 'Salary' },
-  revision: 'a'.repeat(64)
+  revision: 'a'.repeat(64), bulkEligible: true
 };
 function fixture({ fetchImpl, confirm = true } = {}) {
   const listeners = {}, events = {}, nodes = new Map(), calls = [], refreshed = [];
@@ -20,7 +20,7 @@ function fixture({ fetchImpl, confirm = true } = {}) {
   };
   const dialog = {
     open: false, style: {}, innerHTML: '', setAttribute() {},
-    querySelector: node, querySelectorAll: () => [...nodes.values()],
+    querySelector: node, querySelectorAll: selector => selector === '[data-duplicates-select]' ? [] : [...nodes.values()],
     addEventListener: (name, fn) => { events[name] = fn; },
     showModal() { this.open = true; }, close() { this.open = false; }
   };
@@ -31,7 +31,7 @@ function fixture({ fetchImpl, confirm = true } = {}) {
       calls.push({ url, options });
       if (fetchImpl) return fetchImpl(url, options, calls.length);
       return { ok: true, json: async () => options?.method === 'POST'
-        ? { success: true, keptTransactionId: 1, removedTransactionId: 10 }
+        ? { success: true, keptTransactionId: 1, removedTransactionId: 10, merged: 1 }
         : { rows: [pair], total: 1, offset: 0, limit: 50 } };
     },
     FinanceUI: { confirm: async () => confirm },
@@ -54,7 +54,11 @@ function fixture({ fetchImpl, confirm = true } = {}) {
     events.click({ target: { closest: () => button } });
     await flush();
   };
-  return { context, dialog, node, calls, refreshed, open, click, flush };
+  const select = async (index, checked = true) => {
+    events.change({ target: { closest: () => ({ dataset: { duplicatesSelect: String(index) }, checked }) } });
+    await flush();
+  };
+  return { context, dialog, node, calls, refreshed, open, click, select, flush };
 }
 
 test('duplicate UI opens only on request, escapes descriptions and shows both sources and account masks', async () => {
@@ -127,4 +131,63 @@ test('the duplicate review entry is in Transactions and its script and household
   assert.match(index.slice(start, end), /data-transaction-duplicates/);
   assert.match(index, /src="transaction-duplicates\.js\?v=/);
   assert.match(readFileSync(new URL('session.js', import.meta.url), 'utf8'), /FinanceTransactionDuplicates\?\.reset/);
+});
+
+test('page selection submits one atomic batch and clear selection prevents a merge', async () => {
+  const f = fixture();
+  await f.open();
+  await f.click('data-duplicates-select-page');
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (1)');
+  await f.click('data-duplicates-clear');
+  assert.equal(f.node('[data-duplicates-merge-selected]').disabled, true);
+  await f.select(0);
+  await f.click('data-duplicates-merge-selected');
+  const request = f.calls.find(call => call.options?.method === 'POST');
+  assert.equal(request.url, '/api/import-review/duplicates/merge-bulk');
+  assert.deepEqual(JSON.parse(request.options.body), {
+    pairs: [{ plaidId: 10, existingId: 1, revision: pair.revision }], acknowledged: true
+  });
+  assert.match(f.node('#duplicates-status').textContent, /Merged 1 duplicate pairs/);
+  assert.equal(f.refreshed.filter(value => value === 'dashboard').length, 1);
+  assert.equal(f.node('[data-duplicates-merge-selected]').disabled, true);
+});
+
+test('cross-page selection persists, but conflicting pairs and automatic ambiguous selection are prevented', async () => {
+  const second = { ...pair, plaid: { ...pair.plaid, id: 11 }, existing: { ...pair.existing, id: 2 } };
+  const ambiguous = { ...pair, plaid: { ...pair.plaid, id: 12 }, bulkEligible: false };
+  const f = fixture({ fetchImpl: async url => ({ ok: true, json: async () => url.endsWith('offset=50')
+    ? { rows: [second, ambiguous], total: 52, offset: 50 }
+    : { rows: [pair], total: 52, offset: 0 } }) });
+  await f.open();
+  await f.select(0);
+  await f.click('data-duplicates-next');
+  await f.click('data-duplicates-select-page');
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (2)');
+  await f.select(1);
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (2)', 'existing record already selected on the first page');
+  await f.click('data-duplicates-reload');
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (0)');
+});
+
+test('select all requests globally unambiguous pairs and cancelled bulk confirmation does not merge', async () => {
+  const f = fixture({ confirm: false });
+  await f.open();
+  await f.click('data-duplicates-select-all');
+  assert.equal(f.calls[1].url, '/api/import-review/duplicates?selection=all');
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (1)');
+  await f.click('data-duplicates-merge-selected');
+  assert.equal(f.calls.filter(call => call.options?.method === 'POST').length, 0);
+  assert.equal(f.node('[data-duplicates-merge-selected]').textContent, 'Merge selected (1)');
+});
+
+test('failed bulk merge clears all selections and requires reviewing again', async () => {
+  const f = fixture({ fetchImpl: async (url, options) => options?.method === 'POST'
+    ? { ok: false, json: async () => ({ error: 'A selected match changed; nothing merged' }) }
+    : { ok: true, json: async () => ({ rows: [pair], total: 1, offset: 0 }) } });
+  await f.open();
+  await f.click('data-duplicates-select-page');
+  await f.click('data-duplicates-merge-selected');
+  assert.equal(f.node('[data-duplicates-merge-selected]').disabled, true);
+  assert.match(f.node('#duplicates-status').textContent, /nothing merged/);
+  assert.equal(f.refreshed.length, 0);
 });

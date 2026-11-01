@@ -5,7 +5,7 @@ import {
   importReviewedTransaction, loadImportCategorization, refreshImportReviewCandidates
 } from '../utils/transactionImport.js';
 import { currentUserId } from '../utils/tenant.js';
-import { listTransactionDuplicates, mergeTransactionDuplicate } from '../utils/transactionDuplicates.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates } from '../utils/transactionDuplicates.js';
 import { recordAudit } from '../utils/audit.js';
 
 const router = express.Router();
@@ -22,6 +22,18 @@ router.post('/duplicates/merge', async (req, res, next) => {
     const result = await db.transaction(client => mergeTransactionDuplicate(client, req.body));
     await recordAudit(req, 'transaction.duplicate_merged', 'success', { detail: {
       keptTransactionId: result.keptTransactionId, removedTransactionId: result.removedTransactionId
+    } });
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
+router.post('/duplicates/merge-bulk', async (req, res, next) => {
+  try {
+    const result = await db.transaction(client => mergeTransactionDuplicates(client, req.body));
+    await recordAudit(req, 'transaction.duplicates_bulk_merged', 'success', { detail: {
+      merged: result.merged, pairs: result.results.map(item => ({
+        keptTransactionId: item.keptTransactionId, removedTransactionId: item.removedTransactionId
+      }))
     } });
     res.json(result);
   } catch (error) { next(error); }

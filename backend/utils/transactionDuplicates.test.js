@@ -8,7 +8,7 @@ import reviewRouter from '../routes/import-review.js';
 import { syncConnection } from '../routes/plaid.js';
 import { encryptPlaidToken } from './plaid.js';
 import { migratePrivateSchema, seedUserCategories } from './schema.js';
-import { listTransactionDuplicates, mergeTransactionDuplicate } from './transactionDuplicates.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates } from './transactionDuplicates.js';
 import { detectIncomeStreams, incomeSources } from './income.js';
 import { withUser } from './tenant.js';
 
@@ -246,5 +246,98 @@ test('duplicate HTTP endpoints list only tenant matches and reject invalid merge
     });
     assert.equal(invalid.status, 400);
     assert.match((await invalid.json()).error, /Review and confirm/);
+    const invalidBulk = await fetch(`${base}/duplicates/merge-bulk`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: [], acknowledged: true })
+    });
+    assert.equal(invalidBulk.status, 400);
   } finally { await new Promise(resolve => server.close(resolve)); await f.pg.close(); }
+});
+
+const choice = pair => ({ plaidId: pair.plaid.id, existingId: pair.existing.id, revision: pair.revision });
+
+test('bulk merge cleans multiple pairs atomically and retains bank identities and user settings', async () => {
+  const f = await fixture();
+  try {
+    const rows = (await f.list()).rows;
+    assert.ok(rows.every(pair => pair.bulkEligible));
+    const result = await f.run(1, client => mergeTransactionDuplicates(client, { acknowledged: true, pairs: rows.map(choice) }));
+    assert.equal(result.merged, 3);
+    assert.equal(result.results.length, 3);
+    assert.equal((await f.list()).total, 0);
+    assert.equal((await f.client.query('SELECT COUNT(*)::int AS count FROM transactions WHERE id IN(10,11,12)')).rows[0].count, 0);
+    const kept = (await f.client.query('SELECT * FROM transactions WHERE id=3')).rows[0];
+    assert.equal(kept.pay_mode, 'auto');
+    assert.equal(kept.display_name, 'My car');
+    assert.equal(kept.plaid_transaction_id, 'car-1');
+    assert.equal((await f.client.query('SELECT COUNT(*)::int AS count FROM transactions WHERE user_id=2')).rows[0].count, 2);
+  } finally { await f.pg.close(); }
+});
+
+test('a stale or foreign pair rolls back earlier pairs in the entire bulk batch', async () => {
+  const f = await fixture();
+  try {
+    const pairs = (await f.list()).rows.map(choice);
+    await f.client.query("UPDATE transactions SET display_name='Changed after review' WHERE id=$1", [pairs[2].existingId]);
+    const before = (await f.client.query('SELECT * FROM transactions ORDER BY id')).rows;
+    await assert.rejects(f.run(1, client => mergeTransactionDuplicates(client, { acknowledged: true, pairs })), { status: 409 });
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
+    const foreign = choice((await f.list(2)).rows[0]);
+    const own = choice((await f.list()).rows[0]);
+    await assert.rejects(f.run(1, client => mergeTransactionDuplicates(client, {
+      acknowledged: true, pairs: [own, foreign]
+    })), { status: 409 });
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
+  } finally { await f.pg.close(); }
+});
+
+test('bulk selection excludes ambiguous matches globally even when their competitor is on another page', async () => {
+  const f = await fixture();
+  try {
+    await f.client.query(`INSERT INTO transactions(id,user_id,date,description,amount,direction,source,plaid_transaction_id,plaid_account_id)
+      VALUES(14,1,'2026-10-21','ANOTHER DEPOSIT',6200,'CREDIT','plaid','pay-3','bank-1')`);
+    const all = await f.list(1, { selection: 'all' });
+    assert.equal(all.rows.length, 2);
+    assert.deepEqual(all.rows.map(pair => pair.plaid.id), [12, 10]);
+    assert.ok((await f.list()).rows.filter(pair => pair.existing.id === 2).every(pair => !pair.bulkEligible));
+    const ambiguous = (await f.list()).rows.filter(pair => pair.existing.id === 2);
+    await assert.rejects(f.run(1, client => mergeTransactionDuplicates(client, {
+      acknowledged: true, pairs: ambiguous.map(choice)
+    })), { status: 400 });
+    assert.equal((await f.client.query('SELECT COUNT(*)::int AS count FROM transactions WHERE id IN(2,11,14)')).rows[0].count, 3);
+  } finally { await f.pg.close(); }
+});
+
+test('bulk boundaries and repeated transaction selections reject invalid input before writing', async () => {
+  const valid = { plaidId: 10, existingId: 1, revision: 'a'.repeat(64) };
+  const client = { query() { throw new Error('Invalid input must not reach database'); } };
+  for (const input of [
+    {}, { acknowledged: true, pairs: [] }, { acknowledged: false, pairs: [valid] },
+    { acknowledged: true, pairs: [valid, valid] },
+    { acknowledged: true, pairs: Array.from({ length: 501 }, (_, i) => ({ ...valid, plaidId: 1000 + i, existingId: 2000 + i })) },
+    { acknowledged: true, pairs: [{ ...valid, existingId: '1' }] }
+  ]) await assert.rejects(mergeTransactionDuplicates(client, input), { status: 400 });
+});
+
+test('select-all honors the 500-pair boundary without silently truncating', async () => {
+  const f = await fixture();
+  try {
+    await f.client.query(`INSERT INTO transactions(id,user_id,date,description,amount,direction,source,plaid_transaction_id,plaid_account_id)
+      SELECT 1000+i,1,'2026-09-01','BANK PURCHASE',10000+i,'DEBIT','plaid','limit-'||i,'bank-1'
+      FROM generate_series(1,497) i;
+      INSERT INTO transactions(id,user_id,date,description,amount,direction,source)
+      SELECT 2000+i,1,'2026-09-01','STATEMENT PURCHASE',10000+i,'DEBIT','statement.csv'
+      FROM generate_series(1,497) i`);
+    assert.equal((await f.list(1, { selection: 'all' })).rows.length, 500);
+    await f.client.query(`INSERT INTO transactions(id,user_id,date,description,amount,direction,source,plaid_transaction_id,plaid_account_id)
+      VALUES(4000,1,'2026-09-01','BANK',20000,'DEBIT','plaid','limit-extra','bank-1');
+      INSERT INTO transactions(id,user_id,date,description,amount,direction,source)
+      VALUES(4001,1,'2026-09-01','STATEMENT',20000,'DEBIT','statement.csv')`);
+    await assert.rejects(f.list(1, { selection: 'all' }), { status: 422 });
+    assert.equal((await f.list()).rows.length, 50, 'page selection remains available for oversized histories');
+    const selected = [];
+    for (let offset = 0; offset < 500; offset += 50) selected.push(...(await f.list(1, { offset })).rows.map(choice));
+    const result = await f.run(1, client => mergeTransactionDuplicates(client, { acknowledged: true, pairs: selected }));
+    assert.equal(result.merged, 500, 'the maximum supported batch is actually merged, not merely accepted');
+    assert.equal((await f.list()).total, 1);
+  } finally { await f.pg.close(); }
 });
