@@ -21,6 +21,7 @@ window.FinanceSession = (() => {
     window.FinanceImportHistory?.reset();
     window.FinanceReviewTools?.reset();
     window.FinanceTransactionCleanup?.reset();
+    window.FinanceTransactionDuplicates?.reset();
     window.FinanceAccounts?.reset();
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');

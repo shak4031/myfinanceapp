@@ -48,6 +48,8 @@ export function openApiSpec() {
       '/api/plaid/connections/{id}': { delete: op('Bank connections', 'Revoke a Plaid connection and retain imported transactions', pathId) },
       '/api/plaid/accounts/{id}/cashflow': { patch: op('Bank connections', 'Include an eligible USD cash account in the upcoming-payment balance', { ...pathId, ...body({ enabled: true }) }) },
       '/api/import-review/reviews': { get: op('Imports', 'List possible cross-source transaction matches held out of calculations') },
+      '/api/import-review/duplicates': { get: op('Imports', 'Review posted Plaid / existing statement duplicate pairs, 50 per page. No automatic deletion; known different account masks are excluded', query('offset')) },
+      '/api/import-review/duplicates/merge': { post: op('Imports', 'Explicitly merge one reviewed pair atomically. Preserve the existing transaction settings, attach the Plaid identity and remove the extra Plaid row. Stale/foreign matches fail; no Undo', body({ plaidId: 10, existingId: 1, revision: '<revision returned by duplicate review>', acknowledged: true })) },
       '/api/import-review/reviews/{id}/resolve': { post: op('Imports', 'Keep the existing record or add the incoming record separately', { ...pathId, ...body({ action: 'duplicate' }) }) },
       '/api/dashboard/monthly-cashflow': { get: op('Finance', 'Monthly income and spending') },
       '/api/dashboard/category-spending': { post: op('Finance', 'Spending by category', body({ dateFilter: 'current' })) },

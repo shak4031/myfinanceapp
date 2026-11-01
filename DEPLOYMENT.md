@@ -113,6 +113,21 @@ deployment to refresh totals and forecasts; no bank reconnection is required.
 If the faulty imports already overlapped statement history, review those existing
 duplicates explicitly; the migration does not delete previously accepted records.
 
+For already-imported Plaid / statement duplicates, open **Transactions > Review
+Plaid / statement duplicates**. Review each pair's account, date and description.
+Same amount and direction within three days only indicate a possible match;
+known different account masks are excluded. Posted USD Plaid records are compared
+with existing unlinked statement/manual records. Pending records are not merged.
+Each merge requires confirmation and rechecks both records and their displayed
+settings atomically. The existing record keeps its ID, source, categories, fixed
+flag, income decision and payment mode; the extra Plaid row is removed and its
+Plaid identity is attached to the retained row. Future sync uses that identity
+instead of inserting a second copy. Existing review references follow the retained
+record. A stale match, already-linked record, foreign household, or Plaid row with
+import restore history cannot be merged. There is no Undo. Leave uncertain matches
+and genuine separate deposits unmerged. Totals and forecasts refresh after merging.
+This review does not find statement-only or Plaid-only duplicate pairs.
+
 CSV, PDF and Plaid imports share the same server-side validation and overlap
 checks. Possible overlaps with the same amount and direction within three days
 are held in **Import Review**, regardless of description, and are not counted

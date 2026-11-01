@@ -117,6 +117,7 @@ async function reconcilePostedTransaction(client, posted, config) {
 }
 
 export async function syncConnection(client, connectionId, onlyIfDue = false) {
+  await client.query('SELECT pg_advisory_xact_lock($1::integer,193647)', [currentUserId()]);
   const connection = (await client.query(`SELECT * FROM plaid_connections
     WHERE id=$1 AND user_id=current_setting('app.user_id')::integer
     FOR UPDATE`, [connectionId])).rows[0];

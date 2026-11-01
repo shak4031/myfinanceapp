@@ -5,9 +5,27 @@ import {
   importReviewedTransaction, loadImportCategorization, refreshImportReviewCandidates
 } from '../utils/transactionImport.js';
 import { currentUserId } from '../utils/tenant.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate } from '../utils/transactionDuplicates.js';
+import { recordAudit } from '../utils/audit.js';
 
 const router = express.Router();
 const db = new Database();
+
+router.get('/duplicates', async (req, res, next) => {
+  try {
+    res.json(await db.transaction(client => listTransactionDuplicates(client, req.query)));
+  } catch (error) { next(error); }
+});
+
+router.post('/duplicates/merge', async (req, res, next) => {
+  try {
+    const result = await db.transaction(client => mergeTransactionDuplicate(client, req.body));
+    await recordAudit(req, 'transaction.duplicate_merged', 'success', { detail: {
+      keptTransactionId: result.keptTransactionId, removedTransactionId: result.removedTransactionId
+    } });
+    res.json(result);
+  } catch (error) { next(error); }
+});
 
 router.get('/reviews', async (req, res, next) => {
   try {
