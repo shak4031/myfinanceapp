@@ -276,7 +276,7 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryCache = null; categoryPeriod.reset(); transactionPeriod.reset(); categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); window.FinancePro?.invalidateAnalytics?.(); };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryCache = null; categoryPeriod.reset(); transactionPeriod.reset(); $('txn-filter-account').value = ''; $('txn-filter-account').innerHTML = '<option value="">All accounts</option>'; categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); window.FinancePro?.invalidateAnalytics?.(); };
   document.addEventListener('finance:analytics-invalidated', () => { categoryCache = null; });
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
@@ -976,8 +976,22 @@
       const selected = $('txn-filter-category').value;
       const period = transactionPeriod.current();
       const query = String($('txn-filter-search').value || '').trim();
+      const accountSelect = $('txn-filter-account');
+      const selectedAccount = accountSelect.value;
+      const accounts = new Map(transactions.map(transaction => [
+        transaction.account_key || 'unassigned', window.transactionAccountLabel(transaction)
+      ]));
+      accountSelect.innerHTML = '<option value="">All accounts</option>'
+        + [...accounts].sort((a, b) => a[1].localeCompare(b[1])).map(([key, label]) =>
+          `<option value="${escape(key)}"${selectedAccount === key ? ' selected' : ''}>${escape(label)}</option>`).join('');
+      accountSelect.value = selectedAccount;
+      if (selectedAccount && !accounts.has(selectedAccount)) {
+        accountSelect.innerHTML += `<option value="${escape(selectedAccount)}" selected>Previously selected account (no transactions)</option>`;
+        accountSelect.value = selectedAccount;
+      }
       $('txn-filter-category').innerHTML = '<option value="">All categories</option>' + allCategories.map(c => `<option value="${escape(c.name)}" ${selected === c.name ? 'selected' : ''}>${escape(c.name)}</option>`).join('');
       const rows = window.filterTransactionsByCategoryAndMonth(transactions, selected, period.months)
+        .filter(t => !selectedAccount || (t.account_key || 'unassigned') === selectedAccount)
         .filter(t => !transactionId || String(t.id) === transactionId)
         .filter(t => !$('txn-filter-fixed').checked || (fixed(t.is_fixed) && String(t.direction).toUpperCase() === 'DEBIT'))
         .filter(t => window.matchesPayModeFilter(t, $('txn-filter-paymode').value))
@@ -1002,7 +1016,7 @@
         $('txn-pagination').querySelector(`[data-txn-page="${direction}"]`)?.focus({ preventScroll: true });
         table.scrollIntoView({ block: 'start' });
       };
-      $('txn-filter-status').textContent = `${transactionId ? `Transaction #${transactionId} · ` : ''}${period.label}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions${transactionId ? ' · Reset filters to see all activity.' : ''}`;
+      $('txn-filter-status').textContent = `${transactionId ? `Transaction #${transactionId} · ` : ''}${period.label}${selectedAccount ? ` · ${accounts.get(selectedAccount) || 'Previously selected account (no transactions)'}` : ''}${query ? ` · “${query}”` : ''} · ${rows.length.toLocaleString()} matching transactions${transactionId ? ' · Reset filters to see all activity.' : ''}`;
       $('txn-summary').innerHTML = [['Money in', income, 'income'], ['Money out', expenses, 'expense'], ['Net activity', income - expenses, 'net']].map(([label, value, kind]) =>
         `<div class="metric-card ${kind}"><span class="metric-label">${label}</span><strong class="metric-value">${money(value)}</strong><span class="metric-caption">${query ? 'Search results' : 'Selected filters'}${transfers ? ` · ${transfers} transfer${transfers === 1 ? '' : 's'} not counted` : ''}</span></div>`).join('');
       table.innerHTML = rows.length ? visibleRows.map((transaction, index) => {
@@ -1073,10 +1087,12 @@
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => transactionCache ? renderTransactions() : window.loadAllTransactions(), 120);
   };
+  $('txn-filter-account').onchange = () => transactionCache ? renderTransactions() : window.loadAllTransactions();
   function clearTransactionFilters() {
     clearTimeout(searchTimer);
     transactionId = '';
     $('txn-filter-category').value = '';
+    $('txn-filter-account').value = '';
     $('txn-filter-search').value = '';
     transactionPeriod.reset();
     $('txn-filter-fixed').checked = false;

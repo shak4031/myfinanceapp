@@ -103,6 +103,11 @@ Plaid account metadata takes precedence for bank-linked rows, including merged
 statement rows; unlinked statement/manual records use their assigned account.
 Unknown/unassigned accounts are labeled explicitly. Transaction search also
 matches this account information (for example `credit card`, an issuer or `5237`).
+The Transactions Account dropdown filters by the actual linked account identity,
+not name matching, and combines with the date, category and other list filters.
+It includes accounts with stored transactions and an unassigned-account option
+when applicable. Separate statement and Plaid accounts are not guessed to be the
+same account; explicitly merged rows belong to their linked Plaid account.
 This describes the account holding the transaction, not the payment recipient;
 it does not change transaction amounts, transfer treatment or debt-plan settings.
 Updates to merged statement/manual records preserve their existing descriptions

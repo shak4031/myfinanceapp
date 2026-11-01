@@ -1289,6 +1289,7 @@ test('transaction category/month filter excludes other categories and months', (
 test('transaction deep links clear conflicting filters, isolate an ID and survive route replay', async () => {
   const f = activityFixture(); f.run('refresh.js');
   f.node('txn-filter-category').value = 'Dining';
+  f.node('txn-filter-account').value = 'plaid:2';
   f.node('txn-filter-search').value = 'salary';
   f.node('txn-filter-period').value = 'month:2026-09';
   f.node('txn-filter-fixed').checked = true;
@@ -1298,6 +1299,7 @@ test('transaction deep links clear conflicting filters, isolate an ID and surviv
   assert.equal(f.context.location.hash, '#transactions/1');
   assert.equal(f.context.currentTransactionId(), '1');
   assert.equal(f.node('txn-filter-category').value, '');
+  assert.equal(f.node('txn-filter-account').value, '');
   assert.equal(f.node('txn-filter-search').value, '');
   assert.equal(f.node('txn-filter-period').value, '');
   assert.equal(f.node('txn-filter-fixed').checked, false);
@@ -1317,6 +1319,69 @@ test('transaction deep links clear conflicting filters, isolate an ID and surviv
   f.context.showView('transactions');
   await f.context.loadAllTransactions();
   assert.match(f.node('full-txn-table').innerHTML, /October cafe/);
+});
+test('account dropdown isolates actual account identities, composes filters and paginates only selected transactions', async () => {
+  let calls = 0;
+  let transactions = [
+    ...Array.from({ length: 101 }, (_, i) => ({
+      id: i + 1, date: '2026-10-01', description: `Ollo purchase ${i}`, category: 'Shopping',
+      direction: 'DEBIT', amount: 10, account_key: 'plaid:1', account_name: 'Ollo <card>',
+      account_kind: 'credit_card', account_last4: '1234'
+    })),
+    { id: 102, date: '2026-10-02', description: 'Other card purchase', category: 'Shopping',
+      direction: 'DEBIT', amount: 200, account_key: 'plaid:2', account_name: 'Ollo <card>',
+      account_kind: 'credit_card', account_last4: '5678' },
+    { id: 103, date: '2026-10-03', description: 'Unassigned purchase', direction: 'DEBIT', amount: 300, account_key: 'unassigned' },
+    { id: 104, date: '2026-09-01', description: 'Earlier Ollo purchase', category: 'Dining',
+      direction: 'DEBIT', amount: 5, account_key: 'plaid:1', account_name: 'Ollo <card>', account_kind: 'credit_card', account_last4: '1234' }
+  ];
+  const f = fixture(async url => {
+    calls++;
+    return response(200, url === '/api/dashboard/all-transactions' ? { transactions } : [{ name: 'Shopping' }, { name: 'Dining' }]);
+  });
+  f.run('refresh.js');
+  f.node('txn-filter-period').value = 'month:2026-10';
+  await f.context.loadAllTransactions();
+  const select = f.node('txn-filter-account');
+  assert.match(select.innerHTML, /value="plaid:1".*Ollo &lt;card&gt; · ending 1234/);
+  assert.match(select.innerHTML, /value="plaid:2".*ending 5678/);
+  assert.match(select.innerHTML, /Account not assigned/);
+  const fetched = calls;
+  select.value = 'plaid:1';
+  select.onchange();
+  assert.equal(calls, fetched, 'account changes render cached data');
+  assert.match(f.node('txn-filter-status').textContent, /101 matching transactions/);
+  assert.match(f.node('txn-summary').innerHTML, /\$1,010\.00/);
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /Other card purchase|Unassigned purchase|Earlier Ollo purchase/);
+  assert.match(f.node('txn-pagination').innerHTML, /Page 1 of 2/);
+  f.node('txn-pagination').onclick({ target: { closest: () => ({ dataset: { txnPage: 'next' } }) } });
+  assert.match(f.node('full-txn-table').innerHTML, /Ollo purchase 100/);
+  f.node('txn-filter-category').value = 'Dining';
+  select.onchange();
+  assert.match(f.node('txn-filter-status').textContent, /0 matching transactions/);
+  assert.equal(f.node('txn-pagination').hidden, true);
+  f.node('txn-filter-category').value = '';
+  f.node('txn-filter-search').value = 'purchase 100';
+  select.onchange();
+  assert.match(f.node('txn-filter-status').textContent, /1 matching transactions/);
+  f.node('txn-filter-search').value = '';
+  await f.context.loadAllTransactions();
+  assert.equal(select.value, 'plaid:1', 'refresh preserves selection');
+  transactions = transactions.filter(row => row.account_key !== 'plaid:1');
+  await f.context.loadAllTransactions();
+  assert.equal(select.value, 'plaid:1');
+  assert.match(select.innerHTML, /Previously selected account \(no transactions\)/);
+  assert.match(f.node('txn-filter-status').textContent, /0 matching transactions/);
+  await f.context.resetTransactionFilters();
+  assert.equal(select.value, '');
+  assert.match(f.node('full-txn-table').innerHTML, /Other card purchase/);
+  select.value = 'unassigned';
+  select.onchange();
+  assert.match(f.node('full-txn-table').innerHTML, /Unassigned purchase/);
+  assert.doesNotMatch(f.node('full-txn-table').innerHTML, /Other card purchase/);
+  f.context.clearFinanceState();
+  assert.equal(select.value, '');
+  assert.equal(select.innerHTML, '<option value="">All accounts</option>', 'session resets clear private account options');
 });
 test('missing transaction links stay exact and transaction labels are safely escaped', async () => {
   const f = activityFixture(); f.run('refresh.js');

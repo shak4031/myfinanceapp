@@ -4,6 +4,9 @@ export const TRANSACTION_ACCOUNT_JOINS = `
   LEFT JOIN plaid_connections pc ON pc.id=pa.connection_id AND pc.user_id=t.user_id`;
 
 export const TRANSACTION_ACCOUNT_FIELDS = `
+  CASE WHEN pa.id IS NOT NULL THEN 'plaid:' || pa.id::text
+    WHEN a.id IS NOT NULL THEN 'account:' || a.id::text
+    ELSE 'unassigned' END AS account_key,
   COALESCE(pa.name,a.name) AS account_name,
   COALESCE(CASE pa.type
     WHEN 'credit' THEN 'credit_card'

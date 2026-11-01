@@ -76,6 +76,12 @@ test('transaction APIs resolve Plaid bank/card accounts, merged records and stat
       assert.deepEqual(identity(6), ['Rainy day', 'savings', 'Example bank', '0001']);
       assert.deepEqual(identity(7), [null, null, null, null], 'foreign metadata never fills an unknown account');
       assert.equal(byId.get(2).direction, 'DEBIT');
+      assert.match(byId.get(2).account_key, /^plaid:\d+$/);
+      assert.equal(byId.get(3).account_key, byId.get(2).account_key);
+      assert.notEqual(byId.get(1).account_key, byId.get(2).account_key);
+      assert.equal(byId.get(4).account_key, 'account:1');
+      assert.equal(byId.get(5).account_key, 'unassigned');
+      assert.equal(byId.get(7).account_key, 'unassigned');
     }
   } finally {
     await new Promise(resolve => server.close(resolve));
