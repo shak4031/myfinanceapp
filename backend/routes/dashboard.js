@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from '../utils/transactionAccount.js';
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
@@ -577,12 +578,10 @@ router.get('/all-transactions', async (req, res) => {
         t.user_id,
         t.transfer_kind,
         t.account_id,
-        a.name AS account_name,
-        a.kind AS account_kind,
-        a.last4 AS account_last4,
+        ${TRANSACTION_ACCOUNT_FIELDS},
         o.name AS transfer_account_name
       FROM transactions t
-      LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+      ${TRANSACTION_ACCOUNT_JOINS}
       LEFT JOIN accounts o ON o.id = t.transfer_account_id AND o.user_id = t.user_id
       WHERE t.user_id = $1
       ORDER BY t.date DESC

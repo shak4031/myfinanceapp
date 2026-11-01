@@ -43,6 +43,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
       addEventListener: (name, listener) => listeners.set(`document:${name}`, listener)
     },
     notify() {}, closeSidebar() {}, closeAddGoalModal() {}, openAddGoalModal() {},
+    transactionAccountLabel: row => row.account_name || 'Account not assigned',
     loadDashboard() {}, loadAllTransactions() {}, loadCategories() {}, loadEtlStaging() {}, loadGoals() {}, loadPayoffPlan() {}, generateInsights() {},
     showView(view) { context.lastView = view; }, FormData, FinanceSession: { isAuthenticated: () => true }
   };
@@ -1222,7 +1223,8 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'
     ? response(200, { transactions: [
-      { id: 42, category: 'Groceries', date: '2026-10-03', description: 'Market', amount: 42.5, direction: 'DEBIT' },
+      { id: 42, category: 'Groceries', date: '2026-10-03', description: 'Market', amount: 42.5, direction: 'DEBIT',
+        account_name: 'Everyday card', account_kind: 'credit_card', account_institution: 'Example issuer', account_last4: '1234' },
       { category: 'Dining', date: '2026-10-04', description: 'Cafe', amount: 15, direction: 'DEBIT' },
       { category: 'Groceries', date: '2026-09-30', description: 'Earlier market', amount: 20, direction: 'DEBIT' }
     ] })
@@ -1236,9 +1238,41 @@ test('dashboard category drill-down opens a dialog with only matching category a
   assert.equal(f.node('mtd-dialog-count').textContent, '1');
   assert.match(f.node('mtd-dialog-content').innerHTML, /Market/);
   assert.match(f.node('mtd-dialog-content').innerHTML, /href="#transactions\/42">Market/);
+  assert.match(f.node('mtd-dialog-content').innerHTML, /Credit card · Example issuer · Everyday card · ending 1234/);
   assert.doesNotMatch(f.node('mtd-dialog-content').innerHTML, /Cafe|Earlier market/);
   assert.notEqual(f.context.location.hash, 'transactions');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), []);
+});
+
+test('transaction account labels identify account type and support searching bank, card and masked identities', () => {
+  const f = fixture(); f.run('refresh.js');
+  const card = { description: 'Market', amount: 25, account_name: 'Rewards', account_kind: 'credit_card',
+    account_institution: 'Example issuer', account_last4: '0123' };
+  assert.equal(f.context.transactionAccountLabel(card), 'Credit card · Example issuer · Rewards · ending 0123');
+  for (const query of ['credit card', 'example issuer', '0123', 'rewards market']) {
+    assert.equal(f.context.matchesTransactionSearch(card, query), true, query);
+  }
+  assert.equal(f.context.matchesTransactionSearch(card, 'checking'), false);
+  assert.equal(f.context.transactionAccountLabel({}), 'Account not assigned');
+  assert.equal(f.context.transactionAccountLabel({ account_kind: 'checking', account_name: 'Main' }), 'Checking · Main');
+  assert.equal(f.context.transactionAccountLabel({ account_kind: 'savings', account_last4: '0001' }), 'Savings · ending 0001');
+  assert.equal(f.context.transactionAccountLabel({ account_kind: 'unknown', account_name: 'Imported' }), 'Account type unknown · Imported');
+});
+
+test('transaction rows escape and show source account labels without changing money direction', async () => {
+  const f = fixture(async url => url === '/api/dashboard/all-transactions'
+    ? response(200, { transactions: [{
+      id: 1, category: 'Groceries', date: new Date().toISOString().slice(0, 10),
+      description: 'Market', amount: 25, direction: 'DEBIT', account_name: '<Rewards>',
+      account_kind: 'credit_card', account_institution: 'Issuer & bank', account_last4: '0123'
+    }] })
+    : response(200, []));
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const html = f.node('full-txn-table').innerHTML;
+  assert.match(html, /Credit card · Issuer &amp; bank · &lt;Rewards&gt; · ending 0123/);
+  assert.match(html, /amount-debit/);
+  assert.doesNotMatch(html, /<Rewards>/);
 });
 test('transaction category/month filter excludes other categories and months', () => {
   const f = fixture(); f.run('refresh.js');

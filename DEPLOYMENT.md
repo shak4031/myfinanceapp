@@ -97,6 +97,14 @@ Transactions Sync page. The original bank description is stored as the transacti
 description when nonblank, falling back to Plaid's name, then merchant name.
 This preserves available recipient wording for rename rules and analytics.
 If the bank only supplies a generic payment-app name, the recipient remains unknown.
+Transaction lists, category transaction details and transaction troubleshooting
+show the originating account's type, institution, name and masked last four digits.
+Plaid account metadata takes precedence for bank-linked rows, including merged
+statement rows; unlinked statement/manual records use their assigned account.
+Unknown/unassigned accounts are labeled explicitly. Transaction search also
+matches this account information (for example `credit card`, an issuer or `5237`).
+This describes the account holding the transaction, not the payment recipient;
+it does not change transaction amounts, transfer treatment or debt-plan settings.
 Updates to merged statement/manual records preserve their existing descriptions
 and user display names instead of replacing them with Plaid wording.
 This applies to new and modified transactions, including pending-to-posted changes.

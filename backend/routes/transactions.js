@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from '../utils/transactionAccount.js';
 import Database from '../db.js';
 import { currentUserId } from '../utils/tenant.js';
 import { TENANT, RULES_SQL, canonicalMerchant, loadCategorization, saveRule, applyUpdates, preview, failure } from '../utils/categorization.js';
@@ -72,9 +73,9 @@ router.get('/transfer-review', route(async (req, res) => {
     const total = Number((await client.query(`SELECT COUNT(*)::int AS count FROM transactions t
       WHERE t.user_id=current_setting('app.user_id')::integer ${filter}`, params)).rows[0].count);
     const rows = (await client.query(`SELECT t.id,t.date,t.description,t.amount,t.direction,t.category,t.transfer_kind,
-      t.source,t.created_at,a.name AS account_name,other.name AS transfer_account_name
+      t.source,t.created_at,${TRANSACTION_ACCOUNT_FIELDS},other.name AS transfer_account_name
       FROM transactions t
-      LEFT JOIN accounts a ON a.id=t.account_id AND a.user_id=t.user_id
+      ${TRANSACTION_ACCOUNT_JOINS}
       LEFT JOIN accounts other ON other.id=t.transfer_account_id AND other.user_id=t.user_id
       WHERE t.user_id=current_setting('app.user_id')::integer ${filter}
       ORDER BY t.date DESC,t.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, limit, offset])).rows;

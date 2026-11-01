@@ -24,6 +24,17 @@
       : `<span class="tx-transfer-badge ${badge[0]}" title="${escape(badge[2] + where)}">${badge[1]}</span>`;
   };
   window.transferBadge = transferBadge;
+  const ACCOUNT_LABELS = {
+    checking: 'Checking', savings: 'Savings', credit_card: 'Credit card', loan: 'Loan',
+    investment: 'Investment', depository: 'Bank account', crypto: 'Crypto', external: 'External account',
+    other: 'Other account', unknown: 'Account type unknown'
+  };
+  window.transactionAccountLabel = transaction => [
+    ACCOUNT_LABELS[transaction.account_kind] || (transaction.account_name ? 'Account' : 'Account not assigned'),
+    transaction.account_institution, transaction.account_name,
+    transaction.account_last4 ? `ending ${transaction.account_last4}` : ''
+  ].filter(Boolean).join(' · ');
+  const accountBadge = transaction => `<div class="muted tx-source-account" style="font-size:11px">${escape(window.transactionAccountLabel(transaction))}</div>`;
   const validTransactionId = id => /^[1-9]\d*$/.test(String(id)) && Number.isSafeInteger(Number(id));
   window.transactionHref = id => validTransactionId(id) ? `#transactions/${id}` : '';
   window.transactionLink = (id, label) => {
@@ -143,7 +154,7 @@
     const tokens = String(query || '').toLowerCase().replace(/[$,]/g, '').split(/\s+/).filter(Boolean);
     if (!tokens.length) return true;
     const amount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
-    const haystack = `${transaction.display_name || ''} ${transaction.description || ''} ${transaction.category || 'uncategorized'} ${amount}`.toLowerCase();
+    const haystack = `${transaction.display_name || ''} ${transaction.description || ''} ${transaction.category || 'uncategorized'} ${window.transactionAccountLabel(transaction)} ${amount}`.toLowerCase();
     return tokens.every(token => haystack.includes(token));
   };
   const highlight = (text, query) => {
@@ -554,7 +565,7 @@
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<article class="mtd-transaction-row">
           <div><div class="mtd-transaction-description">${window.transactionLink(transaction.id, transaction.display_name || transaction.description)}${transferBadge(transaction)}</div>
-            <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div></div>
+            <div class="mtd-transaction-date">${escape(transactionDate(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div>${accountBadge(transaction)}</div>
           <div class="mtd-transaction-amount ${debit ? 'debit' : 'credit'}">${debit ? '−' : '+'}${money(Math.abs(Number(transaction.amount) || 0))}</div>
         </article>`;
       }).join('')}</div>` : '<div class="mtd-dialog-state"><div><strong>No transactions found</strong>There are no transactions for this category in the selected period.</div></div>';
@@ -998,7 +1009,7 @@
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${offset + index}">
           <td>${escape(transactionDateFormat.format(transactionDate(transaction.date)))}</td>
-          <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${transaction.account_name ? `<div class="muted" style="font-size:11px">${escape(transaction.account_name)}</div>` : ''}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
+          <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${accountBadge(transaction)}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>

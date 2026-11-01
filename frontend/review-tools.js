@@ -42,7 +42,7 @@
         .map(([value, label]) => `<option value="${value}"${current === value ? ' selected' : ''}>${label}</option>`)
     ].join('');
     const amount = `${String(row.direction).toUpperCase() === 'CREDIT' ? '+' : '−'}${money(Math.abs(Number(row.amount) || 0))}`;
-    const source = [row.account_name || 'Account not set', row.source].filter(Boolean).join(' · ');
+    const source = [window.transactionAccountLabel(row), row.source].filter(Boolean).join(' · ');
     const otherAccount = row.transfer_account_name ? ` · ${row.transfer_account_name}` : '';
     return `<tr data-review-row="${Number(row.id)}" data-current-handling="${escape(current)}" data-current-category="${escape(row.category || '')}">
       <td>${escape(row.date || '')}</td>
