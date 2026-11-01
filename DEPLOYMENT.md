@@ -92,7 +92,17 @@ endpoint.
 
 Plaid amounts use the same convention across institutions: positive amounts are
 money out (DEBIT), negative amounts are money in (CREDIT). The app stores positive
-magnitudes and preserves the transaction name for payroll and transfer detection.
+magnitudes and requests `options.include_original_description=true` on every
+Transactions Sync page. The original bank description is stored as the transaction
+description when nonblank, falling back to Plaid's name, then merchant name.
+This preserves available recipient wording for rename rules and analytics.
+If the bank only supplies a generic payment-app name, the recipient remains unknown.
+Updates to merged statement/manual records preserve their existing descriptions
+and user display names instead of replacing them with Plaid wording.
+This applies to new and modified transactions, including pending-to-posted changes.
+Existing unchanged Plaid history is not automatically re-fetched; normal Sync only
+returns changes since the saved cursor. Do not delete history or reset cursors just
+to refresh descriptions.
 This also applies to credit-card purchases, payments and refunds; a credit is not
 automatically salary.
 Income review excludes money moving between accounts; recognizable bill payments,

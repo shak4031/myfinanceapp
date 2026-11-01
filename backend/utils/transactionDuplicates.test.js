@@ -200,7 +200,7 @@ test('subsequent Plaid sync updates the kept statement row rather than recreatin
     await f.merge(pair);
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => ({ data: {
       added: [{ transaction_id: 'pay-2', account_id: 'bank-1', date: '2026-10-21', amount: -6300,
-        name: 'WELLS FARGO BANK PAYROLL', pending: false }],
+        name: 'Wells Fargo', original_description: 'UPDATED PLAID PAYROLL DESCRIPTION', pending: false }],
       modified: [], removed: [], next_cursor: 'after-merge', has_more: false
     } }));
     t.mock.method(PlaidApi.prototype, 'accountsGet', async () => ({ data: { accounts: [{
@@ -213,6 +213,7 @@ test('subsequent Plaid sync updates the kept statement row rather than recreatin
     assert.equal(rows[0].id, 2);
     assert.equal(Number(rows[0].amount), 6300);
     assert.equal(rows[0].source, 'october.csv');
+    assert.equal(rows[0].description, 'WELLS FARGO BANK PAYROLL', 'sync preserves the retained statement description');
     assert.equal(rows[0].income_role, 'income');
     assert.equal(rows[0].display_name, 'My pay');
     assert.equal(rows[0].category_corrected, true);

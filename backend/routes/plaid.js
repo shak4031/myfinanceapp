@@ -59,6 +59,7 @@ async function fetchAllChanges(plaidClient, accessToken, savedCursor) {
       do {
         response = await plaidClient.transactionsSync({
           access_token: accessToken,
+          options: { include_original_description: true },
           ...(cursor ? { cursor } : {})
         });
         added.push(...response.data.added);
@@ -84,7 +85,8 @@ async function updateSyncedTransaction(client, previous, row, config) {
   const category = directionChanged && !previous.category_corrected
     ? classify(row, config.compiled, config.names).category : previous.category;
   await client.query(`UPDATE transactions SET plaid_transaction_id=$1,plaid_account_id=$2,
-      date=$3,description=$4,amount=$5,direction=$6,is_pending=$7,category=$8,
+      date=$3,description=CASE WHEN source='plaid' THEN $4 ELSE description END,
+      amount=$5,direction=$6,is_pending=$7,category=$8,
       income_role=CASE WHEN $6='DEBIT' THEN NULL ELSE income_role END,
       pay_mode=CASE WHEN $6='CREDIT' THEN NULL ELSE pay_mode END,
       transfer_checked=CASE WHEN direction IS DISTINCT FROM $6 THEN FALSE ELSE transfer_checked END

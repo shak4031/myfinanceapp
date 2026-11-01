@@ -78,6 +78,23 @@ test('income detection rejects fixed bill credits and transfers without losing e
   assert.equal(isIncomeTransaction({ direction: 'CREDIT', description: 'ACME PAYROLL', income_role: 'other' }), false);
 });
 
+test('Plaid prefers the original bank description so payment recipients remain distinguishable', () => {
+  const raw = {
+    transaction_id: 'venmo-1', account_id: 'checking-1', date: '2026-10-15',
+    amount: 100, name: 'Venmo', merchant_name: 'Venmo',
+    original_description: '  VISA DDA PUR VENMO RECIPIENT ONE  '
+  };
+  const before = structuredClone(raw);
+  assert.equal(plaidTransaction(raw).description, 'VISA DDA PUR VENMO RECIPIENT ONE');
+  assert.notEqual(plaidTransaction(raw).description,
+    plaidTransaction({ ...raw, original_description: 'VISA DDA PUR VENMO RECIPIENT TWO' }).description);
+  for (const original_description of [undefined, null, '', '   ']) {
+    assert.equal(plaidTransaction({ ...raw, original_description }).description, 'Venmo');
+  }
+  assert.equal(plaidTransaction({ ...raw, name: null, original_description: null }).description, 'Venmo');
+  assert.deepEqual(raw, before);
+});
+
 test('Plaid access tokens are encrypted with authenticated encryption', () => {
   const previous = process.env.PLAID_TOKEN_ENCRYPTION_KEY;
   process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');

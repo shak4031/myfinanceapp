@@ -17,7 +17,7 @@ export function plaidTransaction(row) {
   }
   return validateImportedTransaction({
     date: row.date,
-    description: row.name || row.merchant_name,
+    description: row.original_description?.trim() || row.name || row.merchant_name,
     amount: Math.abs(row.amount),
     // Plaid normalizes all institutions: positive amounts are outflows, negative amounts are inflows.
     direction: row.amount < 0 ? 'CREDIT' : 'DEBIT',

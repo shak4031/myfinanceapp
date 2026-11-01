@@ -92,7 +92,8 @@ test('Plaid sync uses normalized directions for additions, modifications, review
   let changes = {
     added: [raw('bill-1', 500, 'MORTGAGE'), raw('pay-1', -3000, 'ACME PAYROLL'),
       raw('pending-1', 50, 'UTILITY', { pending: true }), raw('overlap-1', 100, 'STATEMENT BILL'),
-      raw('adjustment-1', -25, 'ACME PAYROLL')],
+      raw('adjustment-1', -25, 'ACME PAYROLL'),
+      raw('venmo-1', 120, 'Venmo', { original_description: 'VENMO RECIPIENT ONE' })],
     modified: [], removed: [], next_cursor: 'cursor-1', has_more: false
   };
   try {
@@ -110,6 +111,7 @@ test('Plaid sync uses normalized directions for additions, modifications, review
       VALUES(1,'item-1',$1,'connected') RETURNING id`, [encryptPlaidToken('test-access')])).rows[0];
     PlaidApi.prototype.transactionsSync = async request => {
       assert.equal(request.access_token, 'test-access');
+      assert.deepEqual(request.options, { include_original_description: true });
       return { data: changes };
     };
     PlaidApi.prototype.accountsGet = async () => ({ data: { accounts: [{
@@ -130,16 +132,18 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     assert.equal(bill.is_fixed, true);
     assert.equal(paycheck.direction, 'CREDIT');
     assert.equal(paycheck.category, 'Salary');
+    assert.equal(rows.find(row => row.plaid_transaction_id === 'venmo-1').description, 'VENMO RECIPIENT ONE');
     assert.deepEqual(incomeSources(rows, new Date(2026, 9, 20)).map(source => source.name), ['Acme Payroll']);
     const review = (await client.query("SELECT * FROM transaction_import_reviews WHERE plaid_transaction_id='overlap-1'")).rows[0];
     assert.equal(review.direction, 'DEBIT');
     assert.deepEqual(review.candidate_transaction_ids, [rows[0].id]);
     const pendingId = rows.find(row => row.plaid_transaction_id === 'pending-1').id;
     changes = {
-      added: [raw('posted-1', 55, 'UTILITY', { pending_transaction_id: 'pending-1' }),
+      added: [raw('posted-1', 55, 'UTILITY', { pending_transaction_id: 'pending-1', original_description: 'UTILITY ONLINE PMT' }),
         raw('pay-2', -3000, 'ACME PAYROLL', { date: '2026-10-15' })],
-      modified: [raw('bill-1', 525, 'MORTGAGE'), raw('overlap-1', -100, 'REFUND'),
-        raw('adjustment-1', 25, 'ACME PAYROLL')],
+      modified: [raw('bill-1', 525, 'MORTGAGE'), raw('overlap-1', -100, 'REFUND', { original_description: 'BANK REFUND DETAILS' }),
+        raw('adjustment-1', 25, 'ACME PAYROLL'),
+        raw('venmo-1', 120, 'Venmo', { original_description: 'VENMO RECIPIENT ONE UPDATED' })],
       removed: [{ transaction_id: 'pending-1' }], next_cursor: 'cursor-2', has_more: false
     };
     await sync();
@@ -149,6 +153,8 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     assert.equal(posted.direction, 'DEBIT');
     assert.equal(Number(posted.amount), 55);
     assert.equal(posted.is_pending, false);
+    assert.equal(posted.description, 'UTILITY ONLINE PMT');
+    assert.equal(rows.find(row => row.plaid_transaction_id === 'venmo-1').description, 'VENMO RECIPIENT ONE UPDATED');
     assert.equal(Number(rows.find(row => row.id === bill.id).amount), 525);
     assert.equal(rows.find(row => row.id === bill.id).direction, 'DEBIT');
     const adjustment = rows.find(row => row.plaid_transaction_id === 'adjustment-1');
@@ -156,6 +162,7 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     assert.equal(adjustment.category, 'Other', 'automatic Salary classification is removed when an adjustment becomes money out');
     const updatedReview = (await client.query('SELECT * FROM transaction_import_reviews WHERE id=$1', [review.id])).rows[0];
     assert.equal(updatedReview.direction, 'CREDIT');
+    assert.equal(updatedReview.description, 'BANK REFUND DETAILS');
     assert.deepEqual(updatedReview.candidate_transaction_ids, [], 'changed directions invalidate stale overlap candidates');
     assert.equal((await client.query('SELECT cursor FROM plaid_connections WHERE id=$1', [connection.id])).rows[0].cursor, 'cursor-2');
     const forecast = projectIncome(rows, new Date(2026, 9, 20), { through: new Date(2026, 10, 5) });
