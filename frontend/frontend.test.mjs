@@ -2301,6 +2301,86 @@ test('import and goal editors use native floating dialogs with their controls in
   assert.match(source('refresh.css'), /body dialog\s*\{[^}]*inset:\s*0;[^}]*margin:\s*auto;/);
   assert.match(source('transactions.html'), /url=\/#transactions/);
 });
+test('Plaid Link suspends the native import dialog and restores it after completion or exit', async t => {
+  function plaidFixture({ tokenError = false, openError = false, exchangeError = false, dialogOpen = true } = {}) {
+    const requests = [];
+    const f = fixture(async (url, options) => {
+      requests.push([url, JSON.parse(options.body)]);
+      if (url.endsWith('/link-token')) {
+        assert.equal(f.node('import-modal').open, dialogOpen);
+        return tokenError ? response(503, { error: 'Plaid is not configured' }) : response(200, { link_token: 'test-link' });
+      }
+      return exchangeError ? response(500, { error: 'Could not save bank' }) : response(200, { success: true });
+    });
+    const dialog = f.node('import-modal');
+    dialog.open = dialogOpen;
+    let callbacks;
+    let opened = false;
+    f.context.Plaid = {
+      create(options) {
+        callbacks = options;
+        return { open() {
+          assert.equal(dialog.open, false, 'Plaid must not be behind a native modal');
+          if (openError) throw new Error('Could not open Plaid');
+          opened = true;
+        } };
+      }
+    };
+    f.context.closeImportModal = () => dialog.close();
+    f.context.loadPlaidConnections = async () => {};
+    const html = source('index.html');
+    const start = html.indexOf('    async function plaidRequest(');
+    const end = html.indexOf('    async function loadPlaidConnections(', start);
+    vm.runInContext(html.slice(start, end), f.context);
+    return { ...f, requests, dialog, callbacks: () => callbacks, opened: () => opened };
+  }
+  await t.test('successful linking restores the dialog and saves the bank', async () => {
+    const f = plaidFixture();
+    await f.context.startPlaidLink();
+    assert.equal(f.opened(), true);
+    assert.equal(f.dialog.open, false);
+    await f.callbacks().onSuccess('public-test-token', { institution: { name: 'Test bank' } });
+    assert.equal(f.dialog.open, true);
+    assert.deepEqual(f.requests[1], ['/api/plaid/exchange', { public_token: 'public-test-token', institutionName: 'Test bank' }]);
+    assert.match(f.node('plaid-status').textContent, /Bank connected/);
+  });
+  await t.test('cancellation and Link errors restore the dialog, including reconnect', async () => {
+    for (const error of [null, { display_message: 'Please try again' }]) {
+      const f = plaidFixture();
+      await f.context.startPlaidLink(42);
+      assert.deepEqual(f.requests[0][1], { connectionId: 42 });
+      f.callbacks().onExit(error);
+      assert.equal(f.dialog.open, true);
+      assert.equal(f.node('plaid-status').textContent, error?.display_message || '');
+    }
+  });
+  await t.test('token failures leave the dialog open and show the error', async () => {
+    const f = plaidFixture({ tokenError: true });
+    await f.context.startPlaidLink();
+    assert.equal(f.dialog.open, true);
+    assert.equal(f.opened(), false);
+    assert.equal(f.node('plaid-status').textContent, 'Plaid is not configured');
+  });
+  await t.test('opening failures restore the dialog and show the error', async () => {
+    const f = plaidFixture({ openError: true });
+    await f.context.startPlaidLink();
+    assert.equal(f.dialog.open, true);
+    assert.equal(f.node('plaid-status').textContent, 'Could not open Plaid');
+  });
+  await t.test('exchange failures remain visible in the restored dialog', async () => {
+    const f = plaidFixture({ exchangeError: true });
+    await f.context.startPlaidLink();
+    await f.callbacks().onSuccess('public-test-token', {});
+    assert.equal(f.dialog.open, true);
+    assert.equal(f.node('plaid-status').textContent, 'Could not save bank');
+  });
+  await t.test('Link launched without an import dialog does not open one on exit', async () => {
+    const f = plaidFixture({ dialogOpen: false });
+    await f.context.startPlaidLink();
+    f.callbacks().onExit(null);
+    assert.equal(f.dialog.open, false);
+  });
+});
 test('floating confirmations return explicit acceptance or cancellation', async () => {
   const f = fixture(); f.run('ui.js');
   const cancelled = f.context.FinanceUI.confirm('Delete this item?');

@@ -1875,6 +1875,13 @@
 
     async function startPlaidLink(connectionId = null) {
       const status = document.getElementById('plaid-status');
+      const dialog = document.getElementById('import-modal');
+      let dialogSuspended = false;
+      function restoreImportDialog() {
+        if (!dialogSuspended) return;
+        dialogSuspended = false;
+        if (!dialog.open) dialog.showModal();
+      }
       try {
         if (!window.Plaid) throw new Error('Secure bank connection is loading. Please try again in a moment.');
         status.textContent = 'Preparing secure connection...';
@@ -1882,6 +1889,7 @@
         const handler = window.Plaid.create({
           token: link.link_token,
           onSuccess: async (publicToken, metadata) => {
+            restoreImportDialog();
             status.textContent = 'Saving connection and checking for transactions...';
             try {
               const result = await plaidRequest('/api/plaid/exchange', 'POST', {
@@ -1896,12 +1904,19 @@
             }
           },
           onExit: error => {
+            restoreImportDialog();
             status.textContent = error?.display_message || error?.error_message || '';
           }
         });
         status.textContent = '';
+        // Native modal dialogs sit above Plaid's iframe regardless of its z-index.
+        if (dialog.open) {
+          dialogSuspended = true;
+          closeImportModal();
+        }
         handler.open();
       } catch (error) {
+        restoreImportDialog();
         status.textContent = error.message;
       }
     }

@@ -76,6 +76,10 @@ ES256 webhook signature and exact raw request-body hash. Keep the public
 application origin stable. For local development, use a Plaid Sandbox-capable
 public HTTPS test environment rather than disabling webhook verification.
 
+The Connect bank dialog temporarily closes while Plaid Link is open so the
+browser's native modal layer does not obscure Link. It reopens when linking
+completes, is cancelled, or fails, showing connection status or errors.
+
 Transactions are requested with up to 365 days of initial history. Webhooks
 trigger cursor-based transaction sync, and the server retries missed updates
 with a daily catch-up sync. Sync applies additions, modifications, removals and
