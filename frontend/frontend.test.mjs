@@ -2381,6 +2381,74 @@ test('Plaid Link suspends the native import dialog and restores it after complet
     assert.equal(f.dialog.open, false);
   });
 });
+test('bulk cleanup selects across pages, confirms exact IDs, and invalidates selections on filter changes', async () => {
+  const calls = [];
+  let accepted = false;
+  const f = fixture(async (url, options = {}) => {
+    calls.push([url, options]);
+    if (url.endsWith('/delete')) return response(200, { success: true, deleted: 3 });
+    if (url.includes('selection=all')) return response(200, { ids: [1, 2, 3] });
+    return response(200, { rows: [{ id: 1, date: '2026-08-01', created_at: '2026-10-31T12:00:00Z',
+      description: '<Test bank>', amount: 10, direction: 'DEBIT', source: 'plaid' }], total: 3, offset: 0, limit: 50 });
+  });
+  const confirmations = [];
+  f.context.FinanceUI = { confirm: async message => { confirmations.push(message); return accepted; } };
+  f.run('transaction-cleanup.js');
+  f.node('cleanup-date-type').value = 'imported';
+  f.node('cleanup-start').value = f.node('cleanup-end').value = '2026-10-31';
+  f.node('cleanup-source').value = 'plaid';
+  f.node('cleanup-filters').listeners.submit({ preventDefault() {} });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(calls[0][0], /dateType=imported/);
+  assert.match(f.node('cleanup-rows').innerHTML, /&lt;Test bank&gt;/);
+  await f.node('cleanup-all-select').listeners.click();
+  assert.equal(f.node('cleanup-delete').textContent, 'Delete selected (3)');
+  await f.node('cleanup-delete').listeners.click();
+  assert.equal(calls.some(([url]) => url.endsWith('/delete')), false);
+  assert.match(confirmations[0], /3 selected.*no Undo or Restore.*Plaid rows may return/);
+  accepted = true;
+  await f.node('cleanup-delete').listeners.click();
+  const deletion = calls.find(([url]) => url.endsWith('/delete'));
+  assert.deepEqual(JSON.parse(deletion[1].body), { ids: [1, 2, 3], acknowledged: true });
+  assert.match(f.node('cleanup-status').textContent, /Deleted 3 transactions/);
+  assert.equal(f.node('cleanup-delete').disabled, true);
+  f.node('cleanup-filters').listeners.change();
+  assert.equal(f.node('cleanup-all-select').disabled, true);
+  f.context.FinanceTransactionCleanup.reset();
+  assert.equal(f.node('cleanup-rows').innerHTML, '');
+});
+
+test('bulk cleanup uses themed controls, responsive layout, and an explicit empty state', () => {
+  const html = source('index.html');
+  const start = html.indexOf('<details id="transaction-cleanup"');
+  const panel = html.slice(start, html.indexOf('</details>', start));
+  assert.match(panel, /class="panel cleanup-panel"/);
+  assert.match(panel, /class="cleanup-warning"/);
+  assert.match(panel, /class="btn btn-primary">Find transactions/);
+  assert.match(panel, /No transactions loaded yet/);
+  const css = source('review-tools.css');
+  assert.match(css, /\.cleanup-filters\s*\{[^}]*display:\s*grid/);
+  assert.match(css, /@media \(max-width: 600px\)/);
+  assert.match(css, /\.cleanup-table tr:has\(input:checked\)/);
+  assert.match(css, /#cleanup-status\[role="alert"\]/);
+});
+
+test('bulk cleanup reports errors and ignores results arriving after sign-out', async () => {
+  let resolve;
+  const f = fixture(() => new Promise(done => { resolve = done; }));
+  f.run('transaction-cleanup.js');
+  f.node('cleanup-filters').listeners.submit({ preventDefault() {} });
+  f.context.FinanceTransactionCleanup.reset();
+  resolve(response(200, { rows: [{ id: 1 }], total: 1, offset: 0 }));
+  await new Promise(done => setTimeout(done, 0));
+  assert.equal(f.node('cleanup-rows').innerHTML, '');
+  f.context.fetch = async () => response(400, { error: 'Choose valid dates' });
+  f.node('cleanup-filters').listeners.submit({ preventDefault() {} });
+  await new Promise(done => setTimeout(done, 0));
+  assert.match(f.node('cleanup-status').textContent, /Could not load.*Choose valid dates/);
+  assert.equal(f.node('cleanup-delete').disabled, true);
+});
+
 test('floating confirmations return explicit acceptance or cancellation', async () => {
   const f = fixture(); f.run('ui.js');
   const cancelled = f.context.FinanceUI.confirm('Delete this item?');

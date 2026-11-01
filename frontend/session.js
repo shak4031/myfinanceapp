@@ -20,6 +20,7 @@ window.FinanceSession = (() => {
     window.FinanceSpendingHistory?.reset();
     window.FinanceImportHistory?.reset();
     window.FinanceReviewTools?.reset();
+    window.FinanceTransactionCleanup?.reset();
     window.FinanceAccounts?.reset();
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');

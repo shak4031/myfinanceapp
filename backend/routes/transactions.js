@@ -8,6 +8,7 @@ import { isIncomeRole, incomeSources } from '../utils/income.js';
 import { applyNameRules, compileNameRules, currentNameRule, listNameRules, loadNameRules, matchesName, nameKey, previewNameRule, resolveName, suggestNamePattern, validateNameRule } from '../utils/naming.js';
 import { recordAudit } from '../utils/audit.js';
 import { reconcileTransfers } from '../utils/transfers.js';
+import { listCleanup, deleteCleanup } from '../utils/transactionCleanup.js';
 
 const router = Router();
 const db = new Database();
@@ -335,6 +336,16 @@ router.delete('/name-rules/:id', route(async (req, res) => {
     return applyNameRules(client);
   });
   res.json({ success: true, changed });
+}));
+
+router.get('/cleanup', route(async (req, res) => {
+  res.json(await db.transaction(client => listCleanup(client, req.query)));
+}));
+
+router.post('/cleanup/delete', route(async (req, res) => {
+  const result = await db.transaction(client => deleteCleanup(client, req.body?.ids, req.body?.acknowledged));
+  await recordAudit(req, 'transactions.bulk_delete', 'success', { detail: { deleted: result.deleted } });
+  res.json(result);
 }));
 
 router.post('/delete-by-id', route(async (req, res) => {

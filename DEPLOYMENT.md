@@ -102,6 +102,18 @@ details.
 Disconnecting revokes the Plaid Item and removes its encrypted access token and
 account balance settings; already-imported transaction history is retained.
 
+For targeted cleanup, open **Transactions > Bulk transaction cleanup**. Filter
+by first-imported/synced date (inclusive UTC calendar days) or bank transaction
+date, source, and description. Select individual rows, a page, or all matches
+across pages (up to 10,000; narrow larger searches), then confirm permanent
+deletion. This deletes only the explicitly selected owned transaction IDs, with
+no Undo/Restore backup. It does not alter saved statement or Plaid balances,
+disconnect banks, or remove pending import-review records. Plaid IDs are not
+suppressed: later sync changes or reconnection may recreate deleted rows.
+Disconnect Sandbox banks before cleaning up test data. First-imported dates
+reflect row creation, not the last sync time; missing creation dates cannot be
+matched by that filter. Use bank dates instead for those records.
+
 Before production, complete Plaid's production approval and review its current
 product, pricing, privacy, and consent requirements. Update the app's privacy
 notice to explain that users who choose bank connection share account and

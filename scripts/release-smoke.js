@@ -59,6 +59,8 @@ const failures = [];
 const month = new Date().toISOString().slice(0, 7);
 const READS = [
   ['GET', '/api/auth/me'], ['GET', '/api/license'],
+  ['GET', '/api/transactions/cleanup?dateType=imported&start=2026-01-01&end=2026-12-31&source=plaid'],
+  ['GET', '/api/transactions/cleanup?dateType=transaction&start=2026-01-01&end=2026-12-31&source=all&selection=all'],
   ['GET', '/api/dashboard/insights'], ['GET', '/api/dashboard/monthly-cashflow'], ['GET', '/api/dashboard/all-transactions'],
   ['POST', '/api/dashboard/summary', { dateFilter: 'current' }], ['POST', '/api/dashboard/upcoming-payments'],
   ['POST', '/api/dashboard/category-spending', { dateFilter: 'current' }], ['POST', '/api/dashboard/category-trends'],

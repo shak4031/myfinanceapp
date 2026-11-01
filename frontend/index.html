@@ -501,7 +501,7 @@
   <link rel="stylesheet" href="welcome.css?v=20261030c">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
-  <link rel="stylesheet" href="review-tools.css?v=20261023b">
+  <link rel="stylesheet" href="review-tools.css?v=20261031-cleanup">
   <link rel="stylesheet" href="marketing.css?v=20261024-signup">
   <link rel="stylesheet" href="household.css?v=20261024-signup">
 </head>
@@ -905,6 +905,54 @@
           </table>
         </div>
         <nav id="txn-pagination" class="toolbar" aria-label="Transaction pages" hidden></nav>
+        <details id="transaction-cleanup" class="panel cleanup-panel">
+          <summary class="cleanup-heading">
+            <span class="cleanup-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg></span>
+            <span><span class="cleanup-title">Bulk transaction cleanup</span><span class="cleanup-subtitle">Find an import or date range, then remove only the rows you choose.</span></span>
+            <svg class="cleanup-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="cleanup-body">
+          <div class="cleanup-warning">
+            <strong>Before you delete</strong>
+            <p>Permanent deletion has no Undo or Restore. Plaid transactions may return on a later sync or reconnection. Disconnect a Sandbox bank before cleaning up its fake data.</p>
+            <p>This only removes rows from MyFinance. It does not change your bank, a saved statement, or a connected-bank balance.</p>
+          </div>
+          <div class="review-controls-intro cleanup-step">
+            <span class="review-step" aria-hidden="true">1</span>
+            <div><h2>Find the transactions</h2><p>These cleanup filters are separate from the transaction list above.</p></div>
+          </div>
+          <form id="cleanup-filters" class="cleanup-filters">
+            <label>Date type <select id="cleanup-date-type"><option value="imported">First imported / synced (UTC)</option><option value="transaction">Bank transaction date</option></select></label>
+            <label>From <input id="cleanup-start" type="date" required></label>
+            <label>Through <input id="cleanup-end" type="date" required></label>
+            <label>Source <select id="cleanup-source"><option value="plaid">Plaid only</option><option value="all">All sources</option><option value="other">Non-Plaid only</option></select></label>
+            <label class="cleanup-search">Description contains <input id="cleanup-search" type="search" maxlength="200" placeholder="e.g. Test bank or merchant name"></label>
+            <button type="submit" class="btn btn-primary">Find transactions</button>
+          </form>
+          <p class="import-hint cleanup-date-hint">Import dates show when each row was first saved, not its most recent sync. UTC dates can differ from your local calendar date.</p>
+          <div class="review-controls-intro cleanup-step">
+            <span class="review-step" aria-hidden="true">2</span>
+            <div><h2>Review and select</h2><p>Choose individual rows or select across pages. You will confirm the exact count before deletion.</p></div>
+          </div>
+          <div class="toolbar cleanup-actions">
+            <button id="cleanup-page-select" type="button" class="btn btn-secondary" disabled>Select this page</button>
+            <button id="cleanup-all-select" type="button" class="btn btn-secondary" disabled>Select all matches</button>
+            <button id="cleanup-clear" type="button" class="btn btn-secondary" disabled>Clear selection</button>
+            <button id="cleanup-delete" type="button" class="btn cleanup-delete" disabled>Delete selected</button>
+          </div>
+          <p id="cleanup-status" role="status" aria-live="polite">Choose dates and find transactions to begin.</p>
+          <div class="table-scroll cleanup-table-wrap" tabindex="0" role="region" aria-label="Transactions for bulk cleanup">
+            <table class="review-table cleanup-table">
+              <thead><tr><th>Select</th><th>Bank date</th><th>First imported (UTC)</th><th>Description</th><th>Source</th><th>Amount</th></tr></thead>
+              <tbody id="cleanup-rows"><tr><td colspan="6" class="cleanup-empty"><strong>No transactions loaded yet</strong><small>Choose a date range above and click Find transactions.</small></td></tr></tbody>
+            </table>
+          </div>
+          <nav class="toolbar diagnostics-pagination cleanup-pagination" aria-label="Cleanup result pages">
+            <button id="cleanup-prev" type="button" class="btn btn-secondary" disabled>Previous</button>
+            <button id="cleanup-next" type="button" class="btn btn-secondary" disabled>Next</button>
+          </nav>
+          </div>
+        </details>
         <details class="panel" style="padding: 16px; margin-top: 20px;">
           <summary>Older import tools</summary>
           <p class="muted">Current imports save valid new rows directly and show duplicates, warnings and errors in the import result. This queue is only for older records.</p>
@@ -2331,6 +2379,7 @@
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261024a"></script>
+  <script src="transaction-cleanup.js?v=20261031a"></script>
   <script src="refresh.js?v=20261028-category-search"></script>
   <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
