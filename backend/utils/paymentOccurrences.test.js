@@ -11,23 +11,23 @@ const build = (transactions, stored = [], today = new Date(2026, 10, 2)) =>
   reconcilePaymentOccurrences(transactions, stored, today, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30));
 
 test('carryover is limited to last month and recorded payments settle their own month', () => {
-  const initial = build([tx(1, '2026-08-05')]);
+  const initial = build([tx(1, '2026-09-05')]);
   assert.deepEqual(initial.items.map(item => item.date), ['2026-10-05', '2026-11-05']);
   assert.ok(initial.items.every(item => item.status === 'projected' && item.isFixed));
-  const next = build([tx(1, '2026-08-05')], initial.occurrences, new Date(2027, 0, 2));
+  const next = build([tx(1, '2026-09-05'), tx(4, '2026-11-05')], initial.occurrences, new Date(2027, 0, 2));
   assert.deepEqual(next.items.map(item => item.date), ['2026-12-05', '2027-01-05']);
   const deleted = build([], next.occurrences, new Date(2027, 0, 2));
   assert.equal(deleted.items.length, next.items.length, 'snapshots retain outstanding occurrences if history is deleted');
-  const late = build([tx(1, '2026-08-05'), tx(2, '2026-11-01', { is_fixed: false, amount: 115 })], initial.occurrences);
+  const late = build([tx(1, '2026-09-05'), tx(2, '2026-11-01', { is_fixed: false, amount: 115 })], initial.occurrences);
   assert.equal(late.occurrences.find(row => row.due_date === '2026-11-05').matched_transaction_id, 2);
-  assert.deepEqual(late.items.filter(item => item.status === 'projected').map(item => item.date), ['2026-10-05']);
+  assert.deepEqual(late.items.filter(item => item.status === 'projected').map(item => item.date), ['2026-10-05', '2026-12-01']);
   assert.equal(late.items.filter(item => item.status === 'processed').length, 1);
   assert.equal(late.items.find(item => item.id === 2).amount, 115);
-  assert.deepEqual(build([tx(1, '2026-08-05'), tx(2, '2026-11-01', { is_fixed: false, amount: 115 })], late.occurrences).items, late.items);
+  assert.deepEqual(build([tx(1, '2026-09-05'), tx(2, '2026-11-01', { is_fixed: false, amount: 115 })], late.occurrences).items, late.items);
 });
 
 test('paid and ignored confirmations resolve only an occurrence and a later recorded confirmation does not settle two bills', () => {
-  const transactions = [tx(1, '2026-08-05')];
+  const transactions = [tx(1, '2026-09-05')];
   const initial = build(transactions);
   initial.occurrences[0].status = 'paid';
   initial.occurrences[0].resolved_at = new Date('2026-11-02T12:00:00.000Z');
@@ -58,8 +58,8 @@ test('unflagging the recurring bill stops future forecasts but does not silently
 });
 
 test('new recorded bill amounts and dates update future estimates, never the unpaid earlier invoice', () => {
-  const initial = build([tx(1, '2026-08-05')]);
-  const updated = build([tx(1, '2026-08-05'), tx(2, '2026-10-07', { amount: 125 })], initial.occurrences);
+  const initial = build([tx(1, '2026-09-05')]);
+  const updated = build([tx(1, '2026-09-05'), tx(2, '2026-10-07', { amount: 125 })], initial.occurrences);
   assert.equal(updated.occurrences.find(row => row.due_date === '2026-10-05').status, 'paid');
   assert.equal(updated.occurrences.find(row => row.due_date === '2026-10-05').amount, 125);
   const future = updated.occurrences.find(row => row.due_date === '2026-11-07');
@@ -86,7 +86,7 @@ test('database tracking persists through restarts and is household isolated, inc
     await migrate();
     await db.exec(`INSERT INTO users(id,name) VALUES (2,'Other household');
       INSERT INTO transactions(user_id,date,description,amount,direction,is_fixed)
-      VALUES(1,'2026-08-05','UTILITY PAYMENT',100,'DEBIT',TRUE),(2,'2026-08-05','PRIVATE BILL',200,'DEBIT',TRUE)`);
+      VALUES(1,'2026-09-05','UTILITY PAYMENT',100,'DEBIT',TRUE),(2,'2026-09-05','PRIVATE BILL',200,'DEBIT',TRUE)`);
     const first = await run(1, client => loadFixedPaymentOccurrences(client, today, through));
     assert.equal(first.length, 2);
     assert.equal((await run(2, client => client.query('SELECT * FROM fixed_payment_occurrences'))).rows.length, 0);
@@ -96,6 +96,14 @@ test('database tracking persists through restarts and is household isolated, inc
       VALUES('expired','2026-09-05',$1,100,'projected',1)`, [JSON.stringify(tx(1, '2026-08-05'))]));
     await run(1, client => loadFixedPaymentOccurrences(client, today, through));
     assert.equal((await run(1, client => client.query("SELECT * FROM fixed_payment_occurrences WHERE payment_key='expired'"))).rows.length, 0);
+    await db.query(`INSERT INTO transactions(id,user_id,date,description,amount,direction,is_fixed)
+      VALUES(100,1,'2026-05-11','COMCAST XFINITY',85,'DEBIT',TRUE)`);
+    await run(1, client => client.query(`INSERT INTO fixed_payment_occurrences
+      (payment_key,due_date,template,amount,status,user_id)
+      VALUES('ended','2026-10-11',$1,85,'projected',1)`,
+    [JSON.stringify(tx(100, '2026-05-11', { description: 'COMCAST XFINITY', amount: 85 }))]));
+    await run(1, client => loadFixedPaymentOccurrences(client, today, through));
+    assert.equal((await run(1, client => client.query("SELECT * FROM fixed_payment_occurrences WHERE payment_key='ended'"))).rows.length, 0);
     await run(1, client => client.query(`UPDATE fixed_payment_occurrences SET status='ignored',resolved_at=NOW()
       WHERE payment_key=$1`, [first[0].paymentKey]));
     await migrate();
@@ -170,5 +178,62 @@ test('saved automatic cross-month matches are reassigned within the window witho
   const result = build(history, stored);
   assert.equal(result.occurrences.find(row => row.payment_key === 'oct').matched_transaction_id, 2);
   assert.equal(result.occurrences.find(row => row.payment_key === 'nov').matched_transaction_id, 3);
-  assert.equal(result.items.filter(item => item.status === 'projected').length, 0);
+  assert.equal(result.items.filter(item => item.status === 'projected' && item.date < '2026-12-01').length, 0);
+});
+
+test('Hyundai renamed and unrenamed records settle one bill and repair duplicate saved templates', () => {
+  const history = [
+    tx(1, '2026-08-27', { description: 'HYUNDAI LEASE ONLINE PMT', display_name: null, amount: 443 }),
+    tx(2, '2026-09-24', { description: 'HYUNDAI LEASE ONLINE PMT', display_name: 'Hyundai Lease', amount: 443 }),
+    tx(3, '2026-10-22', { description: 'HYUNDAI LEASE ONLINE PMT', display_name: 'Hyundai Lease', amount: 443 })
+  ];
+  const stored = [
+    { payment_key: 'older-name', due_date: '2026-10-07', template: { ...history[0], date: '2026-07-07' }, amount: 443, status: 'projected' },
+    { payment_key: 'renamed', due_date: '2026-10-24', template: history[1], amount: 443, status: 'projected' }
+  ];
+  const result = build(history, stored);
+  assert.equal(result.items.some(item => item.date.startsWith('2026-10') && item.status === 'projected'), false);
+  assert.equal(result.occurrences.filter(row => row.due_date.startsWith('2026-10')).length, 1);
+  assert.equal(result.items.filter(item => item.date.startsWith('2026-11') && item.status === 'projected').length, 1);
+  assert.deepEqual(build(history, result.occurrences).items, result.items);
+});
+
+test('shortened provider description settles a same-account equal-amount subscription without a Fixed flag or rename', () => {
+  const history = [
+    tx(1, '2026-09-24', { description: 'VISA DDA PUR AP 469216 GOOGLE CLAUDE BY ANTH 855 836 3987 * CA',
+      display_name: 'Google Claude', plaid_account_id: 'same-bank', amount: 21.32 }),
+    tx(2, '2026-10-26', { description: 'Claude By Anth', display_name: null, plaid_account_id: 'same-bank',
+      amount: 21.32, is_fixed: false, category: 'Other' }),
+    tx(3, '2026-09-16', { description: 'PSEG PAYMENT', amount: 90 })
+  ];
+  const result = build(history);
+  const overdue = result.items.filter(item => item.date < '2026-11-01' && item.status === 'projected');
+  assert.deepEqual(overdue.map(item => item.description), ['PSEG']);
+  assert.equal(result.occurrences.find(row => row.template.id === 1 && row.due_date.startsWith('2026-10')).matched_transaction_id, 2);
+  assert.ok(result.items.some(item => item.date === '2026-11-26' && item.status === 'projected'));
+});
+
+test('stale fixed flags do not revive ended bills and saved false positives are discarded', () => {
+  const ended = tx(1, '2026-05-11', { description: 'COMCAST XFINITY' });
+  const stored = [{ payment_key: 'stale', due_date: '2026-10-11', template: ended, amount: 100, status: 'projected' }];
+  assert.deepEqual(build([ended], stored).items, []);
+  assert.deepEqual(build([ended], stored).occurrences, []);
+  assert.deepEqual(build([tx(1, '2026-08-10', { description: 'OLD FIXED FEE' })]).items, []);
+});
+
+test('description variants never settle another account, amount, generic merchant or ambiguous bill', () => {
+  const original = tx(1, '2026-09-24', { description: 'GOOGLE CLAUDE BY ANTH', display_name: 'Personal subscription',
+    plaid_account_id: 'same-bank', amount: 21.32 });
+  for (const changes of [
+    { plaid_account_id: 'other-bank' }, { amount: 20 }, { description: 'GOOGLE OTHER SUBSCRIPTION' },
+    { plaid_account_id: null }
+  ]) {
+    const result = build([original, tx(2, '2026-10-26', { description: 'CLAUDE BY ANTH', plaid_account_id: 'same-bank',
+      amount: 21.32, is_fixed: false, ...changes })]);
+    assert.equal(result.items.filter(item => item.date.startsWith('2026-10') && item.status === 'projected').length, 1);
+  }
+  const ambiguous = build([original,
+    { ...original, id: 3, description: 'CLAUDE BY ANTH BUSINESS', display_name: 'Business subscription' },
+    tx(2, '2026-10-26', { description: 'CLAUDE BY ANTH', plaid_account_id: 'same-bank', amount: 21.32, is_fixed: false })]);
+  assert.equal(ambiguous.items.filter(item => item.date.startsWith('2026-10') && item.status === 'projected').length, 2);
 });

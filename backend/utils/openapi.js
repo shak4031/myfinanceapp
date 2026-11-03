@@ -40,7 +40,7 @@ export function openApiSpec() {
       '/api/admin/support-grants': { get: op('Admin', 'Active support grants customers have given') },
       '/api/admin/support-sessions': { post: op('Admin', 'Start a consented support session (view as customer)', body({ grantId: 1 })) },
       '/api/dashboard/summary': { post: op('Finance', 'Income, spending and balance summary', body({ dateFilter: 'current' })) },
-      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Next 30 days plus unpaid fixed-bill estimates from last calendar month only and current-month paid history. Posted payments settle the matching bill in their own calendar month; old automatic cross-month assignments are corrected.', body({})) },
+      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Next 30 days plus last-month unpaid estimates for recently observed fixed bills and current-month paid history. Match original descriptions despite renames; shortened descriptions require an unambiguous same-account equal-amount match. Repair saved duplicate and stale automatic estimates.', body({})) },
       '/api/dashboard/fixed-payments/{key}/resolve': { post: op('Finance', 'Confirm paid or ignore only this monthly occurrence. Does not create a ledger transaction or change recorded balances. Household scoped; stale resolutions return 409.', {
         parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-f0-9]{64}$' } }],
         ...body({ status: 'paid' })

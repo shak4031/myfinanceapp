@@ -128,6 +128,17 @@ repair saved oldest-first assignments that left already-paid bills overdue;
 explicit paid/ignore choices are preserved. Pending transactions do not resolve
 an occurrence. Matching uses the existing bill/merchant and
 account rules, not a creditor's invoice or a guaranteed due date.
+Renamed and original descriptions are compared independently so a display-name
+change does not create a second bill. Shortened provider descriptions may match
+only with equal amount, a known shared owning account, at least two distinctive
+merchant words, and a single candidate. Categories and the newer payment's Fixed
+flag do not determine whether it settles a bill. Saved duplicate monthly estimates
+are consolidated while explicit paid/ignore choices are retained.
+New forecasts require a fixed payment within the current or previous two calendar
+months. A last-month overdue estimate additionally requires fixed-payment evidence
+in the month preceding it. Old fixed flags cannot revive a bill that disappeared
+months ago; saved stale automatic estimates are removed on the next writable load.
+Recent unpaid estimates survive source deletion within this evidence window.
 Mark paid confirms one occurrence without creating a transaction or changing
 recorded cash. Ignore removes only one occurrence, not future recurrence.
 Removing the Fixed flag from matching transactions stops future projections,
