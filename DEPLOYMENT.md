@@ -115,19 +115,25 @@ it does not change transaction amounts, transfer treatment or debt-plan settings
 
 Startup adds the household-private `fixed_payment_occurrences` table. The dashboard
 uses fixed debit history to estimate monthly occurrences starting after the first
-observed payment, including missing months. Unpaid estimates survive month changes
-and retain snapshots if source transactions are deleted. Previous-month items
+observed payment, limited to last calendar month and the next 30-day horizon.
+Unpaid estimates retain snapshots if source transactions are deleted, but estimates
+older than last month are excluded from display and cash projections and removed
+on the next writable dashboard load. Previous-month items
 appear in a separate overdue section in both calendar and list views.
 These are estimates awaiting confirmation, not proof that a creditor is unpaid.
-Posted matching payments resolve the oldest outstanding occurrence; pending
-transactions do not resolve it. Matching uses the existing bill/merchant and
+Posted matching payments resolve their own calendar month's occurrence, even
+when paid before its estimated day. A newer month's payment is never assumed to
+pay an earlier month. Automatic matches are recalculated on dashboard load to
+repair saved oldest-first assignments that left already-paid bills overdue;
+explicit paid/ignore choices are preserved. Pending transactions do not resolve
+an occurrence. Matching uses the existing bill/merchant and
 account rules, not a creditor's invoice or a guaranteed due date.
 Mark paid confirms one occurrence without creating a transaction or changing
 recorded cash. Ignore removes only one occurrence, not future recurrence.
 Removing the Fixed flag from matching transactions stops future projections,
 but does not silently discard already overdue occurrences.
-A later recorded payment attaches to an unmatched paid confirmation before it
-can settle another occurrence. Read-only support can preview but not persist or
+A later imported payment for the same month attaches to an unmatched paid
+confirmation. Read-only support can preview but not persist or
 resolve payments. Paid history and cash projections do not deduct confirmations
 again. The history drawer now has 24px of space before the payment legend.
 

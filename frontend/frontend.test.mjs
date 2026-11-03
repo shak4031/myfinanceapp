@@ -2415,7 +2415,10 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   const calls = [], notices = [], confirmations = [];
   let accept = false, fail = false;
   const key = 'a'.repeat(64);
-  const timeline = [{ date: '2026-08-05', amount: 100, description: 'Earlier <utility>', status: 'projected', isFixed: true, paymentKey: key }];
+  const timeline = [
+    { date: '2026-10-05', amount: 100, description: 'Earlier <utility>', status: 'projected', isFixed: true, paymentKey: key },
+    { date: '2026-09-05', amount: 900, description: 'Expired old estimate', status: 'projected', isFixed: true, paymentKey: 'b'.repeat(64) }
+  ];
   const f = fixture(async (url, options) => {
     calls.push({ url, options });
     return response(fail && url.includes('/resolve') ? 409 : 200, url.endsWith('/summary') ? { balance: 500, income: 0, expenses: 0, netCashflow: 0 }
@@ -2433,10 +2436,10 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
   await f.context.loadDashboard();
   const markup = f.node('dashboard-payments').innerHTML;
-  assert.match(markup, /Previous months &middot; still unpaid/);
+  assert.match(markup, /Last month &middot; still unpaid/);
   assert.match(markup, /Earlier &lt;utility&gt;/);
   assert.match(markup, /Projected balance in 30 days<\/span><strong>\$400\.00/);
-  assert.doesNotMatch(markup, /data-date="2026-08/);
+  assert.doesNotMatch(markup, /data-date="2026-10|Expired old estimate/);
   assert.match(source('refresh.css'), /\.pay-history \{ margin: 20px 0 24px/);
   assert.match(source('refresh.css'), /#upcoming-section \.pay-carried ol\.pay-list \{ display: block/);
   const button = { dataset: { paymentKey: key, paymentStatus: 'ignored' }, disabled: false };

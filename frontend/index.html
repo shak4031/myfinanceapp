@@ -669,7 +669,7 @@
           <div class="section-head">
             <div>
               <h2>Upcoming payments &amp; projected runway</h2>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">The next 30 days, plus unpaid bills carried forward from earlier months. Confirm a payment as paid or ignore only that occurrence. The running balance starts from your latest recorded balance; unrecorded payments are estimates.</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">The next 30 days, plus unpaid estimates from last month only. Recorded payments settle the matching bill in their calendar month. Confirm a payment as paid or ignore only that occurrence. Unrecorded payments are estimates.</div>
             </div>
             <div class="section-head-actions">
               <div id="cashflow-safety-badge"></div>
@@ -1501,7 +1501,9 @@
       const horizonEnd = new Date(calToday.getFullYear(), calToday.getMonth(), calToday.getDate() + 30);
       const endKey = dateKey(horizonEnd);
       const monthStartKey = `${todayKey.slice(0, 7)}-01`;
-      timeline = timeline.filter(item => item.date <= endKey && (item.date >= monthStartKey || (item.isFixed && item.status !== 'processed')));
+      const previousMonthStartKey = dateKey(new Date(calToday.getFullYear(), calToday.getMonth() - 1, 1));
+      timeline = timeline.filter(item => item.date <= endKey && (item.date >= monthStartKey
+        || (item.date >= previousMonthStartKey && item.isFixed && item.status !== 'processed')));
       timeline.sort((a,b) => a.date.localeCompare(b.date) || Number(b.isIncome) - Number(a.isIncome));
 
       let runningBalance = data.balance;
@@ -1656,7 +1658,7 @@
           <ol class="pay-list" aria-label="Fixed payment history for ${monthName}">${history.map(listRow).join('') || '<li class="pay-list-heading">No recorded fixed payments yet this month.</li>'}</ol>
         </details>
         <div class="pay-cal-legend" aria-hidden="true"><span class="is-upcoming">Upcoming</span><span class="is-overdue">Overdue</span><span class="is-deficit">At risk</span><span class="is-income">Income</span><span class="is-flex">Flexible plan</span><span class="is-mode-auto">Auto-pay</span><span class="is-mode-manual">Manual</span></div>
-        ${carriedEntries.length ? `<section class="pay-carried" aria-label="Unpaid bills from previous months"><h3>Previous months &middot; still unpaid</h3><p>Estimated monthly bills stay here until a matching payment is recorded, you confirm payment, or you ignore that occurrence.</p><ol class="pay-list">${carriedEntries.map(listRow).join('')}</ol></section>` : ''}
+        ${carriedEntries.length ? `<section class="pay-carried" aria-label="Unpaid estimates from last month"><h3>Last month &middot; still unpaid</h3><p>Only last month's unpaid estimates are carried forward. Payments recorded in that month settle the matching bill; you can also confirm payment or ignore the occurrence.</p><ol class="pay-list">${carriedEntries.map(listRow).join('')}</ol></section>` : ''}
         <p class="pay-window-note">${overdueCount ? `${overdueCount} earlier unpaid bill${overdueCount === 1 ? '' : 's'} carried forward. ` : ''}Forecast through ${endKey}. Expected income and future plan allocations are estimates; plan entries use your current monthly allocation.</p>
         <div class="pay-cal" aria-label="Next 30 days and earlier unpaid bills">${weekHead}${weeksHtml}</div>
         <ol class="pay-list" aria-label="Next 30 days and earlier unpaid bills, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
@@ -2405,7 +2407,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261102-usability"></script>
+  <script src="refresh.js?v=20261102-overdue-fix"></script>
   <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261026-household"></script>

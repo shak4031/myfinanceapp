@@ -10,6 +10,7 @@ const confirmationDate = row => row.resolved_at ? iso(new Date(row.resolved_at))
 export function reconcilePaymentOccurrences(transactions, stored, today, through) {
   const todayKey = iso(today);
   const month = todayKey.slice(0, 7);
+  const previousMonthStart = iso(new Date(today.getFullYear(), today.getMonth() - 1, 1));
   const debits = transactions.filter(tx => String(tx.direction).toUpperCase() === 'DEBIT' && !tx.is_pending)
     .map(tx => {
       const parsed = parseTxDate(tx.date);
@@ -19,8 +20,19 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       }
       return { ...tx, date: parsed.iso, amount: Number(tx.amount) };
     }).filter(tx => tx.date <= todayKey).sort((a, b) => a.date.localeCompare(b.date) || Number(a.id) - Number(b.id));
-  const occurrences = stored.map(row => ({ ...row, template: { ...row.template }, amount: Number(row.amount),
+  const occurrences = stored.filter(row => row.due_date >= previousMonthStart).map(row => ({ ...row, template: { ...row.template }, amount: Number(row.amount),
     resolved_at: row.resolved_at instanceof Date ? row.resolved_at.toISOString() : row.resolved_at }));
+  // Rebuild automatic matches: legacy oldest-first assignments could consume a
+  // payment from a different month and leave its actual month's bill unpaid.
+  for (const row of occurrences) {
+    if (row.matched_transaction_id != null && debits.some(tx => String(tx.id) === String(row.matched_transaction_id))) {
+      row.matched_transaction_id = null;
+      if (!row.resolved_at) {
+        row.status = 'projected';
+        row.amount = Number(row.template.amount);
+      }
+    }
+  }
   const cancelled = new Set();
   const groups = [];
   for (const tx of [...debits.filter(isFixedPayment), ...occurrences.map(row => row.template)]) {
@@ -40,7 +52,9 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     // Start after the first observed payment, never invent debt before the bill was observed.
     if (fixed.length) {
       const first = parseTxDate(fixed[0].date);
-      for (let target = new Date(first.year, first.month + 1, 1); target <= through; target.setMonth(target.getMonth() + 1)) {
+      const start = new Date(first.year, first.month + 1, 1);
+      const lowerBound = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      for (let target = start < lowerBound ? lowerBound : start; target <= through; target.setMonth(target.getMonth() + 1)) {
         const prefix = iso(target).slice(0, 7);
         const existing = group.occurrences.find(row => row.due_date.startsWith(prefix));
         const template = fixed.filter(tx => tx.date.slice(0, 7) < prefix).at(-1);
@@ -68,7 +82,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     const assigned = new Set(group.occurrences.map(row => row.matched_transaction_id).filter(id => id != null).map(String));
     for (const tx of group.payments) {
       if (assigned.has(String(tx.id))) continue;
-      const candidate = group.occurrences.find(row => row.due_date.slice(0, 7) <= tx.date.slice(0, 7)
+      const candidate = group.occurrences.find(row => row.due_date.slice(0, 7) === tx.date.slice(0, 7)
         && row.status !== 'ignored' && row.matched_transaction_id == null);
       if (!candidate) continue;
       candidate.status = 'paid';
@@ -78,7 +92,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     }
   }
   const retained = occurrences.filter(row => !cancelled.has(row.payment_key));
-  const items = retained.filter(row => row.status === 'projected' || (row.status === 'paid'
+  const items = retained.filter(row => (row.status === 'projected' && row.due_date <= iso(through)) || (row.status === 'paid'
     && (row.matched_transaction_id ? debits.find(tx => String(tx.id) === String(row.matched_transaction_id))?.date?.slice(0, 7) === month
       : confirmationDate(row)?.slice(0, 7) === month)))
     .map(row => {
@@ -115,8 +129,9 @@ export async function loadFixedPaymentOccurrences(client, today, through) {
   const result = reconcilePaymentOccurrences(transactions, stored, today, through);
   if (!currentReadOnly()) {
     await client.query(`DELETE FROM fixed_payment_occurrences WHERE user_id=$1 AND status='projected'
-      AND due_date >= $2 AND NOT(payment_key=ANY($3::text[]))`,
-    [userId, iso(today), result.occurrences.map(row => row.payment_key)]);
+      AND (due_date < $4 OR (due_date >= $2 AND NOT(payment_key=ANY($3::text[]))))`,
+    [userId, iso(today), result.occurrences.map(row => row.payment_key),
+      iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))]);
   }
   if (!currentReadOnly() && result.occurrences.length) {
     await client.query(`INSERT INTO fixed_payment_occurrences
