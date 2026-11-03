@@ -109,6 +109,15 @@ async function mergeDuplicate(client, input, reconcile) {
       OR candidate_transaction_ids @> ARRAY[$2]::integer[])`, [userId, removeId, keepId]);
   await client.query(`UPDATE transactions SET transfer_pair_id=$3
     WHERE user_id=$1 AND transfer_pair_id=$2`, [userId, removeId, keepId]);
+  await client.query(`WITH affected AS (
+    SELECT id,ROW_NUMBER() OVER(ORDER BY due_date,id) AS position
+    FROM fixed_payment_occurrences WHERE user_id=$1 AND matched_transaction_id IN ($2,$3)
+  )
+  UPDATE fixed_payment_occurrences p SET
+    matched_transaction_id=CASE WHEN affected.position=1 THEN $3 ELSE NULL END,
+    status=CASE WHEN affected.position=1 OR p.resolved_at IS NOT NULL THEN 'paid' ELSE 'projected' END,
+    amount=CASE WHEN affected.position=1 OR p.resolved_at IS NOT NULL THEN p.amount ELSE (p.template->>'amount')::numeric END
+  FROM affected WHERE p.id=affected.id AND p.user_id=$1`, [userId, removeId, keepId]);
   // Release the unique Plaid identity before attaching it to the retained statement record.
   await client.query('DELETE FROM transactions WHERE user_id=$1 AND id=$2', [userId, removeId]);
   await client.query(`UPDATE transactions SET plaid_transaction_id=$3,plaid_account_id=$4,is_pending=FALSE

@@ -155,6 +155,8 @@ app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Use the admin 
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
 // Static files (after API routes)
+app.get('/about', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/about.html')));
+app.get('/contact', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/contact.html')));
 app.use(express.static(join(__dirname, '../frontend'), {
   setHeaders(res, path) {
     if (/\.(?:html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache, must-revalidate');

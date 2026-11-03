@@ -3,7 +3,7 @@ import { TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from '../utils/
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
-import { buildUpcomingPayments } from '../utils/fixedPayments.js';
+import { loadFixedPaymentOccurrences } from '../utils/paymentOccurrences.js';
 import { isIncomeTransaction, projectIncome } from '../utils/income.js';
 import { currentUserId } from '../utils/tenant.js';
 import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
@@ -192,27 +192,9 @@ router.get('/monthly-cashflow', async (req, res) => {
 });
 
 async function loadUpcoming(req, today = new Date()) {
-  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const dateString = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  const transactions = await db.all(
-    `SELECT
-      id,
-      date,
-      description,
-      category,
-      amount,
-      direction,
-      label_id,
-      account_id,
-      is_fixed,
-      pay_mode,
-      display_name
-    FROM transactions
-    WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date`,
-    [currentUserId(), dateString(previousMonth), dateString(today)]
-  );
   const through = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
-  const bills = buildUpcomingPayments(transactions, today, { through });
+  const bills = await db.transaction(client => loadFixedPaymentOccurrences(client, today, through));
   // Income and the flexible debt/goal plan are best-effort: bills still render if planning fails.
   let extras = [], plan = null, pro = false, streams = [];
   try {
@@ -246,6 +228,26 @@ router.post('/upcoming-payments', async (req, res) => {
   } catch (error) {
     log('DASHBOARD', `Error fetching upcoming payments: ${error.message}`);
     res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/fixed-payments/:key/resolve', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{64}$/.test(req.params.key) || !['paid', 'ignored'].includes(req.body?.status)) {
+      return res.status(400).json({ error: 'Choose Mark paid or Ignore this payment for a valid payment.' });
+    }
+    const updated = await db.transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock($1,193647)', [currentUserId()]);
+      return (await client.query(`UPDATE fixed_payment_occurrences SET status=$1,resolved_at=NOW()
+        WHERE user_id=$2 AND payment_key=$3 AND status='projected' RETURNING id`,
+      [req.body.status, currentUserId(), req.params.key])).rows.length;
+    });
+    if (!updated) return res.status(409).json({ error: 'This payment is no longer unpaid. Refresh the dashboard and try again.' });
+    recordAudit(req, 'fixed_payment.resolved', 'success', { detail: { status: req.body.status } });
+    res.json({ success: true });
+  } catch (error) {
+    log('DASHBOARD', `Could not resolve fixed payment: ${error.message}`, 'error');
+    res.status(error.code === '25006' ? 403 : 500).json({ error: error.code === '25006' ? 'This support session is read-only.' : error.message });
   }
 });
 

@@ -1111,17 +1111,20 @@ test('public About and Contact links are visible and the Knowledge Base sits abo
   const mainNavigation = html.match(/<nav aria-label="Main navigation">([\s\S]*?)<\/nav>/)?.[1] || '';
   assert.ok(mainNavigation.indexOf('Financial Checkup') < mainNavigation.indexOf('Knowledge Base'));
   assert.ok(mainNavigation.indexOf('Knowledge Base') < mainNavigation.indexOf('Tutorials'));
-  assert.match(html, /data-marketing-jump="marketing-about">About/);
-  assert.match(html, /data-marketing-jump="marketing-contact">Contact/);
-  assert.match(html, /id="marketing-about"[\s\S]*?Your finances, easier to understand/);
-  assert.match(html, /eligible U\.S\. bank through Plaid/);
-  assert.match(html, /Disconnect any time to stop future bank updates/);
-  assert.match(html, /id="marketing-contact"[\s\S]*?href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
-  assert.match(html, /Never email passwords, verification codes, or full account numbers/);
+  assert.match(html, /href="\/about">About/);
+  assert.match(html, /href="\/contact">Contact/);
+  assert.doesNotMatch(html, /id="marketing-about"|id="marketing-contact"/);
+  assert.match(source('about.html'), /eligible U\.S\. bank through Plaid/);
+  assert.match(source('about.html'), /disconnect any time to stop future bank updates/);
+  assert.match(source('contact.html'), /href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
+  assert.match(source('contact.html'), /Never email passwords, verification codes, full account numbers/);
+  assert.match(source('about.html'), /AES-256-GCM|No online service can guarantee zero risk/);
+  assert.match(source('about.html'), /Authorized operators retain infrastructure access/);
+  assert.match(html, /Independent app\. Concrete safeguards/);
   assert.match(html, /MyFinance stores an encrypted Plaid access token/);
   assert.doesNotMatch(html, /MyFinance does not connect to your bank/);
-  assert.match(source('marketing.css'), /marketing-links a:not\(\[data-marketing-jump="marketing-pricing"\]\):not\(\[data-marketing-jump="marketing-contact"\]\) \{ display: none; \}/);
-  assert.match(html, /Settings &amp; support/);
+  assert.match(source('marketing.css'), /marketing-links a:not\(\[data-marketing-jump="marketing-pricing"\]\):not\(\[href="\/contact"\]\) \{ display: none; \}/);
+  assert.match(source('contact.html'), /Settings &amp; support/);
 });
 test('admin account deletion requires typed email and confirms immediate Stripe cancellation', () => {
   const html = source('admin.html');
@@ -2353,6 +2356,105 @@ test('category surfaces keep depth, keyboard focus, responsive layout, and reduc
   assert.match(styles, /#categories-view \.pro-cat-extra \{ display: none/);
   assert.match(styles, /#categories-view:has\(\.category-analytics\[open\]\) \.pro-cat-extra \{ display: grid/);
   assert.match(source('pro-categories.js'), /<details class="category-analytics/);
+});
+
+test('category dropdown filters choices as typed and keeps multiple selections across searches, refresh and resets', async () => {
+  let requests = 0;
+  const categories = [{ id: 1, name: 'Shopping' }, { id: 2, name: 'Home Improvement' }, { id: 3, name: '<Insurance>' }];
+  const transactions = categories.map(category => ({ date: '2026-10-01', category: category.name, direction: 'DEBIT', amount: category.id * 10 }));
+  const f = fixture(async url => {
+    requests++;
+    return response(200, url === '/api/transactions/categorization-rules' ? { categories, rules: [] } : { transactions });
+  });
+  f.run('refresh.js');
+  f.node('category-filter-period').value = '';
+  const emitted = [];
+  f.context.emitFinanceEvent = (name, detail) => { if (name === 'categories:rendered') emitted.push(detail); };
+  await f.context.loadCategories();
+  assert.match(f.node('category-filter-options').innerHTML, /Shopping/);
+  const choose = async (id, checked) => f.node('category-filter-options').onchange({
+    target: { closest: () => ({ dataset: { selectCategory: String(id) }, checked }) }
+  });
+  f.node('category-filter-search').value = 'shop';
+  await f.node('category-filter-search').oninput();
+  assert.equal(f.node('category-filter-dropdown').open, true);
+  assert.doesNotMatch(f.node('category-filter-options').innerHTML, /Home Improvement/);
+  await choose(1, true);
+  f.node('category-filter-search').value = 'home';
+  await f.node('category-filter-search').oninput();
+  assert.match(f.node('category-filter-options').innerHTML, /Home Improvement/);
+  await choose(2, true);
+  assert.equal(requests, 2);
+  assert.match(f.node('category-filter-selection').textContent, /2 categories selected/);
+  assert.match(f.node('category-cards').innerHTML, /data-open-category="Shopping"/);
+  assert.match(f.node('category-cards').innerHTML, /data-open-category="Home Improvement"/);
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /data-open-category="&lt;Insurance&gt;"/);
+  assert.equal(emitted.at(-1).transactions.length, 2);
+  assert.match(f.node('category-overview-summary').innerHTML, /\$30\.00/);
+  await f.context.loadCategories();
+  assert.match(f.node('category-filter-selection').textContent, /2 categories selected/);
+  await f.node('category-filter-chips').onclick({ target: { closest: () => ({ dataset: { removeCategoryFilter: '1' } }) } });
+  assert.doesNotMatch(f.node('category-cards').innerHTML, /data-open-category="Shopping"/);
+  f.node('category-filter-search').value = 'insurance';
+  await f.node('category-filter-search').oninput();
+  await choose(3, true);
+  assert.match(f.node('category-filter-chips').innerHTML, /&lt;Insurance&gt;/);
+  await choose(2, false);
+  assert.equal(emitted.at(-1).transactions.length, 1);
+  await f.node('category-filter-reset').onclick();
+  assert.equal(f.node('category-filter-selection').textContent, 'Select categories');
+  assert.equal(f.node('category-filter-search').value, '');
+  assert.equal(f.node('category-filter-dropdown').open, false);
+  await choose(1, true);
+  f.context.clearFinanceState();
+  assert.equal(f.node('category-filter-chips').innerHTML, '');
+  assert.equal(f.node('category-filter-options').innerHTML, '');
+});
+
+test('previous-month unpaid bills remain visible in both layouts and resolution buttons confirm, cancel and report failures', async () => {
+  const calls = [], notices = [], confirmations = [];
+  let accept = false, fail = false;
+  const key = 'a'.repeat(64);
+  const timeline = [{ date: '2026-08-05', amount: 100, description: 'Earlier <utility>', status: 'projected', isFixed: true, paymentKey: key }];
+  const f = fixture(async (url, options) => {
+    calls.push({ url, options });
+    return response(fail && url.includes('/resolve') ? 409 : 200, url.endsWith('/summary') ? { balance: 500, income: 0, expenses: 0, netCashflow: 0 }
+      : url.endsWith('/upcoming-payments') ? timeline : url.includes('/resolve') ? { error: 'This payment is no longer unpaid.' } : []);
+  });
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 10, 2, 12])); } };
+  f.context.escapeHtml = value => String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.context.transactionLink = (id, name) => name;
+  f.context.FinanceUI = { howCalc: () => '', confirm: async (message, options) => { confirmations.push({ message, options }); return accept; } };
+  f.context.notify = (...args) => notices.push(args);
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  const markup = f.node('dashboard-payments').innerHTML;
+  assert.match(markup, /Previous months &middot; still unpaid/);
+  assert.match(markup, /Earlier &lt;utility&gt;/);
+  assert.match(markup, /Projected balance in 30 days<\/span><strong>\$400\.00/);
+  assert.doesNotMatch(markup, /data-date="2026-08/);
+  assert.match(source('refresh.css'), /\.pay-history \{ margin: 20px 0 24px/);
+  assert.match(source('refresh.css'), /#upcoming-section \.pay-carried ol\.pay-list \{ display: block/);
+  const button = { dataset: { paymentKey: key, paymentStatus: 'ignored' }, disabled: false };
+  const event = { target: { closest: () => button } };
+  await f.node('dashboard-payments').onclick(event);
+  assert.equal(calls.filter(call => call.url.includes('/resolve')).length, 0, 'cancel does not mutate');
+  assert.match(confirmations[0].message, /only this monthly occurrence/);
+  assert.equal(confirmations[0].options.action, 'Ignore this payment');
+  accept = true;
+  button.dataset.paymentStatus = 'paid';
+  await f.node('dashboard-payments').onclick(event);
+  assert.equal(JSON.parse(calls.find(call => call.url.includes('/resolve')).options.body).status, 'paid');
+  assert.match(confirmations.at(-1).message, /does not create a transaction/);
+  fail = true;
+  button.disabled = false;
+  await f.node('dashboard-payments').onclick(event);
+  assert.equal(button.disabled, false);
+  assert.deepEqual(notices.at(-1), ['This payment is no longer unpaid.', 'error']);
 });
 test('a closed category dialog discards a late transaction response', async () => {
   let finish;

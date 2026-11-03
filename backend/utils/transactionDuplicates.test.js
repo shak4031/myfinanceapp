@@ -117,6 +117,25 @@ test('confirmed payroll and bill merges fix double counting, retain edits and re
   } finally { await f.pg.close(); }
 });
 
+test('merging a duplicate payment preserves the oldest settlement and reopens a double-settled occurrence', async () => {
+  const f = await fixture();
+  try {
+    const template = (await f.client.query('SELECT * FROM transactions WHERE id=3')).rows[0];
+    for (const [key, date, matched] of [['first', '2026-09-22', 12], ['second', '2026-10-22', 3]]) {
+      await f.client.query(`INSERT INTO fixed_payment_occurrences
+        (user_id,payment_key,due_date,template,amount,status,matched_transaction_id)
+        VALUES(1,$1,$2,$3,443,'paid',$4)`, [key, date, JSON.stringify(template), matched]);
+    }
+    const pair = (await f.list()).rows.find(pair => pair.plaid.id === 12);
+    await f.merge(pair);
+    const rows = (await f.client.query('SELECT * FROM fixed_payment_occurrences ORDER BY due_date')).rows;
+    assert.equal(rows[0].matched_transaction_id, 3);
+    assert.equal(rows[0].status, 'paid');
+    assert.equal(rows[1].matched_transaction_id, null);
+    assert.equal(rows[1].status, 'projected');
+  } finally { await f.pg.close(); }
+});
+
 test('stale, mismatched, already merged and foreign pairs fail without modifying either record', async () => {
   const f = await fixture();
   try {

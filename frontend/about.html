@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Learn about MyFinance, its purpose, and the safeguards protecting your financial workspace.">
+  <title>About MyFinance | Privacy, security and purpose</title>
+  <link rel="stylesheet" href="/public-pages.css?v=20261102">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><a class="site-brand" href="/">MyFinance</a><nav aria-label="Main navigation"><a href="/about" aria-current="page">About</a><a href="/contact">Contact</a><a href="/#marketing-signin">Sign in</a></nav></header>
+  <main id="main">
+    <p class="eyebrow">ABOUT MYFINANCE</p>
+    <h1>Clarity for your money. Care for your data.</h1>
+    <p class="intro">MyFinance is an independently built household finance app. Its purpose is simple: help you understand spending, keep track of bills, and make thoughtful plans for savings and debt.</p>
+    <section aria-labelledby="purpose"><h2 id="purpose">Built for everyday decisions</h2><p>Your finances should be understandable without a spreadsheet marathon. MyFinance brings transactions, categories and planning into one workspace, while keeping recorded facts separate from forecasts. You choose your next step; the app does not move your money.</p></section>
+    <section aria-labelledby="security"><h2 id="security">Trust should come from safeguards, not company size</h2><p>It is reasonable to be careful with financial data. Rather than asking you to rely on a big-company name or vague promises, we explain the protections built into MyFinance.</p>
+      <div class="cards">
+        <article><h3>Separate financial workspaces</h3><p>Database-enforced access rules separate households. Sharing happens within your household; another customer's login does not grant access to your workspace.</p></article>
+        <article><h3>Protected sign-in and sessions</h3><p>Passwords are stored as salted, computationally hardened hashes, not readable passwords. Production connections use HTTPS, and sign-in sessions expire after 10 minutes without interaction.</p></article>
+        <article><h3>Optional, data-only bank connections</h3><p>Connect an eligible U.S. bank through Plaid or import statements yourself. MyFinance stores the Plaid sync token encrypted with AES-256-GCM. This integration retrieves account data; it cannot initiate payments or transfers.</p></article>
+        <article><h3>You control support access</h3><p>Customer-workspace support access requires your approval, is time-limited and audited, and can be revoked. Read-only support is enforced by the database, not just a screen setting.</p></article>
+      </div>
+      <div class="trust-note"><h3>Clear limits, no inflated promises</h3><p>No online service can guarantee zero risk. These safeguards are not a claim of independent security certification, a guarantee against breaches, or a promise that server operators cannot access stored financial records. Authorized operators retain infrastructure access.</p><p>You can start without linking a bank and disconnect any time to stop future bank updates. Previously imported transactions remain in your history. Questions about privacy or security deserve a direct answer: <a href="/contact">contact MyFinance</a>.</p></div>
+    </section>
+    <section aria-labelledby="planning"><h2 id="planning">Useful guidance, honest expectations</h2><p>Planning tools are educational, not financial, tax or legal advice. Forecasts, payment estimates and payoff dates depend on the information available and are not promises.</p><p><a href="/#marketing-signin">Explore your workspace</a> or <a href="/contact">get in touch</a>.</p></section>
+  </main>
+  <footer class="site-footer"><p>MyFinance does not move money. Planning results are estimates.</p><nav aria-label="Footer navigation"><a href="/">Home</a><a href="/about">About</a><a href="/contact">Contact</a></nav></footer>
+</body>
+</html>

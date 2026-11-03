@@ -259,7 +259,7 @@ body.auth-pending { height: auto; overflow: visible; }
   .marketing-nav { padding-block: 10px; gap: 8px; }
   .marketing-brand { font-size: 17px; gap: 8px; }
   .marketing-brand .brand-mark { width: 34px; height: 34px; }
-  .marketing-links a:not([data-marketing-jump="marketing-pricing"]):not([data-marketing-jump="marketing-contact"]) { display: none; }
+  .marketing-links a:not([data-marketing-jump="marketing-pricing"]):not([href="/contact"]) { display: none; }
   .marketing-links a, .marketing-nav-cta { padding: 8px 12px; font-size: 13px; }
   .marketing-page [id] { scroll-margin-top: 72px; }
   .mk-stage { min-height: 236px; }
@@ -291,3 +291,7 @@ body.auth-pending { height: auto; overflow: visible; }
 @media (prefers-reduced-motion: reduce) {
   .marketing-page *, .marketing-page *::before, .marketing-page *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+.marketing-trust { margin: 24px 0; padding: 22px; border: 1px solid #cbdcc7; border-radius: 16px; background: #edf3e7; }
+.marketing-trust h2 { font-size: 21px; margin: 0 0 12px; }
+.marketing-trust p { font-size: 14px; line-height: 1.7; }
+.marketing-trust a { color: #285b47; font-weight: 700; }

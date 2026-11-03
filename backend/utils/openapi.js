@@ -40,7 +40,11 @@ export function openApiSpec() {
       '/api/admin/support-grants': { get: op('Admin', 'Active support grants customers have given') },
       '/api/admin/support-sessions': { post: op('Admin', 'Start a consented support session (view as customer)', body({ grantId: 1 })) },
       '/api/dashboard/summary': { post: op('Finance', 'Income, spending and balance summary', body({ dateFilter: 'current' })) },
-      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Fixed payments: paid and still due this month', body({})) },
+      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Next 30 days plus persistent unpaid monthly fixed bills from earlier months and current-month paid history. Matching posted transactions settle the oldest outstanding occurrence.', body({})) },
+      '/api/dashboard/fixed-payments/{key}/resolve': { post: op('Finance', 'Confirm paid or ignore only this monthly occurrence. Does not create a ledger transaction or change recorded balances. Household scoped; stale resolutions return 409.', {
+        parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-f0-9]{64}$' } }],
+        ...body({ status: 'paid' })
+      }) },
       '/api/plaid/link-token': { post: op('Bank connections', 'Create a Plaid Link token for new or existing consented connections', body({ connectionId: 1 })) },
       '/api/plaid/exchange': { post: op('Bank connections', 'Exchange a Plaid Link public token and start an initial sync', body({ public_token: '<one-time Link token>', institutionName: 'Institution' })) },
       '/api/plaid/connections': { get: op('Bank connections', 'List my connected institutions and account balance settings') },

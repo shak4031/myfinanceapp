@@ -41,6 +41,7 @@ function accountKey(tx) {
 }
 
 export function sameBill(a, b) {
+  if (a.plaid_account_id != null && b.plaid_account_id != null && String(a.plaid_account_id) !== String(b.plaid_account_id)) return false;
   if (a.account_id != null && b.account_id != null && String(a.account_id) !== String(b.account_id)) return false;
   if (accountKey(a) !== accountKey(b)) return false;
   const merchant = merchantKey(a);

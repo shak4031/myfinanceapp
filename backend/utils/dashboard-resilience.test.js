@@ -100,6 +100,13 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     if (nextMonth <= horizonEnd) assert.ok(rolling.body.some(item => item.date === iso(nextMonth) && item.status === 'projected'));
     const rollingInsights = await call('/api/dashboard/insights', { cookie });
     assert.equal(rollingInsights.body.pulse.horizonDays, 30);
+    const unpaid = rolling.body.find(item => item.paymentKey && item.status === 'projected');
+    assert.ok(unpaid);
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'invalid' } })).status, 400);
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'paid' } })).status, 200);
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'ignored' } })).status, 409);
+    const resolved = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    assert.equal(resolved.body.find(item => item.paymentKey === unpaid.paymentKey).confirmedPaid, true);
     const monthly = await call('/api/dashboard/category-spending', { cookie, body: { dateFilter: 'current' } });
     assert.equal(monthly.status, 200);
     assert.ok(monthly.body.every(item => Number.isInteger(item.transactionCount)));
@@ -108,6 +115,7 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     const freeCookie = second.headers.get('set-cookie').split(';')[0];
     const freeId = (await database.query("SELECT id FROM users WHERE email='history-free@example.test'")).rows[0].id;
     await grantFixtureAccess(database, freeId, 'basic');
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie: freeCookie, body: { status: 'ignored' } })).status, 409, 'other households cannot resolve an occurrence');
     await database.query(`INSERT INTO transactions(date,description,amount,direction,category,user_id) VALUES ($1,'FREE HISTORY',25,'DEBIT','Free dining',$2)`, [priorDate, freeId]);
     await database.query(`INSERT INTO category_budgets(user_id,category,monthly_amount) VALUES ($1,'Free dining',10)`, [freeId]);
     const freeHistory = await call('/api/dashboard/spending-history', { cookie: freeCookie });

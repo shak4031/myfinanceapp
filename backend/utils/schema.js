@@ -5,7 +5,8 @@ import { refreshImportReviewCandidates } from './transactionImport.js';
 export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
   'credit_cards', 'savings_goals', 'plaid_connections', 'plaid_accounts', 'transaction_import_reviews',
-  'accounts', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews'
+  'accounts', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews',
+  'fixed_payment_occurrences'
 ];
 
 export const DEFAULT_CATEGORIES = [
@@ -349,6 +350,12 @@ export async function migratePrivateSchema(client) {
       expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
     );
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_batch_id INTEGER;
+    CREATE TABLE IF NOT EXISTS fixed_payment_occurrences (
+      id SERIAL PRIMARY KEY, payment_key TEXT NOT NULL, due_date TEXT NOT NULL,
+      template JSONB NOT NULL, amount NUMERIC(14,2) NOT NULL CHECK(amount > 0),
+      status TEXT NOT NULL DEFAULT 'projected' CHECK(status IN ('projected','paid','ignored')),
+      matched_transaction_id INTEGER, resolved_at TIMESTAMPTZ
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -363,6 +370,10 @@ export async function migratePrivateSchema(client) {
   }
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
+    CREATE UNIQUE INDEX IF NOT EXISTS fixed_payment_occurrences_user_payment_key
+      ON fixed_payment_occurrences(user_id,payment_key);
+    CREATE INDEX IF NOT EXISTS fixed_payment_occurrences_user_match_idx
+      ON fixed_payment_occurrences(user_id,matched_transaction_id);
     CREATE UNIQUE INDEX IF NOT EXISTS category_budgets_user_category_key ON category_budgets (user_id, category);
     CREATE UNIQUE INDEX IF NOT EXISTS money_plans_user_key ON money_plans (user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS household_profiles_user_key ON household_profiles (user_id);

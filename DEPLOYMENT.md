@@ -110,6 +110,39 @@ when applicable. Separate statement and Plaid accounts are not guessed to be the
 same account; explicitly merged rows belong to their linked Plaid account.
 This describes the account holding the transaction, not the payment recipient;
 it does not change transaction amounts, transfer treatment or debt-plan settings.
+
+### Usability and unpaid fixed payments
+
+Startup adds the household-private `fixed_payment_occurrences` table. The dashboard
+uses fixed debit history to estimate monthly occurrences starting after the first
+observed payment, including missing months. Unpaid estimates survive month changes
+and retain snapshots if source transactions are deleted. Previous-month items
+appear in a separate overdue section in both calendar and list views.
+These are estimates awaiting confirmation, not proof that a creditor is unpaid.
+Posted matching payments resolve the oldest outstanding occurrence; pending
+transactions do not resolve it. Matching uses the existing bill/merchant and
+account rules, not a creditor's invoice or a guaranteed due date.
+Mark paid confirms one occurrence without creating a transaction or changing
+recorded cash. Ignore removes only one occurrence, not future recurrence.
+Removing the Fixed flag from matching transactions stops future projections,
+but does not silently discard already overdue occurrences.
+A later recorded payment attaches to an unmatched paid confirmation before it
+can settle another occurrence. Read-only support can preview but not persist or
+resolve payments. Paid history and cash projections do not deduct confirmations
+again. The history drawer now has 24px of space before the payment legend.
+
+Categories includes a searchable checkbox dropdown with multiple selections.
+Search narrows choices; once categories are selected, their combined cards,
+totals and detail data remain visible while searching for another category.
+Reset clears both search and selection; household/session changes clear private
+options and selections.
+
+Public `/about` and `/contact` pages are accessible without signing in. Welcome
+and About explain verified protections (household database access rules, password
+hashing, HTTPS in production, encrypted Plaid tokens and consented support), without
+claiming certification or zero risk. Contact keeps the existing support address
+and warns against emailing credentials or financial records. Production HTTPS
+and infrastructure controls remain deployment responsibilities.
 Updates to merged statement/manual records preserve their existing descriptions
 and user display names instead of replacing them with Plaid wording.
 This applies to new and modified transactions, including pending-to-posted changes.

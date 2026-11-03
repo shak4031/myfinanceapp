@@ -212,6 +212,7 @@
   };
   let categoryRequest = 0, transactionRequest = 0, detailRequest = 0;
   let transactionCache = null, categoryCache = null, searchTimer = null;
+  const selectedCategoryIds = new Set();
   // Lets optional modules (e.g. Pro analytics) enhance views without coupling to their internals.
   window.emitFinanceEvent = (name, detail) => {
     if (typeof CustomEvent === 'function' && typeof document.dispatchEvent === 'function') document.dispatchEvent(new CustomEvent(name, { detail }));
@@ -276,7 +277,7 @@
   };
   let debts = [], goals = [], rules = [], categories = [], suggestions = [];
   let goalEditing = null;
-  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryCache = null; categoryPeriod.reset(); transactionPeriod.reset(); $('txn-filter-account').value = ''; $('txn-filter-account').innerHTML = '<option value="">All accounts</option>'; categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); window.FinancePro?.invalidateAnalytics?.(); };
+  window.clearFinanceState = () => { debts = []; goals = []; rules = []; categories = []; suggestions = []; goalEditing = null; debtEditing = null; transactionId = ''; transactionCache = null; categoryCache = null; selectedCategoryIds.clear(); $('category-filter-options').innerHTML = ''; $('category-filter-chips').innerHTML = ''; $('category-filter-selection').textContent = 'Select categories'; $('category-filter-dropdown').open = false; $('category-filter-search').value = ''; categoryPeriod.reset(); transactionPeriod.reset(); $('txn-filter-account').value = ''; $('txn-filter-account').innerHTML = '<option value="">All accounts</option>'; categoryRequest++; transactionRequest++; detailRequest++; window.FinancePlan?.invalidate?.(); window.FinancePro?.invalidateAnalytics?.(); };
   document.addEventListener('finance:analytics-invalidated', () => { categoryCache = null; });
   const reportError = error => {
     const message = error.message || 'Something went wrong. Please try again.';
@@ -298,7 +299,7 @@
     return view;
   };
   window.removeFixedTemplate = async id => {
-    if (!await FinanceUI.confirm('Remove the Fixed flag from this merchant’s matching transactions? This stops its bill projection; no transactions are deleted.')) return;
+    if (!await FinanceUI.confirm('Remove the Fixed flag from this merchant’s matching transactions? This stops future projections; overdue occurrences remain until paid or ignored. No transactions are deleted.')) return;
     try {
       await json('/api/transactions/update-fixed', 'POST', { id, is_fixed: false, apply_to_all: true });
       await loadDashboard(); notify('Fixed flag removed from matching transactions.');
@@ -466,10 +467,23 @@
       const period = categoryPeriod.current();
       const query = String($('category-filter-search').value || '').trim();
       const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-      const visibleCategories = categories.filter(category => tokens.every(token => category.name.toLowerCase().includes(token)));
+      const matchingCategories = categories.filter(category => tokens.every(token => category.name.toLowerCase().includes(token)));
+      for (const id of selectedCategoryIds) {
+        if (!categories.some(category => String(category.id) === id)) selectedCategoryIds.delete(id);
+      }
+      const selectedCategories = categories.filter(category => selectedCategoryIds.has(String(category.id)));
+      const visibleCategories = selectedCategoryIds.size ? selectedCategories : matchingCategories;
+      $('category-filter-options').innerHTML = matchingCategories.length ? matchingCategories.map(category =>
+        `<label><input type="checkbox" data-select-category="${Number(category.id)}"${selectedCategoryIds.has(String(category.id)) ? ' checked' : ''}>${escape(category.name)}</label>`).join('')
+        : '<p role="status">No categories match your search.</p>';
+      $('category-filter-selection').textContent = selectedCategoryIds.size ? `${selectedCategoryIds.size} ${selectedCategoryIds.size === 1 ? 'category' : 'categories'} selected` : 'Select categories';
+      $('category-filter-clear').disabled = !selectedCategoryIds.size;
+      $('category-filter-chips').innerHTML = selectedCategories.map(category =>
+        `<button type="button" data-remove-category-filter="${Number(category.id)}" aria-label="Remove ${escape(category.name)} from selection">${escape(category.name)} &times;</button>`).join('');
       const names = new Set(visibleCategories.map(category => category.name));
+      const narrowed = !!query || selectedCategoryIds.size > 0;
       const filtered = window.filterTransactionsByCategoryAndMonth(activity.transactions || [], '', period.months)
-        .filter(transaction => !query || names.has(transaction.category || 'Uncategorized'));
+        .filter(transaction => !narrowed || names.has(transaction.category || 'Uncategorized'));
       const counts = new Map();
       const spending = new Map();
       const received = new Map();
@@ -482,7 +496,7 @@
         else if (String(transaction.direction).toUpperCase() === 'DEBIT') spending.set(category, (spending.get(category) || 0) + amount);
         else if (String(transaction.direction).toUpperCase() === 'CREDIT') received.set(category, (received.get(category) || 0) + amount);
       }
-      $('category-filter-status').textContent = `${period.label}${query ? ` · “${query}” · ${visibleCategories.length} matching categories` : ''} · ${filtered.length.toLocaleString()} transactions`;
+      $('category-filter-status').textContent = `${period.label}${selectedCategoryIds.size ? ` · ${selectedCategoryIds.size} selected ${selectedCategoryIds.size === 1 ? 'category' : 'categories'}` : query ? ` · “${query}” · ${visibleCategories.length} matching categories` : ''} · ${filtered.length.toLocaleString()} transactions`;
       $('rule-category').innerHTML = categoryOptions('');
       $('category-manager-list').innerHTML = categories.map(category => `<form class="category-manager-row" data-category="${Number(category.id)}">
         <label><span>${escape(category.name)}</span><input data-category-name aria-label="Rename ${escape(category.name)}" maxlength="100" value="${escape(category.name)}"></label>
@@ -497,7 +511,7 @@
       const otherCategories = active.filter(category => !(spending.get(category.name) > 0))
         .sort((a, b) => a.name.localeCompare(b.name));
       const inactive = visibleCategories.filter(category => !counts.has(category.name)).sort((a, b) => a.name.localeCompare(b.name));
-      $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded${query ? ' · matching categories' : ''}</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${visibleCategories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>${query ? 'Matching categories' : 'Across your categories'}</small></span></div>`;
+      $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded${narrowed ? ' · matching categories' : ''}</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${visibleCategories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>${narrowed ? 'Matching categories' : 'Across your categories'}</small></span></div>`;
       const renderCard = category => {
         const [icon, art] = categoryArtwork(category.name);
         const count = counts.get(category.name) || 0;
@@ -515,9 +529,9 @@
       };
       const renderGroup = (list, title, description, id) => list.length ? `<section class="category-group" aria-labelledby="${id}"><div class="category-group-heading"><h2 id="${id}">${title} <span>${list.length}</span></h2><p>${description}</p></div><div class="category-card-grid">${list.map(renderCard).join('')}</div></section>` : '';
       $('category-cards').innerHTML = visibleCategories.length
-        ? `${renderGroup(spendingCategories, 'Your spending', 'Largest first, so the important things stand out.', 'category-spending-title')}${renderGroup(otherCategories, 'Other money movement', 'Deposits and transfers, separate from spending. Open a category to see the breakdown.', 'category-movement-title')}${inactive.length ? `<details class="category-inactive"${query ? ' open' : ''}><summary>No activity this period <span>${inactive.length}</span></summary><div class="category-card-grid">${inactive.map(renderCard).join('')}</div></details>` : ''}`
+        ? `${renderGroup(spendingCategories, 'Your spending', 'Largest first, so the important things stand out.', 'category-spending-title')}${renderGroup(otherCategories, 'Other money movement', 'Deposits and transfers, separate from spending. Open a category to see the breakdown.', 'category-movement-title')}${inactive.length ? `<details class="category-inactive"${narrowed ? ' open' : ''}><summary>No activity this period <span>${inactive.length}</span></summary><div class="category-card-grid">${inactive.map(renderCard).join('')}</div></details>` : ''}`
         : `<div class="category-empty">${query ? 'No categories match your search. Clear the search to see all categories.' : 'Your categories will appear here when they are ready.'}</div>`;
-      window.emitFinanceEvent('categories:rendered', { period: query ? { ...period, label: `${period.label} · “${query}”` } : period, transactions: filtered, allTransactions: activity.transactions || [], categories: visibleCategories });
+      window.emitFinanceEvent('categories:rendered', { period: narrowed ? { ...period, label: `${period.label} · ${selectedCategoryIds.size ? selectedCategories.map(category => category.name).join(', ') : `“${query}”`}` } : period, transactions: filtered, allTransactions: activity.transactions || [], categories: visibleCategories });
       $('category-replacement').innerHTML = categories
         .filter(category => String(category.id) !== String(deletingCategory?.id))
         .map(category => `<option value="${Number(category.id)}">${escape(category.name)}</option>`).join('');
@@ -531,9 +545,29 @@
       reportError(error);
     }
   };
-  $('category-filter-search').oninput = () => window.loadCategories(true);
+  $('category-filter-search').oninput = () => {
+    $('category-filter-dropdown').open = true;
+    return window.loadCategories(true);
+  };
+  $('category-filter-options').onchange = event => {
+    const input = event.target.closest('[data-select-category]');
+    if (!input) return;
+    if (input.checked) selectedCategoryIds.add(input.dataset.selectCategory);
+    else selectedCategoryIds.delete(input.dataset.selectCategory);
+    return window.loadCategories(true).then(() =>
+      $('category-filter-options').querySelector(`[data-select-category="${input.dataset.selectCategory}"]`)?.focus({ preventScroll: true }));
+  };
+  $('category-filter-chips').onclick = event => {
+    const button = event.target.closest('[data-remove-category-filter]');
+    if (!button) return;
+    selectedCategoryIds.delete(button.dataset.removeCategoryFilter);
+    return window.loadCategories(true).then(() => $('category-filter-selection').focus({ preventScroll: true }));
+  };
+  $('category-filter-clear').onclick = () => { selectedCategoryIds.clear(); return window.loadCategories(true); };
   $('category-filter-reset').onclick = () => {
     $('category-filter-search').value = '';
+    selectedCategoryIds.clear();
+    $('category-filter-dropdown').open = false;
     categoryPeriod.reset();
     return window.loadCategories(true);
   };
