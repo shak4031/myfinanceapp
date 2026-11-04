@@ -743,19 +743,32 @@
 
       <section id="knowledge-base-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">KNOWLEDGE BASE · FIRST GUIDE</p><h1>Make sense of your analytics</h1><p class="muted">A practical guide to what each view measures, how to use it, and what it can (and cannot) tell you.</p></div>
+          <div><p class="eyebrow">MYFINANCE FIELD GUIDE</p><h1>Find your next answer</h1><p class="muted">Search a feature, follow a task, or browse by the question you have right now.</p></div>
         </header>
         <div class="kb-content">
-          <section class="kb-intro panel">
-            <p>MyFinance has two analytics views with different jobs. <strong>Overview</strong> looks for changes in your own transaction history. <strong>Spending Compass</strong> adds context from published U.S. household spending data and looks for places your own spending could move toward levels you have already reached.</p>
-            <nav class="kb-jump-links" aria-label="Analytics guide sections">
-              <a class="btn btn-primary" href="#analytics" data-view="analytics">Open Analytics</a>
-              <a class="btn btn-secondary" href="#analytics/compass" data-view="analytics/compass">Open Spending Compass</a>
-              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-overview">Overview cards</button>
-              <button class="btn btn-secondary" type="button" data-kb-anchor="knowledge-base-compass">Compass panels</button>
+          <section class="kb-discovery panel" aria-label="Search and browse help topics">
+            <label class="kb-search-label" for="kb-search">What are you trying to do?</label>
+            <div class="kb-search-wrap"><input id="kb-search" type="search" placeholder="Try “filter by account” or “unpaid bill”" autocomplete="off" aria-describedby="kb-search-hint"><span aria-hidden="true">⌕</span></div>
+            <p id="kb-search-hint" class="kb-search-hint">Search questions, features, and steps. Choose a topic to narrow the guide.</p>
+            <p id="kb-results" class="kb-results" role="status" aria-live="polite"></p>
+            <div class="kb-topic-filters" role="group" aria-label="Filter help topics">
+              <button type="button" class="is-selected" data-kb-filter="all" aria-pressed="true">Everything</button>
+              <button type="button" data-kb-filter="start" aria-pressed="false">Start here</button>
+              <button type="button" data-kb-filter="transactions" aria-pressed="false">Transactions</button>
+              <button type="button" data-kb-filter="accounts" aria-pressed="false">Accounts &amp; Plaid</button>
+              <button type="button" data-kb-filter="bills" aria-pressed="false">Bills &amp; paydays</button>
+              <button type="button" data-kb-filter="categories" aria-pressed="false">Categories</button>
+              <button type="button" data-kb-filter="analytics" aria-pressed="false">Analytics</button>
+              <button type="button" data-kb-filter="planning" aria-pressed="false">Debt &amp; goals</button>
             </nav>
+            <div class="kb-topic-grid" aria-label="Popular questions">
+              <button type="button" data-kb-anchor="knowledge-base-transactions"><span>🧾</span><strong>Find a transaction</strong><small>Search, filter, and understand where it came from</small></button>
+              <button type="button" data-kb-anchor="knowledge-base-imports"><span>📥</span><strong>Import without duplicates</strong><small>What the import results mean and how cleanup works</small></button>
+              <button type="button" data-kb-anchor="knowledge-base-bills"><span>📅</span><strong>Resolve an unpaid bill</strong><small>Carryover, paid confirmations, and one-time ignores</small></button>
+              <button type="button" data-kb-anchor="knowledge-base-analytics"><span>🧭</span><strong>Read the Spending Compass</strong><small>Personal patterns, comparison data, and limitations</small></button>
+            </div>
           </section>
-          <section class="kb-section" aria-labelledby="kb-start-title">
+          <section class="kb-section" data-kb-topic="start" aria-labelledby="kb-start-title">
             <div class="kb-section-heading"><p class="eyebrow">GETTING USEFUL RESULTS</p><h2 id="kb-start-title">Start with complete, well-organized data</h2></div>
             <div class="kb-grid kb-grid-3">
               <article class="kb-card"><h3>Import statements regularly</h3><p>Missing statements make totals look lower than they were. At least 3 complete months help the Overview averages; longer histories make trend signals steadier. Compass comparisons use completed months and need at least 3 full months in standard spending categories.</p></article>
@@ -764,7 +777,73 @@
             </div>
             <p class="kb-caveat">Forecasts assume recent patterns continue. They are estimates, can change when new transactions arrive, and are not financial advice.</p>
           </section>
-          <section class="kb-section" id="knowledge-base-overview" aria-labelledby="kb-overview-title">
+          <section class="kb-section" id="knowledge-base-transactions" data-kb-topic="transactions" aria-labelledby="kb-transactions-title">
+            <div class="kb-section-heading"><p class="eyebrow">TRANSACTIONS</p><h2 id="kb-transactions-title">Find the right transaction, from the right account</h2><p>Use Transactions for exact records and corrections; filter combinations narrow the same list together.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Search and filter your history</h3><p>Search a merchant, original description, renamed payee, account label, category, or amount. Combine the account selector with date range, category, payment method, and fixed-only filters. Totals and results follow those filters. The account list is built from your records, not a hardcoded bank or card name.</p><a class="kb-card-link" href="#tutorials/account-filter">Watch: filter by account</a></article>
+              <article class="kb-card"><h3>See where a transaction came from</h3><p>Rows identify the originating account when available, including account type, institution, name, and masked last four. Plaid account details take precedence for linked transactions; statement account details fill in when available. Unassigned means the source could not be determined, not that it came from a particular account.</p></article>
+              <article class="kb-card"><h3>Rename without losing the original</h3><p>A friendly name helps make your history recognizable while the original description remains available for context and search. Check both when a bank description is abbreviated or a payment service hides a recipient.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#transactions" data-view="transactions">Open Transactions</a><a class="btn btn-secondary" href="#tutorials/transactions">Transaction tutorial</a><a class="btn btn-secondary" href="#tutorials/account-filter">Account filter tutorial</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-imports" data-kb-topic="transactions" aria-labelledby="kb-imports-title">
+            <div class="kb-section-heading"><p class="eyebrow">IMPORTS &amp; DUPLICATES</p><h2 id="kb-imports-title">Bring data in, then review what happened</h2><p>Import results are immediate; possible duplicates are reported separately instead of being silently added twice.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Understand import results</h3><p>Current CSV, OFX/QFX, PDF, and Plaid imports show imported rows, duplicates, warnings, and errors in the result. Valid new transactions save to history after any required account mapping review. Check the selected account and result before retrying an import.</p></article>
+              <article class="kb-card"><h3>Clean up possible duplicates in bulk</h3><p>Open duplicate review, compare each pair, and select only records that are the same real transaction. “Select all unambiguous” excludes ambiguous matches and selects at most 500; competing matches must be resolved individually. Review the batch before merging: the existing record and its settings are kept, extra Plaid rows are removed, and merges cannot be undone.</p><a class="kb-card-link" href="#tutorials/duplicate-cleanup">Watch: bulk duplicate cleanup</a></article>
+              <article class="kb-card"><h3>Do not merge lookalikes</h3><p>Similar amounts or descriptions can still be separate purchases, split deposits, or activity from different accounts. Leave uncertain pairs separate. The whole batch is rejected if a selected pair changed while you were reviewing it.</p></article>
+              <article class="kb-card"><h3>Plaid sync is not the same as a full re-import</h3><p>Linked accounts use incremental updates when the institution reports changes; institutions control when fresh activity is available. Review connection status and account details under Accounts. A new connection does not automatically make every previously imported statement duplicate-proof—inspect suggested pairs before merging.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#transactions" data-view="transactions">Open Transactions</a><a class="btn btn-secondary" href="#tutorials/transactions/import">Import tutorial</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-accounts" data-kb-topic="accounts" aria-labelledby="kb-accounts-title">
+            <div class="kb-section-heading"><p class="eyebrow">ACCOUNTS &amp; CONNECTIONS</p><h2 id="kb-accounts-title">Keep account identity and balances clear</h2><p>Accounts tell you which bank or card supplied a record; connection status tells you when linked data last refreshed.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Correct account details</h3><p>Review an account's name, type, institution, and masked digits. Correct account type and ownership so transfers between your own accounts are recognized and are not counted as spending. Do not create a second account just because an existing connection needs refreshing.</p><a class="kb-card-link" href="#tutorials/accounts">Watch: Accounts</a></article>
+              <article class="kb-card"><h3>Connect or refresh with Plaid</h3><p>Plaid connections can retrieve eligible bank and credit-card activity and balances. Institution update timing varies; refresh may not return new transactions when the institution has none ready. A data connection cannot initiate payments or transfers. You can also use file imports without linking an account.</p></article>
+              <article class="kb-card"><h3>Understand freshness and history</h3><p>Connection freshness describes the last successful data update, not proof that every transaction has posted. Pending activity may change, and account balances can lag. Check the financial institution before relying on a balance or cash-flow estimate.</p></article>
+              <article class="kb-card"><h3>Statement accounts vs. Plaid accounts</h3><p>Records from manual imports and linked accounts can carry different source identifiers. MyFinance shows available account metadata but does not guess that two similarly named sources are the same account. Verify ownership and account details in Accounts.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#accounts" data-view="accounts">Open Accounts</a><a class="btn btn-secondary" href="#tutorials/accounts">Accounts tutorial</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-bills" data-kb-topic="bills" aria-labelledby="kb-bills-title">
+            <div class="kb-section-heading"><p class="eyebrow">BILLS &amp; PAYDAYS</p><h2 id="kb-bills-title">Know what is expected—and what still needs attention</h2><p>The calendar is a planning forecast, not a biller's payment record.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Set up fixed bills and real income</h3><p>Mark recurring bills as Fixed and actual paychecks as Income. Transfers, refunds, and repayments are not paychecks. Choose Auto or Manual for bills when known; manual items are called out for attention. Correct categories separately to describe what the transaction was for.</p><a class="kb-card-link" href="#tutorials/fixed">Watch: bills and income</a></article>
+              <article class="kb-card"><h3>Why last month's unpaid estimate remains</h3><p>A missed estimated payment from the immediately previous month stays visible as unpaid. Older months are not carried forward. The estimate clears when a matching payment from that same calendar month is recorded, or when you resolve that occurrence yourself.</p><a class="kb-card-link" href="#tutorials/bill-follow-up">Watch: resolve an unpaid bill</a></article>
+              <article class="kb-card"><h3>Mark paid or ignore one occurrence</h3><p>“Mark paid” records your confirmation for that bill instance; it does not create a transaction, change a balance, or mark other months paid. “Ignore this payment” dismisses only that month's estimate. A later matching transaction can still be recorded normally.</p></article>
+              <article class="kb-card"><h3>Stop future projections</h3><p>Unmarking a recurring bill stops future projections, but does not erase a still-unpaid estimate from last month. Update the source transaction if a bill ended; resolve a carried item separately if it was paid or should not be tracked.</p></article>
+            </div>
+            <p class="kb-caveat">A forecast cannot confirm a creditor's records. Verify actual payment status with the biller or your bank; estimates can be wrong when transaction descriptions, dates, or account history are incomplete.</p>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#dashboard" data-view="dashboard">Open Dashboard</a><a class="btn btn-secondary" href="#tutorials/bill-follow-up">Unpaid bill tutorial</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-categories" data-kb-topic="categories" aria-labelledby="kb-categories-title">
+            <div class="kb-section-heading"><p class="eyebrow">CATEGORIES</p><h2 id="kb-categories-title">Turn transaction labels into useful patterns</h2><p>Search, select several categories, and compare the combined spending you care about.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Find and select multiple categories</h3><p>Type in the category search to narrow the available choices, then check as many categories as you want. Selected categories appear as removable chips, and totals and charts reflect the selected group. Clear the selection to return to the unfiltered category view.</p><a class="kb-card-link" href="#tutorials/categories">Watch: categories and smart rules</a></article>
+              <article class="kb-card"><h3>Fix a category or future merchant rule</h3><p>Correct an individual transaction when it is a one-off. If future imports from that merchant should use the same category, create or update a merchant rule in Manage categories. Review similar-transaction prompts before applying changes across your history.</p></article>
+              <article class="kb-card"><h3>Transfers are not spending</h3><p>Assign both sides of transfers between your accounts correctly. Otherwise a move between accounts can look like income or an expense and distort category totals, trends, and forecasts.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#categories" data-view="categories">Open Categories</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-planning" data-kb-topic="planning" aria-labelledby="kb-planning-title">
+            <div class="kb-section-heading"><p class="eyebrow">DEBT &amp; SAVINGS GOALS</p><h2 id="kb-planning-title">Plan with your numbers, not autopilot</h2><p>Planning tools model scenarios; they do not move money or guarantee a finish date.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Build a debt payoff plan</h3><p>Add each balance, interest rate, and minimum payment. Compare avalanche, snowball, and available Pro strategies at the same monthly budget. Review the cash-flow assessment and keep a cushion before increasing payments. Updating the plan changes projections—not lender payments.</p><a class="kb-card-link" href="#tutorials/debt">Watch: your debt-free plan</a></article>
+              <article class="kb-card"><h3>Choose and track savings goals</h3><p>Set a target, date, and amount already saved. Choose how goals share the modeled surplus. Record an actual contribution after saving; that action updates progress but does not transfer money. Bank transfers are not automatically treated as goal contributions.</p><a class="kb-card-link" href="#tutorials/goals">Watch: savings goals</a></article>
+              <article class="kb-card"><h3>Why a plan can change</h3><p>New transactions, corrected account balances, missing statements, changed goals, or edited debt details can alter estimated surplus and payoff dates. Treat every result as a scenario based on the information currently in the workspace.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#payoff" data-view="payoff">Open Debt-Free Plan</a><a class="btn btn-secondary" href="#goals" data-view="goals">Open Goals</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-analytics" data-kb-topic="analytics" aria-labelledby="kb-analytics-title">
+            <div class="kb-section-heading"><p class="eyebrow">ANALYTICS</p><h2 id="kb-analytics-title">Choose a lens for your question</h2><p>Overview compares your own transaction history; Spending Compass adds context from published U.S. household spending data.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Overview: what changed?</h3><p>Use trends, category signals, cash-flow forecasts, unusual activity, and recurring charges to spot changes in your own records. Signals are prompts to review, not fraud alerts or judgments.</p><a class="kb-card-link" href="#analytics" data-view="analytics">Open Analytics</a></article>
+              <article class="kb-card"><h3>Spending Compass: how does it compare?</h3><p>Set household size, region, and rent/own status, then review personal history alongside published survey benchmarks. These comparisons are reference points—not goals everyone should meet.</p><a class="kb-card-link" href="#analytics/compass" data-view="analytics/compass">Open Spending Compass</a></article>
+              <article class="kb-card"><h3>Check the source data first</h3><p>Missing months understate totals. Correct categories and account ownership, and compare the exact date windows shown. Compass uses completed months; other views may include the current partial month.</p></article>
+            </div>
+          </section>
+          <section class="kb-section" id="knowledge-base-overview" data-kb-topic="analytics" aria-labelledby="kb-overview-title">
             <div class="kb-section-heading"><p class="eyebrow">ANALYTICS · OVERVIEW</p><h2 id="kb-overview-title">Your history, signals and near-term picture</h2><p>Use this view to notice a change, identify where it came from, then decide what to inspect or adjust.</p></div>
             <article class="kb-feature panel"><h3>At-a-glance measures</h3><p class="kb-purpose">Six quick checks summarize the current month and recent household finances.</p>
               <div class="kb-metric-list">
@@ -787,7 +866,7 @@
               <article class="kb-card"><h3>Weekly rhythm</h3><p>Totals recent spending by weekday and weekend, with an average week and quietest day. It can prompt questions about routines, but it does not adjust for how many of each weekday occur or why purchases happened. Treat small differences as descriptive, not behavioral evidence.</p></article>
             </div>
           </section>
-          <section class="kb-section" id="knowledge-base-compass" aria-labelledby="kb-compass-title">
+          <section class="kb-section" id="knowledge-base-compass" data-kb-topic="analytics" aria-labelledby="kb-compass-title">
             <div class="kb-section-heading"><p class="eyebrow">SPENDING COMPASS</p><h2 id="kb-compass-title">Your patterns, with outside context</h2><p>Compass is not another forecast. It combines your category history with published Consumer Expenditure Survey benchmarks, adjusted for household size, region and housing. Set a time period for each panel; short or incomplete periods can produce unstable comparisons.</p></div>
             <article class="kb-feature panel"><h3>Compass plan and headline</h3><p>Start here. It estimates potential monthly savings for categories where spending is at least $10 above a suggested level and is either above a relevant benchmark or showing an upward trend. Suggested levels are based on your own lower-spending months, typical household spending or—when spending is seasonal—the same months last year. The opportunity is a scenario, not a promised saving or a requirement to spend like another household. Review the category evidence before setting a target.</p></article>
             <div class="kb-grid">
@@ -800,7 +879,7 @@
             </div>
             <p class="kb-caveat">Benchmark values come from the cited U.S. Bureau of Labor Statistics Consumer Expenditure Survey, not other MyFinance users. Contracted bills such as mortgage, rent, loans, insurance and internet are not compared. Survey averages are context, not a judgment about what you should spend.</p>
           </section>
-          <section class="kb-section kb-value-review" aria-labelledby="kb-value-title">
+          <section class="kb-section kb-value-review" data-kb-topic="analytics" aria-labelledby="kb-value-title">
             <div class="kb-section-heading"><p class="eyebrow">WHAT IS DISTINCTIVE?</p><h2 id="kb-value-title">A candid note on usefulness</h2></div>
             <div class="kb-grid">
               <article class="kb-card"><h3>Strongest decision support</h3><p>The month-end forecast, category signals and recurring-charge review each suggest a concrete next step: check the pace, investigate a category, or verify a repeating payment. Compass adds a different lens by combining personal trends with an external household benchmark.</p></article>
@@ -2421,7 +2500,8 @@
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
   <script src="transaction-duplicates.js?v=20261101b"></script>
-  <script src="tutorial.js?v=20261028-analytics"></script>
+  <script src="knowledge-base.js?v=20261103-topics"></script>
+  <script src="tutorial.js?v=20261103-guides"></script>
   <script src="marketing.js?v=20261024-household"></script>
   <script src="household.js?v=20261024-plan-changes"></script>
   <script>FinanceSession.start();</script>

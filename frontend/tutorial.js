@@ -366,8 +366,19 @@
               ${catCard('❓', 'Uncategorized', '$48', 3, 1.8, { note: '3 to review', cls: 'is-todo' })}
             </div>
             <span class="tm-tag tut-pop" ${at(3.2, 'right:44px;top:56px')}>Dining is creeping up 👀</span>${cursor('dining', 2.4)}` },
+        { id: 'select-categories', title: 'Compare several categories', caption: 'Search narrows the category choices. Check more than one to combine those categories in the results; remove a chip to drop one, or clear the selection to see everything again.',
+          render: () => `${chip(2, 'Compare several categories')}
+            <div class="tm-panel tm-panel-dark tut-in" ${at(0.3)}>
+              <small>FILTER CATEGORIES</small>
+              <div class="tm-search" data-id="search">🔍 <span class="tm-type" ${at(1)}>home</span></div>
+              <div class="tm-similar-row tut-in" ${at(1.6)}>${check({ on: true })}<span>Housing</span></div>
+              <div class="tm-similar-row tut-in" ${at(2.2)}>${check({ on: true })}<span>Utilities</span></div>
+              <div class="tm-similar-row tut-in" ${at(2.8)}>${check()}<span>Home maintenance</span></div>
+              <div class="tm-steps"><span class="tm-pill tut-pop" ${at(3.5)}>Housing <b>×</b></span><span class="tm-pill tut-pop" ${at(3.8)}>Utilities <b>×</b></span></div>
+            </div>
+            <div class="tm-note tut-in" ${at(4.4)}>Cards and totals now reflect the selected categories together.</div>${cursor('search', 0.3)}` },
         { id: 'fix', title: 'Fix one, fix them all', caption: 'Something in the wrong bucket? Change its category on the Transactions page. MyFinance finds other charges from the same merchant and offers to move them too, with matching amounts preselected.',
-          render: () => `${chip(2, 'Fix one, fix them all')}
+          render: () => `${chip(3, 'Fix one, fix them all')}
             <div class="tm-table">${txHead()}
               ${txRow({ date: 'Oct 11', desc: 'BLUE BOTTLE COFFEE', cat: swap('Uncategorized', 'Dining', 1.3), tick: check(), amt: '$6.75', cls: 'tm-hl-row', id: 'cat' })}
               ${txRow({ date: 'Oct 10', desc: 'TRADER JOE’S #552', cat: 'Groceries', tick: check(), amt: '$54.20' })}
@@ -375,7 +386,7 @@
             ${similar('Update similar transactions?', 'Found <b>6</b> other transactions from <b>BLUE BOTTLE</b>. 4 with about the same amount are preselected.', [['Oct 4 · $6.75', 'Uncategorized → Dining'], ['Sep 27 · $6.75', 'Uncategorized → Dining'], ['Sep 3 · $18.40', 'Uncategorized → Dining · different amount', false]], 'Update 4 transactions', 2.1, 5.6)}
                         ${cursor('cat', 0.3)}${cursor('similar-apply', 4, 'cat')}${toast('Moved 5 Blue Bottle visits to Dining', 6)}` },
         { id: 'rules', title: 'Rules sort future imports', caption: 'Review matching payments before confirming a category change. Leave Remember this category checked to teach future imports, or uncheck it for an existing-payment-only correction. Rename categories or tidy rules any time from Manage categories.',
-          render: () => `${chip(3, 'Rules sort future imports')}
+          render: () => `${chip(4, 'Rules sort future imports')}
             <div class="tm-split tm-split-tight">
               <div class="tm-panel tut-in" ${at(0.3)}><small>YOUR RULES · LEARNED FROM FIXES</small>
                 ${[['BLUE BOTTLE', 'Dining'], ['SHELL OIL', 'Gas'], ['TRADER JOE’S', 'Groceries'], ['NETFLIX', 'Subscriptions']].map(([m, c], i) => `<div class="tm-rule tut-in" ${at(0.7 + i * 0.4)}><code>${m}</code><span>→</span><b>${c}</b></div>`).join('')}
@@ -387,7 +398,7 @@
               </div>
             </div>` },
         { id: 'period', title: 'Compare time periods', caption: 'Totals start at Last 3 months. Shared choices include 3, 6, 12 and 24 months, specific periods, custom dates and an explicit All time option. Totals and spending shares use the selected dates. Open a card to review its transactions.',
-          render: () => `${chip(4, 'Compare time periods')}
+          render: () => `${chip(5, 'Compare time periods')}
             <div class="tm-row-head"><div><h3>Categories</h3><small>Time period</small></div><span class="tm-toggle"><i class="tut-off" ${at(1.4)}>September</i><i class="tut-on" ${at(1.4)} data-id="oct">October</i></span></div>
             <div class="tm-cats tm-cats-3">
               <div class="tm-cat"><span class="tm-emoji">🍽️</span><b>Dining</b><strong>${swap('$484', '$388', 1.8)}</strong><small class="is-good tut-in" ${at(2.4)}>↓ $96 after cooking Sundays 🎉</small></div>
@@ -395,13 +406,13 @@
               <div class="tm-cat"><span class="tm-emoji">🎬</span><b>Subscriptions</b><strong>${swap('$86', '$71', 1.8)}</strong><small class="is-good tut-in" ${at(2.8)}>↓ $15, one cancelled</small></div>
             </div>${cursor('oct', 0.3)}` },
         { id: 'trends', title: 'Read the six-month trend', caption: 'With Pro Analytics enabled, expand Explore spending insights. Card trend lines use at least six completed months, up to 24, even when your totals cover fewer months. The unfinished current month is excluded. Dots are monthly spending, the dashed line is the average, and change compares the second half with the first. Missing months show a history-needed message, not invented zeros.',
-          render: () => `${chip(5, 'Trend and totals have different jobs')}
+          render: () => `${chip(6, 'Trend and totals have different jobs')}
             <div class="tm-split">
               <div class="tm-panel"><small>SELECTED TOTAL</small><h3>Last 3 months</h3><p>Amount, transaction count and spending share follow your filter.</p><p>Expand Explore spending insights to reveal trends.</p></div>
               <div class="tm-panel"><small>6-MONTH TREND · COMPLETED MONTHS</small><svg viewBox="0 0 300 110" class="tm-chart" aria-hidden="true"><path d="M8 55H292" fill="none" stroke="#64748b" stroke-dasharray="4 4"/><path d="M8 42L65 64L122 35L179 22L236 52L292 62" fill="none" stroke="#397d83" stroke-width="3"/></svg><p>Dashed line: monthly average.</p><p>Second half vs first half, not this partial month.</p></div>
             </div>` },
         { id: 'why', title: 'Categories or transactions?', caption: 'Categories answer where your money goes: patterns and totals. Transactions answer what exactly happened: line by line. Start in Categories to spot a pattern, then jump to Transactions to find the exact charge.',
-          render: () => `${chip(5, 'Categories or transactions?')}
+          render: () => `${chip(7, 'Categories or transactions?')}
             ${compare([PAGES.categories, PAGES.transactions])}
             <span class="tm-both tut-pop" ${at(2.6)}>🔁 Spot it in Categories → find it in Transactions</span>` },
         { id: 'done', title: 'You are ready', caption: 'You are ready. Review anything uncategorized, fix a label once and let your rules do the sorting from now on.',
@@ -615,6 +626,82 @@
             </div>` },
         { id: 'done', title: 'You are ready', caption: 'You are ready. Set your household once, check the Compass after each import and pick one category to bring back to a level you have already reached.',
           render: () => outro("You're ready", 'Follow the flow · read the signals · save', 'Open my Spending Compass') }
+      ]
+    },
+    {
+      id: 'account-filter', title: 'Find transactions by account', blurb: 'Use each transaction’s source account to focus the history on a particular card or bank account.', emoji: '🔎',
+      cta: { label: 'Filter my transactions', view: 'transactions' },
+      scenes: [
+        { id: 'intro', title: 'One history, all your accounts', caption: 'Transactions can include records from several banks, credit cards, and statement imports. Account labels help you see the source and focus the list on one account.', render: () => intro('TUTORIAL', 'Find transactions by account', 'Pick the account. Keep the rest of your filters.', ['🏦', '💳', '🔎']) },
+        { id: 'source', title: 'Read the account label', caption: 'Each available account label can show its type, institution, name, and masked last four. Plaid account details take precedence for linked records; statement account details are used when available.', render: () => `${chip(1, 'Read the account label')}
+          <div class="tm-table">${txHead()}
+            ${txRow({ date: 'Oct 16', desc: 'GROCERY MARKET', cat: 'Groceries', tick: check(), amt: '$82.40' })}
+            ${txRow({ date: 'Oct 15', desc: 'CITY WATER', cat: 'Utilities', tick: check({ on: true }), pay: 'Manual', amt: '$64.00' })}
+          </div>
+          <div class="tm-callouts tm-callouts-row"><p class="tut-in" ${at(1.1)}><span>🏦</span><b>Checking · Bank</b>Institution, account name, masked digits</p><p class="tut-in" ${at(2)}><span>💳</span><b>Credit card</b>Source account shown when available</p></div>` },
+        { id: 'choose', title: 'Choose an account', caption: 'The account selector is built from your transaction history, so it works with your own account names rather than a fixed list. Choose any account to see only its matching transactions.', render: () => `${chip(2, 'Choose an account')}
+          <div class="tm-panel tut-in" ${at(0.3)}><small>TRANSACTION FILTERS</small>
+            <div class="tm-filters"><span class="tm-select">Last 3 months</span><span class="tm-select tm-hl" data-id="account">All accounts⌄</span><span class="tm-select">All categories</span><span class="tm-search">Search</span></div>
+            <div class="tm-list"><li class="tut-in" ${at(1.4)}><span>Oct 16</span><b>GROCERY MARKET</b><i>Checking · Bank · ••1180</i><strong>$82.40</strong></li><li class="tut-in" ${at(1.9)}><span>Oct 15</span><b>CITY WATER</b><i>Credit card · ••4412</i><strong>$64.00</strong></li></div>
+            <span class="tm-tag tm-tag-gold tut-pop" ${at(2.5, 'right:22px;top:52px')}>Select the account you want</span>
+          </div>${cursor('account', 0.4)}` },
+        { id: 'combine', title: 'Combine filters', caption: 'Account selection works together with search, date range, categories, payment method, and fixed-only filters. Totals and page counts update to the matching rows. Reset clears filters; a selected account with no matching transactions stays selected and shows zero results.', render: () => `${chip(3, 'Combine filters')}
+          <div class="tm-filters tut-in" ${at(0.3)}><span class="tm-select">Last 6 months</span><span class="tm-select">Everyday card</span><span class="tm-select">Dining</span><span class="tm-search">Search: coffee</span></div>
+          <div class="tm-metrics tut-in" ${at(1.1)}><div><small>Matching transactions</small><b class="tm-swap-num"><span class="tut-off" ${at(2)}>212</span><span class="tut-on" ${at(2)}>8</span></b></div><div><small>Money out</small><b class="tm-swap-num"><span class="tut-off" ${at(2)}>$4,812</span><span class="tut-on" ${at(2)}>$126</span></b></div></div>
+          <div class="tm-note tut-in" ${at(2.8)}>Each filter narrows the same transaction list.</div>` },
+        { id: 'done', title: 'You are ready', caption: 'Choose an account when you want to focus on one bank or card. Keep in mind that an unassigned transaction cannot be matched to an account until its source is provided.', render: () => outro('Account, then details', 'Choose an account · narrow by date, category, or search', 'Open Transactions') }
+      ]
+    },
+    {
+      id: 'duplicate-cleanup', title: 'Review possible duplicates', blurb: 'Compare matches carefully and clean up confirmed duplicate Plaid and imported records in one batch.', emoji: '🧹',
+      cta: { label: 'Review possible duplicates', view: 'transactions' },
+      scenes: [
+        { id: 'intro', title: 'Review before merging', caption: 'Possible duplicates are suggestions, not automatic decisions. Keep separate transactions separate—even when their descriptions or amounts look alike.', render: () => intro('TUTORIAL', 'Review possible duplicates', 'Confirm the record, not just the resemblance.', ['🔍', '🧾', '✓']) },
+        { id: 'compare', title: 'Check both records', caption: 'Compare dates, amounts, descriptions, and account sources. Different accounts or split deposits should remain separate. Leave a pair unmerged if you are not sure.', render: () => `${chip(1, 'Check both records')}
+          <div class="tm-split tm-split-tight">
+            <div class="tm-panel tut-in" ${at(0.4)}><small>STATEMENT IMPORT</small><div class="tm-kv"><span>Oct 14 · Corner Market</span><b>$42.18</b></div><span class="tm-badge tm-badge-auto">Checking · ••1180</span></div>
+            <div class="tm-panel tut-in" ${at(1.3)}><small>PLAID</small><div class="tm-kv"><span>Oct 14 · CORNER MKT</span><b>$42.18</b></div><span class="tm-badge tm-badge-auto">Checking · ••1180</span></div>
+          </div>
+          <div class="tm-note tut-in" ${at(2.5)}>Same real purchase and same account? Review the pair before merging.</div>` },
+        { id: 'select', title: 'Select a safe batch', caption: 'Select all unambiguous finds up to 500 pairs, or check only the pairs you reviewed. Ambiguous and competing matches are excluded from bulk selection and need individual attention.', render: () => `${chip(2, 'Select a safe batch')}
+          <div class="tm-panel tut-in" ${at(0.3)}><div class="tm-row-head"><div><h3>Possible duplicates</h3><small>Review pairs across pages</small></div><span class="tm-btn" data-id="select-all">Select all unambiguous · max 500</span></div>
+            ${[['Oct 14 · $42.18', 'Same account · likely same transaction', true], ['Oct 13 · $80.00', 'Different accounts · review individually', false], ['Oct 12 · $155.00', 'Competing matches · review individually', false]].map(([label, sub, on], i) => `<div class="tm-similar-row tut-in" ${at(1 + i * .5)}>${check({ on })}<span><b>${label}</b><small>${sub}</small></span></div>`).join('')}
+            <span class="tm-btn tm-btn-primary tut-pop" ${at(3.2)} data-id="merge">Merge selected (1)</span>
+          </div>${cursor('select-all', 0.3)}` },
+        { id: 'confirm', title: 'Understand the merge', caption: 'A merge keeps the existing transaction and its settings, and removes the extra Plaid record. Confirm every pair before approving: merges cannot be undone. If a pair changed during review, the entire batch is rejected so you can reload and compare again.', render: () => `${chip(3, 'Understand the merge')}
+          ${compare([
+            { e: '1', title: 'Kept', when: 'Existing transaction', asks: ['Preserves your current record.', 'Keeps its category and settings.', 'Remains in your history.'] },
+            { e: '2', title: 'Removed', when: 'Confirmed duplicate', asks: ['Extra Plaid copy is removed.', 'Totals no longer double-count it.', 'No undo—verify first.'] }
+          ])}
+          <div class="tm-note tut-in" ${at(4)}>Never merge a different account or a separate part of a split deposit.</div>` },
+        { id: 'done', title: 'You are ready', caption: 'Work in batches when the matches are clear, and leave anything uncertain untouched. Check transaction totals again after the merge.', render: () => outro('Clean up with confidence', 'Compare · select · confirm only true duplicates', 'Review duplicates') }
+      ]
+    },
+    {
+      id: 'bill-follow-up', title: 'Resolve an unpaid bill estimate', blurb: 'Understand last-month carryover, confirm a paid bill, or ignore just one occurrence.', emoji: '📅',
+      cta: { label: 'Review the Dashboard', view: 'dashboard' },
+      scenes: [
+        { id: 'intro', title: 'A forecast, not a biller notice', caption: 'Fixed bills help estimate what is coming. A bill still listed as unpaid means MyFinance has not matched or recorded a resolution for that estimate; it does not prove a creditor is owed.', render: () => intro('TUTORIAL', 'Resolve an unpaid bill estimate', 'Check the record. Then resolve the right month.', ['📅', '🔎', '✓']) },
+        { id: 'carry', title: 'Only last month carries forward', caption: 'An unpaid estimate from the immediately previous month stays visible for follow-up. Older months do not keep accumulating. A recorded matching payment settles only an occurrence in the same calendar month.', render: () => `${chip(1, 'Only last month carries forward')}
+          <div class="tm-panel tut-in" ${at(0.3)}><small>LAST MONTH · STILL UNPAID</small>
+            ${weekCard('Electric · Oct 18', '$96', { tone: 'warn', badge: 'Unpaid' })}
+            <div class="tm-note">Keep the estimate visible until matched or resolved.</div>
+          </div>
+          <div class="tm-note tut-in" ${at(2)}>A payment recorded in November does not automatically settle October.</div>` },
+        { id: 'paid', title: 'Confirm it was paid', caption: 'Choose Mark paid when you paid the bill but no matching transaction appears. It records a confirmation for that one occurrence; it does not create a transaction, change an account balance, or mark other months paid.', render: () => `${chip(2, 'Confirm it was paid')}
+          <div class="tm-panel tut-in" ${at(0.4)}><small>OCTOBER · ELECTRIC</small><div class="tm-kv"><span>Estimated payment</span><b>$96</b></div>
+            <div class="tm-steps"><span class="tm-btn tm-btn-primary" data-id="paid">Mark paid</span><span class="tm-btn" data-id="ignore">Ignore this payment</span></div>
+          </div>
+          ${toast('Confirmed paid · no ledger transaction added', 2.4)}${cursor('paid', 0.5)}` },
+        { id: 'ignore', title: 'Ignore just this month', caption: 'Choose Ignore this payment when the estimate should not be tracked for this occurrence. The decision applies only to that month; it does not erase the bill template or suppress future months.', render: () => `${chip(3, 'Ignore just this month')}
+          <div class="tm-split tm-split-tight">
+            <div class="tm-panel tut-in" ${at(0.4)}><small>OCTOBER</small><div class="tm-kv"><span>Electric</span><b class="is-good">Ignored</b></div><p class="tm-hint">Only this occurrence is dismissed.</p></div>
+            <div class="tm-panel tut-in" ${at(1.4)}><small>NOVEMBER</small><div class="tm-kv"><span>Electric</span><b>Projected</b></div><p class="tm-hint">Future estimate remains based on the fixed bill.</p></div>
+          </div>` },
+        { id: 'source', title: 'When a bill ended', caption: 'Unmarking a recurring bill stops future projections. It does not erase an unpaid estimate from last month. Resolve that occurrence separately if it was paid or should not be tracked. Always check actual status with the bank or biller.', render: () => `${chip(4, 'When a bill ended')}
+          <div class="tm-panel tut-in" ${at(0.3)}><small>FIXED BILL SOURCE</small><div class="tm-kv"><span>Internet · future projections</span><b class="is-warn">Stopped</b></div><div class="tm-kv"><span>Last month's unpaid item</span><b>Still visible</b></div></div>
+          <div class="tm-note tut-in" ${at(2)}>Forecasts can be wrong if the history or matching description is incomplete.</div>` },
+        { id: 'done', title: 'You are ready', caption: 'Use Mark paid for a real payment not in the ledger, Ignore for a single unwanted estimate, and check the statement or biller for actual payment status.', render: () => outro('Close the loop', 'Match · confirm · or ignore one occurrence', 'Review my Dashboard') }
       ]
     }
   ];

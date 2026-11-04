@@ -1068,7 +1068,7 @@ test('phone analytics wraps metric labels and contains readable charts and table
 });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','review-tools.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','income-review.js','marketing.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','review-tools.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','knowledge-base.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -3698,7 +3698,7 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   browserBits(f);
   f.run('tutorial.js');
   const tours = f.context.FinanceTutorials;
-  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,accounts,analytics,compass');
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,accounts,analytics,compass,account-filter,duplicate-cleanup,bill-follow-up');
   tours.open('debt-strategies');
   assert.equal(tours.state.tutorial.id, 'debt');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
@@ -3793,7 +3793,7 @@ test('signed-out hash links never reach the app router', () => {
   f.listeners.get('hashchange')();
   assert.equal(f.context.location.hash, '#dashboard');
 });
-test('updated tutorials explain account freshness, real imports, debt coaching and six-month trends', () => {
+test('updated tutorials explain recent workflows, account freshness, real imports and six-month trends', () => {
   const f = fixture();
   browserBits(f);
   f.run('tutorial.js');
@@ -3830,6 +3830,23 @@ test('updated tutorials explain account freshness, real imports, debt coaching a
   assert.match(f.node('tut-caption').textContent, /3, 6, 12 and 24[\s\S]*three completed months/);
   tours.open('goals/flex');
   assert.match(f.node('tut-caption').textContent, /does not transfer money[\s\S]*does not automatically record/);
+  tours.open('categories/select-categories');
+  assert.match(f.node('tut-caption').textContent, /Check more than one[\s\S]*combine those categories/);
+  assert.match(f.node('tut-canvas').innerHTML, /Housing[\s\S]*Utilities/);
+  tours.open('account-filter/choose');
+  assert.match(f.node('tut-caption').textContent, /built from your transaction history[\s\S]*Choose any account/);
+  tours.open('account-filter/combine');
+  assert.match(f.node('tut-caption').textContent, /works together with search[\s\S]*page counts update/);
+  tours.open('duplicate-cleanup/select');
+  assert.match(f.node('tut-caption').textContent, /up to 500 pairs[\s\S]*excluded from bulk selection/);
+  tours.open('duplicate-cleanup/confirm');
+  assert.match(f.node('tut-caption').textContent, /cannot be undone[\s\S]*entire batch is rejected/);
+  tours.open('bill-follow-up/carry');
+  assert.match(f.node('tut-caption').textContent, /immediately previous month[\s\S]*same calendar month/);
+  tours.open('bill-follow-up/ignore');
+  assert.match(f.node('tut-caption').textContent, /only to that month[\s\S]*does not erase the bill template/);
+  const html = source('index.html');
+  for (const id of ['account-filter', 'duplicate-cleanup', 'bill-follow-up']) assert.match(html, new RegExp(`#tutorials/${id}`));
 });
 test('legacy import review leaves the main menu but remains reachable from Transactions', () => {
   const html = source('index.html');
