@@ -21,7 +21,9 @@ const MATCH = `FROM transactions p
   LEFT JOIN accounts a ON a.user_id=e.user_id AND a.id=e.account_id
   WHERE p.user_id=$1 AND p.source='plaid' AND p.plaid_transaction_id IS NOT NULL AND NOT p.is_pending
     AND (pa.iso_currency_code IS NULL OR pa.iso_currency_code='USD')
-    AND (pa.mask IS NULL OR a.last4 IS NULL OR pa.mask=a.last4)`;
+    AND (pa.mask IS NULL OR a.last4 IS NULL OR pa.mask=a.last4)
+    AND NOT EXISTS (SELECT 1 FROM transaction_import_reviews r WHERE r.user_id=p.user_id
+      AND r.resolution_transaction_id=p.id AND r.status='separate')`;
 const revision = pair => createHash('sha256').update(JSON.stringify([pair.plaid, pair.existing])).digest('hex');
 export const MAX_DUPLICATE_MERGES = 500;
 
@@ -50,6 +52,13 @@ export async function mergeTransactionDuplicate(client, input) {
   return mergeDuplicate(client, input, true);
 }
 
+export async function mergeReviewedDuplicate(client, review, existingId) {
+  const pair = (await client.query(`SELECT ${snapshot('p')} AS plaid,${snapshot('e')} AS existing
+    ${MATCH} AND p.id=$2 AND e.id=$3`, [currentUserId(), review.resolution_transaction_id, existingId])).rows[0];
+  if (!pair) throw failure(409, 'This match changed. Refresh the review before merging.');
+  return mergeTransactionDuplicate(client, { plaidId: pair.plaid.id, existingId,
+    revision: revision(pair), acknowledged: true });
+}
 export async function mergeTransactionDuplicates(client, input) {
   if (!input || input.acknowledged !== true || !Array.isArray(input.pairs)
     || !input.pairs.length || input.pairs.length > MAX_DUPLICATE_MERGES) {
@@ -103,8 +112,10 @@ async function mergeDuplicate(client, input, reconcile) {
   const note = [...new Set([pair.existing.note, pair.plaid.note].filter(Boolean))].join('\n');
   if (note.length > 500) throw failure(409, 'Combined notes exceed 500 characters. Edit the notes before merging; nothing was merged.');
   await client.query(`UPDATE transaction_import_reviews SET
+      status=CASE WHEN resolution_transaction_id=$2 AND status='pending' THEN 'duplicate' ELSE status END,
+      resolved_at=CASE WHEN resolution_transaction_id=$2 AND status='pending' THEN NOW() ELSE resolved_at END,
       resolution_transaction_id=CASE WHEN resolution_transaction_id=$2 THEN $3 ELSE resolution_transaction_id END,
-      matched_transaction_id=CASE WHEN matched_transaction_id=$2 THEN $3 ELSE matched_transaction_id END,
+      matched_transaction_id=CASE WHEN matched_transaction_id=$2 OR (resolution_transaction_id=$2 AND status='pending') THEN $3 ELSE matched_transaction_id END,
       candidate_transaction_ids=ARRAY(SELECT DISTINCT CASE WHEN id=$2 THEN $3 ELSE id END
         FROM unnest(candidate_transaction_ids) id)
     WHERE user_id=$1 AND (resolution_transaction_id=$2 OR matched_transaction_id=$2

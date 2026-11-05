@@ -492,7 +492,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261105-notes">
+  <link rel="stylesheet" href="refresh.css?v=20261105-review">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261028-ledger">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
@@ -959,7 +959,7 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
-          <div class="header-actions"><a class="btn btn-secondary" href="#etl" data-view="etl">Review held transactions</a><button type="button" class="btn btn-secondary" data-transaction-duplicates>Review Plaid / statement duplicates</button></div>
+          <div class="header-actions"><a class="btn btn-secondary" href="#etl" data-view="etl">Review possible duplicates</a><button type="button" class="btn btn-secondary" data-transaction-duplicates>Review Plaid / statement duplicates</button></div>
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
           <div class="filter-panel panel">
@@ -1052,7 +1052,7 @@
         </details>
         <details class="panel" style="padding: 16px; margin-top: 20px;">
           <summary>Import review and older tools</summary>
-          <p class="muted">A Plaid sync can hold possible duplicate transactions outside your history and totals until reviewed. Check here when a bank payment is missing, especially when another payment has the same amount nearby. CSV and PDF imports show their own results and review steps in the import dialog.</p>
+          <p class="muted">Plaid imports uncertain transactions into history and totals, flagging possible duplicates for optional review. Older held records are released on the next successful sync for their connection. CSV and PDF imports show their own results and review steps in the import dialog.</p>
           <a class="btn btn-secondary" href="#etl" data-view="etl">Import review</a>
           <a class="btn btn-secondary" href="#tutorials/transactions/import-review">How import results work</a>
         </details>
@@ -1061,15 +1061,23 @@
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">HELD TRANSACTIONS &amp; OLDER IMPORT TOOLS</p><h1>Import review</h1><p class="muted">Plaid can hold possible duplicates here. CSV and PDF imports show their results and review steps in the import dialog. Older processing issues are listed separately below.</p></div>
+          <div><p class="eyebrow">TRANSACTION QUALITY</p><h1>Import review</h1><p class="muted">Review uncertain matches without blocking new bank activity. CSV and PDF imports show their results and review steps in the import dialog.</p></div>
           <a class="btn btn-secondary" href="#transactions" data-view="transactions">Back to Transactions</a>
         </header>
         <div class="panel" style="padding: 24px; margin-bottom: 16px;">
           <h2>Possible duplicate transactions</h2>
           <p style="color: var(--text-secondary); margin: 8px 0 16px; font-size: 13px;">
-            These records are not included in totals or projections until you decide.             Matching is intentionally cautious: records with the same amount and direction within three days are held for review, even if the descriptions differ. They may still be two real purchases.
+            New Plaid records are already included in history and totals. A flag is not proof of a duplicate: both entries count until merged. Verified exact matches link automatically. Choose Keep both for different real transactions, or Merge into selected existing for the same payment. Older held records are labeled Not yet included.
           </p>
+          <form id="import-review-filters" class="review-filters" onsubmit="event.preventDefault();filterImportReviews()">
+            <label>Search description, amount or date<input id="import-review-search" type="search" maxlength="100" placeholder="e.g. payroll or 500"></label>
+            <label>Show<select id="import-review-mode" onchange="filterImportReviews()"><option value="all">All open reviews</option><option value="flagged">Included, flagged transactions</option><option value="held">Older held transactions</option></select></label>
+            <button type="submit" class="btn btn-secondary">Search</button>
+            <button type="button" class="btn btn-secondary" onclick="loadTransactionImportReviews()">Refresh</button>
+          </form>
+          <p id="import-review-status" class="muted" role="status" aria-live="polite"></p>
           <div id="import-reviews" class="table-scroll"></div>
+          <nav class="review-pagination" aria-label="Import review pages"><button id="import-review-prev" type="button" class="btn btn-secondary" onclick="pageImportReviews(-1)" disabled>Previous</button><span id="import-review-page"></span><button id="import-review-next" type="button" class="btn btn-secondary" onclick="pageImportReviews(1)" disabled>Next</button></nav>
         </div>
         <div class="panel" style="padding: 24px;">
           <h2>Import processing issues</h2>
@@ -1256,7 +1264,7 @@
 
         <div id="import-plaid-panel" style="display: none;">
           <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 13px;">
-            Connect securely with Plaid to sync transactions and account balances. You can still import CSV or PDF statements; possible overlaps are held for your review and are not included twice.
+            Connect securely with Plaid to sync transactions and account balances. Exact verified matches link automatically. Uncertain records are included in totals and flagged as possible duplicates, so both entries may count until reviewed.
           </p>
           <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 12px;">
             Plaid and your financial institution process connection data. MyFinanceApp stores an encrypted connection token. Bank-reported balances may be delayed; check your bank before relying on a projection.
@@ -2040,11 +2048,11 @@
 
     async function plaidRequest(url, method = 'GET', body) {
       const response = await fetch(url, {
-        method,
+        method, cache: 'no-store',
         ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+      if (!response.ok) throw Object.assign(new Error(data.error || `Request failed (${response.status})`), { status: response.status });
       return data;
     }
 
@@ -2111,7 +2119,8 @@
             <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
               <div><strong>${escapeHtml(connection.institutionName || 'Connected institution')}</strong>
                 <div class="muted" style="font-size:12px;margin-top:4px;">
-                  ${connection.lastSyncAt ? `Last synced ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
+                  ${connection.lastSyncAt ? `Last successful check ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
+                  ${connection.lastAttemptAt ? ` · Last attempt ${escapeHtml(new Date(connection.lastAttemptAt).toLocaleString())}` : ''}
                   ${connection.lastErrorCode ? ` · ${escapeHtml(connection.lastErrorCode)}` : ''}
                 </div>
                 ${connection.lastErrorCode === 'PLAID_ENVIRONMENT_MISMATCH' ? '<p class="muted">This saved connection belongs to another Plaid environment. Disconnect it, then use Connect bank to create a new connection. Saved transactions are kept; the old remote item must be managed separately.</p>' : ''}
@@ -2129,7 +2138,7 @@
               const balance = reportedBalance == null ? NaN : Number(reportedBalance);
               const currency = /^[A-Z]{3}$/.test(account.currency || '') ? account.currency : 'USD';
               return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
-                <div><strong>${escapeHtml(account.name)}${account.mask ? ` ···· ${escapeHtml(account.mask)}` : ''}</strong>
+                <div><strong>${escapeHtml(account.name)}${account.mask ? ` ···· ${escapeHtml(account.mask)}` : ''}</strong><p class="muted" style="font-size:12px;">Latest saved bank activity: ${escapeHtml(account.latestTransactionDate || 'None received yet')}. Bank delivery can lag behind a successful check.</p>
                   <div class="muted" style="font-size:12px;">${escapeHtml([account.type, account.subtype].filter(Boolean).join(' · '))}
                     ${Number.isFinite(balance) ? ` · ${account.availableBalance != null ? 'Available' : 'Current'} reported balance ${balance.toLocaleString('en-US', { style: 'currency', currency })}` : ' · Balance unavailable'}
                   </div>
@@ -2148,7 +2157,7 @@
       try {
         status.textContent = 'Syncing transactions and checking account balances...';
         const result = await plaidRequest(`/api/plaid/connections/${id}/sync`, 'POST', {});
-        status.textContent = `Sync complete: Plaid reported ${result.added} additions, ${result.modified} changes, ${result.removed} removals.${result.pendingReviews > 0 ? ` ${result.pendingReviews} total transactions are held outside your history and totals for review. Close this dialog and open Transactions > Review held transactions.` : ''}`;
+        status.textContent = `Sync complete: ${result.imported ?? result.added} new records saved, ${result.autoMatched || 0} exact matches linked automatically, ${result.released || 0} older held records processed. Plaid reported ${result.modified} changes and ${result.removed} removals.${result.flaggedReviews > 0 ? ` ${result.flaggedReviews} possible duplicates are included in totals; review them under Transactions > Review possible duplicates.` : ''}${result.pendingReviews > 0 ? ` ${result.pendingReviews} older records remain held in other connections or imports.` : ''} A successful check does not mean the bank has supplied today's activity.`;
         await loadPlaidConnections();
         await loadTransactionImportReviews();
         await loadDashboard();
@@ -2182,55 +2191,91 @@
       }
     }
 
+    let importReviewOffset = 0;
+    let importReviewGeneration = 0;
+    const importReviewBusy = new Set();
+    const importReviewRows = new Map();
+    function filterImportReviews() { importReviewOffset = 0; return loadTransactionImportReviews(); }
+    function pageImportReviews(direction) { importReviewOffset = Math.max(0, importReviewOffset + direction * 25); return loadTransactionImportReviews(); }
     async function loadTransactionImportReviews() {
       const target = document.getElementById('import-reviews');
       if (!target) return;
+      const generation = ++importReviewGeneration;
       try {
-        const { reviews } = await plaidRequest('/api/import-review/reviews');
+        const search = document.getElementById('import-review-search')?.value || '';
+        const mode = document.getElementById('import-review-mode')?.value || 'all';
+        const { reviews, total = reviews.length, held = 0, limit = 25 } = await plaidRequest(`/api/import-review/reviews?offset=${importReviewOffset}&search=${encodeURIComponent(search)}&mode=${encodeURIComponent(mode)}`);
+        if (generation !== importReviewGeneration) return;
+        if (!reviews.length && total > 0 && importReviewOffset > 0) {
+          importReviewOffset = Math.floor((total - 1) / limit) * limit;
+          return loadTransactionImportReviews();
+        }
+        importReviewRows.clear();
+        reviews.forEach(review => importReviewRows.set(Number(review.id), review));
+        document.getElementById('import-review-page').textContent = total ? `${importReviewOffset + 1}-${Math.min(importReviewOffset + reviews.length, total)} of ${total} · ${held} held, ${total - held} included` : 'No open reviews';
+        document.getElementById('import-review-prev').disabled = importReviewOffset === 0;
+        document.getElementById('import-review-next').disabled = importReviewOffset + limit >= total;
         if (!reviews.length) {
           target.innerHTML = '<p class="muted">No possible duplicate transactions need review.</p>';
           return;
         }
-        target.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr>
-          <th style="text-align:left;padding:8px;">Incoming transaction</th>
-          <th style="text-align:left;padding:8px;">Possible existing match</th>
-          <th style="text-align:left;padding:8px;">Decision</th>
-        </tr></thead><tbody>${reviews.map(review => {
+        target.innerHTML = reviews.map(review => {
           const incoming = `${review.date} · ${review.description} · ${Number(review.amount).toFixed(2)} ${review.direction}`;
-          const matches = (review.candidates || []).map(row =>
-            escapeHtml(`${row.date} · ${row.description} · ${Number(row.amount).toFixed(2)} ${row.direction}`)).join('<br>');
+          const account = [review.institution, review.account_name, review.account_mask ? `ending ${review.account_mask}` : 'Account details unavailable'].filter(Boolean).join(' · ');
+          const included = !!review.resolution_transaction_id;
           const matchChoices = (review.candidates || []).map(row =>
-            `<option value="${Number(row.id)}">${escapeHtml(`${row.date} · ${row.description} · ${Number(row.amount).toFixed(2)}`)}</option>`).join('');
-          return `<tr style="border-top:1px solid var(--border);">
-            <td style="padding:10px;">${escapeHtml(incoming)}<div class="muted" style="font-size:11px;">${escapeHtml(review.source)}${review.is_pending ? ' · Pending bank transaction' : ''}</div></td>
-            <td style="padding:10px;">${matches || '<span class="muted">No active match remains; choose whether to add it separately.</span>'}
-              ${matchChoices ? `<label class="muted" style="display:block;margin-top:8px;font-size:11px;">Match this to<select id="import-review-match-${review.id}" style="display:block;max-width:100%;margin-top:4px;">${matchChoices}</select></label>` : ''}
-            </td>
-            <td style="padding:10px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">
-              ${matchChoices ? `<button class="btn btn-secondary" onclick="resolveImportReview(${review.id},'duplicate')">Keep selected existing</button>` : ''}
-              <button class="btn btn-primary" onclick="resolveImportReview(${review.id},'import')">Add as separate</button>
-            </div></td>
-          </tr>`;
-        }).join('')}</tbody></table>`;
+            `<option value="${Number(row.id)}">${escapeHtml(`${row.date} · ${row.description} · ${Number(row.amount).toFixed(2)} ${row.direction} · ${row.accountName || 'Account unknown'}${row.accountMask ? ` ending ${row.accountMask}` : ''}`)}</option>`).join('');
+          const matchDetails = (review.candidates || []).map(row => `<li><a href="#transactions/${Number(row.id)}">${escapeHtml(row.description)}</a><div>${escapeHtml(`${row.date} · ${Number(row.amount).toFixed(2)} ${row.direction} · ${row.category || 'Uncategorized'}`)}</div><div class="muted">${escapeHtml([row.institution, row.accountName || 'Account unknown', row.accountMask ? `ending ${row.accountMask}` : ''].filter(Boolean).join(' · '))}</div></li>`).join('');
+          return `<article class="import-review-card" id="import-review-${review.id}">
+            <div class="review-comparison"><section><p class="eyebrow">BANK RECORD · #${Number(review.id)}</p><h3>${escapeHtml(incoming)}</h3><p class="muted">${escapeHtml(account)}</p><span class="review-inclusion">${included ? 'Included in history and totals' : 'Not yet included · older held record'}</span>${review.is_pending ? '<p class="muted">Pending at bank</p>' : ''}</section>
+            <section><p class="eyebrow">COMPARE WITH EXISTING</p>${matchChoices ? `<ul class="review-candidates">${matchDetails}</ul><label>Selected existing transaction<select id="import-review-match-${review.id}">${(review.candidates || []).length > 1 ? '<option value="">Choose a match...</option>' : ''}${matchChoices}</select></label>` : '<p class="muted">No active match remains. Keep this bank record.</p>'}<p class="muted">Same amount alone does not mean the same payment. Check the merchant, direction, date and account.</p></section></div>
+            <div class="review-actions">${matchChoices ? `<button class="btn btn-secondary" onclick="resolveImportReview(${review.id},'duplicate')">Merge into selected existing</button>` : ''}<button class="btn btn-primary" onclick="resolveImportReview(${review.id},'import')">${included ? 'Keep both · clear flag' : 'Add to history'}</button></div>
+            <p id="import-review-error-${review.id}" role="status" aria-live="polite"></p></article>`;
+        }).join('');
+        for (const id of importReviewBusy) {
+          document.getElementById(`import-review-${id}`)?.querySelectorAll('button,select').forEach(button => { button.disabled = true; });
+        }
       } catch (error) {
-        target.textContent = error.message;
+        if (generation === importReviewGeneration) document.getElementById('import-review-status').textContent = `Could not refresh reviews: ${error.message}`;
       }
     }
 
     async function resolveImportReview(id, action) {
-      if (action === 'import' && !confirm('Add this transaction as a separate entry? This may affect totals and projections.')) return;
+      if (importReviewBusy.has(id)) return;
+      const review = importReviewRows.get(id);
+      if (!review) return;
+      if (action === 'import' && !review.resolution_transaction_id && !confirm('Add this transaction to history and totals?')) return;
+      const errorTarget = document.getElementById(`import-review-error-${id}`);
       try {
         const body = { action };
         if (action === 'duplicate') {
           const candidate = document.getElementById(`import-review-match-${id}`)?.value;
-          if (!candidate || !confirm('Treat this as the same transaction as the selected existing record?')) return;
+          if (!candidate) { errorTarget.textContent = 'Choose an existing transaction to merge into.'; return; }
+          if (!confirm('These are the same real payment. Keep the selected existing record and remove the extra bank copy? Notes will be preserved.')) return;
           body.matchTransactionId = Number(candidate);
         }
+        importReviewBusy.add(id);
+        document.getElementById(`import-review-${id}`)?.querySelectorAll('button,select').forEach(button => { button.disabled = true; });
+        errorTarget.textContent = 'Saving decision...';
         await plaidRequest(`/api/import-review/reviews/${id}/resolve`, 'POST', body);
+        ++importReviewGeneration;
+        importReviewRows.delete(id);
+        document.getElementById(`import-review-${id}`)?.remove();
+        document.getElementById('import-review-status').textContent = action === 'duplicate' ? `Review #${id} resolved: kept the selected existing transaction.` : `Review #${id} resolved: bank transaction kept in history.`;
         await loadTransactionImportReviews();
-        await loadDashboard();
+        try {
+          await loadDashboard();
+          if (typeof loadAllTransactions === 'function') await loadAllTransactions();
+        } catch (error) { document.getElementById('import-review-status').textContent += ` Decision saved, but dashboard refresh failed: ${error.message}`; }
       } catch (error) {
-        notify(error.message);
+        errorTarget.textContent = `Not saved: ${error.message}`;
+        if (error.status === 409) {
+          document.getElementById('import-review-status').textContent = `Not saved: ${error.message} The review list has been refreshed.`;
+          await loadTransactionImportReviews();
+        }
+      } finally {
+        importReviewBusy.delete(id);
+        document.getElementById(`import-review-${id}`)?.querySelectorAll('button,select').forEach(button => { button.disabled = false; });
       }
     }
 
@@ -2509,7 +2554,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261105-notes"></script>
+  <script src="refresh.js?v=20261105-review"></script>
   <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261104-mfa-sha1"></script>

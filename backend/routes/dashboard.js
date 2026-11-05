@@ -572,6 +572,8 @@ router.get('/all-transactions', async (req, res) => {
         t.description,
         t.display_name,
         t.note,
+        EXISTS(SELECT 1 FROM transaction_import_reviews r WHERE r.user_id=t.user_id
+          AND r.resolution_transaction_id=t.id AND r.status='pending') AS possible_duplicate,
         t.amount,
         t.direction,
         t.category,

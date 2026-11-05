@@ -995,3 +995,13 @@ body .view .acct-stale { border-color: #d9b465; }
 .tx-note-editor label, .tx-note-editor small { display: block; margin: 8px 0; }
 .tx-note-editor textarea { display: block; width: 100%; min-width: 180px; box-sizing: border-box; resize: vertical; }
 .tx-note-editor [role="status"] { display: block; margin-top: 6px; }
+.review-filters, .review-actions, .review-pagination { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
+.review-filters label { display: grid; gap: 6px; }
+.import-review-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+.review-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.review-comparison h3 { font-size: 15px; overflow-wrap: anywhere; }
+.review-comparison select { display: block; width: 100%; margin-top: 8px; }
+.review-candidates { padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }
+.review-candidates li { margin-bottom: 12px; }
+.review-inclusion { font-size: 12px; font-weight: 600; }
+@media (max-width: 700px) { .review-comparison { grid-template-columns: 1fr; } }

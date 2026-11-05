@@ -2,10 +2,10 @@ import express from 'express';
 import Database from '../db.js';
 import { failure } from '../utils/categorization.js';
 import {
-  importReviewedTransaction, loadImportCategorization, refreshImportReviewCandidates
+  importReviewedTransaction, loadImportCategorization, refreshImportReviewCandidates, findTransactionCandidates
 } from '../utils/transactionImport.js';
 import { currentUserId } from '../utils/tenant.js';
-import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates } from '../utils/transactionDuplicates.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates, mergeReviewedDuplicate } from '../utils/transactionDuplicates.js';
 import { recordAudit } from '../utils/audit.js';
 
 const router = express.Router();
@@ -41,17 +41,34 @@ router.post('/duplicates/merge-bulk', async (req, res, next) => {
 
 router.get('/reviews', async (req, res, next) => {
   try {
+    const offset = Number(req.query.offset || 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) throw failure(400, 'Invalid review page');
+    const search = String(req.query.search || '').trim().slice(0, 100);
+    const mode = req.query.mode || 'all';
+    if (!['all', 'flagged', 'held'].includes(mode)) throw failure(400, 'Invalid review filter');
+    const filter = `r.user_id=current_setting('app.user_id')::integer AND r.status='pending'
+      AND ($1='' OR POSITION(LOWER($1) IN LOWER(r.description || ' ' || r.amount::text || ' ' || r.date))>0)
+      AND ($2='all' OR ($2='flagged' AND r.resolution_transaction_id IS NOT NULL)
+        OR ($2='held' AND r.resolution_transaction_id IS NULL))`;
+    const count = await db.get(`SELECT COUNT(*)::integer AS total,
+      COUNT(*) FILTER(WHERE r.resolution_transaction_id IS NULL)::integer AS held
+      FROM transaction_import_reviews r WHERE ${filter}`, [search, mode]);
     const rows = await db.all(`SELECT r.id, r.source, r.date, r.description, r.amount, r.direction,
-        r.balance, r.category, r.plaid_transaction_id, r.is_pending, r.created_at,
+        r.balance, r.category, r.plaid_transaction_id, r.is_pending, r.created_at,r.resolution_transaction_id,
+        pa.name AS account_name,pa.mask AS account_mask,pc.institution_name AS institution,
         COALESCE((SELECT json_agg(json_build_object(
           'id', t.id, 'date', t.date, 'description', t.description,
-          'amount', t.amount, 'direction', t.direction
+          'amount', t.amount, 'direction', t.direction,'category',t.category,
+          'accountName',a.name,'accountMask',a.last4,'institution',a.institution
         ) ORDER BY t.date DESC, t.id DESC)
-        FROM transactions t WHERE t.id = ANY(r.candidate_transaction_ids) AND t.user_id = r.user_id), '[]'::json) AS candidates
+        FROM transactions t LEFT JOIN accounts a ON a.id=t.account_id AND a.user_id=t.user_id
+        WHERE t.id = ANY(r.candidate_transaction_ids) AND t.user_id = r.user_id
+          AND t.id IS DISTINCT FROM r.resolution_transaction_id), '[]'::json) AS candidates
       FROM transaction_import_reviews r
-      WHERE r.user_id = current_setting('app.user_id')::integer AND r.status = 'pending'
-      ORDER BY r.created_at, r.id`);
-    res.json({ reviews: rows });
+      LEFT JOIN plaid_accounts pa ON pa.account_id=r.plaid_account_id AND pa.user_id=r.user_id
+      LEFT JOIN plaid_connections pc ON pc.id=pa.connection_id AND pc.user_id=r.user_id
+      WHERE ${filter} ORDER BY r.created_at,r.id LIMIT 25 OFFSET $3`, [search, mode, offset]);
+    res.json({ reviews: rows, total: count.total, held: count.held, offset, limit: 25 });
   } catch (error) { next(error); }
 });
 
@@ -66,12 +83,27 @@ router.post('/reviews/:id/resolve', async (req, res, next) => {
       const review = (await client.query(`SELECT * FROM transaction_import_reviews
         WHERE id = $1 AND user_id = current_setting('app.user_id')::integer
         FOR UPDATE`, [id])).rows[0];
-      if (!review || review.status !== 'pending') throw failure(404, 'Pending import review not found');
-      if (await refreshImportReviewCandidates(client, review)) return { staleCandidates: true };
+      if (!review) throw failure(404, 'Import review not found');
+      if (review.status !== 'pending') {
+        if ((action === 'duplicate' && review.status === 'duplicate' && review.matched_transaction_id === Number(req.body?.matchTransactionId))
+          || (action === 'import' && ['imported', 'separate'].includes(review.status))) return { status: review.status, alreadyResolved: true };
+        throw failure(409, 'This review was already resolved. Refresh the list.');
+      }
       if (action === 'duplicate') {
+        const candidates = await findTransactionCandidates(client, review);
         const candidateId = Number(req.body?.matchTransactionId);
-        if (!Number.isSafeInteger(candidateId) || !review.candidate_transaction_ids.includes(candidateId)) {
+        if (!Number.isSafeInteger(candidateId) || !(review.candidate_transaction_ids || []).includes(candidateId)) {
           throw failure(400, 'Choose one of the listed matching transactions before keeping only the existing record');
+        }
+        if (!candidates.some(row => row.id === candidateId)) {
+          await refreshImportReviewCandidates(client, review);
+          return { staleCandidates: true };
+        }
+        if (review.resolution_transaction_id) {
+          await mergeReviewedDuplicate(client, review, candidateId);
+          await client.query(`UPDATE transaction_import_reviews SET status='duplicate',matched_transaction_id=$2,
+            resolved_at=NOW() WHERE id=$1 AND user_id=current_setting('app.user_id')::integer`, [id, candidateId]);
+          return { status: 'duplicate', matchedTransactionId: candidateId };
         }
         const candidate = (await client.query(`SELECT id,plaid_transaction_id FROM transactions
           WHERE id=$1 AND user_id=current_setting('app.user_id')::integer FOR UPDATE`, [candidateId])).rows[0];
@@ -88,12 +120,17 @@ router.post('/reviews/:id/resolve', async (req, res, next) => {
         [id, candidateId]);
         return { status: 'duplicate', matchedTransactionId: candidateId };
       }
+      if (review.resolution_transaction_id) {
+        await client.query(`UPDATE transaction_import_reviews SET status='separate',resolved_at=NOW()
+          WHERE id=$1 AND user_id=current_setting('app.user_id')::integer`, [id]);
+        return { status: 'separate', transactionId: review.resolution_transaction_id };
+      }
       const config = await loadImportCategorization(client);
       const transactionId = await importReviewedTransaction(client, review, config);
       await client.query(`UPDATE transaction_import_reviews
-        SET status='imported', resolution_transaction_id=$2, resolved_at=NOW() WHERE id=$1`,
+        SET status='separate', resolution_transaction_id=$2, resolved_at=NOW() WHERE id=$1`,
       [id, transactionId]);
-      return { status: 'imported', transactionId };
+      return { status: 'separate', transactionId };
     });
     if (result.staleCandidates) {
       return res.status(409).json({
@@ -101,6 +138,9 @@ router.post('/reviews/:id/resolve', async (req, res, next) => {
         error: 'Possible transaction matches have changed. Review the updated matches before deciding.'
       });
     }
+    if (!result.alreadyResolved) await recordAudit(req, 'transaction.import_review_resolved', 'success', {
+      detail: { reviewId: id, action, transactionId: result.transactionId ?? result.matchedTransactionId }
+    });
     res.json({ success: true, ...result });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ success: false, error: error.message });

@@ -3,7 +3,7 @@ import { administrativeTransaction } from '../db.js';
 import Database from '../db.js';
 import { withUser, currentUserId } from '../utils/tenant.js';
 import { classify, failure, loadCategorization } from '../utils/categorization.js';
-import { importTransactions, refreshImportReviewCandidates } from '../utils/transactionImport.js';
+import { importTransactions, refreshImportReviewCandidates, releaseHeldPlaidReviews } from '../utils/transactionImport.js';
 import {
   decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook,
   assertPlaidTokenEnvironment, plaidTokenEnvironment
@@ -138,6 +138,8 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
   const added = changes.added.map(plaidTransaction);
   const modified = changes.modified.map(plaidTransaction);
   const postedPendingIds = new Set([...added, ...modified].map(row => row.pendingTransactionId).filter(Boolean));
+  await refreshPlaidAccountBalances(client, connection.id, accessToken, plaidClient);
+  const incoming = [];
 
   for (const row of [...added, ...modified]) {
     if (row.pendingTransactionId) await reconcilePostedTransaction(client, row, config);
@@ -160,8 +162,9 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
       }
       continue;
     }
-    await importTransactions(client, [row], config, 'plaid');
+    incoming.push(row);
   }
+  const imported = await importTransactions(client, incoming, config, 'plaid');
 
   for (const removed of changes.removed) {
     if (postedPendingIds.has(removed.transaction_id)) continue;
@@ -183,18 +186,37 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
     [removed.transaction_id]);
     await client.query(`UPDATE transaction_import_reviews SET status='removed', resolved_at=NOW()
       WHERE plaid_transaction_id=$1 AND user_id=current_setting('app.user_id')::integer
-        AND status IN ('pending','duplicate','imported')`,
+        AND status IN ('pending','duplicate','imported','separate')`,
     [removed.transaction_id]);
   }
 
-  await refreshPlaidAccountBalances(client, connection.id, accessToken, plaidClient);
+  const released = await releaseHeldPlaidReviews(client, connection.id, config);
+  const flagged = (await client.query(`SELECT * FROM transaction_import_reviews
+    WHERE user_id=current_setting('app.user_id')::integer AND status='pending'
+      AND resolution_transaction_id IS NOT NULL AND plaid_account_id IN
+        (SELECT account_id FROM plaid_accounts WHERE connection_id=$1 AND user_id=current_setting('app.user_id')::integer)`,
+  [connection.id])).rows;
+  for (const review of flagged) {
+    const current = (await client.query(`SELECT date,description,amount,direction,is_pending FROM transactions
+      WHERE id=$1 AND user_id=current_setting('app.user_id')::integer`, [review.resolution_transaction_id])).rows[0];
+    if (!current) continue;
+    await client.query(`UPDATE transaction_import_reviews SET date=$2,description=$3,amount=$4,direction=$5,is_pending=$6
+      WHERE id=$1`, [review.id, current.date, current.description, current.amount, current.direction, current.is_pending]);
+    await refreshImportReviewCandidates(client, { ...review, ...current });
+    await client.query(`UPDATE transaction_import_reviews SET status='imported',resolved_at=NOW()
+      WHERE id=$1 AND cardinality(candidate_transaction_ids)=0`, [review.id]);
+  }
   await client.query(`UPDATE plaid_connections SET cursor=$2,last_sync_at=NOW(),
     last_sync_attempt_at=NOW(),last_error_code=NULL
     WHERE id=$1 AND user_id=current_setting('app.user_id')::integer`,
   [connection.id, changes.cursor || null]);
-  const pendingReviews = (await client.query(`SELECT COUNT(*)::integer AS count FROM transaction_import_reviews
-    WHERE user_id=current_setting('app.user_id')::integer AND status='pending'`)).rows[0].count;
-  return { added: added.length, modified: modified.length, removed: changes.removed.length, pendingReviews };
+  const reviewCounts = (await client.query(`SELECT
+    COUNT(*) FILTER(WHERE resolution_transaction_id IS NULL)::integer AS held,
+    COUNT(*) FILTER(WHERE resolution_transaction_id IS NOT NULL)::integer AS flagged
+    FROM transaction_import_reviews WHERE user_id=current_setting('app.user_id')::integer AND status='pending'`)).rows[0];
+  return { added: added.length, modified: modified.length, removed: changes.removed.length,
+    imported: imported.imported, autoMatched: imported.autoMatched || 0, released,
+    pendingReviews: reviewCounts.held, flaggedReviews: reviewCounts.flagged };
 }
 
 async function syncAndRecordFailure(connectionId, onlyIfDue = false) {
@@ -294,7 +316,9 @@ plaidRouter.post('/exchange', async (req, res, next) => {
 
 plaidRouter.get('/connections', async (req, res, next) => {
   try {
-    const rows = await db.all(`SELECT c.id,c.institution_name,c.status,c.last_sync_at,c.last_error_code,
+    const rows = await db.all(`SELECT c.id,c.institution_name,c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,
+        (SELECT MAX(t.date) FROM transactions t WHERE t.user_id=c.user_id AND t.plaid_account_id=a.account_id
+          AND t.plaid_transaction_id IS NOT NULL) AS latest_transaction_date,
         a.id AS account_record_id,a.name,a.official_name,a.mask,a.type,a.subtype,a.current_balance,
         a.available_balance,a.iso_currency_code,a.use_for_cashflow,a.balance_checked_at
       FROM plaid_connections c LEFT JOIN plaid_accounts a
@@ -306,7 +330,7 @@ plaidRouter.get('/connections', async (req, res, next) => {
       if (!connection) {
         connection = {
           id: row.id, institutionName: row.institution_name, status: row.status,
-          lastSyncAt: row.last_sync_at, lastErrorCode: row.last_error_code, accounts: []
+          lastSyncAt: row.last_sync_at, lastAttemptAt: row.last_sync_attempt_at, lastErrorCode: row.last_error_code, accounts: []
         };
         connections.push(connection);
       }
@@ -314,7 +338,8 @@ plaidRouter.get('/connections', async (req, res, next) => {
         id: row.account_record_id, name: row.name, officialName: row.official_name, mask: row.mask,
         type: row.type, subtype: row.subtype, currentBalance: row.current_balance,
         availableBalance: row.available_balance, currency: row.iso_currency_code,
-        useForCashflow: row.use_for_cashflow, balanceCheckedAt: row.balance_checked_at
+        useForCashflow: row.use_for_cashflow, balanceCheckedAt: row.balance_checked_at,
+        latestTransactionDate: row.latest_transaction_date
       });
     }
     res.json({ connections });

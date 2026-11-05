@@ -5,12 +5,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { PlaidApi } from 'plaid';
 import Database from '../db.js';
 import reviewRouter from '../routes/import-review.js';
+import dashboardRouter from '../routes/dashboard.js';
 import { syncConnection } from '../routes/plaid.js';
 import { encryptPlaidToken } from './plaid.js';
 import { migratePrivateSchema, seedUserCategories } from './schema.js';
 import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates } from './transactionDuplicates.js';
 import { detectIncomeStreams, incomeSources } from './income.js';
-import { withUser } from './tenant.js';
+import { withUser, currentUserId } from './tenant.js';
 
 const adapter = pg => ({ async query(sql, params = []) {
   const result = params.length ? await pg.query(sql, params) : (await pg.exec(sql)).at(-1);
@@ -286,6 +287,62 @@ test('duplicate HTTP endpoints list only tenant matches and reject invalid merge
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: [], acknowledged: true })
     });
     assert.equal(invalidBulk.status, 400);
+  } finally { await new Promise(resolve => server.close(resolve)); await f.pg.close(); }
+});
+
+test('review decisions clear immediately, accept still-valid selections, remain idempotent and preserve keep-both decisions', async t => {
+  const f = await fixture();
+  await f.client.query(`INSERT INTO transaction_import_reviews(user_id,source,date,description,amount,direction,
+    plaid_transaction_id,plaid_account_id,candidate_transaction_ids,resolution_transaction_id) VALUES
+    (1,'plaid','2026-10-21','WELLS FARGO BANK PAYROLL',6200,'CREDIT','pay-2','bank-1','{2}',11),
+    (1,'plaid','2026-10-22','HYUNDAI LEASE DEALS',443,'DEBIT','car-1','bank-1','{3}',12);
+    INSERT INTO transactions(id,user_id,date,description,amount,direction,source)
+    VALUES(14,1,'2026-10-22','WELLS FARGO BANK PAYROLL',6200,'CREDIT','another-statement.csv');
+    UPDATE transactions SET note='Bank note' WHERE id=11;
+    UPDATE transactions SET note='Receipt note' WHERE id=2;`);
+  const app = express();
+  app.use(express.json());
+  app.use((req, res, next) => withUser(Number(req.headers['x-test-user'] || 1), next));
+  app.use('/reviews', reviewRouter);
+  app.use('/dashboard', dashboardRouter);
+  app.use((error, req, res, next) => res.status(error.status || 500).json({ error: error.message }));
+  t.mock.method(Database.prototype, 'transaction', callback => f.run(currentUserId(), callback));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}/reviews`;
+  const resolve = (id, body, user = 1) => fetch(`${base}/reviews/${id}/resolve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-user': String(user) }, body: JSON.stringify(body)
+  });
+  try {
+    const initial = await (await fetch(`${base}/reviews?mode=flagged`)).json();
+    assert.equal(initial.total, 2);
+    const [salary, car] = initial.reviews;
+    const activityUrl = `http://127.0.0.1:${server.address().port}/dashboard/all-transactions`;
+    const activity = await (await fetch(activityUrl)).json();
+    assert.equal(activity.transactions.find(row => row.id === '11').possible_duplicate, true);
+    assert.equal(activity.transactions.find(row => row.id === '11').counts_as_income, true, 'flagged payroll still counts as income');
+    assert.equal((await resolve(salary.id, { action: 'duplicate', matchTransactionId: 2 }, 2)).status, 404);
+    const merged = await resolve(salary.id, { action: 'duplicate', matchTransactionId: 2 });
+    assert.equal(merged.status, 200, await merged.text());
+    assert.equal((await (await fetch(`${base}/reviews`)).json()).total, 1, 'resolved row no longer appears on first attempt');
+    assert.equal((await f.client.query('SELECT note FROM transactions WHERE id=2')).rows[0].note, 'Receipt note\nBank note');
+    assert.equal((await resolve(salary.id, { action: 'duplicate', matchTransactionId: 2 })).status, 200, 'double-click or network retry is idempotent');
+    assert.equal((await resolve(car.id, { action: 'import' })).status, 200);
+    assert.equal((await resolve(car.id, { action: 'import' })).status, 200);
+    assert.equal((await (await fetch(`${base}/reviews`)).json()).total, 0);
+    assert.ok((await f.client.query('SELECT id FROM transactions WHERE id=12')).rows[0], 'keep both never inserts a second copy');
+    assert.equal((await f.list()).rows.some(pair => pair.plaid.id === 12), false, 'keep both does not reappear in the other duplicate queue');
+    assert.equal((await resolve(car.id, { action: 'duplicate', matchTransactionId: 3 })).status, 409);
+
+    await f.client.query(`INSERT INTO transaction_import_reviews(user_id,source,date,description,amount,direction)
+      SELECT 1,'manual','2026-11-04','Page test ' || n,10,'DEBIT' FROM generate_series(1,27) n`);
+    const page1 = await (await fetch(`${base}/reviews?search=Page%20test`)).json();
+    const page2 = await (await fetch(`${base}/reviews?search=Page%20test&offset=25`)).json();
+    assert.equal(page1.total, 27);
+    assert.equal(page1.reviews.length, 25);
+    assert.equal(page2.reviews.length, 2);
+    assert.equal((await fetch(`${base}/reviews?offset=-1`)).status, 400);
+    assert.equal((await fetch(`${base}/reviews?mode=invalid`)).status, 400);
   } finally { await new Promise(resolve => server.close(resolve)); await f.pg.close(); }
 });
 

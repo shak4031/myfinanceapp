@@ -183,10 +183,17 @@ endpoint.
 Scheduled failures record their error and attempt time after rolling back the
 failed sync. Transient failures wait at least six hours before a scheduled retry;
 invalid items require user attention instead of being retried hourly.
-The sync response distinguishes Plaid-reported changes from the total pending
-import-review count. Held records are excluded from history and calculations;
-Transactions > Review held transactions opens their review queue. Same amount
-and direction within three days is only a possible match, not proof of duplication.
+The sync response distinguishes provider-reported changes, newly saved records,
+automatically linked exact matches, included duplicate flags and older held records.
+Transactions > Review possible duplicates opens a searchable, paginated queue.
+Each card states whether the record already counts in totals. Successful decisions
+remove the card immediately; repeated submissions of the same decision are
+idempotent. A change to an unrelated candidate does not invalidate a still-valid
+selected match. Keep both clears the flag without inserting a second copy, and
+the decision is respected by the Plaid/statement duplicate list.
+Connection details distinguish the last successful check from the latest saved
+bank activity date. A successful incremental check cannot prove the institution
+has delivered today's payroll; the app does not invent a deposit from a forecast.
 Changing `PLAID_ENVIRONMENT` does not convert saved access tokens. An identified
 cross-environment token is blocked before remote sync or update-mode Link.
 Disconnect that old connection and use Connect bank in the current environment.
@@ -329,15 +336,22 @@ Bulk merging is atomic: one stale, missing, foreign, or conflicting pair rejects
 the entire batch. No partial cleanup is committed. Totals refresh once per batch.
 Selections clear on merge completion/failure and household changes.
 
-CSV, PDF and Plaid imports share the same server-side validation and overlap
-checks. Possible overlaps with the same amount and direction within three days
-are held in **Import Review**, regardless of description, and are not counted
-in totals or forecasts until the user chooses to keep the existing transaction
-or explicitly add the new one as separate. This conservative window can flag
-legitimate repeated purchases for review. Plaid transaction IDs are unique per
-user and repeated syncs are idempotent. No heuristic can prove two records are
-the same real-world purchase when institutions provide different or incomplete
-details.
+All imports share server-side value validation, but Plaid uses nonblocking overlap
+handling: distinct provider IDs are never deduplicated against each other by
+amount. Only unlinked, posted, non-Plaid history with a matching merchant, amount,
+direction and date within three days can become a candidate; known different
+account masks/types are excluded. A unique candidate links automatically only
+with the same day and full description (case/whitespace normalized) and verified
+account mask, institution and type. Pending bank records, incomplete account
+identity, competing candidates or repeated identical incoming rows do not
+auto-merge. Existing categories, names, notes and payment settings are preserved.
+Other plausible matches are saved in history and totals with a possible-duplicate
+flag; both entries count until merged. Different merchants with equal amounts
+do not generate flags. Plaid IDs remain unique per household and replays are
+idempotent. On the next successful sync, older held records for that connection
+are processed by the same rules even if the provider returns no new changes.
+CSV/PDF review flows are unchanged. No heuristic proves identity from incomplete
+bank details, so ambiguous cases are not silently deleted.
 Disconnecting revokes the Plaid Item and removes its encrypted access token and
 account balance settings; already-imported transaction history is retained.
 

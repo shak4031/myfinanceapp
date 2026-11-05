@@ -2025,9 +2025,9 @@ test('transaction notes render escaped, support search, save and clear, and expo
   assert.equal(button.disabled, false);
   assert.equal(editor.value, 'Retry later', 'failed edits remain available to retry');
 });
-test('Plaid sync distinguishes reported additions from records held outside transaction totals', async () => {
+test('Plaid sync reports included flags without claiming the bank delivered current activity', async () => {
   const f = fixture();
-  f.context.plaidRequest = async () => ({ added: 3, modified: 1, removed: 0, pendingReviews: 2 });
+  f.context.plaidRequest = async () => ({ added: 3, imported: 2, autoMatched: 1, modified: 1, removed: 0, pendingReviews: 0, flaggedReviews: 2 });
   f.context.loadPlaidConnections = async () => {};
   f.context.loadTransactionImportReviews = async () => {};
   f.context.loadDashboard = async () => {};
@@ -2036,9 +2036,57 @@ test('Plaid sync distinguishes reported additions from records held outside tran
   const end = html.indexOf('    async function setPlaidCashflowAccount(', start);
   vm.runInContext(html.slice(start, end), f.context);
   await f.context.syncPlaidConnection(1);
-  assert.match(f.node('plaid-status').textContent, /Plaid reported 3 additions/);
-  assert.match(f.node('plaid-status').textContent, /2 total transactions are held outside your history and totals/);
-  assert.match(f.node('plaid-status').textContent, /Review held transactions/);
+  assert.match(f.node('plaid-status').textContent, /2 new records saved, 1 exact matches linked automatically/);
+  assert.match(f.node('plaid-status').textContent, /2 possible duplicates are included in totals/);
+  assert.match(f.node('plaid-status').textContent, /does not mean the bank has supplied today's activity/);
+});
+test('import review UI clears successful decisions, blocks double submissions and keeps failures visible', async () => {
+  const f = fixture();
+  f.context.escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  f.context.confirm = () => true;
+  const review = { id: 8, date: '2026-11-04', description: '<Payroll>', amount: 6594.42, direction: 'CREDIT',
+    resolution_transaction_id: 33, account_name: 'Checking', account_mask: '1234', candidates: [
+      { id: 10, date: '2026-11-04', description: 'Payroll', amount: 6594.42, direction: 'CREDIT', accountName: 'Checking' }
+    ] };
+  let open = [review], resolveSave, reject = false, calls = 0, removed = false;
+  const controls = [{ disabled: false }, { disabled: false }];
+  f.node('import-review-8').querySelectorAll = () => controls;
+  f.node('import-review-8').remove = () => { removed = true; };
+  f.node('import-review-match-8').value = '10';
+  f.context.plaidRequest = async (url, method) => {
+    if (method === 'POST') {
+      calls++;
+      if (reject) throw new Error('Decision could not be saved');
+      await new Promise(resolve => { resolveSave = resolve; });
+      open = [];
+      return { success: true };
+    }
+    return { reviews: open, total: open.length, held: 0, limit: 25 };
+  };
+  const html = source('index.html');
+  const start = html.indexOf('    let importReviewOffset = 0;');
+  const end = html.indexOf('    let pendingCsvFile', start);
+  vm.runInContext(html.slice(start, end), f.context);
+  await f.context.loadTransactionImportReviews();
+  assert.match(f.node('import-reviews').innerHTML, /&lt;Payroll&gt;/);
+  assert.match(f.node('import-reviews').innerHTML, /Included in history and totals/);
+  assert.match(f.node('import-reviews').innerHTML, /Keep both · clear flag/);
+  const saving = f.context.resolveImportReview(8, 'duplicate');
+  assert.ok(controls.every(control => control.disabled));
+  await f.context.resolveImportReview(8, 'duplicate');
+  assert.equal(calls, 1, 'double-click sends one decision');
+  f.context.loadDashboard = async () => { throw new Error('Refresh unavailable'); };
+  resolveSave();
+  await saving;
+  assert.equal(removed, true, 'remove saved row before refreshing other screens');
+  assert.match(f.node('import-review-status').textContent, /resolved.*Decision saved, but dashboard refresh failed/);
+  assert.match(f.node('import-reviews').innerHTML, /No possible duplicate/);
+  open = [review]; reject = true; removed = false;
+  await f.context.loadTransactionImportReviews();
+  await f.context.resolveImportReview(8, 'import');
+  assert.equal(removed, false);
+  assert.match(f.node('import-review-error-8').textContent, /Not saved: Decision could not be saved/);
+  assert.ok(controls.every(control => !control.disabled));
 });
 test('similar-payment matcher normalizes statement noise with regex and weighs amount', () => {
   const f = fixture(); f.run('refresh.js');
@@ -4265,8 +4313,8 @@ test('legacy import review leaves the main menu but remains reachable from Trans
   const html = source('index.html');
   assert.doesNotMatch(html, /class="nav-btn" data-view="etl"/);
   assert.match(html, /Import review and older tools[\s\S]*href="#etl" data-view="etl">Import review/);
-  assert.match(html, /href="#etl" data-view="etl">Review held transactions/);
-  assert.match(html, /Plaid can hold possible duplicates here/);
+  assert.match(html, /href="#etl" data-view="etl">Review possible duplicates/);
+  assert.match(html, /uncertain transactions into history and totals/);
   assert.match(html, /href="#tutorials\/accounts">How Accounts works/);
   assert.match(html, /Older queued import records/);
   assert.doesNotMatch(html, /forcePushStaging|dismissStaging|Watch the 1-min tour/);

@@ -1,5 +1,6 @@
 import { currentUserId } from './tenant.js';
 import { classify, loadCategorization, failure, TENANT } from './categorization.js';
+import { merchantKey } from './analytics.js';
 
 const MAX_AMOUNT = 999999999999.99;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -63,6 +64,97 @@ async function findCandidateTransactions(client, transaction) {
   return rows.filter(row => isPossibleMatch(transaction, row));
 }
 
+const descriptionKey = value => String(value || '').toUpperCase().replace(/\s+/g, ' ').trim();
+const importKey = row => JSON.stringify([row.plaidAccountId, row.date, row.direction, Number(row.amount), descriptionKey(row.description)]);
+
+async function findPlaidCandidates(client, transaction) {
+  const rows = (await client.query(`SELECT t.id,t.date,t.description,t.amount,t.direction,
+      (a.last4 IS NOT NULL AND a.last4=pa.mask AND a.institution IS NOT NULL
+        AND LOWER(a.institution)=LOWER(pc.institution_name)
+        AND a.kind=CASE WHEN pa.type='credit' THEN 'credit_card' ELSE pa.subtype END) AS verified_account,
+      NOT EXISTS(SELECT 1 FROM transaction_import_reviews r WHERE r.user_id=t.user_id
+        AND r.status='pending' AND t.id=ANY(r.candidate_transaction_ids)
+        AND r.plaid_transaction_id IS DISTINCT FROM $6::text) AS uncontested
+    FROM transactions t
+    LEFT JOIN accounts a ON a.id=t.account_id AND a.user_id=t.user_id
+    LEFT JOIN plaid_accounts pa ON pa.account_id=$5 AND pa.user_id=t.user_id
+    LEFT JOIN plaid_connections pc ON pc.id=pa.connection_id AND pc.user_id=t.user_id
+    WHERE t.user_id=current_setting('app.user_id')::integer AND t.plaid_transaction_id IS NULL
+      AND t.source IS DISTINCT FROM 'plaid' AND NOT t.is_pending
+      AND t.amount=$1 AND UPPER(t.direction)=$2
+      AND t.date::date BETWEEN $3::date-3 AND $3::date+3
+      AND t.id IS DISTINCT FROM $4::integer
+      AND (a.last4 IS NULL OR pa.mask IS NULL OR a.last4=pa.mask)
+      AND (a.kind IS NULL OR pa.subtype IS NULL OR a.kind='unknown'
+        OR a.kind=CASE WHEN pa.type='credit' THEN 'credit_card' ELSE pa.subtype END)
+      AND (pa.iso_currency_code IS NULL OR pa.iso_currency_code='USD')
+    ORDER BY t.date DESC,t.id`, [transaction.amount, transaction.direction, transaction.date,
+    transaction.resolution_transaction_id ?? null, transaction.plaidAccountId, transaction.plaidTransactionId ?? transaction.plaid_transaction_id])).rows;
+  const key = merchantKey(transaction.description);
+  return rows.filter(row => descriptionKey(row.description) === descriptionKey(transaction.description)
+    || (key && merchantKey(row.description) === key));
+}
+
+async function importPlaidTransaction(client, transaction, config, source, allowAutomaticMatch, review = null) {
+  const candidates = await findPlaidCandidates(client, transaction);
+  const exact = candidates.length === 1 && candidates[0].verified_account && candidates[0].uncontested
+    && candidates[0].date === transaction.date
+    && descriptionKey(candidates[0].description) === descriptionKey(transaction.description)
+    && !transaction.isPending && allowAutomaticMatch;
+  let transactionId;
+  if (exact) {
+    transactionId = candidates[0].id;
+    await client.query(`UPDATE transactions SET plaid_transaction_id=$1,plaid_account_id=$2
+      WHERE id=$3 AND ${TENANT}`, [transaction.plaidTransactionId, transaction.plaidAccountId, transactionId]);
+  } else {
+    transactionId = await insertTransaction(client, transaction, config, source, {
+      transactionId: transaction.plaidTransactionId, accountId: transaction.plaidAccountId, isPending: transaction.isPending
+    }, transaction.manualCategory ?? null);
+  }
+  const flagged = !exact && candidates.length > 0;
+  if (review) {
+    await client.query(`UPDATE transaction_import_reviews SET status=$2,resolution_transaction_id=$3,
+      matched_transaction_id=$4,candidate_transaction_ids=$5,resolved_at=CASE WHEN $2='pending' THEN NULL ELSE NOW() END
+      WHERE id=$1 AND ${TENANT}`, [review.id, exact ? 'duplicate' : flagged ? 'pending' : 'imported',
+      exact ? null : transactionId, exact ? transactionId : null, candidates.map(row => row.id)]);
+  } else if (flagged) {
+    await client.query(`INSERT INTO transaction_import_reviews
+      (source,date,description,amount,direction,balance,category,plaid_transaction_id,plaid_account_id,
+        is_pending,candidate_transaction_ids,user_id,resolution_transaction_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [source, transaction.date, transaction.description, transaction.amount, transaction.direction, transaction.balance,
+      transaction.manualCategory ?? null, transaction.plaidTransactionId, transaction.plaidAccountId, transaction.isPending === true,
+      candidates.map(row => row.id), currentUserId(), transactionId]);
+  }
+  return { imported: exact ? 0 : 1, duplicates: exact ? 1 : 0, needsReview: flagged ? 1 : 0, autoMatched: exact ? 1 : 0 };
+}
+
+export async function releaseHeldPlaidReviews(client, connectionId, config) {
+  const reviews = (await client.query(`SELECT r.* FROM transaction_import_reviews r
+    JOIN plaid_accounts a ON a.account_id=r.plaid_account_id AND a.user_id=r.user_id
+    WHERE r.user_id=current_setting('app.user_id')::integer AND a.connection_id=$1
+      AND r.status='pending' AND r.resolution_transaction_id IS NULL
+      AND r.plaid_transaction_id IS NOT NULL ORDER BY r.id FOR UPDATE OF r`, [connectionId])).rows;
+  const counts = new Map();
+  const incoming = reviews.map(review => ({ ...review, plaidTransactionId: review.plaid_transaction_id,
+    plaidAccountId: review.plaid_account_id, isPending: review.is_pending, manualCategory: review.category }));
+  for (const row of incoming) counts.set(importKey(row), (counts.get(importKey(row)) || 0) + 1);
+  for (const row of incoming) {
+    const existing = (await client.query(`SELECT id,source FROM transactions WHERE ${TENANT}
+      AND plaid_transaction_id=$1`, [row.plaidTransactionId])).rows[0];
+    if (existing) {
+      await client.query(`UPDATE transaction_import_reviews SET
+        status=$2,resolution_transaction_id=$3,matched_transaction_id=$4,
+        resolved_at=CASE WHEN $2='pending' THEN NULL ELSE NOW() END
+        WHERE id=$1 AND ${TENANT}`, [row.id, existing.source === 'plaid' ? 'pending' : 'duplicate',
+        existing.source === 'plaid' ? existing.id : null, existing.source === 'plaid' ? null : existing.id]);
+      continue;
+    }
+    await importPlaidTransaction(client, validateImportedTransaction(row), config, row.source, counts.get(importKey(row)) === 1, row);
+  }
+  return incoming.length;
+}
+
 async function insertTransaction(client, transaction, config, source, plaid = {}, manualCategory = null) {
   let suggestion = null;
   if (manualCategory !== null) {
@@ -90,6 +182,9 @@ export async function importTransactions(client, transactions, config, source, p
   let imported = 0;
   let duplicates = 0;
   let needsReview = 0;
+  let autoMatched = 0;
+  const counts = new Map();
+  for (const row of transactions) counts.set(importKey(row), (counts.get(importKey(row)) || 0) + 1);
   for (const raw of transactions) {
     const transaction = validateImportedTransaction(raw);
     const transactionId = raw.plaidTransactionId ?? plaid.transactionId;
@@ -102,9 +197,16 @@ export async function importTransactions(client, transactions, config, source, p
       [transactionId])).rows[0];
       if (existing) { duplicates++; continue; }
       const reviewed = (await client.query(`SELECT id FROM transaction_import_reviews
-        WHERE ${TENANT} AND plaid_transaction_id = $1 AND status IN ('pending','duplicate','imported')`,
+        WHERE ${TENANT} AND plaid_transaction_id = $1 AND status IN ('pending','duplicate','imported','separate')`,
       [transactionId])).rows[0];
       if (reviewed) { duplicates++; continue; }
+      const result = await importPlaidTransaction(client, { ...transaction, plaidTransactionId: transactionId,
+        plaidAccountId: accountId, isPending }, config, source, counts.get(importKey(raw)) === 1);
+      imported += result.imported;
+      duplicates += result.duplicates;
+      needsReview += result.needsReview;
+      autoMatched += result.autoMatched;
+      continue;
     }
     const candidates = await findCandidateTransactions(client, {
       ...transaction,
@@ -130,7 +232,7 @@ export async function importTransactions(client, transactions, config, source, p
     }, manualCategory);
     imported++;
   }
-  return { imported, duplicates, needsReview, excluded: 0 };
+  return { imported, duplicates, needsReview, excluded: 0, ...(autoMatched ? { autoMatched } : {}) };
 }
 
 export async function importReviewedTransaction(client, review, config) {
@@ -156,6 +258,10 @@ export async function loadImportCategorization(client) {
 
 export async function findTransactionCandidates(client, transaction) {
   const validated = validateImportedTransaction(transaction);
+  if (transaction.plaid_transaction_id || transaction.plaidTransactionId) {
+    return findPlaidCandidates(client, { ...validated,
+      plaidAccountId: transaction.plaidAccountId ?? transaction.plaid_account_id });
+  }
   return findCandidateTransactions(client, validated);
 }
 

@@ -132,8 +132,8 @@ test('startup repairs legacy Plaid data for all households exactly once and pres
     assert.deepEqual(rows.slice(4), untouched, 'statement/manual records, including linked statement rows, are untouched');
     const reviews = (await client.query('SELECT * FROM transaction_import_reviews ORDER BY id')).rows;
     assert.deepEqual(reviews.map(row => row.direction), ['DEBIT', 'DEBIT', 'DEBIT', 'DEBIT']);
-    assert.deepEqual(reviews[0].candidate_transaction_ids, [1, 5]);
-    assert.deepEqual(reviews[1].candidate_transaction_ids, [3], 'review candidates never cross households');
+    assert.deepEqual(reviews[0].candidate_transaction_ids, [], 'distinct Plaid identities and unrelated merchants are no longer candidates');
+    assert.deepEqual(reviews[1].candidate_transaction_ids, [], 'review candidates never cross households or compare distinct Plaid identities');
     assert.equal(reviews[3].status, 'duplicate', 'explicit review resolutions are preserved');
     assert.equal((await client.query("SELECT current_setting('app.user_id') AS id")).rows[0].id, '2');
     assert.deepEqual(incomeSources(rows, new Date(2026, 9, 20)).map(source => source.name),
@@ -198,7 +198,8 @@ test('Plaid sync uses normalized directions for additions, modifications, review
       return syncConnection(tenant, connection.id);
     }));
     const firstSync = await sync();
-    assert.equal(firstSync.pendingReviews, 1, 'held records are explicitly surfaced instead of being called saved additions');
+    assert.equal(firstSync.pendingReviews, 0, 'new Plaid transactions never wait outside totals');
+    assert.equal(firstSync.flaggedReviews, 1, 'possible overlaps are included with flags');
     let rows = (await client.query('SELECT * FROM transactions ORDER BY id')).rows;
     const bill = rows.find(row => row.plaid_transaction_id === 'bill-1');
     const paycheck = rows.find(row => row.plaid_transaction_id === 'pay-1');
@@ -211,6 +212,7 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     const review = (await client.query("SELECT * FROM transaction_import_reviews WHERE plaid_transaction_id='overlap-1'")).rows[0];
     assert.equal(review.direction, 'DEBIT');
     assert.deepEqual(review.candidate_transaction_ids, [rows[0].id]);
+    assert.ok(rows.some(row => row.id === review.resolution_transaction_id));
     const pendingId = rows.find(row => row.plaid_transaction_id === 'pending-1').id;
     changes = {
       added: [raw('posted-1', 55, 'UTILITY', { pending_transaction_id: 'pending-1', original_description: 'UTILITY ONLINE PMT' }),
@@ -250,6 +252,17 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     assert.deepEqual((await client.query('SELECT * FROM transactions ORDER BY id')).rows, rows);
     assert.equal((await client.query('SELECT cursor FROM plaid_connections WHERE id=$1', [connection.id])).rows[0].cursor, 'cursor-2',
       'an invalid provider update cannot advance the sync cursor');
+    await client.query(`INSERT INTO transaction_import_reviews(user_id,source,date,description,amount,direction,
+      plaid_transaction_id,plaid_account_id,status) VALUES
+      (1,'plaid','2026-11-04','WELLS FARGO BANK PAYROLL',6594.42,'CREDIT','november-payroll','checking-1','pending')`);
+    changes = { added: [], modified: [], removed: [], next_cursor: 'cursor-3', has_more: false };
+    const recovered = await sync();
+    assert.equal(recovered.released, 1, 'a zero-change sync still releases an older held salary');
+    assert.equal(recovered.pendingReviews, 0);
+    const salary = (await client.query("SELECT * FROM transactions WHERE plaid_transaction_id='november-payroll'")).rows[0];
+    assert.equal(salary.date, '2026-11-04');
+    assert.equal(salary.direction, 'CREDIT');
+    assert.ok(incomeSources([salary], new Date(2026, 10, 5)).some(row => row.name === 'Wells Fargo Bank'));
   } finally {
     PlaidApi.prototype.transactionsSync = originalSync;
     PlaidApi.prototype.accountsGet = originalAccounts;

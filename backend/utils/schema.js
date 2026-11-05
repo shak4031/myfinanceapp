@@ -392,6 +392,8 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS plaid_accounts_id_user_key ON plaid_accounts (id, user_id);
     CREATE INDEX IF NOT EXISTS plaid_accounts_user_cashflow_idx ON plaid_accounts (user_id, use_for_cashflow);
     CREATE INDEX IF NOT EXISTS import_reviews_user_status_idx ON transaction_import_reviews (user_id, status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS import_reviews_resolution_status_idx ON transaction_import_reviews (user_id, resolution_transaction_id, status)
+      WHERE resolution_transaction_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS transactions_user_account_idx ON transactions (user_id, account_id);
     CREATE UNIQUE INDEX IF NOT EXISTS import_reviews_user_plaid_transaction_key
       ON transaction_import_reviews (user_id, plaid_transaction_id)
