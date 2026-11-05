@@ -13,6 +13,13 @@
   <main id="main">
     <p class="eyebrow">MYFINANCE / TECHNICAL SECURITY FRAMEWORK</p>
     <h1>Security architecture &amp; data protection</h1>
+    <section class="trust-note" aria-labelledby="security-summary"><h2 id="security-summary">Security, in plain English</h2>
+      <p><strong>What we protect:</strong> HTTPS protects information sent between your browser and MyFinance. Bank-connection tokens are encrypted, passwords are securely hashed rather than stored as readable text, and access controls separate households' financial records. When you connect through Plaid, MyFinance does not receive your bank login password and cannot initiate bank transfers.</p>
+      <p><strong>What to know:</strong> MyFinance stores account details, balances and transaction history to provide your financial views. It is not a vault that only you can decrypt, and security cannot prevent every scam, compromised device or stolen session. An independent security assessment and verification of backup/storage encryption remain outstanding.</p>
+      <p><strong>Three steps you can take:</strong></p>
+      <ol><li><strong>Turn on MFA</strong> in Settings &amp; support when available, so a password alone is not enough on an untrusted browser.</li><li><strong>Save recovery codes separately from your phone</strong>, in a secure place you can reach if the phone is lost.</li><li><strong>Only trust personal browsers</strong>. Never select the 90-day trust option on shared or public computers; forget trusted browsers if a device is lost.</li></ol>
+      <p>MFA and recovery features are implemented; live deployment is not yet verified here. <a href="#identity">Read how sign-in protection works</a>, or continue below for the technical evidence and limits.</p>
+    </section>
     <p class="intro">A technical account of the safeguards implemented in MyFinance, the information the service processes, and the responsibilities that remain with its operators and users.</p>
     <dl class="document-meta"><div><dt>Document</dt><dd>MF-SEC-001 / version 1.6</dd></div><div><dt>Reviewed</dt><dd>4 November 2026</dd></div><div><dt>Audience</dt><dd>Customers, technical reviewers &amp; operators</dd></div><div><dt>Status</dt><dd>Implementation &amp; operator-verified deployment controls; not certification</dd></div></dl>
     <section class="trust-note" aria-labelledby="identity-enhancements"><h2 id="identity-enhancements">Stronger account protection: beyond passwords</h2>

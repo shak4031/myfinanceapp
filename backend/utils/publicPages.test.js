@@ -27,6 +27,12 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /href="mailto:/);
       } else {
         assert.match(html, /MF-SEC-001/);
+        assert.match(html, /Security, in plain English/);
+        assert.match(html, /What we protect:/);
+        assert.match(html, /What to know:/);
+        assert.match(html, /Save recovery codes separately from your phone/);
+        assert.match(html, /Only trust personal browsers/);
+        assert.ok(html.indexOf('id="security-summary"') < html.indexOf('id="identity-enhancements"'));
         assert.match(html, /version 1\.6/);
         assert.match(html, /Stronger account protection: beyond passwords/);
         assert.match(html, /a stolen password alone is insufficient/);
