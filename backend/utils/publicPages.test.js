@@ -27,7 +27,13 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /href="mailto:/);
       } else {
         assert.match(html, /MF-SEC-001/);
-        assert.match(html, /version 1\.5/);
+        assert.match(html, /version 1\.6/);
+        assert.match(html, /Stronger account protection: beyond passwords/);
+        assert.match(html, /a stolen password alone is insufficient/);
+        assert.match(html, /Their deployment and actual user enrollment have not been verified/);
+        assert.match(html, /QR setup improves usability; it is not an additional authentication factor/);
+        assert.match(html, /Account-protection validation/);
+        assert.match(html, /207 passing tests/);
         assert.match(html, /HMAC-SHA-1 with a random 160-bit secret/);
         assert.match(html, /algorithm=SHA1/);
         assert.match(html, /Known SHA-1 collision attacks do not directly break/);
