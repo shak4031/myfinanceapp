@@ -2,6 +2,8 @@ import { reconcileTransfers } from './transfers.js';
 import { classify, loadCategorization } from './categorization.js';
 import { refreshImportReviewCandidates } from './transactionImport.js';
 import { TRAFFIC_SCHEMA } from './traffic.js';
+import { MFA_SCHEMA } from './mfa.js';
+import { TRUSTED_BROWSER_SCHEMA } from './trustedBrowsers.js';
 
 export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
@@ -437,6 +439,10 @@ export async function migratePrivateSchema(client) {
       households,household_members,household_invitations,household_subscriptions,stripe_events,app_migrations,email_verification_tokens
       FROM PUBLIC, finance_app_runtime;
   `);
+  await client.query(MFA_SCHEMA);
+  await client.query('REVOKE ALL ON user_mfa FROM PUBLIC, finance_app_runtime');
+  await client.query(TRUSTED_BROWSER_SCHEMA);
+  await client.query('REVOKE ALL ON trusted_browsers FROM PUBLIC, finance_app_runtime');
   await normalizeStoredDates(client);
   await repairLegacyPlaidDirections(client);
   await backfillTransfers(client);

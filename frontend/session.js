@@ -20,6 +20,7 @@ window.FinanceSession = (() => {
   let inviteToken = location.hash.startsWith('#invite-token=') ? location.hash.slice('#invite-token='.length) : '';
   let verifyToken = location.hash.startsWith('#verify-token=') ? location.hash.slice('#verify-token='.length) : '';
   let verificationNotice = '';
+  let mfaRequired = false;
   if (inviteToken || verifyToken) history.replaceState(null, '', location.pathname);
   const el = id => document.getElementById(id);
   function lock() {
@@ -32,6 +33,8 @@ window.FinanceSession = (() => {
     window.FinanceTransactionCleanup?.reset();
     window.FinanceTransactionDuplicates?.reset();
     window.FinanceAccounts?.reset();
+    window.FinanceMfa?.reset();
+    mfaRequired = false;
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');
     if (cleanAppMarkup) document.querySelector('.app-container').innerHTML = cleanAppMarkup;
@@ -77,6 +80,14 @@ window.FinanceSession = (() => {
     return response;
   };
   function renderMode() {
+    if (mode !== 'login') mfaRequired = false;
+    el('auth-mfa-label').hidden = !mfaRequired;
+    el('auth-trust-label').hidden = !mfaRequired;
+    el('auth-mfa-code').required = mfaRequired;
+    if (!mfaRequired) {
+      el('auth-mfa-code').value = '';
+      el('auth-trust-browser').checked = false;
+    }
     const recovery = mode === 'forgot' || mode === 'reset';
     el('auth-screen').classList.toggle('is-registering', mode === 'register');
     el('auth-signup-steps').hidden = mode !== 'register';
@@ -229,10 +240,20 @@ window.FinanceSession = (() => {
         }
         const response = await fetch(`/api/auth/${mode === 'invite' ? 'accept-invite' : mode}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: el('auth-email').value.trim(), password: el('auth-password').value, name: el('auth-name').value.trim(), setupToken: el('auth-token').value, ...(inviteToken && mode === 'invite' ? { token: inviteToken } : {}) })
+          body: JSON.stringify({ email: el('auth-email').value.trim(), password: el('auth-password').value, name: el('auth-name').value.trim(), setupToken: el('auth-token').value, ...(mode === 'login' && mfaRequired ? { code: el('auth-mfa-code').value.trim(), trustBrowser: el('auth-trust-browser').checked === true } : {}), ...(inviteToken && mode === 'invite' ? { token: inviteToken } : {}) })
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Unable to sign in.');
+        if (data.mfaRequired) {
+          mfaRequired = true;
+          renderMode();
+          el('auth-description').textContent = 'Confirm sign-in with your authenticator or a recovery code.';
+          el('auth-mfa-code').focus();
+          return;
+        }
+        el('auth-password').value = '';
+        el('auth-mfa-code').value = '';
+        el('auth-trust-browser').checked = false;
         if (inviteToken && mode === 'login') {
           user = data.user || (await (await fetch('/api/auth/me')).json()).user;
           if (!user) throw new Error('Unable to verify the signed-in account.');

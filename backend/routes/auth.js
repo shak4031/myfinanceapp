@@ -9,6 +9,8 @@ import { recordAudit } from '../utils/audit.js';
 import { sendPasswordResetEmail, sendSecurityNotice, mailConfigured, appOrigin } from '../utils/mailer.js';
 import { isDemoEmail } from '../utils/demo.js';
 import { ensureHousehold, invitedHousehold, joinHousehold } from '../utils/households.js';
+import { newSecret, encryptSecret, decryptSecret, matchingStep, recoveryCodes, consumeFactor } from '../utils/mfa.js';
+import { TRUST_DAYS, rememberBrowser, browserIsTrusted, revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
 
 const router = Router();
 const sessionHours = 12;
@@ -16,6 +18,7 @@ const resetMinutes = 30;
 export const cookieName = 'finance_session';
 export const supportCookieName = 'finance_support';
 const production = process.env.NODE_ENV === 'production';
+export const trustedCookieName = production ? '__Host-finance_trusted' : 'finance_trusted';
 export const cookieOptions = { httpOnly: true, secure: production, sameSite: 'strict', path: '/' };
 const publicUser = row => ({ id: row.id, name: row.name, email: row.email, role: row.role === 'admin' ? 'admin' : 'user', emailVerified: !!row.email_verified_at });
 const genericResetMessage = 'If that email belongs to an account, a password reset link has been sent.';
@@ -323,6 +326,9 @@ router.post('/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
     const { password } = req.body;
+    if (req.body.trustBrowser !== undefined && typeof req.body.trustBrowser !== 'boolean') {
+      return res.status(400).json({ error: 'Trust this browser must be a boolean.' });
+    }
     if (!validCredentials(email, password)) {
       await recordAudit(req, 'auth.login', 'failure', { email, status: 401, detail: { reason: 'invalid_format' } });
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -342,11 +348,132 @@ router.post('/login', async (req, res, next) => {
       });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
-    const session = await administrativeTransaction(client => issueSession(client, req, res, row));
-    await recordAudit(req, 'auth.login', 'success', { actorUserId: row.id, subjectUserId: row.id, email, status: 200 });
+    const result = await administrativeTransaction(async client => {
+      const current = (await client.query('SELECT id,name,email,role,password_hash,email_verified_at FROM users WHERE id=$1 FOR UPDATE', [row.id])).rows[0];
+      if (!current || current.password_hash !== row.password_hash) return { invalid: true };
+      const mfa = (await client.query('SELECT * FROM user_mfa WHERE user_id=$1', [row.id])).rows[0];
+      let trustedBrowser = null, trustedSignIn = false;
+      if (mfa?.enabled_at) {
+        const previous = readCookie(req, trustedCookieName);
+        if (req.body.code) {
+          if (!await consumeFactor(client, mfa, req.body.code)) return { invalid: true };
+          if (req.body.trustBrowser === true) trustedBrowser = await rememberBrowser(client, row.id, previous);
+        } else {
+          if (!await browserIsTrusted(client, row.id, previous)) return { mfaRequired: true };
+          trustedBrowser = await rememberBrowser(client, row.id, previous);
+          trustedSignIn = true;
+        }
+      }
+      return { session: await issueSession(client, req, res, current), trustedBrowser, trustedSignIn };
+    });
+    if (result.mfaRequired) return res.json({ mfaRequired: true });
+    if (result.invalid) {
+      await recordAudit(req, 'auth.login', 'failure', { actorUserId: null, subjectUserId: row.id, status: 401, detail: { reason: 'invalid_credentials_or_factor' } });
+      return res.status(401).json({ error: 'Invalid credentials or authenticator/recovery code.' });
+    }
+    const session = result.session;
+    await recordAudit(req, 'auth.login', 'success', { actorUserId: row.id, subjectUserId: row.id, email, status: 200,
+      detail: { trustedBrowser: result.trustedSignIn, browserRemembered: !!result.trustedBrowser } });
+    if (result.trustedBrowser) res.cookie(trustedCookieName, result.trustedBrowser.token,
+      { ...cookieOptions, expires: new Date(result.trustedBrowser.expiresAt) });
     sendSession(res, session);
+  } catch (error) {
+    if (error.code === 'MFA_KEY_UNAVAILABLE') return res.status(503).json({ error: 'Authenticator verification is temporarily unavailable.' });
+    next(error);
+  }
+});
+
+router.get('/mfa', requireUser, async (req, res, next) => {
+  try {
+    if (req.support) return res.status(403).json({ error: 'End support access to manage authentication.' });
+    const row = await administrativeTransaction(async client =>
+      (await client.query('SELECT enabled_at,cardinality(recovery_hashes) AS remaining FROM user_mfa WHERE user_id=$1', [req.user.id])).rows[0]);
+    res.json({ enabled: !!row?.enabled_at, recoveryCodesRemaining: row?.enabled_at ? row.remaining : 0 });
   } catch (error) { next(error); }
 });
+
+router.get('/mfa/trusted-browsers', requireUser, async (req, res, next) => {
+  try {
+    if (req.support) return res.status(403).json({ error: 'End support access to manage trusted browsers.' });
+    const token = readCookie(req, trustedCookieName);
+    const browsers = await administrativeTransaction(async client => (await client.query(`SELECT id::text,created_at,last_used_at,expires_at,
+      token_hash=$2 AS current FROM trusted_browsers WHERE user_id=$1 AND expires_at>NOW() ORDER BY created_at DESC`,
+    [req.user.id, token ? tokenHash(token) : null])).rows);
+    res.json({ trustDays: TRUST_DAYS, browsers });
+  } catch (error) { next(error); }
+});
+
+router.post('/mfa/revoke-trusted-browsers', requireUser, async (req, res, next) => {
+  try {
+    if (req.support || isDemoEmail(req.user.email)) return res.status(403).json({ error: 'Trusted browsers cannot be changed in support or demo sessions.' });
+    await administrativeTransaction(async client => {
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [req.user.id]);
+      await revokeTrustedBrowsers(client, req.user.id);
+      await client.query('DELETE FROM sessions WHERE (user_id=$1 OR actor_user_id=$1) AND token_hash<>$2', [req.user.id, tokenHash(cookieToken(req))]);
+    });
+    res.clearCookie(trustedCookieName, cookieOptions);
+    await recordAudit(req, 'auth.trusted_browsers_revoked', 'success', { actorUserId: req.user.id, subjectUserId: req.user.id, status: 200 });
+    res.json({ success: true, message: 'All trusted browsers were forgotten and other sessions signed out. Your next sign-in will require MFA.' });
+  } catch (error) { next(error); }
+});
+
+for (const action of ['enroll', 'confirm', 'disable', 'recovery-codes']) {
+  router.post(`/mfa/${action}`, requireUser, async (req, res, next) => {
+    try {
+      if (req.support || isDemoEmail(req.user.email)) return res.status(403).json({ error: 'Authenticator settings cannot be changed in support or demo sessions.' });
+      if (!await rateLimit(req, req.user.email, 'mfa-settings')) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+      const result = await administrativeTransaction(async client => {
+        const user = (await client.query('SELECT password_hash FROM users WHERE id=$1 FOR UPDATE', [req.user.id])).rows[0];
+        if (typeof req.body?.password !== 'string' || req.body.password.length > 128
+          || !await verifyPassword(req.body.password, user?.password_hash)) {
+          return { status: 403, error: 'Current password is required.' };
+        }
+        const mfa = (await client.query('SELECT * FROM user_mfa WHERE user_id=$1', [req.user.id])).rows[0];
+        if (action === 'enroll') {
+          if (mfa?.enabled_at) return { status: 409, error: 'Authenticator is already enabled.' };
+          const secret = newSecret();
+          await client.query(`INSERT INTO user_mfa(user_id,pending_ciphertext,pending_expires_at)
+            VALUES($1,$2,NOW()+INTERVAL '10 minutes') ON CONFLICT(user_id)
+            DO UPDATE SET pending_ciphertext=$2,pending_expires_at=NOW()+INTERVAL '10 minutes'`,
+          [req.user.id, encryptSecret(secret, req.user.id)]);
+          return { secret, uri: `otpauth://totp/${encodeURIComponent(`MyFinance:${req.user.email}`)}?secret=${secret}&issuer=MyFinance&algorithm=SHA256&digits=6&period=30` };
+        }
+        if (action === 'confirm') {
+          if (mfa?.enabled_at || !mfa?.pending_ciphertext || new Date(mfa.pending_expires_at).getTime() <= Date.now()) {
+            return { status: 409, error: 'Enrollment expired or is already enabled. Start again.' };
+          }
+          const step = matchingStep(decryptSecret(mfa.pending_ciphertext, req.user.id), req.body.code);
+          if (step === null) return { status: 403, error: 'Invalid authenticator code. Check the clock on your device.' };
+          const recovery = recoveryCodes();
+          await client.query(`UPDATE user_mfa SET secret_ciphertext=pending_ciphertext,pending_ciphertext=NULL,
+            pending_expires_at=NULL,enabled_at=NOW(),last_step=$2,recovery_hashes=$3 WHERE user_id=$1`,
+          [req.user.id, step, recovery.hashes]);
+          await client.query('DELETE FROM sessions WHERE (user_id=$1 OR actor_user_id=$1) AND token_hash<>$2', [req.user.id, tokenHash(cookieToken(req))]);
+          await revokeTrustedBrowsers(client, req.user.id);
+          return { recoveryCodes: recovery.codes };
+        }
+        if (!await consumeFactor(client, mfa, req.body.code)) return { status: 403, error: 'A valid authenticator or unused recovery code is required.' };
+        await revokeTrustedBrowsers(client, req.user.id);
+        if (action === 'disable') {
+          await client.query('DELETE FROM user_mfa WHERE user_id=$1', [req.user.id]);
+          await client.query('DELETE FROM sessions WHERE (user_id=$1 OR actor_user_id=$1) AND token_hash<>$2', [req.user.id, tokenHash(cookieToken(req))]);
+          return { success: true };
+        }
+        const recovery = recoveryCodes();
+        await client.query('UPDATE user_mfa SET recovery_hashes=$2 WHERE user_id=$1', [req.user.id, recovery.hashes]);
+        return { recoveryCodes: recovery.codes };
+      });
+      await recordAudit(req, `auth.mfa_${action.replace('-', '_')}`, result.error ? 'failure' : 'success',
+        { actorUserId: req.user.id, subjectUserId: req.user.id, status: result.status || 200 });
+      if (result.error) return res.status(result.status).json({ error: result.error });
+      if (action !== 'enroll') res.clearCookie(trustedCookieName, cookieOptions);
+      res.json(result);
+    } catch (error) {
+      if (error.code === 'MFA_KEY_UNAVAILABLE') return res.status(503).json({ error: 'Authenticator verification is temporarily unavailable.' });
+      next(error);
+    }
+  });
+}
 
 router.post('/logout', async (req, res, next) => {
   try {
@@ -420,16 +547,19 @@ router.post('/password-reset/confirm', async (req, res, next) => {
     }
     const encoded = await hashPassword(password);
     const user = await administrativeTransaction(async client => {
-      const row = (await client.query(`
-        UPDATE password_reset_tokens SET used_at = NOW()
-        WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW() RETURNING user_id
-      `, [tokenHash(token)])).rows[0];
+      const row = (await client.query(`SELECT user_id FROM password_reset_tokens
+        WHERE token_hash=$1 AND used_at IS NULL AND expires_at>NOW()`, [tokenHash(token)])).rows[0];
       if (!row) return null;
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [row.user_id]);
+      const consumed = await client.query(`UPDATE password_reset_tokens SET used_at=NOW()
+        WHERE token_hash=$1 AND used_at IS NULL AND expires_at>NOW() RETURNING user_id`, [tokenHash(token)]);
+      if (!consumed.rows.length) return null;
       const updated = (await client.query(
         'UPDATE users SET password_hash=$1, password_changed_at=NOW() WHERE id=$2 RETURNING id,name,email,role',
         [encoded, row.user_id])).rows[0];
       // Sign out everywhere, including any support sessions on the account.
       await client.query('DELETE FROM sessions WHERE user_id=$1 OR actor_user_id=$1', [row.user_id]);
+      await revokeTrustedBrowsers(client, row.user_id);
       await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id=$1 AND used_at IS NULL', [row.user_id]);
       await client.query('DELETE FROM auth_attempts WHERE key = ANY($1)', [attemptKeysForEmail(updated.email)]);
       return updated;
@@ -439,6 +569,7 @@ router.post('/password-reset/confirm', async (req, res, next) => {
       return res.status(400).json({ error: 'This reset link is invalid or has expired' });
     }
     await recordAudit(req, 'auth.password_reset_completed', 'success', { actorUserId: user.id, subjectUserId: user.id, status: 200 });
+    res.clearCookie(trustedCookieName, cookieOptions);
     sendSecurityNotice(user, 'Your MyFinanceApp password was changed',
       `Hi ${user.name},\n\nYour password was just changed and all sessions were signed out. If this was not you, contact support immediately.`)
       .catch(() => log('MAIL', 'Password change notice could not be sent'));
@@ -471,12 +602,16 @@ router.post('/password', requireUser, async (req, res, next) => {
     const encoded = await hashPassword(newPassword);
     const current = tokenHash(cookieToken(req));
     await administrativeTransaction(async client => {
+      const latest = (await client.query('SELECT password_hash FROM users WHERE id=$1 FOR UPDATE', [req.user.id])).rows[0];
+      if (latest?.password_hash !== row.password_hash) throw Object.assign(new Error('Password changed. Try again.'), { status: 409 });
       await client.query('UPDATE users SET password_hash=$1, password_changed_at=NOW() WHERE id=$2', [encoded, req.user.id]);
+      await revokeTrustedBrowsers(client, req.user.id);
       await client.query('DELETE FROM sessions WHERE (user_id=$1 OR actor_user_id=$1) AND token_hash <> $2', [req.user.id, current]);
       await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id=$1 AND used_at IS NULL', [req.user.id]);
       await client.query('DELETE FROM auth_attempts WHERE key = $1', [tokenHash(`password:email:${email}`)]);
     });
     await recordAudit(req, 'auth.password_changed', 'success', { actorUserId: req.user.id, subjectUserId: req.user.id, status: 200 });
+    res.clearCookie(trustedCookieName, cookieOptions);
     sendSecurityNotice(req.user, 'Your MyFinanceApp password was changed',
       `Hi ${req.user.name},\n\nYour password was just changed from a signed-in device, and every other device was signed out. If this was not you, reset your password and contact support immediately.`)
       .catch(() => log('MAIL', 'Password change notice could not be sent'));

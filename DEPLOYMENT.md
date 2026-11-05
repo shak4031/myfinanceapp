@@ -12,6 +12,72 @@
 
 ## Environment
 
+### Optional authenticator MFA
+
+Set `MFA_ENCRYPTION_KEY` on the application service before users enroll. Generate
+a separate 32-byte Base64 key locally:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Store it as a protected Railway deployment secret and keep a secure recovery
+copy. Do not reuse the Plaid key, commit it, or replace it without re-encrypting
+the `user_mfa` secrets. A missing/wrong key prevents enrollment or TOTP
+verification on untrusted browsers; there is no automatic password-only fallback.
+An explicitly trusted browser can use password plus its valid trust cookie.
+Recovery codes remain usable if the encryption key is unavailable, but they do
+not repair encrypted secrets. Do not advertise automatic key rotation.
+
+Users enable optional TOTP in **Settings & support** with their current password
+and a six-digit authenticator code. Manual setup uses HMAC-SHA-256, six digits and
+30-second periods with random 256-bit secrets. The authenticator must support
+SHA-256 and be configured explicitly for it, not its usual SHA-1 default.
+The enrollment URI specifies `algorithm=SHA256`. This pre-release change assumes
+no deployed MFA enrollments; any older development enrollment must be disabled
+before upgrading and re-enrolled afterward. There is no SHA-1 fallback.
+Secrets are AES-256-GCM encrypted with user-ID-associated
+data; pending enrollment expires in ten minutes. A one-step clock tolerance is
+accepted and used steps cannot be replayed. Confirming enrollment signs out
+other devices and support sessions. Ten independent 128-bit recovery codes
+are returned once and stored only as SHA-256 hashes; use is atomic and single-use.
+Replacing codes or disabling MFA requires the password and a valid factor.
+Using a recovery code consumes only that code. Replace the set when running low
+or if it may have been exposed: in Settings, provide the password and an
+authenticator code or another unused recovery code and choose **Replace recovery
+codes**. All old codes are invalidated; securely save the ten new codes.
+This does not restore a lost authenticator. Without an authenticator backup,
+disable MFA using the password and an unused recovery code, then immediately
+enroll the replacement authenticator.
+Password reset never removes MFA. There is no administrator/email-only MFA
+reset endpoint; losing both authenticator and recovery codes locks the user out
+unless a separately designed and verified operator recovery process is used.
+TOTP is not phishing-resistant. The public demo and support sessions cannot
+change MFA. Every household member enrolls independently; MFA is not required
+globally, and this does not implement passkeys or an independent security audit.
+
+### Trusted browsers (90 days)
+
+After a successful authenticator or recovery-code sign-in, users may explicitly
+check **Trust this browser for 90 days**. It is unchecked by default. Password
+verification remains mandatory; only the MFA prompt is skipped on that browser.
+This uses a random 256-bit token in an HttpOnly, SameSite=Strict, host-only cookie
+(`__Host-finance_trusted`, Secure in production). The database stores only its
+SHA-256 hash, account binding and timestamps. Tokens rotate at trusted sign-in
+without extending the original 90-day expiry. At most twenty records per login
+are retained. No device fingerprint or SMS service is used.
+
+Settings lists remembered browsers by timestamps and identifies the current
+cookie; **Forget all trusted browsers** revokes their tokens and signs out other
+sessions, keeping this session open. Normal logout retains browser trust.
+Password changes/resets, MFA confirmation/disable/recovery-code replacement,
+and administrator session revocation invalidate trust. Password reset still
+preserves MFA. Clearing cookies, expiry or a different browser requires MFA.
+Session limits remain ten minutes idle and twelve hours absolute. Never trust
+shared/public browsers: possession of the cookie plus password bypasses the
+second-factor prompt. This is a convenience/security trade-off, not
+hardware-bound or risk-based device recognition.
+
 Set secrets in your deployment platform, never in source control:
 
 ```text
@@ -313,7 +379,7 @@ New public registrations receive single-use email verification links, valid for
 registration, invitations and reminders; existing logins are grandfathered
 verified. SMTP connection, greeting and socket timeouts are bounded so an
 unresponsive mail server does not hold registration or reminder transactions
-indefinitely. MFA and self-service account deletion are not implemented.
+indefinitely. Optional authenticator MFA is implemented; self-service account deletion is not.
 
 ## Household subscriptions and Stripe rollout
 

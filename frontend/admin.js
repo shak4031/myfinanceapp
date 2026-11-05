@@ -210,7 +210,7 @@
     }
     const prompts = {
       'password-reset': `Email a password reset link to ${email}? Verify the customer's identity first. You will not see the link.`,
-      'revoke-sessions': 'Sign this user out of every device?',
+      'revoke-sessions': 'Sign this user out of every device and forget all trusted browsers? If MFA is enabled, the next sign-in will require a factor.',
       unlock: 'Clear failed sign-in lockouts for this user?',
       'license-grant': plan === 'pro'
         ? `Grant MyFinance Pro (USD 14.99/month per household) to ${email}? This includes all analytics, budgets, debt planning and goals. This license action does not collect payment.`

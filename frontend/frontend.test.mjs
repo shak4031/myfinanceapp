@@ -516,18 +516,18 @@ test('member Settings hides support grants, explains household sharing and skips
   assert.match(f.node('support-status').textContent, /members already share access/);
   assert.equal(f.node('support-grants').innerHTML, '');
   assert.equal(f.node('support-activity').innerHTML, '');
-  assert.equal(calls.length, 0);
+  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa']);
   const actual = [...new Set([...f.context.document.querySelector('.main-content').options])].find(node => node.id === 'settings-view');
   await actual.listeners.submit({ target: { id: 'support-grant-form' }, preventDefault() {} });
   await actual.listeners.click({ target: { dataset: { revoke: '1' } } });
-  assert.equal(calls.length, 0, 'hidden support controls also reject synthetic member actions');
+  assert.equal(calls.filter(call => call.url.includes('support-access')).length, 0, 'hidden support controls also reject synthetic member actions');
   assert.match(actual.innerHTML, /Operators can access operational information and audit metadata/);
   assert.doesNotMatch(actual.innerHTML, /Nobody can see your data without a grant from you/);
 });
 
 test('owner Settings retains support access while support sessions cannot manage grants', async () => {
   const calls = [];
-  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); return response(200, { grants: [], activity: [] }); });
+  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); return response(200, { grants: [], activity: [], browsers: [] }); });
   let support = null;
   f.context.FinanceTools = { escape: String };
   f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => support, currentUser: () => ({ household: { role: 'owner' } }) };
@@ -535,13 +535,138 @@ test('owner Settings retains support access while support sessions cannot manage
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(f.node('support-grant-form').hidden, false);
-  assert.deepEqual(calls.map(call => call.url), ['/api/support-access']);
+  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa', '/api/auth/mfa/trusted-browsers', '/api/support-access']);
   support = { id: 1 };
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(f.node('support-grant-form').hidden, true);
   assert.match(f.node('support-status').textContent, /hidden during a support session/);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 3);
+});
+
+test('MFA login challenge never reloads or authenticates before the second factor is submitted', async () => {
+  const requests = [];
+  const f = fixture(async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/auth/me') return response(401, {});
+    if (url === '/api/auth/status') return response(200, { registrationEnabled: true });
+    if (url === '/api/auth/login') {
+      const input = JSON.parse(options.body);
+      return response(200, input.code ? { user: { id: 4 } } : { mfaRequired: true });
+    }
+    return response(202, {});
+  });
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  f.node('auth-email').value = 'customer@example.test';
+  f.node('auth-password').value = 'secret-password-123';
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.context.reloaded, undefined);
+  assert.equal(f.context.FinanceSession.isAuthenticated(), false);
+  assert.equal(f.node('auth-mfa-label').hidden, false);
+  assert.equal(f.node('auth-mfa-code').required, true);
+  assert.equal(f.node('auth-trust-label').hidden, false);
+  assert.equal(f.node('auth-trust-browser').checked, false, 'trust is opt-in');
+  f.node('auth-mfa-code').value = '123456';
+  f.node('auth-trust-browser').checked = true;
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.context.reloaded, true);
+  assert.equal(f.node('auth-password').value, '');
+  assert.equal(f.node('auth-mfa-code').value, '');
+  assert.equal(JSON.parse(requests.filter(request => request.url === '/api/auth/login').at(-1).options.body).code, '123456');
+  assert.equal(JSON.parse(requests.filter(request => request.url === '/api/auth/login').at(-1).options.body).trustBrowser, true);
+  assert.equal(f.node('auth-trust-browser').checked, false);
+});
+
+test('MFA settings show manual setup and one-time recovery codes, and discard late secret responses on lock', async () => {
+  let enabled = false, authenticated = true, pendingEnroll = null;
+  const f = fixture(async (url, options = {}) => {
+    if (url === '/api/auth/mfa') return response(200, { enabled, recoveryCodesRemaining: enabled ? 10 : 0 });
+    if (url === '/api/auth/mfa/trusted-browsers') return response(200, { browsers: [] });
+    if (url === '/api/auth/mfa/enroll') {
+      if (pendingEnroll) return pendingEnroll;
+      return response(200, { secret: 'LOCAL-TEST-SECRET' });
+    }
+    if (url === '/api/auth/mfa/confirm') {
+      assert.equal(JSON.parse(options.body).code, '123456');
+      enabled = true;
+      return response(200, { recoveryCodes: ['test-recovery-code'] });
+    }
+    return response(200, { grants: [], activity: [] });
+  });
+  f.context.FinanceTools = { escape: String };
+  f.context.FinanceSession = {
+    isAuthenticated: () => authenticated, currentSupport: () => null,
+    currentUser: () => ({ id: 4, email: 'member@example.test', household: { role: 'member' } })
+  };
+  f.run('account.js');
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const view = f.context.document.querySelector('.main-content').options.find(node => node.id === 'settings-view');
+  assert.match(view.innerHTML, /algorithm SHA-256 \(not SHA-1\), six digits and 30 seconds/);
+  assert.match(view.innerHTML, /All old codes become invalid; save the ten new codes/);
+  assert.match(view.innerHTML, /Replacing codes does not restore a lost authenticator/);
+  const submit = () => view.listeners.submit({ target: { id: 'mfa-form' }, preventDefault() {} });
+  f.node('mfa-password').value = 'current-password-123';
+  await submit();
+  assert.equal(f.node('mfa-secret').textContent, 'LOCAL-TEST-SECRET');
+  assert.equal(f.node('mfa-enrollment').hidden, false);
+  assert.equal(f.node('mfa-submit').textContent, 'Confirm authenticator');
+  f.node('mfa-password').value = 'current-password-123';
+  f.node('mfa-code').value = '123456';
+  await submit();
+  assert.equal(f.node('mfa-secret').textContent, '');
+  assert.equal(f.node('mfa-codes').textContent, 'test-recovery-code');
+  f.node('mfa-dismiss').listeners.click();
+  assert.equal(f.node('mfa-codes').textContent, '');
+  enabled = false;
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  let resolveEnroll;
+  pendingEnroll = new Promise(resolve => { resolveEnroll = resolve; });
+  const waiting = submit();
+  authenticated = false;
+  f.context.FinanceMfa.reset();
+  resolveEnroll(response(200, { secret: 'STALE-SECRET' }));
+  await waiting;
+  assert.equal(f.node('mfa-secret').textContent, '');
+  assert.equal(f.node('mfa-enrollment').hidden, true);
+});
+
+test('trusted-browser settings render only metadata, revoke trust, and clear on session lock', async () => {
+  let browsers = [{
+    id: '1', current: true, created_at: '2026-11-04T12:00:00Z',
+    last_used_at: '2026-11-04T12:00:00Z', expires_at: '2027-02-02T12:00:00Z'
+  }];
+  let revoked = false;
+  const f = fixture(async (url, options = {}) => {
+    if (url === '/api/auth/mfa') return response(200, { enabled: true, recoveryCodesRemaining: 10 });
+    if (url === '/api/auth/mfa/trusted-browsers') return response(200, { trustDays: 90, browsers });
+    if (url === '/api/auth/mfa/revoke-trusted-browsers') {
+      assert.equal(options.method, 'POST');
+      browsers = []; revoked = true;
+      return response(200, { message: 'Trusted browsers forgotten.' });
+    }
+    return response(200, {});
+  });
+  f.context.FinanceTools = { escape: String };
+  f.context.FinanceUI = { confirm: async () => true };
+  f.context.FinanceSession = {
+    isAuthenticated: () => true, currentSupport: () => null,
+    currentUser: () => ({ email: 'member@example.test', household: { role: 'member' } })
+  };
+  f.run('account.js');
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(f.node('trusted-browsers').innerHTML, /This browser/);
+  assert.equal(f.node('trusted-revoke').hidden, false);
+  await f.node('trusted-revoke').listeners.click();
+  assert.equal(revoked, true);
+  assert.equal(f.node('trusted-revoke').hidden, true);
+  assert.match(f.node('trusted-status').textContent, /forgotten/);
+  f.context.FinanceMfa.reset();
+  assert.equal(f.node('trusted-browsers').textContent, '');
+  assert.equal(f.node('trusted-status').textContent, '');
 });
 
 test('import history selects recent imports, confirms recovery and refreshes financial views', async () => {
@@ -3773,7 +3898,7 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   browserBits(f);
   f.run('tutorial.js');
   const tours = f.context.FinanceTutorials;
-  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,accounts,analytics,compass,account-filter,duplicate-cleanup,bill-follow-up');
+  assert.equal(tours.list().map(item => item.id).join(), 'debt,goals,dashboard,fixed,categories,transactions,accounts,analytics,compass,account-filter,duplicate-cleanup,bill-follow-up,mfa');
   tours.open('debt-strategies');
   assert.equal(tours.state.tutorial.id, 'debt');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'strategy');
@@ -3789,6 +3914,97 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   assert.equal(tours.state.index, tours.state.tutorial.scenes.length - 1);
   assert.match(f.node('tutorial-root').innerHTML, /All tutorials/);
 });
+test('MFA tutorial and knowledge base explain manual setup, recovery and trusted browsers without exposing credentials', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  tours.open('mfa');
+  const tutorial = tours.state.tutorial;
+  assert.equal(tutorial.cta.view, 'settings');
+  assert.equal(tutorial.scenes.map(scene => scene.id).join(), 'intro,app,setup,confirm,signin,recovery,phone,troubleshoot,done');
+  tutorial.scenes.forEach((scene, index) => {
+    tours.go(index);
+    assert.match(f.node('tut-canvas').innerHTML, /\S/);
+    assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]|otpauth:|[A-Z2-7]{52}/);
+  });
+  tours.open('mfa/setup');
+  assert.match(f.node('tut-caption').textContent, /SHA-256[\s\S]*manual key, not QR or SMS/);
+  tours.open('mfa/recovery');
+  assert.match(f.node('tut-caption').textContent, /another unused recovery code[\s\S]*All old codes become invalid/);
+  tours.open('mfa/phone');
+  assert.match(f.node('tut-caption').textContent, /different unused recovery code[\s\S]*Password reset does not remove MFA/);
+  tours.open('two-step-verification');
+  assert.equal(tours.state.tutorial.id, 'mfa');
+  assert.equal(tours.state.index, 0);
+  const html = source('index.html');
+  const guide = html.match(/<section class="kb-section" id="knowledge-base-mfa"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(guide);
+  assert.equal((guide.match(/class="kb-card"/g) || []).length, 8);
+  assert.match(html, /data-kb-filter="security"/);
+  assert.match(html, /data-kb-anchor="knowledge-base-mfa"/);
+  assert.match(guide, /data-kb-topic="security"/);
+  assert.match(guide, /https:\/\/ente.io\/auth\//);
+  assert.match(guide, /https:\/\/getaegis.app\//);
+  assert.match(guide, /manual key, not a QR scanner or SMS/);
+  assert.match(guide, /fixed expiry[\s\S]*twenty browsers/);
+  assert.match(guide, /no email-only or administrator MFA reset/);
+  assert.match(guide, /SHA-256, six digits, and a 30-second period/);
+  assert.match(source('account.js'), /href="#tutorials\/mfa"/);
+});
+
+test('MFA knowledge-base guides are searchable, topic-filtered and reachable from the popular question', () => {
+  const f = fixture();
+  const root = f.node('knowledge-base-view'), search = f.node('kb-search');
+  const discovery = f.node('kb-discovery');
+  const guide = source('index.html').match(/<section class="kb-section" id="knowledge-base-mfa"[\s\S]*?<\/section>/)[0];
+  const articles = [...guide.matchAll(/<article class="kb-card">([\s\S]*?)<\/article>/g)].map((match, index) => {
+    const article = f.node(`mfa-guide-${index}`);
+    article.textContent = match[1].replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&');
+    return article;
+  });
+  const mfa = f.node('knowledge-base-mfa'), other = f.node('knowledge-base-transactions');
+  mfa.dataset.kbTopic = 'security';
+  other.dataset.kbTopic = 'transactions';
+  mfa.querySelectorAll = () => articles;
+  const otherArticle = f.node('other-guide');
+  otherArticle.textContent = 'Find a transaction';
+  other.querySelectorAll = () => [otherArticle];
+  let scrolled = false;
+  mfa.scrollIntoView = () => { scrolled = true; };
+  const filters = ['all', 'security', 'transactions'].map(topic => {
+    const filter = f.node(`kb-filter-${topic}`);
+    filter.dataset.kbFilter = topic;
+    return filter;
+  });
+  root.querySelectorAll = selector => selector === '[data-kb-filter]' ? filters : [mfa, other];
+  root.querySelector = selector => selector === '#kb-search' ? search
+    : selector === '#kb-results' ? f.node('kb-results')
+    : selector === '.kb-discovery' ? discovery
+    : selector.includes('security') && !mfa.hidden ? mfa : null;
+  f.run('knowledge-base.js');
+  filters[1].listeners.click();
+  assert.equal(mfa.hidden, false);
+  assert.equal(other.hidden, true);
+  assert.equal(f.node('kb-results').textContent, '8 guides found.');
+  assert.equal(scrolled, true);
+  search.value = 'recovery codes';
+  search.listeners.input();
+  assert.ok(articles.some(article => !article.hidden));
+  assert.ok(articles.filter(article => !article.hidden).every(article => /recovery codes/i.test(article.textContent)));
+  search.value = 'nonexistent help phrase';
+  search.listeners.input();
+  assert.equal(mfa.hidden, true);
+  assert.match(f.node('kb-results').textContent, /^0 guides found/);
+  const jump = f.node('kb-mfa-jump');
+  jump.dataset.kbAnchor = 'knowledge-base-mfa';
+  root.listeners.click({ target: { closest: () => jump } });
+  assert.equal(search.value, '');
+  assert.equal(mfa.hidden, false);
+  assert.equal(other.hidden, false);
+  assert.ok(articles.every(article => !article.hidden));
+});
+
 test('spending compass tutorial walks through the plan, money flow, overlapping signals and fairness', () => {
   const f = fixture();
   browserBits(f);

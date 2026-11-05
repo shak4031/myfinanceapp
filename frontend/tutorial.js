@@ -703,9 +703,69 @@
           <div class="tm-note tut-in" ${at(2)}>Forecasts can be wrong if the history or matching description is incomplete.</div>` },
         { id: 'done', title: 'You are ready', caption: 'Use Mark paid for a real payment not in the ledger, Ignore for a single unwanted estimate, and check the statement or biller for actual payment status.', render: () => outro('Close the loop', 'Match · confirm · or ignore one occurrence', 'Review my Dashboard') }
       ]
+    },
+    {
+    id: 'mfa', title: 'Protect your sign-in with MFA', blurb: 'Start with the basics, connect an authenticator, save recovery codes and remember a personal browser.', emoji: '🔐',
+    cta: { label: 'Open Settings & support', view: 'settings' },
+    scenes: [
+      { id: 'intro', title: 'What is MFA?', caption: 'MFA means multi-factor authentication, also called two-step verification. It adds a changing code from an app on your phone to your password. The code is not a text message, email, or bank code. This tutorial uses illustrations only, never your real credentials.',
+        render: () => intro('SIGN-IN SECURITY', 'Your password + your phone', 'An extra check if someone steals your password. Illustrations only.', ['🔑', '📱', '🔐']) },
+      { id: 'app', title: 'Choose an authenticator', caption: 'An authenticator app generates codes even without internet or mobile signal. Ente Auth on iPhone or Android and Aegis on Android support SHA-256 in their published implementations; they are compatible candidates, not an end-to-end tested list. Get official download links from the MFA knowledge-base guide. You need time-based codes with SHA-256, six digits and thirty seconds.',
+        render: () => `${chip(1, 'Choose a compatible authenticator')}
+          ${compare([
+            { e: '📱', title: 'Ente Auth', when: 'iPhone and Android', asks: ['Install from the official site or linked app store', 'Choose SHA-256 for MyFinance'] },
+            { e: '📱', title: 'Aegis', when: 'Android', asks: ['Install from the official site or linked app store', 'Choose SHA-256 for MyFinance'] }
+          ])}
+          <div class="tm-note tut-in" ${at(2)}>Not every authenticator supports SHA-256. Do not use a SHA-1-only entry.</div>` },
+      { id: 'setup', title: 'Connect your phone manually', caption: 'Sign in and open Settings and support. Enter your MyFinance password and choose Set up authenticator. In the phone app, add an account manually and put the displayed setup key in Secret or Key. Set the account name to your MyFinance email, issuer to MyFinance, type to time-based TOTP, algorithm to SHA-256, digits to six, and period to thirty seconds. Current enrollment uses a manual key, not QR or SMS. On one phone, switch between the browser and authenticator.',
+        render: () => `${chip(2, 'Settings & support: Set up authenticator')}
+          <div class="tm-split tm-split-tight">
+            <div class="tm-panel tut-in" ${at(0.3)}><small>MYFINANCE BROWSER</small><h3>Setup key</h3><p class="tm-hint">Copy your private key from Settings, not from this illustration.</p><div class="tm-note">Never share this key or send it to support.</div></div>
+            <div class="tm-panel tut-in" ${at(1.2)}><small>PHONE APP: ADD MANUALLY</small>
+              <div class="tm-kv"><span>Type / algorithm</span><b>TOTP / SHA-256</b></div>
+              <div class="tm-kv"><span>Digits / period</span><b>6 / 30 seconds</b></div>
+              <div class="tm-kv"><span>Account / issuer</span><b>Your email / MyFinance</b></div>
+              <p class="tm-hint">Secret = setup key, not password.</p></div>
+          </div>` },
+      { id: 'confirm', title: 'Confirm and save backups', caption: 'Back in MyFinance, enter your password again and the current six-digit phone code. Choose Confirm authenticator within ten minutes. MFA becomes enabled only after a correct code, and other sessions are signed out. Save all ten recovery codes securely outside this browser before hiding them. Keep them accessible without signing in to MyFinance. Demo and support sessions cannot enroll; every household member enrolls separately.',
+        render: () => `${chip(3, 'Confirm first, then save recovery codes')}
+          <div class="tm-panel tut-in" ${at(0.4)}><small>CONFIRM AUTHENTICATOR</small>
+            <div class="tm-kv"><span>Current password</span><b>Enter again</b></div><div class="tm-kv"><span>Phone code</span><b>Current 6 digits</b></div>
+            <span class="tm-btn tm-btn-primary">Confirm authenticator</span></div>
+          <div class="tm-note tut-in" ${at(2)}>Save ten one-time recovery codes in a protected password manager or safe printed copy.</div>` },
+      { id: 'signin', title: 'Sign in and remember a browser', caption: 'Sign in with email and password. When asked, open the MyFinance entry on your phone and enter its current code. On a private device, optionally check Trust this browser for 90 days. Passwords are always required. Trust expires on a fixed date; signing in does not extend it. Normal sign-out keeps trust; clearing cookies or using another browser requires a code. Never trust a public or shared computer. Session timeouts are unchanged.',
+        render: () => `${chip(4, 'Password, then phone code')}
+          <div class="tm-panel tut-in" ${at(0.4)}><small>ON YOUR PERSONAL BROWSER ONLY</small>
+            <div class="tm-kv"><span>Email + password</span><b>Always required</b></div>
+            <div class="tm-kv"><span>Authenticator code</span><b>On untrusted browsers</b></div>
+            <div class="tm-kv"><span>${check()} Trust this browser for 90 days</span><b>Optional</b></div></div>
+          <div class="tm-note tut-in" ${at(2)}>A stolen password plus trust cookie can bypass MFA. Trust is not hardware identity.</div>` },
+      { id: 'recovery', title: 'Use or replace recovery codes', caption: 'If you cannot use the authenticator, sign in with your password and one unused recovery code instead of the phone code. It works once; the other codes remain valid. When running low or if the set may be exposed, enter your password and an authenticator code or another unused recovery code in Settings, then choose Replace recovery codes. All old codes become invalid, ten new codes appear once, and trusted browsers are forgotten. Save the new set. Replacement is not needed after every use and does not restore a lost authenticator.',
+        render: () => `${chip(5, 'A recovery code is a single-use backup')}
+          <div class="tm-split tm-split-tight">
+            <div class="tm-panel tut-in" ${at(0.3)}><small>USE ONE TO SIGN IN</small><h3>10 codes becomes 9</h3><p class="tm-hint">The used code is consumed. Others still work.</p></div>
+            <div class="tm-panel tut-in" ${at(1.2)}><small>REPLACE THE SET IN SETTINGS</small><h3>Save ten new codes</h3><p class="tm-hint">Password + phone code or another unused recovery code.</p><p class="tm-hint">Old codes and browser trust become invalid.</p></div>
+          </div>` },
+      { id: 'phone', title: 'Lost or replaced phone', caption: 'Restore a secure authenticator backup if you have one and verify the new phone before erasing the old one. Otherwise, sign in using a recovery code. In Settings, disable MFA with your password and a different unused recovery code, then immediately enroll the replacement phone and save the new codes. Disabling briefly returns to password-only sign-in and revokes other sessions and trust. If a device was lost, forget all trusted browsers; change your password if exposed. Password reset does not remove MFA. Losing both your authenticator and recovery codes can lock you out; the app has no email-only or administrator MFA reset.',
+        render: () => `${chip(6, 'Keep a safe recovery path')}
+          ${compare([
+            { e: '📱', title: 'Have an app backup?', when: 'Follow the authenticator instructions', asks: ['Restore or securely transfer the entry', 'Verify the new phone before erasing the old one'] },
+            { e: '🔐', title: 'No authenticator backup?', when: 'Keep unused recovery codes ready', asks: ['Use one code to sign in, another to disable', 'Immediately enroll the replacement phone'] }
+          ])}` },
+      { id: 'troubleshoot', title: 'When a code does not work', caption: 'Check the MyFinance entry, SHA-256 algorithm, six digits and thirty seconds. Turn on automatic date and time on the phone. Use a fresh code before it changes. A successful time step cannot be reused, including the enrollment code, so wait for the next code. Restart setup if the ten-minute window expired. Used recovery codes will not work again. Respect rate-limit wait messages. Contact support for temporary unavailability without sending passwords, keys or codes.',
+        render: () => `${chip(7, 'Check settings before retrying')}
+          <div class="tm-panel tut-in" ${at(0.3)}><small>QUICK CHECKLIST</small>
+            <div class="tm-kv"><span>Correct entry and algorithm</span><b>MyFinance / SHA-256</b></div>
+            <div class="tm-kv"><span>Digits and period</span><b>6 / 30 seconds</b></div>
+            <div class="tm-kv"><span>Phone clock</span><b>Automatic date/time</b></div>
+            <div class="tm-kv"><span>Already used the code?</span><b>Wait for a new one</b></div></div>
+          <div class="tm-note tut-in" ${at(2)}>Never share passwords, setup keys, phone codes or recovery codes with support.</div>` },
+      { id: 'done', title: 'Your next step', caption: 'Open Settings and support to start. Follow the MFA knowledge-base guides for app links, recovery and browser management. MFA is optional and adds protection, not a guarantee. SHA-256 time-based codes are still not phishing-resistant. Keep your phone locked and backup codes safe.',
+        render: () => outro('Protect your next sign-in', 'Connect your phone. Save backups. Trust only personal browsers.', 'Open Settings & support') }
+    ]
     }
   ];
-  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null], 'fixed-bills': ['fixed', null], income: ['fixed', 'income'], categorization: ['categories', null], 'which-page': ['transactions', 'why'], 'spending-compass': ['compass', null], 'compass-signals': ['compass', 'signals'] };
+  const ALIASES = { 'debt-strategies': ['debt', 'strategy'], 'debt-dates': ['debt', 'dates'], payoff: ['debt', null], plan: ['debt', null], 'fixed-bills': ['fixed', null], income: ['fixed', 'income'], categorization: ['categories', null], 'which-page': ['transactions', 'why'], 'spending-compass': ['compass', null], 'compass-signals': ['compass', 'signals'], 'two-step-verification': ['mfa', null] };
 
   const sceneDuration = scene => scene.duration || Math.max(6500, scene.caption.split(/\s+/).length * 330 + 1800);
 

@@ -50,6 +50,34 @@ Implementation: [tenant context](backend/utils/tenant.js),
 
 ## Sign-in and session guard rails
 
+- Optional TOTP MFA is available per login in Settings & support. Enrollment
+  requires the current password and proof of a six-digit authenticator code.
+  An enrolled user's password alone never issues a sign-in session: an untrusted
+  browser must supply a factor, while an explicitly trusted browser must also
+  present its valid trust cookie.
+  Pending secrets expire after ten minutes and are AES-256-GCM encrypted using
+  the separately configured `MFA_ENCRYPTION_KEY`, bound to the login ID.
+  Codes use HMAC-SHA-256 with random 256-bit secrets, 30-second periods and a
+  one-period clock tolerance. Manual enrollment requires a SHA-256-capable
+  authenticator explicitly configured for SHA-256.
+  Successful time steps cannot be reused.
+- Ten single-use recovery codes are shown on enrollment/replacement and stored
+  as SHA-256 hashes. Disabling MFA or replacing recovery codes requires both
+  the current password and an authenticator/unused recovery code. Enrollment
+  and disabling revoke other sessions. Password resets preserve MFA.
+  MFA changes are unavailable in demo/support sessions. There is no
+  email-only or administrator MFA-reset API; save recovery codes securely.
+- After MFA verification, users can explicitly trust a personal browser for
+  ninety days (unchecked by default). A random token is stored in an HttpOnly,
+  SameSite=Strict, host-only cookie, Secure in production; only its SHA-256 hash
+  and account/timestamps are stored server-side. It rotates on sign-in without
+  extending expiry and is not a hardware identity or financial-data session.
+  Passwords remain required, and ten-minute idle/twelve-hour sessions are unchanged.
+  Settings can forget all browsers and sign out other sessions. Normal logout
+  preserves trust; password changes/resets, MFA changes and administrator
+  session revocation remove it. Cookie theft plus password theft can bypass
+  the MFA prompt, so shared/public browsers must never be trusted.
+
 - Passwords are stored as salted scrypt hashes, not recoverable plaintext.
   New passwords must be 12 to 128 characters.
 - New public registrations must verify their email before Stripe Checkout.
@@ -158,7 +186,7 @@ Undoing an import is not permanent erasure: its transaction rows are retained
 in the import batch's recovery backup so they can be restored. Audit events may
 retain filenames and change metadata. An operator must include recovery data,
 audit/log retention, and infrastructure backups in any deletion/retention policy.
-Do not claim zero-knowledge storage, universal encryption at rest, MFA, or
+Do not claim zero-knowledge storage, universal encryption at rest, mandatory or phishing-resistant MFA, or
 independent compliance certification based on these controls alone.
 
 ## Advanced diagnostics and performance

@@ -13,6 +13,7 @@ import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.
 import { isDemoEmail, DEMO_EMAIL } from '../utils/demo.js';
 import { stripeClient } from '../utils/billing.js';
 import { trafficReport } from '../utils/traffic.js';
+import { revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -348,11 +349,13 @@ router.post('/users/:id/revoke-sessions', async (req, res, next) => {
     const id = parseId(req.params.id);
     const count = id && await administrativeTransaction(async client => {
       if (!await loadUser(client, id)) return null;
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [id]);
+      await revokeTrustedBrowsers(client, id);
       return (await client.query('DELETE FROM sessions WHERE user_id=$1 OR actor_user_id=$1', [id])).rowCount;
     });
     if (count === null || !id) return res.status(404).json({ error: 'User not found' });
     await recordAudit(req, 'admin.sessions_revoked', 'success', { subjectUserId: id, status: 200, detail: { sessions: count } });
-    res.json({ success: true, revoked: count });
+    res.json({ success: true, revoked: count, message: 'All sessions revoked and trusted browsers forgotten.' });
   } catch (error) { next(error); }
 });
 
