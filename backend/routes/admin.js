@@ -2,9 +2,9 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { administrativeTransaction } from '../db.js';
 import { recordAudit, hashIdentifier, auditRetentionDays } from '../utils/audit.js';
-import { tokenHash } from '../utils/passwords.js';
+import { tokenHash, verifyPassword } from '../utils/passwords.js';
 import { mailConfigured, sendSecurityNotice } from '../utils/mailer.js';
-import { issuePasswordReset, attemptKeysForEmail, supportCookieName, cookieOptions } from './auth.js';
+import { issuePasswordReset, attemptKeysForEmail, supportCookieName, cookieOptions, rateLimit } from './auth.js';
 import { openApiSpec } from '../utils/openapi.js';
 import { log } from '../utils/logger.js';
 import { queryLogs, parseSince, logRetentionDays } from '../utils/logStore.js';
@@ -14,6 +14,7 @@ import { isDemoEmail, DEMO_EMAIL } from '../utils/demo.js';
 import { stripeClient } from '../utils/billing.js';
 import { trafficReport } from '../utils/traffic.js';
 import { revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
+import { consumeFactor } from '../utils/mfa.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -125,6 +126,7 @@ router.get('/users', async (req, res, next) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase().slice(0, 100) : '';
     const rows = await administrativeTransaction(async client => (await client.query(`
       SELECT u.id, u.name, u.email, u.role, u.created_at, u.password_changed_at,
+        EXISTS(SELECT 1 FROM user_mfa mf WHERE mf.user_id=u.id AND mf.enabled_at IS NOT NULL) AS mfa_enabled,
         (SELECT MAX(created_at) FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login' AND a.outcome='success') AS last_login,
         (SELECT COUNT(*)::int FROM audit_events a WHERE a.subject_user_id = u.id AND a.event_type='auth.login'
            AND a.outcome='failure' AND a.created_at > NOW() - INTERVAL '24 hours') AS failed_logins_24h,
@@ -357,6 +359,67 @@ router.post('/users/:id/revoke-sessions', async (req, res, next) => {
     await recordAudit(req, 'admin.sessions_revoked', 'success', { subjectUserId: id, status: 200, detail: { sessions: count } });
     res.json({ success: true, revoked: count, message: 'All sessions revoked and trusted browsers forgotten.' });
   } catch (error) { next(error); }
+});
+
+router.post('/users/:id/disable-mfa', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'A valid user ID is required.' });
+    const body = req.body || {};
+    if (typeof body.confirmEmail !== 'string' || body.identityVerified !== true) {
+      return res.status(400).json({ error: 'Confirm the account email and that you independently verified the account owner.' });
+    }
+    if (!await rateLimit(req, req.user.email, 'admin-mfa-reset')) {
+      await recordAudit(req, 'admin.mfa_disabled', 'denied', { subjectUserId: id, status: 429 });
+      return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+    }
+    const result = await administrativeTransaction(async client => {
+      // Use consistent lock order when two administrators manage each other's accounts.
+      await client.query('SELECT id FROM users WHERE id=ANY($1) ORDER BY id FOR UPDATE', [[req.user.id, id]]);
+      const admin = (await client.query('SELECT password_hash,role FROM users WHERE id=$1', [req.user.id])).rows[0];
+      if (admin?.role !== 'admin' || typeof body.password !== 'string' || body.password.length > 128
+        || !await verifyPassword(body.password, admin.password_hash)) {
+        return { status: 403, error: 'Your current administrator password is required.' };
+      }
+      const target = await loadUser(client, id);
+      if (!target) return { status: 404, error: 'User not found.' };
+      if (isDemoEmail(target.email)) return { status: 403, error: 'Demo MFA settings cannot be changed.' };
+      if (body.confirmEmail.trim().toLowerCase() !== target.email.toLowerCase()) {
+        return { status: 400, error: 'The confirmation email does not match this account.' };
+      }
+      if (!(await client.query('SELECT user_id FROM user_mfa WHERE user_id=$1', [id])).rows.length) {
+        return { status: 409, error: 'This account has no MFA enrollment to reset.' };
+      }
+      const adminMfa = (await client.query('SELECT * FROM user_mfa WHERE user_id=$1', [req.user.id])).rows[0];
+      if (adminMfa?.enabled_at && !await consumeFactor(client, adminMfa, body.code)) {
+        return { status: 403, error: 'Your administrator authenticator or unused recovery code is required.' };
+      }
+      await client.query('DELETE FROM user_mfa WHERE user_id=$1', [id]);
+      await revokeTrustedBrowsers(client, id);
+      await client.query('DELETE FROM sessions WHERE user_id=$1 OR actor_user_id=$1', [id]);
+      await client.query('UPDATE support_grants SET revoked_at=NOW() WHERE user_id=$1 AND revoked_at IS NULL', [id]);
+      return { target };
+    });
+    await recordAudit(req, 'admin.mfa_disabled', result.error ? 'failure' : 'success', {
+      subjectUserId: id, status: result.status || 200, detail: { identityVerified: true }
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    let notificationSent = false;
+    try {
+      notificationSent = await sendSecurityNotice(result.target, 'MyFinance MFA was disabled by an administrator',
+        `Hi ${result.target.name},\n\nAn administrator disabled authenticator verification for your account after an account-recovery request. All sessions, support access and trusted browsers were revoked. You can now sign in with your existing email and password. Re-enable MFA in Settings & support and save a separate secure copy of the new recovery codes.\n\nIf you did not request this, contact support immediately and change your password.`);
+    } catch (error) {
+      log('MAIL', 'Administrator MFA reset notice could not be sent');
+    }
+    if (!notificationSent) {
+      await recordAudit(req, 'admin.mfa_reset_notice', 'failure', { subjectUserId: id, detail: { reason: 'delivery_failed' } });
+    }
+    res.json({ success: true, notificationSent,
+      message: `MFA disabled. All sessions, support access and trusted browsers revoked. The user can sign in with their existing password and re-enable MFA.${notificationSent ? '' : ' Warning: the security email could not be sent; contact the user through your verified recovery channel.'}` });
+  } catch (error) {
+    if (error.code === 'MFA_KEY_UNAVAILABLE') return res.status(503).json({ error: 'Administrator authenticator verification is temporarily unavailable.' });
+    next(error);
+  }
 });
 
 router.post('/users/:id/unlock', async (req, res, next) => {

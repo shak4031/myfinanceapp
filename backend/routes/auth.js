@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import QRCode from 'qrcode';
 import { administrativeTransaction } from '../db.js';
 import { seedUserCategories } from '../utils/schema.js';
 import { hashPassword, verifyPassword, tokenHash, validCredentials } from '../utils/passwords.js';
@@ -138,7 +139,7 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
-async function rateLimit(req, email, scope = 'login') {
+export async function rateLimit(req, email, scope = 'login') {
   return administrativeTransaction(async client => {
     await client.query('DELETE FROM auth_attempts WHERE reset_at < NOW()');
     for (const value of [`${scope}:ip:${req.ip}`, `${scope}:email:${email}`]) {
@@ -432,11 +433,13 @@ for (const action of ['enroll', 'confirm', 'disable', 'recovery-codes']) {
         if (action === 'enroll') {
           if (mfa?.enabled_at) return { status: 409, error: 'Authenticator is already enabled.' };
           const secret = newSecret();
+          const uri = `otpauth://totp/${encodeURIComponent(`MyFinance:${req.user.email}`)}?secret=${secret}&issuer=MyFinance&algorithm=SHA256&digits=6&period=30`;
+          const qrCode = await QRCode.toDataURL(uri, { errorCorrectionLevel: 'M', margin: 4, width: 280 });
           await client.query(`INSERT INTO user_mfa(user_id,pending_ciphertext,pending_expires_at)
             VALUES($1,$2,NOW()+INTERVAL '10 minutes') ON CONFLICT(user_id)
             DO UPDATE SET pending_ciphertext=$2,pending_expires_at=NOW()+INTERVAL '10 minutes'`,
           [req.user.id, encryptSecret(secret, req.user.id)]);
-          return { secret, uri: `otpauth://totp/${encodeURIComponent(`MyFinance:${req.user.email}`)}?secret=${secret}&issuer=MyFinance&algorithm=SHA256&digits=6&period=30` };
+          return { secret, uri, qrCode };
         }
         if (action === 'confirm') {
           if (mfa?.enabled_at || !mfa?.pending_ciphertext || new Date(mfa.pending_expires_at).getTime() <= Date.now()) {

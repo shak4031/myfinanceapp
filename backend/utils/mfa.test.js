@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
+import jsQR from 'jsqr';
+import { PNG } from 'pngjs';
 import application from '../app.js';
 import { migratePrivateSchema } from './schema.js';
 import { hashPassword, tokenHash } from './passwords.js';
@@ -104,6 +106,10 @@ test('optional MFA enrollment, session gating, recovery, reset preservation and 
     assert.equal(enrollmentUri.searchParams.get('period'), '30');
     assert.equal(enrollmentUri.searchParams.get('secret'), enroll.body.secret);
     assert.match(enroll.body.secret, /^[A-Z2-7]{51}[AQ]$/);
+    assert.match(enroll.body.qrCode, /^data:image\/png;base64,/);
+    const png = PNG.sync.read(Buffer.from(enroll.body.qrCode.split(',')[1], 'base64'));
+    const decoded = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
+    assert.equal(decoded?.data, enroll.body.uri, 'scanning the actual QR image recovers the exact SHA-256 enrollment URI');
     assert.equal((await call('/mfa', undefined, cookie)).body.enabled, false);
     assert.equal((await call('/mfa/confirm', { password, code: 'invalid' }, cookie)).status, 403);
     const expiredSecret = enroll.body.secret;
@@ -263,10 +269,86 @@ test('optional MFA enrollment, session gating, recovery, reset preservation and 
     capClient.release();
     await database.query('DELETE FROM auth_attempts');
     const unlocked = await call('/login', { email, password: 'changed-password-trust-123', code: finalCodes[2] });
+    const targetPassword = 'recovery-target-password-123';
+    const targetEmail = 'recovery@example.test';
+    const targetClient = await pg.Pool.prototype.connect();
+    await targetClient.query('BEGIN');
+    const target = (await targetClient.query('INSERT INTO users(name,email,password_hash) VALUES($1,$2,$3) RETURNING id',
+      ['Recovery target', targetEmail, await hashPassword(targetPassword)])).rows[0];
+    await ensureHousehold(targetClient, target.id);
+    const targetSecret = newSecret();
+    await targetClient.query(`INSERT INTO user_mfa(user_id,secret_ciphertext,enabled_at,recovery_hashes)
+      VALUES($1,$2,NOW(),$3)`, [target.id, encryptSecret(targetSecret, target.id), [tokenHash('e'.repeat(32))]]);
+    const targetTrust = await rememberBrowser(targetClient, target.id, null);
+    const targetSession = 'a'.repeat(64);
+    await targetClient.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '1 hour')",
+      [tokenHash(targetSession), target.id]);
+    const targetGrant = (await targetClient.query(`INSERT INTO support_grants(user_id,access_level,reason,expires_at)
+      VALUES($1,'read','Recovery test',NOW()+INTERVAL '1 hour') RETURNING id`, [target.id])).rows[0];
+    await targetClient.query(`INSERT INTO sessions(token_hash,user_id,actor_user_id,support_grant_id,expires_at)
+      VALUES($1,$2,1,$3,NOW()+INTERVAL '1 hour')`, [tokenHash('b'.repeat(64)), target.id, targetGrant.id]);
+    await targetClient.query('COMMIT');
+    targetClient.release();
+    const resetMfa = async (body, session = unlocked.cookie, origin = base) => {
+      const response = await fetch(`${base}/api/admin/users/${target.id}/disable-mfa`, {
+        method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', ...(session ? { Cookie: session } : {}) },
+        body: JSON.stringify(body)
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const resetBody = { confirmEmail: targetEmail, identityVerified: true, password: 'changed-password-trust-123', code: finalCodes[3] };
+    assert.equal((await resetMfa(resetBody, null)).status, 401);
+    assert.equal((await resetMfa(resetBody, `finance_session=${targetSession}`)).status, 403);
+    assert.equal((await resetMfa(resetBody, `${unlocked.cookie}; finance_support=${'b'.repeat(64)}`)).status, 403);
+    assert.equal((await resetMfa(resetBody, unlocked.cookie, 'https://untrusted.example')).status, 403);
+    assert.equal((await resetMfa({ ...resetBody, identityVerified: false })).status, 400);
+    assert.equal((await resetMfa({ ...resetBody, password: 'wrong' })).status, 403);
+    assert.equal((await resetMfa({ ...resetBody, confirmEmail: 'wrong@example.test' })).status, 400);
+    assert.equal((await resetMfa({ ...resetBody, code: '' })).status, 403, 'admin must prove their own MFA, not target MFA');
+    assert.equal((await database.query('SELECT user_id FROM user_mfa WHERE user_id=$1', [target.id])).rows.length, 1);
+    const usersResponse = await fetch(base + '/api/admin/users', { headers: { Cookie: unlocked.cookie } });
+    assert.equal((await usersResponse.json()).find(user => user.id === target.id).mfa_enabled, true);
+    const resetResult = await resetMfa(resetBody);
+    assert.equal(resetResult.status, 200);
+    assert.equal(typeof resetResult.body.notificationSent, 'boolean');
+    assert.match(resetResult.body.message, /MFA disabled/);
+    assert.equal((await database.query('SELECT user_id FROM user_mfa WHERE user_id=$1', [target.id])).rows.length, 0);
+    assert.equal((await database.query('SELECT id FROM trusted_browsers WHERE user_id=$1', [target.id])).rows.length, 0);
+    assert.equal((await database.query('SELECT token_hash FROM sessions WHERE user_id=$1 OR actor_user_id=$1', [target.id])).rows.length, 0);
+    assert.ok((await database.query('SELECT revoked_at FROM support_grants WHERE id=$1', [targetGrant.id])).rows[0].revoked_at);
+    assert.equal((await call('/me', undefined, `finance_session=${targetSession}`)).status, 401);
+    const adminRecovered = await call('/login', { email: targetEmail, password: targetPassword }, `${trustedCookieName}=${targetTrust.token}`);
+    assert.equal(adminRecovered.status, 200);
+    assert.ok(adminRecovered.cookie);
+    assert.equal((await call('/mfa', undefined, adminRecovered.cookie)).body.enabled, false);
+    const reEnrollment = await call('/mfa/enroll', { password: targetPassword }, adminRecovered.cookie);
+    assert.equal(reEnrollment.status, 200);
+    const reConfirmed = await call('/mfa/confirm', {
+      password: targetPassword, code: totp(reEnrollment.body.secret, Math.floor(Date.now() / 30000))
+    }, adminRecovered.cookie);
+    assert.equal(reConfirmed.status, 200);
+    assert.equal((await call('/login', { email: targetEmail, password: targetPassword })).body.mfaRequired, true);
+    assert.equal((await call('/login', { email: targetEmail, password: targetPassword, code: 'e'.repeat(32) })).status, 401);
+    const resetAudit = (await database.query("SELECT detail FROM audit_events WHERE event_type='admin.mfa_disabled' AND outcome='success'")).rows;
+    assert.equal(resetAudit.length, 1);
+    assert.equal(JSON.stringify(resetAudit).includes(targetSecret), false);
+    assert.equal(JSON.stringify(resetAudit).includes(resetBody.password), false);
+    await database.query('DELETE FROM auth_attempts');
+    for (let attempt = 0; attempt < 10; attempt++) {
+      assert.equal((await resetMfa({ ...resetBody, password: 'wrong' })).status, 403);
+    }
+    assert.equal((await resetMfa(resetBody)).status, 429);
+    await database.query('DELETE FROM auth_attempts');
     for (let attempt = 0; attempt < 10; attempt++) {
       assert.equal((await call('/mfa/enroll', { password: 'incorrect-password' }, unlocked.cookie)).status, 403);
     }
     assert.equal((await call('/mfa/enroll', { password: 'changed-password-trust-123' }, unlocked.cookie)).status, 429);
+    await database.query('DELETE FROM auth_attempts');
+    assert.equal((await call('/mfa/disable', {
+      password: 'changed-password-trust-123', code: finalCodes[4]
+    }, unlocked.cookie)).status, 200);
+    assert.equal((await resetMfa({ ...resetBody, code: '' })).status, 200, 'administrator without MFA must still supply their password');
+    assert.equal((await resetMfa({ ...resetBody, code: '' })).status, 409, 'already-reset accounts are not reported as another successful reset');
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (oldOrigin === undefined) delete process.env.APP_ORIGIN; else process.env.APP_ORIGIN = oldOrigin;

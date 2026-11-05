@@ -585,7 +585,7 @@ test('MFA settings show manual setup and one-time recovery codes, and discard la
     if (url === '/api/auth/mfa/trusted-browsers') return response(200, { browsers: [] });
     if (url === '/api/auth/mfa/enroll') {
       if (pendingEnroll) return pendingEnroll;
-      return response(200, { secret: 'LOCAL-TEST-SECRET' });
+      return response(200, { secret: 'LOCAL-TEST-SECRET', qrCode: 'data:image/png;base64,dGVzdA==' });
     }
     if (url === '/api/auth/mfa/confirm') {
       assert.equal(JSON.parse(options.body).code, '123456');
@@ -600,6 +600,7 @@ test('MFA settings show manual setup and one-time recovery codes, and discard la
     currentUser: () => ({ id: 4, email: 'member@example.test', household: { role: 'member' } })
   };
   f.run('account.js');
+  f.node('mfa-qr').removeAttribute = name => { if (name === 'src') delete f.node('mfa-qr').src; };
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   const view = f.context.document.querySelector('.main-content').options.find(node => node.id === 'settings-view');
@@ -611,11 +612,16 @@ test('MFA settings show manual setup and one-time recovery codes, and discard la
   await submit();
   assert.equal(f.node('mfa-secret').textContent, 'LOCAL-TEST-SECRET');
   assert.equal(f.node('mfa-enrollment').hidden, false);
+  assert.equal(f.node('mfa-qr').src, 'data:image/png;base64,dGVzdA==');
+  f.node('mfa-qr').listeners.error();
+  assert.equal(f.node('mfa-qr-error').hidden, false);
+  assert.equal(f.node('mfa-qr').hidden, true);
   assert.equal(f.node('mfa-submit').textContent, 'Confirm authenticator');
   f.node('mfa-password').value = 'current-password-123';
   f.node('mfa-code').value = '123456';
   await submit();
   assert.equal(f.node('mfa-secret').textContent, '');
+  assert.equal(f.node('mfa-qr').src, undefined);
   assert.equal(f.node('mfa-codes').textContent, 'test-recovery-code');
   f.node('mfa-dismiss').listeners.click();
   assert.equal(f.node('mfa-codes').textContent, '');
@@ -627,10 +633,11 @@ test('MFA settings show manual setup and one-time recovery codes, and discard la
   const waiting = submit();
   authenticated = false;
   f.context.FinanceMfa.reset();
-  resolveEnroll(response(200, { secret: 'STALE-SECRET' }));
+  resolveEnroll(response(200, { secret: 'STALE-SECRET', qrCode: 'data:image/png;base64,c3RhbGU=' }));
   await waiting;
   assert.equal(f.node('mfa-secret').textContent, '');
   assert.equal(f.node('mfa-enrollment').hidden, true);
+  assert.equal(f.node('mfa-qr').src, undefined);
 });
 
 test('trusted-browser settings render only metadata, revoke trust, and clear on session lock', async () => {
@@ -3451,6 +3458,60 @@ test('traffic reports public views and signup entry clicks, but not signed-in vi
     }
   }
 });
+test('admin MFA reset requires explicit confirmation and clears reauthentication secrets on success and failure', async () => {
+  let enabled = true, fail = false;
+  const requests = [];
+  const f = fixture(async (url, options = {}) => {
+    let body = { stats: {} }, status = 200;
+    if (url === '/api/auth/me') body = { user: { role: 'admin', name: 'Owner', email: 'owner@example.test' } };
+    if (url.startsWith('/api/admin/users?')) body = [{ id: 3, email: 'member@example.test', mfa_enabled: enabled }];
+    if (url.endsWith('/disable-mfa')) {
+      requests.push(JSON.parse(options.body));
+      if (fail) { status = 403; body = { error: 'Administrator code required.' }; }
+      else { enabled = false; body = { success: true, message: 'MFA disabled. Sessions revoked.' }; }
+    }
+    return { ok: status === 200, status, text: async () => JSON.stringify(body), headers: { get: () => null } };
+  });
+  const dialog = f.node('mfa-reset-dialog');
+  let open = false;
+  dialog.showModal = () => { open = true; };
+  dialog.close = () => { open = false; dialog.listeners.close(); };
+  f.node('mfa-reset-email').focus = () => {};
+  f.run('admin.js');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  f.node('tabs').listeners.click({ target: { dataset: { tab: 'users' } } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(f.node('users').innerHTML, /data-action="disable-mfa"/);
+  const button = { dataset: { action: 'disable-mfa', id: '3', email: 'member@example.test' } };
+  await f.node('users').listeners.click({ target: { closest: () => button } });
+  assert.equal(open, true);
+  assert.equal(f.node('mfa-reset-submit').disabled, true);
+  await f.node('mfa-reset-form').listeners.submit({ preventDefault() {} });
+  assert.equal(requests.length, 0);
+  f.node('mfa-reset-email').value = 'member@example.test';
+  f.node('mfa-reset-password').value = 'admin-password';
+  f.node('mfa-reset-code').value = '123456';
+  f.node('mfa-reset-check').checked = true;
+  f.node('mfa-reset-check').listeners.change();
+  assert.equal(f.node('mfa-reset-submit').disabled, false);
+  fail = true;
+  await f.node('mfa-reset-form').listeners.submit({ preventDefault() {} });
+  assert.equal(open, true);
+  assert.equal(f.node('mfa-reset-password').value, '');
+  assert.equal(f.node('mfa-reset-code').value, '');
+  assert.match(f.node('mfa-reset-error').textContent, /Administrator code required/);
+  f.node('mfa-reset-password').value = 'admin-password';
+  f.node('mfa-reset-code').value = '654321';
+  f.node('mfa-reset-password').listeners.input();
+  fail = false;
+  await f.node('mfa-reset-form').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(requests[1], { confirmEmail: 'member@example.test', identityVerified: true, password: 'admin-password', code: '654321' });
+  assert.equal(open, false);
+  assert.equal(f.node('mfa-reset-password').value, '');
+  assert.equal(f.node('mfa-reset-code').value, '');
+  assert.doesNotMatch(f.node('users').innerHTML, /data-action="disable-mfa"/);
+});
+
 test('admin Traffic tab renders counts, changes range and surfaces reporting errors', async () => {
   const calls = [];
   let failTraffic = false;
@@ -3929,7 +3990,7 @@ test('MFA tutorial and knowledge base explain manual setup, recovery and trusted
     assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]|otpauth:|[A-Z2-7]{52}/);
   });
   tours.open('mfa/setup');
-  assert.match(f.node('tut-caption').textContent, /SHA-256[\s\S]*manual key, not QR or SMS/);
+  assert.match(f.node('tut-caption').textContent, /Scan QR code[\s\S]*SHA-256/);
   tours.open('mfa/recovery');
   assert.match(f.node('tut-caption').textContent, /another unused recovery code[\s\S]*All old codes become invalid/);
   tours.open('mfa/phone');
@@ -3946,9 +4007,10 @@ test('MFA tutorial and knowledge base explain manual setup, recovery and trusted
   assert.match(guide, /data-kb-topic="security"/);
   assert.match(guide, /https:\/\/ente.io\/auth\//);
   assert.match(guide, /https:\/\/getaegis.app\//);
-  assert.match(guide, /manual key, not a QR scanner or SMS/);
+  assert.match(guide, /Scan QR code/);
   assert.match(guide, /fixed expiry[\s\S]*twenty browsers/);
-  assert.match(guide, /no email-only or administrator MFA reset/);
+  assert.match(guide, /administrator-assisted recovery/);
+  assert.match(guide, /independently verify your identity/);
   assert.match(guide, /SHA-256, six digits, and a 30-second period/);
   assert.match(source('account.js'), /href="#tutorials\/mfa"/);
 });

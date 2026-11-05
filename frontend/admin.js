@@ -136,20 +136,64 @@
   }
   async function loadUsers() {
     const rows = await api(`/api/admin/users?q=${encodeURIComponent($('user-q').value.trim())}`);
-    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
+    $('users').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>MFA</th><th>Last sign-in</th><th>Failed (24h)</th><th>Sessions</th><th>Grants</th><th>Actions</th></tr></thead><tbody>${
       rows.map(user => `<tr><td>${esc(user.id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td>${esc(user.role)}</td><td>${planCell(user)}</td>
-        <td>${esc(when(user.last_login))}</td><td>${esc(user.failed_logins_24h)}</td><td>${esc(user.active_sessions)}</td><td>${esc(user.active_grants)}</td>
+        <td>${user.mfa_enabled ? 'Enabled' : 'Not enabled'}</td><td>${esc(when(user.last_login))}</td><td>${esc(user.failed_logins_24h)}</td><td>${esc(user.active_sessions)}</td><td>${esc(user.active_grants)}</td>
         <td class="actions">
           ${planButton(user)}
           <button class="btn btn-secondary" data-action="password-reset" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Email reset link</button>
           <button class="btn btn-secondary" data-action="unlock" data-id="${esc(user.id)}">Unlock</button>
           <button class="btn btn-secondary" data-action="revoke-sessions" data-id="${esc(user.id)}">Sign out everywhere</button>
           <button class="btn btn-secondary" data-action="audit" data-id="${esc(user.id)}">Activity</button>
+          ${user.mfa_enabled && user.email?.toLowerCase() !== 'demo@myfinance.app' ? `<button class="btn btn-danger" data-action="disable-mfa" data-id="${esc(user.id)}" data-email="${esc(user.email)}">Reset MFA</button>` : ''}
           ${deleteButton(user)}
         </td></tr>`).join('')
     }</tbody></table>`;
   }
   $('user-search').onclick = () => loadUsers().catch(error => toast(error.message));
+  let mfaResetTarget = null;
+  const resetDialog = $('mfa-reset-dialog');
+  const resetSubmit = $('mfa-reset-submit');
+  const updateMfaReset = () => {
+    resetSubmit.disabled = !mfaResetTarget || !$('mfa-reset-check').checked || !$('mfa-reset-password').value
+      || $('mfa-reset-email').value.trim().toLowerCase() !== mfaResetTarget.email.toLowerCase();
+  };
+  const clearMfaReset = () => {
+    mfaResetTarget = null;
+    ['mfa-reset-email', 'mfa-reset-password', 'mfa-reset-code'].forEach(id => { $(id).value = ''; });
+    $('mfa-reset-check').checked = false;
+    $('mfa-reset-error').hidden = true;
+    updateMfaReset();
+  };
+  ['mfa-reset-email', 'mfa-reset-password'].forEach(id => $(id).addEventListener('input', updateMfaReset));
+  $('mfa-reset-check').addEventListener('change', updateMfaReset);
+  resetDialog.addEventListener('close', clearMfaReset);
+  resetDialog.addEventListener('cancel', clearMfaReset);
+  $('mfa-reset-cancel').addEventListener('click', () => { resetDialog.close(); clearMfaReset(); });
+  $('mfa-reset-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (resetSubmit.disabled || !mfaResetTarget) return;
+    resetSubmit.disabled = true;
+    $('mfa-reset-error').hidden = true;
+    try {
+      const result = await api(`/api/admin/users/${encodeURIComponent(mfaResetTarget.id)}/disable-mfa`, {
+        method: 'POST', body: JSON.stringify({
+          confirmEmail: $('mfa-reset-email').value.trim(), identityVerified: $('mfa-reset-check').checked,
+          password: $('mfa-reset-password').value, code: $('mfa-reset-code').value.trim()
+        })
+      });
+      resetDialog.close();
+      clearMfaReset();
+      toast(result.message);
+      await loadUsers();
+    } catch (error) {
+      $('mfa-reset-password').value = '';
+      $('mfa-reset-code').value = '';
+      $('mfa-reset-error').textContent = error.message;
+      $('mfa-reset-error').hidden = false;
+      updateMfaReset();
+    }
+  });
   let deleteTarget = null;
   const deleteDialog = $('delete-account-dialog');
   const deleteEmailInput = $('delete-account-email');
@@ -197,6 +241,14 @@
     if (!button) return;
     const { action, id, email, plan = 'pro' } = button.dataset;
     if (action === 'audit') { $('f-user').value = id; $('f-type').value = ''; $('f-outcome').value = ''; return openTab('audit'); }
+    if (action === 'disable-mfa') {
+      clearMfaReset();
+      mfaResetTarget = { id, email };
+      $('mfa-reset-target').textContent = email;
+      resetDialog.showModal();
+      $('mfa-reset-email').focus();
+      return;
+    }
     if (action === 'delete-account') {
       deleteTarget = { id, email };
       $('delete-account-target').textContent = email;

@@ -52,7 +52,7 @@
         <button type="submit" class="btn btn-primary" id="mfa-submit">Set up authenticator</button>
         <button type="button" class="btn btn-secondary" id="mfa-regenerate" hidden>Replace recovery codes</button>
       </form>
-      <div id="mfa-enrollment" hidden><p>In a SHA-256-capable authenticator, add an account manually using this setup key. Choose time-based codes, algorithm SHA-256 (not SHA-1), six digits and 30 seconds. If your app does not support selecting SHA-256, use a compatible authenticator. Enrollment expires in ten minutes. Enter the code above and confirm.</p><pre id="mfa-secret"></pre><p>Account: <span id="mfa-account"></span> / issuer: MyFinance</p></div>
+      <div id="mfa-enrollment" hidden><p>Open a SHA-256-capable authenticator on your phone, choose Add account and Scan QR code, then scan the image below. It includes the account and code settings automatically. Enrollment expires in ten minutes. Enter your password and the six-digit code above, then choose Confirm authenticator.</p><img id="mfa-qr" width="280" height="280" style="max-width:100%;height:auto" alt="Private MyFinance authenticator enrollment QR code. Scan with your authenticator; do not share."><p id="mfa-qr-error" role="alert" hidden>QR image could not be displayed. Use the manual setup key below or restart setup.</p><details><summary>Cannot scan? Set up manually</summary><p>On the same phone, switch between this browser and your authenticator. Add an account manually using this setup key. Choose time-based codes, algorithm SHA-256 (not SHA-1), six digits and 30 seconds. If your app does not support SHA-256, use a compatible authenticator. The QR code and setup key are private: never share or send them to support.</p><pre id="mfa-secret"></pre><p>Account: <span id="mfa-account"></span> / issuer: MyFinance</p></details></div>
       <div id="mfa-recovery" hidden><h3>Save these recovery codes now</h3><p>Shown only for this operation. Store them securely outside this browser. Each code works once. Replacing codes invalidates the entire old set.</p><pre id="mfa-codes"></pre><button type="button" class="btn btn-secondary" id="mfa-dismiss">I saved the codes; hide them</button></div>
       <p id="mfa-status" role="status"></p></div>
     <div class="panel plan-card"><div><p class="eyebrow">TRUSTED BROWSERS</p><h2>Manage remembered sign-ins</h2>
@@ -63,12 +63,23 @@
     <p id="trusted-status" role="status"></p></div>`;
   document.querySelector('.main-content').appendChild(view);
   let mfaEnabled = false, mfaPending = false, mfaGeneration = 0;
+  $('mfa-qr').addEventListener('error', () => {
+    $('mfa-qr').hidden = true;
+    $('mfa-qr-error').hidden = false;
+  });
+  const clearEnrollment = () => {
+    $('mfa-secret').textContent = '';
+    $('mfa-qr').removeAttribute('src');
+    $('mfa-qr').hidden = true;
+    $('mfa-qr-error').hidden = true;
+    $('mfa-enrollment').hidden = true;
+  };
   window.FinanceMfa = { reset() {
     mfaGeneration++;
     mfaPending = false;
     ['mfa-secret', 'mfa-codes'].forEach(id => { $(id).textContent = ''; });
     ['mfa-password', 'mfa-code'].forEach(id => { $(id).value = ''; });
-    $('mfa-enrollment').hidden = true;
+    clearEnrollment();
     $('mfa-recovery').hidden = true;
     $('trusted-browsers').textContent = '';
     $('trusted-status').textContent = '';
@@ -114,14 +125,19 @@
       if (generation !== mfaGeneration || !FinanceSession.isAuthenticated()) return;
       if (!response.ok) throw new Error(data.error || 'Unable to change authenticator settings.');
       if (action === 'enroll') {
+        if (typeof data.qrCode !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(data.qrCode)) {
+          throw new Error('Authenticator QR setup could not be loaded. Start setup again.');
+        }
         mfaPending = true;
         $('mfa-secret').textContent = data.secret;
+        $('mfa-qr-error').hidden = true;
+        $('mfa-qr').hidden = false;
+        $('mfa-qr').src = data.qrCode;
         $('mfa-account').textContent = FinanceSession.currentUser().email;
         $('mfa-enrollment').hidden = false;
       } else {
         mfaPending = false;
-        $('mfa-secret').textContent = '';
-        $('mfa-enrollment').hidden = true;
+        clearEnrollment();
         $('mfa-codes').textContent = (data.recoveryCodes || []).join('\n');
         $('mfa-recovery').hidden = !data.recoveryCodes;
       }

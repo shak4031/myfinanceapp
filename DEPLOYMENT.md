@@ -32,8 +32,14 @@ not repair encrypted secrets. Do not advertise automatic key rotation.
 Users enable optional TOTP in **Settings & support** with their current password
 and a six-digit authenticator code. Manual setup uses HMAC-SHA-256, six digits and
 30-second periods with random 256-bit secrets. The authenticator must support
-SHA-256 and be configured explicitly for it, not its usual SHA-1 default.
-The enrollment URI specifies `algorithm=SHA256`. This pre-release change assumes
+SHA-256. Users can scan the enrollment QR to import settings automatically,
+or expand the manual-key fallback and explicitly select SHA-256 rather than
+the usual SHA-1 default. The server generates a PNG QR locally from the
+`otpauth://` URI with `algorithm=SHA256`; no external QR service receives secrets.
+The QR is returned only in the authenticated, no-store enrollment response and
+cleared from the page on confirmation, MFA disable, and session lock/reset.
+The QR and manual key contain the same secret; do not screenshot or share them.
+On one phone use the manual fallback. This pre-release change assumes
 no deployed MFA enrollments; any older development enrollment must be disabled
 before upgrading and re-enrolled afterward. There is no SHA-1 fallback.
 Secrets are AES-256-GCM encrypted with user-ID-associated
@@ -49,9 +55,22 @@ codes**. All old codes are invalidated; securely save the ten new codes.
 This does not restore a lost authenticator. Without an authenticator backup,
 disable MFA using the password and an unused recovery code, then immediately
 enroll the replacement authenticator.
-Password reset never removes MFA. There is no administrator/email-only MFA
-reset endpoint; losing both authenticator and recovery codes locks the user out
-unless a separately designed and verified operator recovery process is used.
+Password reset never removes MFA. There is no email-only MFA reset.
+For lost authenticators and recovery codes, an administrator can use **Users >
+Reset MFA** after independently verifying the account owner's identity.
+The endpoint requires the target email, explicit identity-verification
+acknowledgment, the administrator's current password and, if enrolled, the
+administrator's own authenticator or unused recovery code. The checkbox is
+not proof of identity: operators must establish a recovery-verification policy
+and resist social engineering before using this privileged override.
+Reset removes active and pending MFA and all old recovery codes, revokes the
+target's sessions, support grants and browser trust, and records an audit event.
+It attempts a security email and explicitly warns the administrator if delivery
+fails. The existing password is not changed; the user can sign in normally and
+should immediately enroll MFA again. No automatic re-enrollment requirement or
+waiting period is enforced. Protect administrator accounts with MFA. An admin
+who loses their own factors cannot bypass the required administrator factor
+with this endpoint; another authenticated administrator is needed.
 TOTP is not phishing-resistant. The public demo and support sessions cannot
 change MFA. Every household member enrolls independently; MFA is not required
 globally, and this does not implement passkeys or an independent security audit.

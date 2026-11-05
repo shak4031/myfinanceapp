@@ -13,7 +13,8 @@
     "start": "node backend/server.js"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.3.14"
+    "@electric-sql/pglite": "^0.3.14",
+    "jsqr": "^1.4.0"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
@@ -23,6 +24,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^6.0.227",
     "pg": "^8.21.0",
+    "qrcode": "^1.5.4",
     "plaid": "^49.0.0",
     "sqlite3": "^6.0.1",
     "stripe": "^20.0.0"

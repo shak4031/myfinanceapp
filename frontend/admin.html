@@ -174,6 +174,19 @@
         <div id="api"></div>
       </section>
     </div>
+    <dialog id="mfa-reset-dialog" class="delete-account-dialog" aria-labelledby="mfa-reset-title">
+      <form id="mfa-reset-form">
+        <h2 id="mfa-reset-title">Disable MFA for account recovery?</h2>
+        <p>Independently verify the account owner's identity through your established recovery process first. An email address or this checkbox alone is not identity verification. This removes the authenticator and recovery codes, revokes all sessions, support access and browser trust, and permits password-only sign-in until the user re-enables MFA. The action is audited and a security email is attempted.</p>
+        <p class="delete-target-email" id="mfa-reset-target"></p>
+        <label>Type the customer's account email<input id="mfa-reset-email" type="email" autocomplete="off" required></label>
+        <label>Your administrator password<input id="mfa-reset-password" type="password" autocomplete="current-password" maxlength="128" required></label>
+        <label>Your administrator authenticator or recovery code (required if your MFA is enabled)<input id="mfa-reset-code" autocomplete="one-time-code" maxlength="32"></label>
+        <label class="delete-confirm-check"><input id="mfa-reset-check" type="checkbox" required> I independently verified this account owner's identity and authorize password-only sign-in.</label>
+        <p id="mfa-reset-error" role="alert" hidden></p>
+        <div class="actions"><button type="button" class="btn btn-secondary" id="mfa-reset-cancel">Cancel</button><button type="submit" class="btn btn-danger" id="mfa-reset-submit" disabled>Disable MFA and sign out everywhere</button></div>
+      </form>
+    </dialog>
     <dialog id="delete-account-dialog" class="delete-account-dialog" aria-labelledby="delete-account-title">
       <form id="delete-account-form" novalidate>
         <h2 id="delete-account-title">Permanently delete account?</h2>
@@ -194,6 +207,6 @@
   <div id="admin-toast" hidden role="status"></div>
   <script src="ui.js?v=20261017r"></script>
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="admin.js?v=20261027-account-delete-stripe-cancel"></script>
+  <script src="admin.js?v=20261104-mfa-reset"></script>
 </body>
 </html>

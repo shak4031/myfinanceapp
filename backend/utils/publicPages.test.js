@@ -27,7 +27,7 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /href="mailto:/);
       } else {
         assert.match(html, /MF-SEC-001/);
-        assert.match(html, /version 1\.4/);
+        assert.match(html, /version 1\.5/);
         assert.match(html, /HMAC-SHA-256 with a random 256-bit secret/);
         assert.match(html, /algorithm=SHA256/);
         assert.match(html, /Replacing recovery codes does not restore a lost authenticator/);
@@ -37,6 +37,8 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /stolen trust cookie together with a stolen password/);
         assert.match(html, /Optional authenticator MFA and recovery/);
         assert.match(html, /Password resets preserve MFA/);
+        assert.match(html, /administrators can disable MFA after independently verifying the account owner/);
+        assert.match(html, /re-enrollment and a waiting period are not enforced/);
         assert.match(html, /Recorded production verification/);
         assert.match(html, /WireGuard/);
         assert.match(html, /database TLS operator-verified on 4 November 2026/);

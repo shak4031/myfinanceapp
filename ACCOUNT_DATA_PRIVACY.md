@@ -58,15 +58,25 @@ Implementation: [tenant context](backend/utils/tenant.js),
   Pending secrets expire after ten minutes and are AES-256-GCM encrypted using
   the separately configured `MFA_ENCRYPTION_KEY`, bound to the login ID.
   Codes use HMAC-SHA-256 with random 256-bit secrets, 30-second periods and a
-  one-period clock tolerance. Manual enrollment requires a SHA-256-capable
-  authenticator explicitly configured for SHA-256.
+  one-period clock tolerance. The authenticated enrollment response includes
+  a locally server-generated PNG QR encoding the setup URI; no external QR
+  service is used. Scanning imports SHA-256 settings in compatible apps.
+  Manual fallback requires explicitly selecting SHA-256. QR and key contain
+  the same private secret and are cleared on confirmation and session reset.
   Successful time steps cannot be reused.
 - Ten single-use recovery codes are shown on enrollment/replacement and stored
   as SHA-256 hashes. Disabling MFA or replacing recovery codes requires both
   the current password and an authenticator/unused recovery code. Enrollment
   and disabling revoke other sessions. Password resets preserve MFA.
-  MFA changes are unavailable in demo/support sessions. There is no
-  email-only or administrator MFA-reset API; save recovery codes securely.
+  MFA changes are unavailable in demo/support sessions. There is no email-only
+  MFA reset. Administrators can disable MFA for account recovery after
+  independently verifying the owner, confirming the target email and
+  reauthenticating with their password and own factor if enrolled. This audited
+  override deletes MFA and recovery codes, revokes sessions, support access and
+  browser trust, and attempts a security email (delivery failures are surfaced).
+  Password-only login then works until the user voluntarily re-enrolls MFA.
+  This makes administrator security and identity-verification procedures part
+  of the MFA recovery trust boundary; save separate recovery codes securely.
 - After MFA verification, users can explicitly trust a personal browser for
   ninety days (unchecked by default). A random token is stored in an HttpOnly,
   SameSite=Strict, host-only cookie, Secure in production; only its SHA-256 hash
