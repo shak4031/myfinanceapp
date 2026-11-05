@@ -28,10 +28,11 @@ test('About and Contact have separate public URLs, accessible navigation and hon
       } else {
         assert.match(html, /MF-SEC-001/);
         assert.match(html, /version 1\.5/);
-        assert.match(html, /HMAC-SHA-256 with a random 256-bit secret/);
-        assert.match(html, /algorithm=SHA256/);
+        assert.match(html, /HMAC-SHA-1 with a random 160-bit secret/);
+        assert.match(html, /algorithm=SHA1/);
+        assert.match(html, /Known SHA-1 collision attacks do not directly break/);
         assert.match(html, /Replacing recovery codes does not restore a lost authenticator/);
-        assert.match(html, /including when using SHA-256/);
+        assert.match(html, /TOTP is not phishing-resistant/);
         assert.match(html, /Trust this browser for 90 days/);
         assert.match(html, /fixed ninety-day expiry/);
         assert.match(html, /stolen trust cookie together with a stolen password/);

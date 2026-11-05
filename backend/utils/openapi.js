@@ -22,7 +22,7 @@ export function openApiSpec() {
       '/api/auth/mfa/trusted-browsers': { get: op('Auth', 'List this login’s remembered browsers and fixed 90-day expiries; no token hashes returned') },
       '/api/auth/mfa/revoke-trusted-browsers': { post: op('Auth', 'Forget all trusted browsers and sign out other sessions; current session stays open') },
       '/api/auth/mfa': { get: op('Auth', 'Current login authenticator status and remaining recovery-code count') },
-      '/api/auth/mfa/enroll': { post: op('Auth', 'Password-confirmed SHA-256 TOTP enrollment; returns secret, otpauth uri and locally generated PNG data-URL qrCode; encrypted pending secret expires in ten minutes', body({ password: '************' })) },
+      '/api/auth/mfa/enroll': { post: op('Auth', 'Password-confirmed SHA-1 TOTP enrollment; returns secret, otpauth uri and locally generated PNG data-URL qrCode; encrypted pending secret expires in ten minutes', body({ password: '************' })) },
       '/api/auth/mfa/confirm': { post: op('Auth', 'Enable TOTP after password and code verification; returns ten recovery codes once', body({ password: '************', code: '123456' })) },
       '/api/auth/mfa/disable': { post: op('Auth', 'Disable TOTP with password plus authenticator or recovery code', body({ password: '************', code: '123456' })) },
       '/api/auth/mfa/recovery-codes': { post: op('Auth', 'Replace all recovery codes with password plus a factor', body({ password: '************', code: '123456' })) },

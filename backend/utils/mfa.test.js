@@ -12,17 +12,17 @@ import { totp, matchingStep, encryptSecret, decryptSecret, newSecret } from './m
 import { trustedCookieName } from '../routes/auth.js';
 import { browserIsTrusted, rememberBrowser } from './trustedBrowsers.js';
 
-test('SHA-256 TOTP RFC vectors, replay window and authenticated secret encryption', () => {
-  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA';
-  for (const [seconds, code] of [[59, '119246'], [1111111109, '084774'], [1111111111, '062674'],
-    [1234567890, '819424'], [2000000000, '698825'], [20000000000, '737706']]) {
+test('SHA-1 TOTP RFC vectors, replay window and authenticated secret encryption', () => {
+  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  for (const [seconds, code] of [[59, '287082'], [1111111109, '081804'], [1111111111, '050471'],
+    [1234567890, '005924'], [2000000000, '279037'], [20000000000, '353130']]) {
     assert.equal(totp(secret, Math.floor(seconds / 30)), code);
   }
-  assert.equal(matchingStep(secret, '119246', -1, 59000), 1);
-  assert.equal(matchingStep(secret, '119246', 1, 59000), null);
-  assert.equal(matchingStep(secret, '119246', -1, 120000), null);
+  assert.equal(matchingStep(secret, '287082', -1, 59000), 1);
+  assert.equal(matchingStep(secret, '287082', 1, 59000), null);
+  assert.equal(matchingStep(secret, '287082', -1, 120000), null);
   assert.equal(matchingStep(secret, '1234567'), null);
-  assert.match(newSecret(), /^[A-Z2-7]{51}[AQ]$/);
+  assert.match(newSecret(), /^[A-Z2-7]{32}$/);
   const old = process.env.MFA_ENCRYPTION_KEY;
   try {
     process.env.MFA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
@@ -101,15 +101,15 @@ test('optional MFA enrollment, session gating, recovery, reset preservation and 
     assert.equal(enroll.status, 200);
     assert.match(enroll.body.uri, /^otpauth:\/\/totp\/MyFinance/);
     const enrollmentUri = new URL(enroll.body.uri);
-    assert.equal(enrollmentUri.searchParams.get('algorithm'), 'SHA256');
+    assert.equal(enrollmentUri.searchParams.get('algorithm'), 'SHA1');
     assert.equal(enrollmentUri.searchParams.get('digits'), '6');
     assert.equal(enrollmentUri.searchParams.get('period'), '30');
     assert.equal(enrollmentUri.searchParams.get('secret'), enroll.body.secret);
-    assert.match(enroll.body.secret, /^[A-Z2-7]{51}[AQ]$/);
+    assert.match(enroll.body.secret, /^[A-Z2-7]{32}$/);
     assert.match(enroll.body.qrCode, /^data:image\/png;base64,/);
     const png = PNG.sync.read(Buffer.from(enroll.body.qrCode.split(',')[1], 'base64'));
     const decoded = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
-    assert.equal(decoded?.data, enroll.body.uri, 'scanning the actual QR image recovers the exact SHA-256 enrollment URI');
+    assert.equal(decoded?.data, enroll.body.uri, 'scanning the actual QR image recovers the exact SHA-1 enrollment URI');
     assert.equal((await call('/mfa', undefined, cookie)).body.enabled, false);
     assert.equal((await call('/mfa/confirm', { password, code: 'invalid' }, cookie)).status, 403);
     const expiredSecret = enroll.body.secret;

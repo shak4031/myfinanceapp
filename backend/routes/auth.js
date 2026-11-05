@@ -433,7 +433,7 @@ for (const action of ['enroll', 'confirm', 'disable', 'recovery-codes']) {
         if (action === 'enroll') {
           if (mfa?.enabled_at) return { status: 409, error: 'Authenticator is already enabled.' };
           const secret = newSecret();
-          const uri = `otpauth://totp/${encodeURIComponent(`MyFinance:${req.user.email}`)}?secret=${secret}&issuer=MyFinance&algorithm=SHA256&digits=6&period=30`;
+          const uri = `otpauth://totp/${encodeURIComponent(`MyFinance:${req.user.email}`)}?secret=${secret}&issuer=MyFinance&algorithm=SHA1&digits=6&period=30`;
           const qrCode = await QRCode.toDataURL(uri, { errorCorrectionLevel: 'M', margin: 4, width: 280 });
           await client.query(`INSERT INTO user_mfa(user_id,pending_ciphertext,pending_expires_at)
             VALUES($1,$2,NOW()+INTERVAL '10 minutes') ON CONFLICT(user_id)

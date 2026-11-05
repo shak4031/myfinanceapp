@@ -604,7 +604,9 @@ test('MFA settings show manual setup and one-time recovery codes, and discard la
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   const view = f.context.document.querySelector('.main-content').options.find(node => node.id === 'settings-view');
-  assert.match(view.innerHTML, /algorithm SHA-256 \(not SHA-1\), six digits and 30 seconds/);
+  assert.match(view.innerHTML, /algorithm SHA-1, six digits and 30 seconds/);
+  assert.match(view.innerHTML, /Google Authenticator or Microsoft Authenticator/);
+  assert.match(view.innerHTML, /select Other account/);
   assert.match(view.innerHTML, /All old codes become invalid; save the ten new codes/);
   assert.match(view.innerHTML, /Replacing codes does not restore a lost authenticator/);
   const submit = () => view.listeners.submit({ target: { id: 'mfa-form' }, preventDefault() {} });
@@ -3990,7 +3992,7 @@ test('MFA tutorial and knowledge base explain manual setup, recovery and trusted
     assert.doesNotMatch(f.node('tut-canvas').innerHTML, /undefined|\[object Object\]|otpauth:|[A-Z2-7]{52}/);
   });
   tours.open('mfa/setup');
-  assert.match(f.node('tut-caption').textContent, /Scan QR code[\s\S]*SHA-256/);
+  assert.match(f.node('tut-caption').textContent, /Scan QR code[\s\S]*SHA-1/);
   tours.open('mfa/recovery');
   assert.match(f.node('tut-caption').textContent, /another unused recovery code[\s\S]*All old codes become invalid/);
   tours.open('mfa/phone');
@@ -4011,7 +4013,9 @@ test('MFA tutorial and knowledge base explain manual setup, recovery and trusted
   assert.match(guide, /fixed expiry[\s\S]*twenty browsers/);
   assert.match(guide, /administrator-assisted recovery/);
   assert.match(guide, /independently verify your identity/);
-  assert.match(guide, /SHA-256, six digits, and a 30-second period/);
+  assert.match(guide, /SHA-1, six digits, and a 30-second period/);
+  assert.match(guide, /Google Authenticator/);
+  assert.match(guide, /Microsoft Authenticator/);
   assert.match(source('account.js'), /href="#tutorials\/mfa"/);
 });
 

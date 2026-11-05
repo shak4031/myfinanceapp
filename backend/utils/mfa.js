@@ -22,12 +22,11 @@ function key() {
 
 export function newSecret() {
   let bits = 0, value = 0, text = '';
-  for (const byte of randomBytes(32)) {
+  for (const byte of randomBytes(20)) {
     value = (value << 8) | byte;
     bits += 8;
     while (bits >= 5) { bits -= 5; text += alphabet[(value >>> bits) & 31]; }
   }
-  if (bits > 0) text += alphabet[(value << (5 - bits)) & 31];
   return text;
 }
 
@@ -47,7 +46,7 @@ function secretBytes(secret) {
 export function totp(secret, step) {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(step));
-  const digest = createHmac('sha256', secretBytes(secret)).update(counter).digest();
+  const digest = createHmac('sha1', secretBytes(secret)).update(counter).digest();
   const offset = digest.at(-1) & 15;
   return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, '0');
 }

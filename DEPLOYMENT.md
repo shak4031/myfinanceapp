@@ -30,18 +30,23 @@ Recovery codes remain usable if the encryption key is unavailable, but they do
 not repair encrypted secrets. Do not advertise automatic key rotation.
 
 Users enable optional TOTP in **Settings & support** with their current password
-and a six-digit authenticator code. Manual setup uses HMAC-SHA-256, six digits and
-30-second periods with random 256-bit secrets. The authenticator must support
-SHA-256. Users can scan the enrollment QR to import settings automatically,
-or expand the manual-key fallback and explicitly select SHA-256 rather than
-the usual SHA-1 default. The server generates a PNG QR locally from the
-`otpauth://` URI with `algorithm=SHA256`; no external QR service receives secrets.
+and a six-digit authenticator code. Setup uses HMAC-SHA-1, six digits and
+30-second periods with random 160-bit secrets for standard TOTP compatibility,
+including Google Authenticator and Microsoft Authenticator (Other account).
+Users can scan the enrollment QR to import settings automatically, or expand
+the manual-key fallback using standard time-based SHA-1 defaults.
+The server generates a PNG QR locally from the `otpauth://` URI with
+`algorithm=SHA1`; no external QR service receives secrets.
+SHA-1 collision attacks against signatures do not directly break HMAC-SHA-1
+TOTP. This choice is specific to TOTP; token/recovery hashing stays SHA-256
+and secret encryption stays AES-256-GCM.
 The QR is returned only in the authenticated, no-store enrollment response and
 cleared from the page on confirmation, MFA disable, and session lock/reset.
 The QR and manual key contain the same secret; do not screenshot or share them.
 On one phone use the manual fallback. This pre-release change assumes
 no deployed MFA enrollments; any older development enrollment must be disabled
-before upgrading and re-enrolled afterward. There is no SHA-1 fallback.
+before upgrading and re-enrolled afterward. Verification uses only the
+enrolled SHA-1 configuration, not a try-both-algorithms fallback.
 Secrets are AES-256-GCM encrypted with user-ID-associated
 data; pending enrollment expires in ten minutes. A one-step clock tolerance is
 accepted and used steps cannot be replayed. Confirming enrollment signs out

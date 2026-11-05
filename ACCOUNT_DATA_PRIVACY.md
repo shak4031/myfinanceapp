@@ -57,11 +57,12 @@ Implementation: [tenant context](backend/utils/tenant.js),
   present its valid trust cookie.
   Pending secrets expire after ten minutes and are AES-256-GCM encrypted using
   the separately configured `MFA_ENCRYPTION_KEY`, bound to the login ID.
-  Codes use HMAC-SHA-256 with random 256-bit secrets, 30-second periods and a
+  Codes use HMAC-SHA-1 with random 160-bit secrets, 30-second periods and a
   one-period clock tolerance. The authenticated enrollment response includes
   a locally server-generated PNG QR encoding the setup URI; no external QR
-  service is used. Scanning imports SHA-256 settings in compatible apps.
-  Manual fallback requires explicitly selecting SHA-256. QR and key contain
+  service is used. Scanning imports standard SHA-1 TOTP settings in compatible
+  apps such as Google Authenticator and Microsoft Authenticator.
+  Manual fallback uses time-based SHA-1 defaults. QR and key contain
   the same private secret and are cleared on confirmation and session reset.
   Successful time steps cannot be reused.
 - Ten single-use recovery codes are shown on enrollment/replacement and stored

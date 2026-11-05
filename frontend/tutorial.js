@@ -710,19 +710,19 @@
     scenes: [
       { id: 'intro', title: 'What is MFA?', caption: 'MFA means multi-factor authentication, also called two-step verification. It adds a changing code from an app on your phone to your password. The code is not a text message, email, or bank code. This tutorial uses illustrations only, never your real credentials.',
         render: () => intro('SIGN-IN SECURITY', 'Your password + your phone', 'An extra check if someone steals your password. Illustrations only.', ['🔑', '📱', '🔐']) },
-      { id: 'app', title: 'Choose an authenticator', caption: 'An authenticator app generates codes even without internet or mobile signal. Ente Auth on iPhone or Android and Aegis on Android support SHA-256 in their published implementations; they are compatible candidates, not an end-to-end tested list. Get official download links from the MFA knowledge-base guide. You need time-based codes with SHA-256, six digits and thirty seconds.',
+      { id: 'app', title: 'Choose an authenticator', caption: 'An authenticator app generates codes even without internet or mobile signal. Google Authenticator and Microsoft Authenticator on iPhone or Android support standard TOTP codes. These are standards-compatible choices, not an end-to-end tested list. Get official app links from the MFA knowledge-base guide. MyFinance uses time-based codes with SHA-1, six digits and thirty seconds, the usual defaults.',
         render: () => `${chip(1, 'Choose a compatible authenticator')}
           ${compare([
-            { e: '📱', title: 'Ente Auth', when: 'iPhone and Android', asks: ['Install from the official site or linked app store', 'Choose SHA-256 for MyFinance'] },
-            { e: '📱', title: 'Aegis', when: 'Android', asks: ['Install from the official site or linked app store', 'Choose SHA-256 for MyFinance'] }
+            { e: '📱', title: 'Google Authenticator', when: 'iPhone and Android', asks: ['Install from the official app store', 'Add account and scan the QR'] },
+            { e: '📱', title: 'Microsoft Authenticator', when: 'iPhone and Android', asks: ['Install from the official app store', 'Choose Other account and scan the QR'] }
           ])}
-          <div class="tm-note tut-in" ${at(2)}>Not every authenticator supports SHA-256. Do not use a SHA-1-only entry.</div>` },
-      { id: 'setup', title: 'Scan to connect your phone', caption: 'Sign in and open Settings and support. Enter your MyFinance password and choose Set up authenticator. In a compatible phone app, choose Add account and Scan QR code, then scan the image on your computer or another screen. It includes SHA-256, six digits, thirty seconds and your account automatically. Cannot scan or using one phone? Expand Cannot scan? Set up manually, copy the setup key into Secret or Key, and select time-based TOTP, SHA-256, six digits and thirty seconds. Use your email as the account name and MyFinance as issuer. Switch between browser and authenticator on one phone. Never share the QR or key; no SMS is used.',
+          <div class="tm-note tut-in" ${at(2)}>Standard TOTP: SHA-1, six digits, thirty seconds. Scanning sets these automatically.</div>` },
+      { id: 'setup', title: 'Scan to connect your phone', caption: 'Sign in and open Settings and support. Enter your MyFinance password and choose Set up authenticator. In your phone app, choose Add account and Scan QR code, then scan the image on your computer or another screen. In Microsoft Authenticator choose Other account. The QR includes SHA-1, six digits, thirty seconds and your account automatically. Cannot scan or using one phone? Expand Cannot scan? Set up manually, copy the setup key into Secret or Key, and select time-based TOTP, SHA-1, six digits and thirty seconds. In Google Authenticator choose Enter a setup key and Time based. Use your email as the account name and MyFinance as issuer. Switch between browser and authenticator on one phone. Never share the QR or key; no SMS is used.',
         render: () => `${chip(2, 'Settings & support: Set up authenticator')}
           <div class="tm-split tm-split-tight">
             <div class="tm-panel tut-in" ${at(0.3)}><small>PHONE APP: ADD ACCOUNT</small><h3>Scan QR code</h3><p class="tm-hint">Scan the real QR in Settings. This illustration contains no enrollment code.</p><div class="tm-note">Never share your QR or setup key.</div></div>
             <div class="tm-panel tut-in" ${at(1.2)}><small>CANNOT SCAN? ADD MANUALLY</small>
-              <div class="tm-kv"><span>Type / algorithm</span><b>TOTP / SHA-256</b></div>
+              <div class="tm-kv"><span>Type / algorithm</span><b>TOTP / SHA-1</b></div>
               <div class="tm-kv"><span>Digits / period</span><b>6 / 30 seconds</b></div>
               <div class="tm-kv"><span>Account / issuer</span><b>Your email / MyFinance</b></div>
               <p class="tm-hint">Secret = setup key, not password.</p></div>
@@ -752,15 +752,15 @@
             { e: '📱', title: 'Have an app backup?', when: 'Follow the authenticator instructions', asks: ['Restore or securely transfer the entry', 'Verify the new phone before erasing the old one'] },
             { e: '🔐', title: 'No authenticator backup?', when: 'Keep unused recovery codes ready', asks: ['Use one code to sign in, another to disable', 'Immediately enroll the replacement phone'] }
           ])}<div class="tm-note tut-in" ${at(2)}>Lost both? Contact support for identity-verified administrator recovery. Re-enroll immediately.</div>` },
-      { id: 'troubleshoot', title: 'When a code does not work', caption: 'Check the MyFinance entry, SHA-256 algorithm, six digits and thirty seconds. Turn on automatic date and time on the phone. Use a fresh code before it changes. A successful time step cannot be reused, including the enrollment code, so wait for the next code. Restart setup if the ten-minute window expired. Used recovery codes will not work again. Respect rate-limit wait messages. Contact support for temporary unavailability without sending passwords, keys or codes.',
+      { id: 'troubleshoot', title: 'When a code does not work', caption: 'Check the MyFinance entry, SHA-1 algorithm, six digits and thirty seconds. Turn on automatic date and time on the phone. Use a fresh code before it changes. A successful time step cannot be reused, including the enrollment code, so wait for the next code. Restart setup if the ten-minute window expired. Used recovery codes will not work again. Respect rate-limit wait messages. Contact support for temporary unavailability without sending passwords, keys or codes.',
         render: () => `${chip(7, 'Check settings before retrying')}
           <div class="tm-panel tut-in" ${at(0.3)}><small>QUICK CHECKLIST</small>
-            <div class="tm-kv"><span>Correct entry and algorithm</span><b>MyFinance / SHA-256</b></div>
+            <div class="tm-kv"><span>Correct entry and algorithm</span><b>MyFinance / SHA-1</b></div>
             <div class="tm-kv"><span>Digits and period</span><b>6 / 30 seconds</b></div>
             <div class="tm-kv"><span>Phone clock</span><b>Automatic date/time</b></div>
             <div class="tm-kv"><span>Already used the code?</span><b>Wait for a new one</b></div></div>
           <div class="tm-note tut-in" ${at(2)}>Never share passwords, setup keys, phone codes or recovery codes with support.</div>` },
-      { id: 'done', title: 'Your next step', caption: 'Open Settings and support to start. Follow the MFA knowledge-base guides for app links, recovery and browser management. MFA is optional and adds protection, not a guarantee. SHA-256 time-based codes are still not phishing-resistant. Keep your phone locked and backup codes safe.',
+      { id: 'done', title: 'Your next step', caption: 'Open Settings and support to start. Follow the MFA knowledge-base guides for app links, recovery and browser management. MFA is optional and adds protection, not a guarantee. Time-based codes are not phishing-resistant. Keep your phone locked and backup codes safe.',
         render: () => outro('Protect your next sign-in', 'Connect your phone. Save backups. Trust only personal browsers.', 'Open Settings & support') }
     ]
     }
