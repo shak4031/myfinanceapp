@@ -10,8 +10,9 @@ import { log } from '../utils/logger.js';
 import { queryLogs, parseSince, logRetentionDays } from '../utils/logStore.js';
 import { monitorEnabled } from './monitor.js';
 import { entitlementFromRow, setLicense, OWNER_USER_ID } from '../utils/license.js';
-import { isDemoEmail } from '../utils/demo.js';
+import { isDemoEmail, DEMO_EMAIL } from '../utils/demo.js';
 import { stripeClient } from '../utils/billing.js';
+import { trafficReport } from '../utils/traffic.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -70,6 +71,14 @@ async function cancelStripeSubscriptionForDeletion(target) {
 }
 
 router.get('/openapi.json', (req, res) => res.json(openApiSpec()));
+
+router.get('/traffic', async (req, res, next) => {
+  const days = Number(req.query.days ?? 7);
+  if (![1, 7, 30, 90, 365].includes(days)) return res.status(400).json({ error: 'Choose 1, 7, 30, 90 or 365 calendar days.' });
+  try {
+    res.json(await administrativeTransaction(client => trafficReport(client, days, DEMO_EMAIL)));
+  } catch (error) { next(error); }
+});
 
 router.get('/overview', async (req, res, next) => {
   try {

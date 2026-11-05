@@ -29,6 +29,7 @@ import accounts from './routes/accounts.js';
 import activity from './routes/activity.js';
 import billing, { stripeWebhook, requireSubscription } from './routes/billing.js';
 import household from './routes/household.js';
+import publicMetrics from './routes/publicMetrics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -120,6 +121,7 @@ import staging from './routes/staging.js';
 
 // Routes BEFORE static files
 app.use('/api/auth', auth);
+app.use('/api/public-metrics', publicMetrics);
 app.use('/api/plaid/webhook', plaidWebhook);
 // Token-authenticated (not session) so CI and uptime monitors can read redacted error logs.
 app.use('/api/monitor', monitor);
@@ -157,6 +159,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not fo
 // Static files (after API routes)
 app.get('/about', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/about.html')));
 app.get('/contact', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/contact.html')));
+app.get('/security', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/security.html')));
 app.use(express.static(join(__dirname, '../frontend'), {
   setHeaders(res, path) {
     if (/\.(?:html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache, must-revalidate');

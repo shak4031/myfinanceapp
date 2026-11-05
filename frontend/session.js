@@ -1,6 +1,15 @@
 /* Session checks happen before any financial requests, including legacy views. */
 window.FinanceSession = (() => {
   const nativeFetch = window.fetch.bind(window);
+  function reportTraffic(event) {
+    nativeFetch('/api/public-metrics', {
+      method: 'POST', credentials: 'omit', keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event })
+    }).then(response => {
+      if (!response.ok) throw new Error(`Traffic report failed (${response.status})`);
+    }).catch(error => console.warn('MyFinance traffic reporting:', error.message));
+  }
   let user = null;
   let support = null;
   let generation = 0;
@@ -154,6 +163,7 @@ window.FinanceSession = (() => {
   async function start() {
     cleanAppMarkup = document.querySelector('.app-container').innerHTML;
     const focusAccess = () => {
+      if (registrationEnabled && !user && !inviteToken) reportTraffic('signup_click');
       if (registrationEnabled && mode === 'login') { mode = 'register'; renderMode(); }
       (el('marketing-signin') || el('marketing-access'))?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
       (mode === 'setup' || mode === 'register' ? el('auth-name') : el('auth-email'))?.focus({ preventScroll: true });
@@ -174,6 +184,7 @@ window.FinanceSession = (() => {
     el('auth-switch').onclick = () => {
       if (mode === 'accept') { inviteToken = ''; location.reload(); return; }
       mode = mode === 'login' ? (inviteToken ? 'invite' : registrationEnabled ? 'register' : 'login') : 'login';
+      if (mode === 'register') reportTraffic('signup_click');
       if (location.hash.startsWith('#reset-token=')) history.replaceState(null, '', location.pathname);
       el('auth-error').textContent = '';
       renderMode();
@@ -281,6 +292,7 @@ window.FinanceSession = (() => {
       mode = inviteToken ? 'invite' : setupRequired && location.hash === '#owner-setup' ? 'setup' : 'login';
       registrationEnabled = !!status.registrationEnabled;
       renderMode();
+      if (mode === 'login') reportTraffic('homepage_view');
     } catch (error) { el('auth-description').textContent = error.message; }
   }
   async function logout() {

@@ -15,6 +15,7 @@ export function openApiSpec() {
     paths: {
       '/api/health': { get: op('System', 'Liveness check') },
       '/api/auth/status': { get: op('Auth', 'Setup and registration status') },
+      '/api/public-metrics': { post: op('Public traffic', 'Unauthenticated, same-origin event report; aggregate counters only, no cookies required (homepage_view or signup_click)', body({ event: 'homepage_view' })) },
       '/api/auth/me': { get: op('Auth', 'Current user and active support session, if any') },
       '/api/auth/activity': { post: op('Auth', 'Renew a still-valid session on user interaction; ten-minute idle and twelve-hour absolute expiry', body({ idleMs: 0 })) },
       '/api/auth/login': { post: op('Auth', 'Sign in', body({ email: 'you@example.com', password: '************' })) },
@@ -29,6 +30,7 @@ export function openApiSpec() {
       },
       '/api/support-access/{id}': { delete: op('Support', 'Customer: revoke a support grant immediately', pathId) },
       '/api/admin/overview': { get: op('Admin', 'Health, configuration and 24-hour security/error counts') },
+      '/api/admin/traffic': { get: op('Admin', 'UTC calendar-day public views, signup clicks, successful demo logins and registrations; days: 1, 7, 30, 90 or 365', query('days')) },
       '/api/admin/users': { get: op('Admin', 'Search accounts (no financial data)', query('q')) },
       '/api/admin/users/{id}': { delete: op('Admin', 'Permanently delete an eligible non-admin account; explicitly confirm immediate cancellation of any Stripe subscription', { ...pathId, ...body({ confirmEmail: 'customer@example.com', cancelStripeSubscription: true }) }) },
       '/api/admin/audit': { get: op('Admin', 'Search the audit and error log', query('eventType', 'outcome', 'userId', 'requestId', 'email', 'beforeId', 'limit')) },

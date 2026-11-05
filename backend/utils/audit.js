@@ -97,6 +97,7 @@ export async function purgeExpiredAuditEvents() {
       'DELETE FROM audit_events WHERE created_at < NOW() - make_interval(days => $1)', [auditRetentionDays()]);
     await client.query('DELETE FROM password_reset_tokens WHERE expires_at < NOW() - INTERVAL \'1 day\'');
     await client.query('DELETE FROM sessions WHERE expires_at <= NOW()');
+    await client.query("DELETE FROM traffic_daily WHERE day < (NOW() AT TIME ZONE 'UTC')::date - 364");
     return result.rowCount;
   });
 }

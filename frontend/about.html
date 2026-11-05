@@ -9,13 +9,14 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header"><a class="site-brand" href="/">MyFinance</a><nav aria-label="Main navigation"><a href="/about" aria-current="page">About</a><a href="/contact">Contact</a><a href="/#marketing-signin">Sign in</a></nav></header>
+  <header class="site-header"><a class="site-brand" href="/">MyFinance</a><nav aria-label="Main navigation"><a href="/about" aria-current="page">About</a><a href="/security">Security</a><a href="/contact">Contact</a><a href="/#marketing-signin">Sign in</a></nav></header>
   <main id="main">
     <p class="eyebrow">ABOUT MYFINANCE</p>
     <h1>Clarity for your money. Care for your data.</h1>
     <p class="intro">MyFinance is an independently built household finance app. Its purpose is simple: help you understand spending, keep track of bills, and make thoughtful plans for savings and debt.</p>
     <section aria-labelledby="purpose"><h2 id="purpose">Built for everyday decisions</h2><p>Your finances should be understandable without a spreadsheet marathon. MyFinance brings transactions, categories and planning into one workspace, while keeping recorded facts separate from forecasts. You choose your next step; the app does not move your money.</p></section>
     <section aria-labelledby="security"><h2 id="security">Trust should come from safeguards, not company size</h2><p>It is reasonable to be careful with financial data. Rather than asking you to rely on a big-company name or vague promises, we explain the protections built into MyFinance.</p>
+      <p><a href="/security">Read the technical security whitepaper</a> for data-flow diagrams, cryptographic parameters, TLS responsibilities, account isolation and the limits of these safeguards.</p>
       <div class="cards">
         <article><h3>Separate financial workspaces</h3><p>Database-enforced access rules separate households. Sharing happens within your household; another customer's login does not grant access to your workspace.</p></article>
         <article><h3>Protected sign-in and sessions</h3><p>Passwords are stored as salted, computationally hardened hashes, not readable passwords. Production connections use HTTPS, and sign-in sessions expire after 10 minutes without interaction.</p></article>

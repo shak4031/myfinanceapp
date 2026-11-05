@@ -92,6 +92,7 @@
     <div id="admin-app" hidden>
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="traffic">Traffic</button>
         <button data-tab="logs">App logs</button>
         <button data-tab="users">Users</button>
         <button data-tab="errors">Error logs</button>
@@ -100,6 +101,15 @@
         <button data-tab="api">API explorer</button>
       </nav>
       <section data-panel="overview"><div id="overview"></div></section>
+      <section data-panel="traffic" hidden>
+        <div class="card">
+          <h2>Public traffic &amp; signup interest</h2>
+          <div class="filters"><label>Calendar days (UTC)<select id="traffic-days"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></label><button class="btn btn-primary" id="traffic-refresh">Refresh stats</button></div>
+          <p class="muted">Homepage views count signed-out homepage loads after the account service responds. Signup clicks include Create an account, Find my starting point and public plan/start buttons when registration is open. Demo logins count successful sign-ins, including manually entered demo credentials; registrations count successful public account creation, not email verification, paid subscriptions or invited members.</p>
+          <p class="muted">Counts are events, not unique people, and not a linked conversion funnel. Repeat loads/clicks, bots that run JavaScript and test traffic may be included. Blocked scripts, reporting failures and rate limits can undercount. No analytics cookies, persistent visitor IDs, referrers or financial data are collected. New views/clicks start with this deployment and cannot reconstruct earlier Reddit visits; sign-ins/registrations use retained audit records.</p>
+          <div id="traffic" aria-live="polite"></div>
+        </div>
+      </section>
       <section data-panel="users" hidden>
         <div class="card">
           <div class="filters"><label>Search name or email<input id="user-q" placeholder="name or email"></label><button class="btn btn-primary" id="user-search">Search</button></div>

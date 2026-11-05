@@ -2937,7 +2937,7 @@ test('financial loads are blocked until a verified session', async () => {
   await assert.rejects(f.context.fetch('/api/goals'), /sign in/);
   assert.equal(requests.length, 0);
   await f.context.FinanceSession.start();
-  assert.deepEqual(requests, ['/api/auth/me','/api/auth/status']);
+  assert.deepEqual(requests, ['/api/auth/me','/api/auth/status','/api/public-metrics']);
   assert.equal(f.node('auth-token-label').hidden, true, 'the owner token stays hidden until first-run setup is chosen');
   assert.equal(f.node('auth-submit').textContent, 'Sign in');
   assert.equal(f.node('auth-setup').hidden, false);
@@ -3284,6 +3284,81 @@ test('marketing start opens registration only when registration is enabled', asy
     assert.equal(f.node('auth-title').textContent, registrationEnabled ? 'Make room for your next chapter.' : 'Welcome back.');
     assert.equal(f.node('auth-switch').hidden, !registrationEnabled);
   }
+});
+test('traffic reports public views and signup entry clicks, but not signed-in views or closed/invited signup', async () => {
+  for (const scenario of [
+    { registrationEnabled: true, signedIn: false, invited: false, views: 1, clicks: 3 },
+    { registrationEnabled: false, signedIn: false, invited: false, views: 1, clicks: 0 },
+    { registrationEnabled: true, signedIn: true, invited: false, views: 0, clicks: 0 },
+    { registrationEnabled: true, signedIn: false, invited: true, views: 0, clicks: 0 }
+  ]) {
+    const reports = [];
+    const f = fixture(async (url, options = {}) => {
+      if (url === '/api/public-metrics') {
+        reports.push({ body: JSON.parse(options.body), credentials: options.credentials });
+        return response(202, { accepted: true });
+      }
+      if (url === '/api/auth/me') return scenario.signedIn ? response(200, { user: { id: 4, name: 'Member' } }) : response(401, {});
+      return response(200, { setupRequired: false, registrationEnabled: scenario.registrationEnabled });
+    });
+    const plan = Object.assign(f.node('public-plan'), { dataset: { choosePlan: 'pro' } });
+    const all = f.context.document.querySelectorAll;
+    f.context.document.querySelectorAll = selector => selector === '[data-choose-plan]' ? [plan] : all(selector);
+    if (scenario.invited) {
+      f.context.location.hash = '#invite-token=private-invitation';
+      f.context.location.pathname = '/';
+      f.context.history.replaceState = () => { f.context.location.hash = ''; };
+    }
+    f.run('session.js');
+    await f.context.FinanceSession.start();
+    f.node('marketing-start').listeners.click();
+    plan.listeners.click();
+    // Return to sign-in before testing the explicit Create an account switch.
+    if (!scenario.signedIn && !scenario.invited && scenario.registrationEnabled) {
+      f.node('auth-switch').onclick();
+      f.node('auth-switch').onclick();
+    }
+    assert.equal(reports.filter(report => report.body.event === 'homepage_view').length, scenario.views);
+    assert.equal(reports.filter(report => report.body.event === 'signup_click').length, scenario.clicks);
+    for (const report of reports) {
+      assert.equal(report.credentials, 'omit');
+      assert.deepEqual(Object.keys(report.body), ['event']);
+    }
+  }
+});
+test('admin Traffic tab renders counts, changes range and surfaces reporting errors', async () => {
+  const calls = [];
+  let failTraffic = false;
+  const f = fixture(async url => {
+    calls.push(url);
+    const isTraffic = url.startsWith('/api/admin/traffic');
+    const body = url === '/api/auth/me' ? { user: { role: 'admin', name: 'Owner', email: 'owner@example.test' } }
+      : isTraffic ? failTraffic ? { error: 'Reporting unavailable' } : {
+        retentionDays: 365,
+        totals: { homepage_views: 21, demo_logins: 5, signup_clicks: 8, registrations: 2 },
+        daily: [{ day: '2026-11-04', homepage_views: 21, demo_logins: 5, signup_clicks: 8, registrations: 2 }]
+      } : { stats: {}, emailConfigured: true, alertWebhookConfigured: true };
+    return { ok: !isTraffic || !failTraffic, status: isTraffic && failTraffic ? 503 : 200,
+      text: async () => JSON.stringify(body), headers: { get: () => null } };
+  });
+  f.node('traffic-days').value = '7';
+  f.run('admin.js');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.node('admin-app').hidden, false);
+  f.node('tabs').listeners.click({ target: { dataset: { tab: 'traffic' } } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(f.node('traffic').innerHTML, /Homepage views<\/span><b>21/);
+  assert.match(f.node('traffic').innerHTML, /Demo logins<\/span><b>5/);
+  assert.match(f.node('traffic').innerHTML, /Signup clicks<\/span><b>8/);
+  assert.match(f.node('traffic').innerHTML, /Accounts created<\/span><b>2/);
+  assert.match(f.node('traffic').innerHTML, /2026-11-04/);
+  f.node('traffic-days').value = '30';
+  await f.node('traffic-days').listeners.change();
+  assert.ok(calls.includes('/api/admin/traffic?days=30'));
+  failTraffic = true;
+  await f.node('traffic-refresh').listeners.click();
+  assert.match(f.node('traffic').textContent, /Unable to load traffic statistics: Reporting unavailable/);
+  assert.match(f.node('admin-toast').textContent, /Reporting unavailable/);
 });
 test('pricing cards preserve a plan for explicit hosted checkout after sign-in', async () => {
   const html = source('index.html');

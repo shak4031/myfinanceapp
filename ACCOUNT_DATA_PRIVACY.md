@@ -4,6 +4,10 @@ This describes the controls implemented in the application, not a security
 certification or a guarantee that a particular hosting environment is configured
 correctly.
 
+The public [technical security whitepaper](frontend/security.html), served at
+`/security`, explains the cryptographic parameters, data flows, TLS boundaries
+and deployment-dependent storage protections. It is linked from the homepage.
+
 ## What is separated
 
 Each **household** has a private workspace. Household members use separate
@@ -158,6 +162,23 @@ Do not claim zero-knowledge storage, universal encryption at rest, MFA, or
 independent compliance certification based on these controls alone.
 
 ## Advanced diagnostics and performance
+
+The administrator's **Traffic** tab shows UTC calendar-day homepage views,
+signup-intent clicks, successful demo logins and public registrations. Views
+count signed-out homepage loads after successful account-status checks, not
+unique visitors. Signup clicks include the registration switch and enabled
+public start/plan buttons. They are not completed registrations or paid
+subscriptions. Invited members are excluded from public-registration totals.
+
+Only day/event/count aggregates are stored for views/clicks; reporting omits
+cookies and accepts no email, referrer, full URL or financial payload.
+IP-derived abuse-limit keys are transient in memory, not stored in counters.
+Authentication audits retain their separate identity metadata. Counters are
+purged after 365 calendar days by audit maintenance; sign-in/registration
+coverage depends on audit retention. The panel does not attribute visits to
+Reddit, reconstruct visits before deployment, or measure distinct demo testers.
+Repeated clicks, JavaScript-capable bots, blocked scripts, failed requests and
+rate limits affect counts.
 
 Open **Advanced diagnostics** in the navigation for Transaction troubleshooting
 and Activity log. Troubleshooting first loads at most 30 import metadata entries,

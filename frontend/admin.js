@@ -39,6 +39,24 @@
   });
   const openTab = tab => document.querySelector(`#tabs button[data-tab="${tab}"]`).click();
 
+  async function loadTraffic() {
+    $('traffic').textContent = 'Loading traffic statistics...';
+    try {
+      const data = await api(`/api/admin/traffic?days=${encodeURIComponent($('traffic-days').value)}`);
+      const labels = { homepage_views: 'Homepage views', demo_logins: 'Demo logins', signup_clicks: 'Signup clicks', registrations: 'Accounts created' };
+      $('traffic').innerHTML = `<div class="stats">${Object.entries(labels).map(([key, label]) =>
+        `<div class="stat"><span class="eyebrow">${esc(label)}</span><b>${esc(data.totals[key])}</b></div>`).join('')}</div>
+        <p class="muted">Daily counters retained for ${esc(data.retentionDays)} days; authentication totals depend on audit retention. All dates use UTC. These statistics do not identify Reddit visitors or measure time spent in the demo.</p>
+        <div class="table-scroll"><table><thead><tr><th>Date (UTC)</th>${Object.values(labels).map(label => `<th>${esc(label)}</th>`).join('')}</tr></thead>
+        <tbody>${data.daily.map(row => `<tr><td>${esc(row.day)}</td>${Object.keys(labels).map(key => `<td>${esc(row[key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    } catch (error) {
+      $('traffic').textContent = `Unable to load traffic statistics: ${error.message}`;
+      throw error;
+    }
+  }
+  $('traffic-refresh').addEventListener('click', () => loadTraffic().catch(error => toast(error.message)));
+  $('traffic-days').addEventListener('change', () => loadTraffic().catch(error => toast(error.message)));
+
   async function loadOverview() {
     const data = await api('/api/admin/overview');
     const s = data.stats;
@@ -375,7 +393,7 @@
     } catch (error) { output.textContent = `Request not sent: ${error.message}`; }
   });
 
-  const loaders = { overview: loadOverview, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
+  const loaders = { overview: loadOverview, traffic: loadTraffic, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
 
   (async () => {
     try {

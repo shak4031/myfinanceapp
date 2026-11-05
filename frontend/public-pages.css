@@ -25,3 +25,35 @@ section { margin-top: 40px; }
 .contact-link { display: inline-block; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
 .site-footer { border-top: 1px solid #d7e1d4; font-size: 13px; }
 @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } main { padding-top: 32px; } .site-header nav { gap: 16px; } }
+.document-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 24px 0; border-block: 1px solid #d7e1d4; }
+.document-meta dt, .section-number { font-size: 12px; font-weight: 750; letter-spacing: 1px; text-transform: uppercase; color: #526958; }
+.document-meta dd { margin: 6px 0 0; }
+.document-toc { display: block; padding: 24px; margin-top: 32px; border: 1px solid #d7e1d4; border-radius: 12px; background: #fff; }
+.document-toc ol { columns: 2; padding-left: 24px; }
+.document-toc li { break-inside: avoid; margin: 6px 0; }
+.security-document section { margin-top: 56px; scroll-margin-top: 24px; }
+.security-document code { font-family: Consolas, monospace; font-size: .92em; overflow-wrap: anywhere; }
+.table-scroll, .diagram-scroll { overflow-x: auto; }
+.security-table { width: 100%; min-width: 620px; border-collapse: collapse; background: #fff; font-size: 14px; }
+.security-table caption { text-align: left; font-weight: 700; padding: 16px 0; }
+.security-table th, .security-table td { padding: 16px; text-align: left; vertical-align: top; border: 1px solid #d7e1d4; line-height: 1.65; }
+.security-table th { background: #edf3e7; }
+.security-figure { margin: 28px 0; padding: 12px; background: #fff; border: 1px solid #d7e1d4; border-radius: 12px; }
+.security-figure svg { display: block; width: 100%; min-width: 760px; height: auto; font: 14px system-ui, sans-serif; fill: #243e35; }
+.diagram-heading { font-size: 17px; font-weight: 750; }
+.security-figure figcaption { padding: 12px; font-size: 13px; line-height: 1.7; color: #526958; }
+@media (max-width: 620px) { .document-meta { grid-template-columns: 1fr; } .document-toc ol { columns: 1; } }
+@media print {
+  .security-document { background: #fff; color: #000; font-size: 10pt; }
+  .security-document .site-header, .security-document .skip-link, .security-document .site-footer { display: none; }
+  .security-document main { max-width: none; padding: 0; }
+  .security-document h1 { font-size: 28pt; }
+  .security-document h2 { font-size: 18pt; }
+  .security-document h3 { font-size: 13pt; }
+  .security-document section { margin-top: 24px; }
+  .security-document .table-scroll, .security-document .diagram-scroll { overflow: visible; }
+  .security-document .security-table, .security-document .security-figure svg { min-width: 0; font-size: 9pt; }
+  .security-document .security-table th, .security-document .security-table td { padding: 8px; }
+  .security-document figure, .security-document tr { break-inside: avoid; }
+  .security-document h2, .security-document h3 { break-after: avoid; }
+}

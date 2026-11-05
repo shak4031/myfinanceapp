@@ -1,6 +1,7 @@
 import { reconcileTransfers } from './transfers.js';
 import { classify, loadCategorization } from './categorization.js';
 import { refreshImportReviewCandidates } from './transactionImport.js';
+import { TRAFFIC_SCHEMA } from './traffic.js';
 
 export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
@@ -24,6 +25,7 @@ export const DEFAULT_CATEGORIES = [
 ];
 
 export async function migratePrivateSchema(client) {
+  await client.query(TRAFFIC_SCHEMA);
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE, role TEXT DEFAULT 'user'
@@ -431,7 +433,7 @@ export async function migratePrivateSchema(client) {
       EXECUTE format('GRANT finance_app_runtime TO %I', current_user);
     END $$;
     GRANT USAGE ON SCHEMA public TO finance_app_runtime;
-    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses, app_logs,
+    REVOKE ALL ON users, sessions, auth_attempts, password_reset_tokens, support_grants, audit_events, user_licenses, app_logs, traffic_daily,
       households,household_members,household_invitations,household_subscriptions,stripe_events,app_migrations,email_verification_tokens
       FROM PUBLIC, finance_app_runtime;
   `);
