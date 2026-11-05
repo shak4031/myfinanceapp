@@ -27,6 +27,12 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /href="mailto:/);
       } else {
         assert.match(html, /MF-SEC-001/);
+        assert.match(html, /version 1\.1/);
+        assert.match(html, /Recorded production verification/);
+        assert.match(html, /WireGuard/);
+        assert.match(html, /database TLS operator-verified on 4 November 2026/);
+        assert.match(html, /not an independent infrastructure audit/);
+        assert.match(html, /Storage\/backup encryption, restore testing and specific TLS cipher suites have not been confirmed/);
         assert.match(html, /AES-256-GCM/);
         assert.match(html, /N=32768, r=8, p=1/);
         assert.match(html, /TLS_AES_256_GCM_SHA384/);
