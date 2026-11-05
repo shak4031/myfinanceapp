@@ -194,6 +194,14 @@ the decision is respected by the Plaid/statement duplicate list.
 Connection details distinguish the last successful check from the latest saved
 bank activity date. A successful incremental check cannot prove the institution
 has delivered today's payroll; the app does not invent a deposit from a forecast.
+The Accounts panel also shows successful Plaid sync and attempt times separately
+from saved activity/statement dates. It associates a saved account with Plaid only
+when institution (normalized spelling), last four digits and account type identify
+one account on each side within the household. Ambiguous or incomplete identities
+do not inherit another account's sync time. Verified linked activity contributes
+to the card's transaction count, date range and last-added time. Recorded statement
+balances and their dates remain unchanged. Manual sync refreshes the Accounts
+panel, including zero-change syncs.
 Changing `PLAID_ENVIRONMENT` does not convert saved access tokens. An identified
 cross-environment token is blocked before remote sync or update-mode Link.
 Disconnect that old connection and use Connect bank in the current environment.

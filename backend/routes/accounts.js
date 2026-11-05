@@ -169,11 +169,30 @@ router.get('/', route(async (req, res) => {
   const userId = currentUserId();
   const result = await db.transaction(async client => {
     const accounts = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id = $1 ORDER BY (status = 'needs_review') DESC, kind, name, id`, [userId])).rows;
-    const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, source, transfer_kind, transfer_account_id, created_at
+    const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, plaid_account_id, source, transfer_kind, transfer_account_id, created_at
       FROM transactions WHERE user_id = $1`, [userId])).rows;
-    return { accounts, rows };
+    const linked = (await client.query(`SELECT a.account_id,a.mask,a.type,a.subtype,c.institution_name,
+      c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,a.balance_checked_at
+      FROM plaid_accounts a JOIN plaid_connections c ON c.id=a.connection_id AND c.user_id=a.user_id
+      WHERE a.user_id=$1`, [userId])).rows;
+    return { accounts, rows, linked };
   });
-  const { accounts, rows } = result;
+  const { accounts, rows, linked } = result;
+  const institutionKey = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/bank$/, '');
+  const matches = bank => accounts.filter(account => account.status === 'active'
+    && account.last4 && account.last4 === bank.mask
+    && institutionKey(account.institution) && institutionKey(account.institution) === institutionKey(bank.institution_name)
+    && account.kind === (bank.type === 'credit' ? 'credit_card' : bank.subtype));
+  const associations = linked.map(bank => ({ bank, matches: matches(bank) }));
+  const plaidByAccount = new Map();
+  const accountByPlaid = new Map();
+  for (const { bank, matches: candidates } of associations) {
+    if (candidates.length !== 1) continue;
+    const account = candidates[0];
+    if (associations.filter(entry => entry.matches.some(candidate => candidate.id === account.id)).length !== 1) continue;
+    plaidByAccount.set(account.id, bank);
+    accountByPlaid.set(bank.account_id, account.id);
+  }
   const byId = new Map(accounts.map(account => [account.id, account]));
   const balances = accountBalances(rows, accounts);
   const stats = new Map(accounts.map(account => [account.id, { transactions: 0, firstDate: null, lastDate: null, lastDataAddedAt: null, transfersTo: 0, unknown: 0, unknownTotal: 0 }]));
@@ -184,8 +203,9 @@ router.get('/', route(async (req, res) => {
   const unknownRows = [];
   for (const row of rows) {
     const iso = parseTxDate(row.date)?.iso || null;
-    if (row.account_id != null && stats.has(row.account_id)) {
-      const entry = stats.get(row.account_id);
+    const accountId = accountByPlaid.get(row.plaid_account_id) ?? row.account_id;
+    if (accountId != null && stats.has(accountId)) {
+      const entry = stats.get(accountId);
       entry.transactions++;
       if (iso && (!entry.firstDate || iso < entry.firstDate)) entry.firstDate = iso;
       if (iso && (!entry.lastDate || iso > entry.lastDate)) entry.lastDate = iso;
@@ -193,7 +213,7 @@ router.get('/', route(async (req, res) => {
         const addedAt = new Date(row.created_at).toISOString();
         if (!entry.lastDataAddedAt || addedAt > entry.lastDataAddedAt) entry.lastDataAddedAt = addedAt;
       }
-    } else if (row.account_id == null) {
+    } else if (accountId == null) {
       const key = row.source || 'import';
       if (!unassigned.has(key)) unassigned.set(key, { source: key, transactions: 0, firstDate: null, lastDate: null });
       const entry = unassigned.get(key);
@@ -223,7 +243,10 @@ router.get('/', route(async (req, res) => {
       const balance = balances.get(account.id) || null;
       const statementDate = parseTxDate(account.statement?.closingDate)?.iso || null;
       const dataAsOf = [entry.lastDate, statementDate].filter(Boolean).sort().at(-1) || null;
+      const bank = plaidByAccount.get(account.id);
       return { ...account, kindLabel: ACCOUNT_KIND_LABELS[account.kind], ...entry, unknownTotal: cents(entry.unknownTotal),
+        plaid: bank ? { status: bank.status, lastSyncAt: bank.last_sync_at, lastAttemptAt: bank.last_sync_attempt_at,
+          lastErrorCode: bank.last_error_code, balanceCheckedAt: bank.balance_checked_at } : null,
         dataAsOf, balance: balance?.balance ?? null, balanceAsOf: balance?.asOf ?? null };
     }),
     unassigned: [...unassigned.values()].sort((a, b) => b.transactions - a.transactions),

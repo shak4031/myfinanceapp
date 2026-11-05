@@ -289,17 +289,25 @@
   // ---------- Accounts page ----------
   function freshness(account) {
     if (account.kind === 'external') return { stale: false, markup: '<p class="muted acct-freshness">External recipient - no account data expected.</p>' };
+    const stamp = value => `<time datetime="${escape(value)}">${escape(new Date(value).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</time>`;
+    const bank = account.plaid;
+    const sync = bank ? `<div class="acct-freshness">
+      <p><strong>Last successful Plaid sync:</strong> ${bank.lastSyncAt ? stamp(bank.lastSyncAt) : 'Not completed yet'}</p>
+      ${bank.lastAttemptAt ? `<p class="muted">Last Plaid attempt: ${stamp(bank.lastAttemptAt)}</p>` : ''}
+      ${bank.status !== 'connected' || bank.lastErrorCode ? `<p class="acct-badge warn">Connection needs attention${bank.lastErrorCode ? `: ${escape(bank.lastErrorCode)}` : ''}. Open Connect bank to review it.</p>` : ''}
+      <p class="muted">A successful check may return no new transactions. Activity dates and recorded balances below are separate.</p>
+    </div>` : '<p class="muted acct-freshness">No uniquely verified Plaid connection for this saved account. Its activity dates reflect saved transactions and statements, not syncs from other accounts.</p>';
     const date = account.dataAsOf;
-    if (!date) return { stale: false, markup: '<p class="acct-freshness"><span class="acct-badge">No account data</span> Last data update: unavailable. Import a recent statement to establish freshness.</p>' };
+    if (!date) return { stale: false, markup: `${sync}<p class="acct-freshness"><span class="acct-badge">No account data</span> Latest saved activity / statement date: unavailable. Import a recent statement or check your bank connection.</p>` };
     const now = new Date();
     const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     const age = Math.max(0, Math.floor((today - Date.parse(`${date}T00:00:00Z`)) / 86400000));
     const stale = age > 45;
     const added = account.lastDataAddedAt ? new Date(account.lastDataAddedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : null;
-    return { stale, markup: `<div class="acct-freshness${stale ? ' is-stale' : ''}">
-      <p><strong>Last data update:</strong> <time datetime="${escape(date)}">${escape(date)}</time> (${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} ago`})
+    return { stale, markup: `${sync}<div class="acct-freshness${stale ? ' is-stale' : ''}">
+      <p><strong>Latest saved activity / statement date:</strong> <time datetime="${escape(date)}">${escape(date)}</time> (${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} ago`})
       ${stale ? '<span class="acct-badge warn">Stale data - over 45 days old</span>' : ''}</p>
-      <p class="muted">Data covers activity or a statement through this date.${stale ? ' Import a recent statement to update this account.' : ''}</p>
+      <p class="muted">Most recent saved transaction or statement date, not a guarantee of complete bank history.${stale ? bank ? ' Check your bank connection or import a recent statement.' : ' Import a recent statement to update this account.' : ''}</p>
       <p class="muted">${added ? `Transaction data last added: <time datetime="${escape(account.lastDataAddedAt)}">${escape(added)}</time>` : 'Transaction import time unavailable.'}</p>
     </div>` };
   }

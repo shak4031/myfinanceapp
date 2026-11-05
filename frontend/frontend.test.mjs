@@ -1069,13 +1069,40 @@ test('account freshness marks only data older than 45 calendar days and keeps im
   assert.match(card(2), /Stale data - over 45 days old/);
   assert.match(card(2), /Transaction data last added: <time datetime="2026-10-19T10:00:00Z"/);
   assert.match(card(2), /Import a recent statement/);
-  assert.match(card(3), /Last data update: unavailable/);
+  assert.match(card(3), /Latest saved activity \/ statement date: unavailable/);
   assert.doesNotMatch(card(3), /acct-stale/);
   assert.match(card(4), /External recipient/);
   assert.doesNotMatch(card(4), /acct-stale|Stale data/);
   assert.match(card(5), /\(today\)/);
   assert.doesNotMatch(card(5), /acct-stale/);
   assert.doesNotMatch(card(6), /acct-stale|NaN|Invalid Date/);
+});
+
+test('Accounts separates current Plaid syncs from old activity, balances and failed attempts', async () => {
+  const accounts = [
+    { id: 1, name: 'Linked checking', kind: 'checking', dataAsOf: '2026-10-23', balance: 7332.75, balanceAsOf: '2026-10-23',
+      plaid: { status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z', lastAttemptAt: '2026-11-05T13:00:00Z' } },
+    { id: 2, name: 'Empty linked account', kind: 'savings', dataAsOf: null,
+      plaid: { status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z' } },
+    { id: 3, name: 'Failed checking', kind: 'checking', dataAsOf: '2026-10-23',
+      plaid: { status: 'relink_required', lastSyncAt: '2026-11-04T13:00:00Z', lastAttemptAt: '2026-11-05T13:00:00Z', lastErrorCode: 'ITEM_LOGIN_REQUIRED' } },
+    { id: 4, name: 'Statement only', kind: 'checking', dataAsOf: '2026-10-23' }
+  ].map(account => ({ status: 'active', transactions: 0, ...account }));
+  const f = fixture(async () => response(200, { accounts, kinds: [] }));
+  f.run('accounts.js');
+  await f.context.FinanceAccounts.loadPage();
+  const cards = [...f.node('accounts-root').innerHTML.matchAll(/<article class="acct-card[^]*?<\/article>/g)].map(match => match[0]);
+  const card = id => cards.find(html => html.includes(`data-account="${id}"`));
+  assert.match(card(1), /Last successful Plaid sync:<\/strong> <time datetime="2026-11-05T13:00:00Z"/);
+  assert.match(card(1), /Latest saved activity \/ statement date:[^]*2026-10-23/);
+  assert.match(card(1), /Recorded balance.*2026-10-23/);
+  assert.match(card(2), /Last successful Plaid sync:[^]*2026-11-05T13:00:00Z/);
+  assert.match(card(2), /date: unavailable/);
+  assert.match(card(3), /Last successful Plaid sync:<\/strong> <time datetime="2026-11-04T13:00:00Z"/);
+  assert.match(card(3), /Last Plaid attempt: <time datetime="2026-11-05T13:00:00Z"/);
+  assert.match(card(3), /Connection needs attention: ITEM_LOGIN_REQUIRED/);
+  assert.match(card(4), /No uniquely verified Plaid connection/);
+  assert.doesNotMatch(card(4), /Last successful Plaid sync/);
 });
 
 test('CSV imports use detected accounts without a required global account picker', async () => {
@@ -2031,6 +2058,8 @@ test('Plaid sync reports included flags without claiming the bank delivered curr
   f.context.loadPlaidConnections = async () => {};
   f.context.loadTransactionImportReviews = async () => {};
   f.context.loadDashboard = async () => {};
+  let accountRefreshes = 0;
+  f.context.FinanceAccounts = { loadPage: async () => { accountRefreshes++; } };
   const html = source('index.html');
   const start = html.indexOf('    async function syncPlaidConnection(');
   const end = html.indexOf('    async function setPlaidCashflowAccount(', start);
@@ -2039,6 +2068,7 @@ test('Plaid sync reports included flags without claiming the bank delivered curr
   assert.match(f.node('plaid-status').textContent, /2 new records saved, 1 exact matches linked automatically/);
   assert.match(f.node('plaid-status').textContent, /2 possible duplicates are included in totals/);
   assert.match(f.node('plaid-status').textContent, /does not mean the bank has supplied today's activity/);
+  assert.equal(accountRefreshes, 1, 'successful manual sync refreshes the Accounts panel too');
 });
 test('import review UI clears successful decisions, blocks double submissions and keeps failures visible', async () => {
   const f = fixture();

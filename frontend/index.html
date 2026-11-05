@@ -822,7 +822,7 @@
             <div class="kb-grid">
               <article class="kb-card"><h3>Correct account details</h3><p>Review an account's name, type, institution, and masked digits. Correct account type and ownership so transfers between your own accounts are recognized and are not counted as spending. Do not create a second account just because an existing connection needs refreshing.</p><a class="kb-card-link" href="#tutorials/accounts">Watch: Accounts</a></article>
               <article class="kb-card"><h3>Connect or refresh with Plaid</h3><p>Plaid connections can retrieve eligible bank and credit-card activity and balances. Institution update timing varies; refresh may not return new transactions when the institution has none ready. A data connection cannot initiate payments or transfers. You can also use file imports without linking an account.</p></article>
-              <article class="kb-card"><h3>Understand freshness and history</h3><p>Connection freshness describes the last successful data update, not proof that every transaction has posted. Pending activity may change, and account balances can lag. Check the financial institution before relying on a balance or cash-flow estimate.</p></article>
+              <article class="kb-card"><h3>Understand freshness and history</h3><p>Accounts shows Last successful Plaid sync separately from Latest saved activity / statement date. A successful check can return no new transactions and does not change the date of an old recorded balance. Failed checks show their attempt time and connection error without advancing the success time. Plaid dates appear only when the saved account uniquely matches the bank, account type and last four digits; otherwise the card explains that no connection is verified. Pending activity and balances can lag. Check the financial institution before relying on a balance or cash-flow estimate.</p></article>
               <article class="kb-card"><h3>Statement accounts vs. Plaid accounts</h3><p>Records from manual imports and linked accounts can carry different source identifiers. MyFinance shows available account metadata but does not guess that two similarly named sources are the same account. Verify ownership and account details in Accounts.</p></article>
             </div>
             <div class="kb-jump-links"><a class="btn btn-primary" href="#accounts" data-view="accounts">Open Accounts</a><a class="btn btn-secondary" href="#tutorials/accounts">Accounts tutorial</a></div>
@@ -2161,6 +2161,7 @@
         await loadPlaidConnections();
         await loadTransactionImportReviews();
         await loadDashboard();
+        if (window.FinanceAccounts) await FinanceAccounts.loadPage();
       } catch (error) {
         status.textContent = error.message;
       }
@@ -2555,7 +2556,7 @@
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
   <script src="refresh.js?v=20261105-review"></script>
-  <script src="accounts.js?v=20261024-auto-accounts"></script>
+  <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261104-mfa-sha1"></script>
   <script src="pro-charts.js?v=20261031c"></script>
