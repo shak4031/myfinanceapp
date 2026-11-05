@@ -5,7 +5,7 @@ import { reconcileTransfers } from './transfers.js';
 
 const FIELDS = ['id', 'date', 'description', 'amount', 'direction', 'source', 'category', 'is_fixed',
   'pay_mode', 'income_role', 'account_id', 'plaid_transaction_id', 'plaid_account_id', 'is_pending',
-  'display_name', 'name_override', 'category_corrected', 'import_batch_id', 'balance'];
+  'display_name', 'name_override', 'category_corrected', 'import_batch_id', 'balance', 'note'];
 const snapshot = alias => `jsonb_build_object(${FIELDS.map(field => `'${field}',${alias}.${field}`).join(',')},
   'account_name',${alias === 'p' ? 'pa.name' : 'a.name'},
   'institution',${alias === 'p' ? 'pc.institution_name' : 'a.institution'},
@@ -100,6 +100,8 @@ async function mergeDuplicate(client, input, reconcile) {
     throw failure(409, 'This Plaid record belongs to an import with restore history. Review that import before merging; nothing was merged.');
   }
   const keepId = input.existingId, removeId = input.plaidId;
+  const note = [...new Set([pair.existing.note, pair.plaid.note].filter(Boolean))].join('\n');
+  if (note.length > 500) throw failure(409, 'Combined notes exceed 500 characters. Edit the notes before merging; nothing was merged.');
   await client.query(`UPDATE transaction_import_reviews SET
       resolution_transaction_id=CASE WHEN resolution_transaction_id=$2 THEN $3 ELSE resolution_transaction_id END,
       matched_transaction_id=CASE WHEN matched_transaction_id=$2 THEN $3 ELSE matched_transaction_id END,
@@ -120,8 +122,9 @@ async function mergeDuplicate(client, input, reconcile) {
   FROM affected WHERE p.id=affected.id AND p.user_id=$1`, [userId, removeId, keepId]);
   // Release the unique Plaid identity before attaching it to the retained statement record.
   await client.query('DELETE FROM transactions WHERE user_id=$1 AND id=$2', [userId, removeId]);
-  await client.query(`UPDATE transactions SET plaid_transaction_id=$3,plaid_account_id=$4,is_pending=FALSE
-    WHERE user_id=$1 AND id=$2`, [userId, keepId, pair.plaid.plaid_transaction_id, pair.plaid.plaid_account_id]);
+  await client.query(`UPDATE transactions SET plaid_transaction_id=$3,plaid_account_id=$4,is_pending=FALSE,
+    note=$5 WHERE user_id=$1 AND id=$2`, [userId, keepId, pair.plaid.plaid_transaction_id, pair.plaid.plaid_account_id,
+    note]);
   if (reconcile) await reconcileTransfers(client, userId);
   return { success: true, keptTransactionId: keepId, removedTransactionId: removeId };
 }

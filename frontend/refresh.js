@@ -154,7 +154,7 @@
     const tokens = String(query || '').toLowerCase().replace(/[$,]/g, '').split(/\s+/).filter(Boolean);
     if (!tokens.length) return true;
     const amount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
-    const haystack = `${transaction.display_name || ''} ${transaction.description || ''} ${transaction.category || 'uncategorized'} ${window.transactionAccountLabel(transaction)} ${amount}`.toLowerCase();
+    const haystack = `${transaction.display_name || ''} ${transaction.description || ''} ${transaction.note || ''} ${transaction.category || 'uncategorized'} ${window.transactionAccountLabel(transaction)} ${amount}`.toLowerCase();
     return tokens.every(token => haystack.includes(token));
   };
   const highlight = (text, query) => {
@@ -1057,7 +1057,9 @@
         const debit = String(transaction.direction).toUpperCase() === 'DEBIT';
         return `<tr data-transaction="${offset + index}">
           <td>${escape(transactionDateFormat.format(transactionDate(transaction.date)))}</td>
-          <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${accountBadge(transaction)}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div></td>
+          <td><div class="tx-desc-cell"><div class="tx-desc-text">${window.transactionHref(transaction.id) ? `<a class="transaction-link" href="${window.transactionHref(transaction.id)}">${describe(transaction, query)}</a>` : describe(transaction, query)}${transferBadge(transaction)}${accountBadge(transaction)}</div><button type="button" class="tx-rename" data-rename title="Give this payee a clearer name (applies to similar and future transactions)" aria-label="Rename ${escape(transaction.display_name || transaction.description)}">Rename</button></div>
+            ${transaction.note ? `<div class="tx-note"><strong>Note</strong><span>${escape(transaction.note)}</span></div>` : ''}
+            <details class="tx-note-editor"><summary>${transaction.note ? 'Edit note' : 'Add note'}</summary><label>Note for this transaction only<textarea data-note maxlength="500" rows="3" aria-label="Note for ${escape(transaction.display_name || transaction.description)}">${escape(transaction.note || '')}</textarea></label><small>Up to 500 characters. Shared with your household; do not include passwords or full account numbers.</small><button type="button" class="btn btn-secondary btn-compact" data-save-note>Save note</button><span data-note-status role="status"></span></details></td>
           <td><select data-category aria-label="Category for ${escape(transaction.description)}">
             <option value="">Uncategorized</option>${allCategories.map(category => `<option value="${escape(category.name)}" ${category.name === transaction.category ? 'selected' : ''}>${escape(category.name)}</option>`).join('')}
           </select></td>
@@ -1070,7 +1072,23 @@
           <td class="${debit ? 'amount-debit' : 'amount-credit'}" style="text-align:right">${debit ? '−' : '+'}${money(Math.abs(transaction.amount))}</td>
         </tr>`;
       }).join('') : `<tr><td colspan="6" class="empty-state">${transactionId ? 'This transaction is unavailable or no longer matches these filters. Reset filters to return to all activity.' : 'No transactions match these filters.'}</td></tr>`;
-      table.onclick = event => {
+      table.onclick = async event => {
+        const save = event.target.closest('[data-save-note]');
+        if (save) {
+          const row = save.closest('[data-transaction]');
+          const item = rows[Number(row.dataset.transaction)];
+          const editor = row.querySelector('[data-note]');
+          const status = row.querySelector('[data-note-status]');
+          save.disabled = true;
+          status.textContent = 'Saving...';
+          try {
+            const result = await json(`/api/transactions/${item.id}/note`, 'PATCH', { note: editor.value });
+            item.note = result.note;
+            renderTransactions(page);
+            notify(result.note ? 'Transaction note saved.' : 'Transaction note removed.');
+          } catch (error) { status.textContent = error.message; save.disabled = false; }
+          return;
+        }
         const button = event.target.closest('[data-rename]');
         const row = button?.closest('[data-transaction]');
         if (row) window.openRenameDialog(rows[Number(row.dataset.transaction)]);

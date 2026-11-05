@@ -78,7 +78,21 @@ export function getPlaidClient() {
 }
 
 export function plaidErrorCode(error) {
-  return error?.response?.data?.error_code || error?.response?.data?.error?.error_code || null;
+  return error?.response?.data?.error_code || error?.response?.data?.error?.error_code
+    || (error?.code === 'PLAID_ENVIRONMENT_MISMATCH' ? error.code : null);
+}
+
+export function plaidTokenEnvironment(token) {
+  return /^access-(sandbox|production)-/.exec(token)?.[1] || null;
+}
+
+export function assertPlaidTokenEnvironment(token) {
+  const stored = plaidTokenEnvironment(token);
+  const current = String(process.env.PLAID_ENVIRONMENT || 'sandbox').toLowerCase();
+  if (stored && stored !== current) {
+    throw Object.assign(new Error(`This saved bank connection belongs to Plaid ${stored}, but the app is configured for ${current}. Disconnect the old connection, then connect the bank again in the current environment. Existing transactions are kept.`),
+      { status: 409, code: 'PLAID_ENVIRONMENT_MISMATCH' });
+  }
 }
 
 function decodeJwtPart(part) {

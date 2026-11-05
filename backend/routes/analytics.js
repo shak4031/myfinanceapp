@@ -23,7 +23,7 @@ async function timed(res, name, callback) {
 async function loadInputs() {
   return db.transaction(async client => {
     const transactions = (await client.query(
-      'SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name, account_id, pay_mode FROM transactions ORDER BY date, id')).rows;
+      'SELECT id, date, description, note, amount, direction, category, is_fixed, label_id, transfer_kind, display_name, account_id, pay_mode FROM transactions ORDER BY date, id')).rows;
     const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
     // Starting cash is checking accounts only, matching the dashboard.
@@ -138,7 +138,8 @@ router.get('/export.csv', async (req, res, next) => {
         { label: 'Direction', value: tx => tx.direction },
         { label: 'Amount', value: tx => Number(tx.amount).toFixed(2) },
         { label: 'Fixed bill', value: tx => (tx.is_fixed ? 'yes' : 'no') },
-        { label: 'Transfer (not counted)', value: tx => tx.transfer_kind || '' }
+        { label: 'Transfer (not counted)', value: tx => tx.transfer_kind || '' },
+        { label: 'Note', value: tx => tx.note || '' }
       ]);
     }
     const stamp = new Date().toISOString().slice(0, 10);

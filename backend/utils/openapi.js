@@ -82,6 +82,7 @@ export function openApiSpec() {
         delete: op('Finance', 'Delete an account with no imported transactions (409 otherwise)') },
       '/api/accounts/assign': { post: op('Finance', 'Assign every transaction from an older import source to an account', body({ source: 'checking', accountId: 1 })) },
       '/api/transactions/categorization-rules': { get: op('Finance', 'List categorization rules') },
+      '/api/transactions/{id}/note': { patch: op('Finance', 'Save a household-owned transaction note (plain text, maximum 500 characters); an empty string removes it. Does not change the bank description or other transactions.', { ...pathId, ...body({ note: 'Replacement part for the office' }) }) },
       '/api/transactions/categorization-preview': { post: op('Finance', 'Preview category suggestions', body({ scope: 'uncategorized' })) },
       '/api/transactions/update-pay-mode': { post: op('Finance', "Mark outgoing payments as auto-pay or manual (pay_mode 'auto', 'manual' or null)", body({ ids: [1], pay_mode: 'auto' })) },
       '/api/transactions/income-sources': { get: op('Finance', 'Deposits grouped by sender with whether each counts as income and why') },

@@ -110,7 +110,7 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
     assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM accounts')).rows[0].count, beforeBadNewAccount);
     assert.equal((await history()).batches.length, 2, 'rejections do not leave history or accounts');
 
-    await database.query("UPDATE transactions SET category='Gas',category_corrected=TRUE,pay_mode='manual',display_name='My shop',name_override=TRUE WHERE direction='DEBIT'");
+    await database.query("UPDATE transactions SET category='Gas',category_corrected=TRUE,pay_mode='manual',display_name='My shop',name_override=TRUE,note='Receipt retained for warranty' WHERE direction='DEBIT'");
     const edited = await rows();
     const commitFailureReview = await review([first.body.batchId]);
     failReconciliation = true;
@@ -130,7 +130,7 @@ test('import recovery preserves exact rows, duplicates, statement facts and tena
     const nextId = (await database.query("SELECT nextval('transactions_id_seq') AS id")).rows[0].id;
     assert.ok(Number(nextId) > Math.max(...edited.map(row => row.id)), 'a restart reserves IDs held in backups');
     assert.equal((await restore([first.body.batchId])).body.affected, 2);
-    assert.deepEqual(await rows(), edited, 'restore preserves IDs, timestamps, manual categories, pay mode and names');
+    assert.deepEqual(await rows(), edited, 'restore preserves IDs, timestamps, manual categories, pay mode, names and notes');
     assert.equal((await restore([first.body.batchId])).status, 409);
 
     await undo([first.body.batchId]);

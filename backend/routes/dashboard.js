@@ -571,6 +571,7 @@ router.get('/all-transactions', async (req, res) => {
         t.date,
         t.description,
         t.display_name,
+        t.note,
         t.amount,
         t.direction,
         t.category,

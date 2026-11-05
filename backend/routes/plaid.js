@@ -5,7 +5,8 @@ import { withUser, currentUserId } from '../utils/tenant.js';
 import { classify, failure, loadCategorization } from '../utils/categorization.js';
 import { importTransactions, refreshImportReviewCandidates } from '../utils/transactionImport.js';
 import {
-  decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook
+  decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook,
+  assertPlaidTokenEnvironment, plaidTokenEnvironment
 } from '../utils/plaid.js';
 
 const plaidRouter = express.Router();
@@ -131,6 +132,7 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
   if (connection.status !== 'connected') throw failure(409, 'This bank connection needs attention before it can sync');
   const plaidClient = getPlaidClient();
   const accessToken = decryptPlaidToken(connection.access_token_ciphertext);
+  assertPlaidTokenEnvironment(accessToken);
   const changes = await fetchAllChanges(plaidClient, accessToken, connection.cursor);
   const config = await loadCategorization(client);
   const added = changes.added.map(plaidTransaction);
@@ -190,17 +192,19 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
     last_sync_attempt_at=NOW(),last_error_code=NULL
     WHERE id=$1 AND user_id=current_setting('app.user_id')::integer`,
   [connection.id, changes.cursor || null]);
-  return { added: added.length, modified: modified.length, removed: changes.removed.length };
+  const pendingReviews = (await client.query(`SELECT COUNT(*)::integer AS count FROM transaction_import_reviews
+    WHERE user_id=current_setting('app.user_id')::integer AND status='pending'`)).rows[0].count;
+  return { added: added.length, modified: modified.length, removed: changes.removed.length, pendingReviews };
 }
 
-async function syncAndRecordFailure(connectionId) {
+async function syncAndRecordFailure(connectionId, onlyIfDue = false) {
   try {
-    return await db.transaction(client => syncConnection(client, connectionId));
+    return await db.transaction(client => syncConnection(client, connectionId, onlyIfDue));
   } catch (error) {
     const code = plaidErrorCode(error);
     const storedCode = /^[A-Z0-9_]{1,100}$/.test(code || '') ? code : 'SYNC_FAILED';
     await db.run(`UPDATE plaid_connections SET last_error_code=$2,last_sync_attempt_at=NOW(),
-      status=CASE WHEN $2 IN ('ITEM_LOGIN_REQUIRED','INVALID_ACCESS_TOKEN','ITEM_NOT_FOUND')
+      status=CASE WHEN $2 IN ('ITEM_LOGIN_REQUIRED','INVALID_ACCESS_TOKEN','ITEM_NOT_FOUND','PLAID_ENVIRONMENT_MISMATCH')
         THEN 'relink_required' ELSE status END
       WHERE id=$1`, [connectionId, storedCode]);
     throw error;
@@ -215,8 +219,7 @@ export async function syncDuePlaidConnections(structuredLog) {
     ORDER BY last_sync_at NULLS FIRST LIMIT 100`)).rows);
   for (const connection of connections) {
     try {
-      await withUser(connection.user_id, () =>
-        db.transaction(client => syncConnection(client, connection.id, true)));
+      await withUser(connection.user_id, () => syncAndRecordFailure(connection.id, true));
     } catch (error) {
       structuredLog('warn', {
         event: 'plaid.scheduled_sync_failed',
@@ -245,6 +248,7 @@ plaidRouter.post('/link-token', async (req, res, next) => {
       const row = await db.get('SELECT access_token_ciphertext FROM plaid_connections WHERE id=$1', [connectionId]);
       if (!row) throw failure(404, 'Connected bank account not found');
       request.access_token = decryptPlaidToken(row.access_token_ciphertext);
+      assertPlaidTokenEnvironment(request.access_token);
     } else {
       request.products = ['transactions'];
       request.transactions = { days_requested: 365 };
@@ -334,12 +338,14 @@ plaidRouter.post('/connections/:id/update-link', async (req, res, next) => {
       'SELECT access_token_ciphertext FROM plaid_connections WHERE id=$1', [id]
     );
     if (!connection) throw failure(404, 'Connected bank account not found');
+    const accessToken = decryptPlaidToken(connection.access_token_ciphertext);
+    assertPlaidTokenEnvironment(accessToken);
     const response = await getPlaidClient().linkTokenCreate({
       user: { client_user_id: String(currentUserId()) },
       client_name: 'MyFinanceApp',
       language: 'en',
       country_codes: ['US'],
-      access_token: decryptPlaidToken(connection.access_token_ciphertext)
+      access_token: accessToken
     });
     res.json({ link_token: response.data.link_token, expiration: response.data.expiration });
   } catch (error) { next(error); }
@@ -366,9 +372,13 @@ plaidRouter.delete('/connections/:id', async (req, res, next) => {
     if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'Invalid connection ID');
     const connection = await db.get('SELECT * FROM plaid_connections WHERE id=$1', [id]);
     if (!connection) throw failure(404, 'Connected bank account not found');
-    await getPlaidClient().itemRemove({ access_token: decryptPlaidToken(connection.access_token_ciphertext) });
+    const accessToken = decryptPlaidToken(connection.access_token_ciphertext);
+    const tokenEnvironment = plaidTokenEnvironment(accessToken);
+    const wrongEnvironment = tokenEnvironment && tokenEnvironment !== String(process.env.PLAID_ENVIRONMENT || 'sandbox').toLowerCase();
+    if (!wrongEnvironment) await getPlaidClient().itemRemove({ access_token: accessToken });
     await db.run('DELETE FROM plaid_connections WHERE id=$1 AND user_id=$2', [id, currentUserId()]);
-    res.json({ success: true });
+    res.json({ success: true, remoteRevoked: !wrongEnvironment,
+      message: wrongEnvironment ? 'Old-environment connection removed locally; saved transactions were kept. The remote item was not revoked because it belongs to a different Plaid environment. Manage it in that environment separately.' : 'Bank disconnected. Saved transactions were kept.' });
   } catch (error) { next(error); }
 });
 

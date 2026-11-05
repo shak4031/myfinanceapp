@@ -41,6 +41,20 @@ function reviewImportId(value, field) {
   return Number(value);
 }
 
+router.patch('/:id/note', route(async (req, res) => {
+  const id = Number(req.params.id);
+  const note = req.body?.note;
+  if (!Number.isSafeInteger(id) || id < 1) throw failure(400, 'A valid transaction ID is required');
+  if (typeof note !== 'string' || note.length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(note)) {
+    throw failure(400, 'Enter a plain-text note of at most 500 characters');
+  }
+  const row = await db.transaction(async client => (await client.query(
+    `UPDATE transactions SET note=$2 WHERE id=$1 AND ${TENANT} RETURNING id,note`, [id, note.trim()])).rows[0]);
+  if (!row) throw failure(404, 'Transaction not found');
+  await recordAudit(req, 'transaction.note_updated', 'success', { detail: { transactionId: id } });
+  res.json(row);
+}));
+
 router.get('/transfer-review/imports', route(async (req, res) => {
   const before = req.query.before === undefined ? null : reviewImportId(req.query.before, 'import cursor');
   const limit = 30;

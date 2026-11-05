@@ -180,6 +180,31 @@ their last app-check time and warns users to verify the bank balance before
 relying on projections. It does not call a separate paid real-time balance
 endpoint.
 
+Scheduled failures record their error and attempt time after rolling back the
+failed sync. Transient failures wait at least six hours before a scheduled retry;
+invalid items require user attention instead of being retried hourly.
+The sync response distinguishes Plaid-reported changes from the total pending
+import-review count. Held records are excluded from history and calculations;
+Transactions > Review held transactions opens their review queue. Same amount
+and direction within three days is only a possible match, not proof of duplication.
+Changing `PLAID_ENVIRONMENT` does not convert saved access tokens. An identified
+cross-environment token is blocked before remote sync or update-mode Link.
+Disconnect that old connection and use Connect bank in the current environment.
+Disconnect keeps transaction history. For a known cross-environment token it
+removes the local connection only, explicitly reporting that remote revocation
+was not performed; manage the old item in its original environment separately.
+
+Transactions support a household-visible plain-text note of up to 500 characters.
+Use Add note/Edit note on the transaction row; save an empty note to remove it.
+Notes appear beneath the bank description, participate in transaction search,
+and are included in transaction CSV exports. They do not rename a merchant or
+change bill matching. Plaid modifications preserve notes; duplicate merges retain
+both distinct notes and require editing first if their combined length exceeds
+500 characters. Audit events record the transaction ID, not note text.
+Notes follow the transaction lifecycle: deleting the transaction (including a
+provider removal) deletes its note. Do not store credentials or full account
+numbers in notes.
+
 Plaid amounts use the same convention across institutions: positive amounts are
 money out (DEBIT), negative amounts are money in (CREDIT). The app stores positive
 magnitudes and requests `options.include_original_description=true` on every

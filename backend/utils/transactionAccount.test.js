@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import Database from '../db.js';
 import dashboardRouter from '../routes/dashboard.js';
 import transactionsRouter from '../routes/transactions.js';
+import analyticsRouter from '../routes/analytics.js';
 import { migratePrivateSchema } from './schema.js';
 import { withUser } from './tenant.js';
 
@@ -49,14 +50,26 @@ test('transaction APIs resolve Plaid bank/card accounts, merged records and stat
   }));
   const app = express();
   app.use(express.json());
-  app.use((req, res, next) => withUser(1, next));
+  app.use((req, res, next) => { req.user = { id: 1 }; withUser(1, next); });
   app.use('/dashboard', dashboardRouter);
   app.use('/transactions', transactionsRouter);
+  app.use('/analytics', analyticsRouter);
   app.use((error, req, res, next) => res.status(error.status || 500).json({ error: error.message }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
+    const saveNote = (id, note) => fetch(`${base}/transactions/${id}/note`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note })
+    });
+    const saved = await saveNote(1, '  Replacement part for the office\nKeep receipt.  ');
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).note, 'Replacement part for the office\nKeep receipt.');
+    assert.equal((await saveNote(8, 'must not cross households')).status, 404);
+    assert.equal((await saveNote(1, 'x'.repeat(501))).status, 400);
+    assert.equal((await saveNote(1, null)).status, 400);
+    assert.equal((await saveNote(1, '\u0000')).status, 400);
+    assert.equal((await saveNote('invalid', 'test')).status, 400);
     for (const [path, key] of [['/dashboard/all-transactions', 'transactions'], ['/transactions/transfer-review?importId=untracked', 'rows']]) {
       const response = await fetch(base + path);
       const data = await response.json();
@@ -82,7 +95,16 @@ test('transaction APIs resolve Plaid bank/card accounts, merged records and stat
       assert.equal(byId.get(4).account_key, 'account:1');
       assert.equal(byId.get(5).account_key, 'unassigned');
       assert.equal(byId.get(7).account_key, 'unassigned');
+      if (key === 'transactions') assert.equal(byId.get(1).note, 'Replacement part for the office\nKeep receipt.');
     }
+    assert.equal((await saveNote(1, '=SUM(1,2)\nReceipt "saved"')).status, 200);
+    const exported = await fetch(`${base}/analytics/export.csv?transactionId=1`);
+    const csv = await exported.text();
+    assert.equal(exported.status, 200, csv);
+    assert.match(csv, /Transfer \(not counted\),Note\r\n/);
+    assert.ok(csv.includes(`"'=SUM(1,2)\nReceipt ""saved"""`), 'notes use CSV quoting and formula-injection protection');
+    assert.equal((await saveNote(1, '')).status, 200);
+    assert.equal((await pg.query('SELECT note FROM transactions WHERE id=1')).rows[0].note, '');
   } finally {
     await new Promise(resolve => server.close(resolve));
     await pg.close();

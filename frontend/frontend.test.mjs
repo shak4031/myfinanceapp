@@ -1984,6 +1984,62 @@ test('transaction search matches description, category and amount and highlights
   assert.equal(f.node('txn-filter-search').value, '');
   assert.match(f.node('txn-filter-status').textContent, /Last 3 months · 4 matching/);
 });
+test('transaction notes render escaped, support search, save and clear, and expose save failures', async () => {
+  const rows = activity.map(tx => ({ ...tx, note: 'Receipt <script>alert(1)</script>' }));
+  const requests = [];
+  let reject = false;
+  const f = fixture(async (url, options) => {
+    if (url.endsWith('/note')) {
+      requests.push([url, options]);
+      return reject ? response(503, { error: 'Notes unavailable' })
+        : response(200, { note: JSON.parse(options.body).note.trim() });
+    }
+    return response(200, url === '/api/categories' ? categoryData
+      : url.endsWith('categorization-rules') ? { categories: categoryData, rules: [] } : { transactions: rows });
+  });
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 9, 16, 12])); } };
+  const notices = [];
+  f.context.notify = message => notices.push(message);
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const table = f.node('full-txn-table');
+  assert.match(table.innerHTML, /class="tx-note"[^]*Receipt &lt;script&gt;/);
+  assert.doesNotMatch(table.innerHTML, /<script>alert/);
+  assert.equal(f.context.matchesTransactionSearch(rows[0], 'receipt'), true);
+  const editor = { value: '  Office receipt  ' }, status = {};
+  const row = { dataset: { transaction: '0' }, querySelector: selector => selector === '[data-note]' ? editor : status };
+  const button = { disabled: false, closest: () => row };
+  const event = { target: { closest: selector => selector === '[data-save-note]' ? button : null } };
+  await table.onclick(event);
+  assert.equal(requests[0][1].method, 'PATCH');
+  assert.match(table.innerHTML, /<span>Office receipt<\/span>/);
+  assert.equal(notices.at(-1), 'Transaction note saved.');
+  editor.value = '';
+  await table.onclick(event);
+  assert.equal(notices.at(-1), 'Transaction note removed.');
+  reject = true;
+  editor.value = 'Retry later';
+  await table.onclick(event);
+  assert.equal(status.textContent, 'Notes unavailable');
+  assert.equal(button.disabled, false);
+  assert.equal(editor.value, 'Retry later', 'failed edits remain available to retry');
+});
+test('Plaid sync distinguishes reported additions from records held outside transaction totals', async () => {
+  const f = fixture();
+  f.context.plaidRequest = async () => ({ added: 3, modified: 1, removed: 0, pendingReviews: 2 });
+  f.context.loadPlaidConnections = async () => {};
+  f.context.loadTransactionImportReviews = async () => {};
+  f.context.loadDashboard = async () => {};
+  const html = source('index.html');
+  const start = html.indexOf('    async function syncPlaidConnection(');
+  const end = html.indexOf('    async function setPlaidCashflowAccount(', start);
+  vm.runInContext(html.slice(start, end), f.context);
+  await f.context.syncPlaidConnection(1);
+  assert.match(f.node('plaid-status').textContent, /Plaid reported 3 additions/);
+  assert.match(f.node('plaid-status').textContent, /2 total transactions are held outside your history and totals/);
+  assert.match(f.node('plaid-status').textContent, /Review held transactions/);
+});
 test('similar-payment matcher normalizes statement noise with regex and weighs amount', () => {
   const f = fixture(); f.run('refresh.js');
   const key = f.context.merchantKey;
@@ -4208,7 +4264,9 @@ test('updated tutorials explain recent workflows, account freshness, real import
 test('legacy import review leaves the main menu but remains reachable from Transactions', () => {
   const html = source('index.html');
   assert.doesNotMatch(html, /class="nav-btn" data-view="etl"/);
-  assert.match(html, /Older import tools[\s\S]*href="#etl" data-view="etl">Legacy import review/);
+  assert.match(html, /Import review and older tools[\s\S]*href="#etl" data-view="etl">Import review/);
+  assert.match(html, /href="#etl" data-view="etl">Review held transactions/);
+  assert.match(html, /Plaid can hold possible duplicates here/);
   assert.match(html, /href="#tutorials\/accounts">How Accounts works/);
   assert.match(html, /Older queued import records/);
   assert.doesNotMatch(html, /forcePushStaging|dismissStaging|Watch the 1-min tour/);

@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { PlaidApi } from 'plaid';
+import postgres from 'pg';
+import express from 'express';
 import { migratePrivateSchema, repairLegacyPlaidDirections, seedUserCategories } from './schema.js';
 import { encryptPlaidToken } from './plaid.js';
 import { incomeSources, projectIncome } from './income.js';
-import { syncConnection } from '../routes/plaid.js';
+import plaidRouter, { syncConnection, syncDuePlaidConnections } from '../routes/plaid.js';
 import { withUser } from './tenant.js';
 
 function adapter(pg) {
@@ -16,6 +18,77 @@ function adapter(pg) {
     }
   };
 }
+
+test('scheduled Plaid failures persist retry state, isolate connections and stop wrong-environment retries', async t => {
+  const pg = new PGlite(), client = adapter(pg);
+  const keys = ['PLAID_ENVIRONMENT', 'PLAID_CLIENT_ID', 'PLAID_SECRET', 'PLAID_TOKEN_ENCRYPTION_KEY', 'APP_ORIGIN'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.PLAID_ENVIRONMENT = 'production';
+    process.env.APP_ORIGIN = 'https://finance.example.com';
+    process.env.PLAID_CLIENT_ID = 'test-client';
+    process.env.PLAID_SECRET = 'test-secret';
+    process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+    await pg.transaction(tx => migratePrivateSchema(adapter(tx)));
+    await client.query(`INSERT INTO plaid_connections(user_id,item_id,access_token_ciphertext,status)
+      VALUES(1,'old-sandbox',$1,'connected'),(1,'transient-prod',$2,'connected')`,
+    [encryptPlaidToken('access-sandbox-private'), encryptPlaidToken('access-production-private')]);
+    t.mock.method(postgres.Pool.prototype, 'connect', async () => ({ ...client, release() {} }));
+    let remoteCalls = 0;
+    t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => {
+      remoteCalls++;
+      throw { response: { data: { error_code: 'PRODUCT_NOT_READY' } } };
+    });
+    const messages = [];
+    await syncDuePlaidConnections((level, event) => messages.push(event));
+    const rows = (await client.query('SELECT status,last_error_code,last_sync_attempt_at FROM plaid_connections ORDER BY id')).rows;
+    assert.equal(rows[0].status, 'relink_required');
+    assert.equal(rows[0].last_error_code, 'PLAID_ENVIRONMENT_MISMATCH');
+    assert.equal(rows[1].status, 'connected');
+    assert.equal(rows[1].last_error_code, 'PRODUCT_NOT_READY');
+    assert.ok(rows.every(row => row.last_sync_attempt_at));
+    assert.equal(remoteCalls, 1, 'wrong-environment token never reaches Plaid');
+    assert.equal(messages.length, 2);
+    assert.equal(JSON.stringify(messages).includes('private'), false);
+    await syncDuePlaidConnections(() => assert.fail('connections should not retry immediately'));
+    assert.equal(remoteCalls, 1, 'permanent mismatch stops; transient errors respect six-hour backoff');
+    await client.query(`INSERT INTO users(id,name) VALUES(2,'Other household');
+      INSERT INTO plaid_accounts(connection_id,user_id,account_id,name) VALUES(1,1,'old-account','Old checking');
+      INSERT INTO transactions(user_id,date,description,amount,direction,source,plaid_account_id)
+        VALUES(1,'2026-10-26','Stored history',500,'DEBIT','plaid','old-account');`);
+    t.mock.method(PlaidApi.prototype, 'itemRemove', () => assert.fail('never send a sandbox token to production for removal'));
+    t.mock.method(PlaidApi.prototype, 'linkTokenCreate', () => assert.fail('update Link cannot convert environments'));
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => withUser(Number(req.headers['x-test-user'] || 1), next));
+    app.use('/plaid', plaidRouter);
+    app.use((error, req, res, next) => res.status(error.status || 500).json({ error: error.message }));
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    const base = `http://127.0.0.1:${server.address().port}/plaid`;
+    try {
+      for (const [path, body] of [['/connections/1/update-link', {}], ['/link-token', { connectionId: 1 }]]) {
+        const response = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const result = await response.json();
+        assert.equal(response.status, 409, JSON.stringify(result));
+        assert.match(result.error, /Disconnect the old connection/);
+      }
+      assert.equal((await fetch(`${base}/connections/1`, { method: 'DELETE', headers: { 'x-test-user': '2' } })).status, 404);
+      const disconnected = await fetch(`${base}/connections/1`, { method: 'DELETE' });
+      assert.equal(disconnected.status, 200);
+      const result = await disconnected.json();
+      assert.equal(result.remoteRevoked, false);
+      assert.match(result.message, /remote item was not revoked/);
+      assert.equal((await client.query('SELECT id FROM plaid_connections WHERE id=1')).rows.length, 0);
+      assert.equal((await client.query('SELECT description FROM transactions')).rows[0].description, 'Stored history');
+    } finally { await new Promise(resolve => server.close(resolve)); }
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+    }
+    await pg.close();
+  }
+});
 
 test('startup repairs legacy Plaid data for all households exactly once and preserves unrelated records', async () => {
   const pg = new PGlite();
@@ -124,7 +197,8 @@ test('Plaid sync uses normalized directions for additions, modifications, review
       await tenant.query("SELECT set_config('app.user_id',$1,true)", ['1']);
       return syncConnection(tenant, connection.id);
     }));
-    await sync();
+    const firstSync = await sync();
+    assert.equal(firstSync.pendingReviews, 1, 'held records are explicitly surfaced instead of being called saved additions');
     let rows = (await client.query('SELECT * FROM transactions ORDER BY id')).rows;
     const bill = rows.find(row => row.plaid_transaction_id === 'bill-1');
     const paycheck = rows.find(row => row.plaid_transaction_id === 'pay-1');

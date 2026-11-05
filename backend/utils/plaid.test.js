@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { decryptPlaidToken, encryptPlaidToken, plaidTransaction, verifyPlaidWebhook } from './plaid.js';
+import { decryptPlaidToken, encryptPlaidToken, plaidTransaction, verifyPlaidWebhook, assertPlaidTokenEnvironment, plaidTokenEnvironment } from './plaid.js';
 import { isIncomeTransaction, incomeSources } from './income.js';
 import { classify } from './categorization.js';
 import { validateImportedTransaction } from './transactionImport.js';
@@ -38,6 +38,22 @@ test('Plaid amounts have consistent directions across banks and account types, r
   }
 });
 
+test('Plaid environment mismatch is detected locally without exposing access tokens', () => {
+  const previous = process.env.PLAID_ENVIRONMENT;
+  try {
+    process.env.PLAID_ENVIRONMENT = 'production';
+    assert.equal(plaidTokenEnvironment('access-sandbox-private'), 'sandbox');
+    assert.doesNotThrow(() => assertPlaidTokenEnvironment('access-production-private'));
+    assert.throws(() => assertPlaidTokenEnvironment('access-sandbox-private'), error => {
+      assert.equal(error.code, 'PLAID_ENVIRONMENT_MISMATCH');
+      assert.equal(error.status, 409);
+      assert.equal(error.message.includes('private'), false);
+      return true;
+    });
+  } finally {
+    if (previous === undefined) delete process.env.PLAID_ENVIRONMENT; else process.env.PLAID_ENVIRONMENT = previous;
+  }
+});
 test('Plaid normalization preserves bank wording and pending-to-posted identifiers', () => {
   const tx = plaidTransaction({
     transaction_id: 'posted-1', account_id: 'checking-1', date: '2026-10-15',

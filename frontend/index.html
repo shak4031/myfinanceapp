@@ -492,7 +492,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261102-usability">
+  <link rel="stylesheet" href="refresh.css?v=20261105-notes">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261028-ledger">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
@@ -803,6 +803,7 @@
               <article class="kb-card"><h3>Search and filter your history</h3><p>Search a merchant, original description, renamed payee, account label, category, or amount. Combine the account selector with date range, category, payment method, and fixed-only filters. Totals and results follow those filters. The account list is built from your records, not a hardcoded bank or card name.</p><a class="kb-card-link" href="#tutorials/account-filter">Watch: filter by account</a></article>
               <article class="kb-card"><h3>See where a transaction came from</h3><p>Rows identify the originating account when available, including account type, institution, name, and masked last four. Plaid account details take precedence for linked transactions; statement account details fill in when available. Unassigned means the source could not be determined, not that it came from a particular account.</p></article>
               <article class="kb-card"><h3>Rename without losing the original</h3><p>A friendly name helps make your history recognizable while the original description remains available for context and search. Check both when a bank description is abbreviated or a payment service hides a recipient.</p></article>
+              <article class="kb-card"><h3>Add a note to one transaction</h3><p>Open Transactions and choose Add note beneath a description. Write up to 500 characters and select Save note. The note appears below that transaction, is searchable, and travels with your transaction CSV export. Use Edit note to change it, or save an empty note to remove it. Unlike renaming a payee, this does not change similar or future transactions. Notes are visible to your household; do not include passwords or full account numbers. Deleting a transaction also deletes its note.</p></article>
             </div>
             <div class="kb-jump-links"><a class="btn btn-primary" href="#transactions" data-view="transactions">Open Transactions</a><a class="btn btn-secondary" href="#tutorials/transactions">Transaction tutorial</a><a class="btn btn-secondary" href="#tutorials/account-filter">Account filter tutorial</a></div>
           </section>
@@ -958,7 +959,7 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
-          <button type="button" class="btn btn-secondary" data-transaction-duplicates>Review Plaid / statement duplicates</button>
+          <div class="header-actions"><a class="btn btn-secondary" href="#etl" data-view="etl">Review held transactions</a><button type="button" class="btn btn-secondary" data-transaction-duplicates>Review Plaid / statement duplicates</button></div>
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
           <div class="filter-panel panel">
@@ -1050,9 +1051,9 @@
           </div>
         </details>
         <details class="panel" style="padding: 16px; margin-top: 20px;">
-          <summary>Older import tools</summary>
-          <p class="muted">Current imports save valid new rows directly and show duplicates, warnings and errors in the import result. This queue is only for older records.</p>
-          <a class="btn btn-secondary" href="#etl" data-view="etl">Legacy import review</a>
+          <summary>Import review and older tools</summary>
+          <p class="muted">A Plaid sync can hold possible duplicate transactions outside your history and totals until reviewed. Check here when a bank payment is missing, especially when another payment has the same amount nearby. CSV and PDF imports show their own results and review steps in the import dialog.</p>
+          <a class="btn btn-secondary" href="#etl" data-view="etl">Import review</a>
           <a class="btn btn-secondary" href="#tutorials/transactions/import-review">How import results work</a>
         </details>
       </section>
@@ -1060,7 +1061,7 @@
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">OLDER QUEUED RECORDS ONLY</p><h1>Legacy import review</h1><p class="muted">Current imports do not wait here. Read their results in the import dialog.</p></div>
+          <div><p class="eyebrow">HELD TRANSACTIONS &amp; OLDER IMPORT TOOLS</p><h1>Import review</h1><p class="muted">Plaid can hold possible duplicates here. CSV and PDF imports show their results and review steps in the import dialog. Older processing issues are listed separately below.</p></div>
           <a class="btn btn-secondary" href="#transactions" data-view="transactions">Back to Transactions</a>
         </header>
         <div class="panel" style="padding: 24px; margin-bottom: 16px;">
@@ -2111,12 +2112,14 @@
               <div><strong>${escapeHtml(connection.institutionName || 'Connected institution')}</strong>
                 <div class="muted" style="font-size:12px;margin-top:4px;">
                   ${connection.lastSyncAt ? `Last synced ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
-                  ${connection.lastErrorCode ? ' · Connection needs attention' : ''}
+                  ${connection.lastErrorCode ? ` · ${escapeHtml(connection.lastErrorCode)}` : ''}
                 </div>
+                ${connection.lastErrorCode === 'PLAID_ENVIRONMENT_MISMATCH' ? '<p class="muted">This saved connection belongs to another Plaid environment. Disconnect it, then use Connect bank to create a new connection. Saved transactions are kept; the old remote item must be managed separately.</p>' : ''}
+                ${connection.lastErrorCode === 'INVALID_ACCESS_TOKEN' ? '<p class="muted">The saved access token is no longer usable. If the app changed from sandbox to production, disconnect this old connection and use Connect bank again; Reconnect cannot convert a sandbox connection.</p>' : ''}
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                ${connection.status === 'relink_required' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
-                <button class="btn btn-secondary" onclick="syncPlaidConnection(${connection.id})">Sync now</button>
+                ${connection.status === 'relink_required' && connection.lastErrorCode !== 'PLAID_ENVIRONMENT_MISMATCH' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
+                ${connection.status === 'connected' ? `<button class="btn btn-secondary" onclick="syncPlaidConnection(${connection.id})">Sync now</button>` : ''}
                 <button class="btn btn-secondary" onclick="disconnectPlaidConnection(${connection.id})">Disconnect</button>
               </div>
             </div>
@@ -2145,7 +2148,7 @@
       try {
         status.textContent = 'Syncing transactions and checking account balances...';
         const result = await plaidRequest(`/api/plaid/connections/${id}/sync`, 'POST', {});
-        status.textContent = `Sync complete: ${result.added} added, ${result.modified} updated, ${result.removed} removed.`;
+        status.textContent = `Sync complete: Plaid reported ${result.added} additions, ${result.modified} changes, ${result.removed} removals.${result.pendingReviews > 0 ? ` ${result.pendingReviews} total transactions are held outside your history and totals for review. Close this dialog and open Transactions > Review held transactions.` : ''}`;
         await loadPlaidConnections();
         await loadTransactionImportReviews();
         await loadDashboard();
@@ -2170,8 +2173,8 @@
       if (!confirm('Disconnect this bank? Existing transactions remain in your history, but automatic updates will stop.')) return;
       const status = document.getElementById('plaid-status');
       try {
-        await plaidRequest(`/api/plaid/connections/${id}`, 'DELETE');
-        status.textContent = 'Bank disconnected. Imported transactions were kept.';
+        const result = await plaidRequest(`/api/plaid/connections/${id}`, 'DELETE');
+        status.textContent = result.message || 'Bank disconnected. Imported transactions were kept.';
         await loadPlaidConnections();
         await loadDashboard();
       } catch (error) {
@@ -2506,7 +2509,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261102-overdue-fix"></script>
+  <script src="refresh.js?v=20261105-notes"></script>
   <script src="accounts.js?v=20261024-auto-accounts"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261104-mfa-sha1"></script>

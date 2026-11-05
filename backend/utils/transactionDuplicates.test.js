@@ -82,6 +82,21 @@ test('review only proposes posted cross-source matches in the same household and
   } finally { await f.pg.close(); }
 });
 
+test('duplicate merges preserve both notes and reject overflow instead of silently losing comments', async () => {
+  const f = await fixture();
+  try {
+    await f.client.query("UPDATE transactions SET note='Statement receipt' WHERE id=1");
+    await f.client.query("UPDATE transactions SET note='Bank context' WHERE id=10");
+    const pair = (await f.list()).rows.find(pair => pair.plaid.id === 10);
+    await f.merge(pair);
+    assert.equal((await f.client.query('SELECT note FROM transactions WHERE id=1')).rows[0].note, 'Statement receipt\nBank context');
+    await f.client.query('UPDATE transactions SET note=$1 WHERE id=2', ['x'.repeat(500)]);
+    await f.client.query("UPDATE transactions SET note='extra' WHERE id=11");
+    const overflow = (await f.list()).rows.find(pair => pair.plaid.id === 11);
+    await assert.rejects(() => f.merge(overflow), /Combined notes exceed 500/);
+    assert.equal((await f.client.query('SELECT id FROM transactions WHERE id IN (2,11)')).rows.length, 2);
+  } finally { await f.pg.close(); }
+});
 test('confirmed payroll and bill merges fix double counting, retain edits and redirect references', async () => {
   const f = await fixture();
   try {
@@ -215,6 +230,7 @@ test('subsequent Plaid sync updates the kept statement row rather than recreatin
     process.env.PLAID_ENVIRONMENT = 'sandbox';
     process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
     await f.client.query('UPDATE plaid_connections SET access_token_ciphertext=$1 WHERE id=1', [encryptPlaidToken('test-access')]);
+    await f.client.query("UPDATE transactions SET note='Payroll clarification' WHERE id=2");
     const pair = (await f.list()).rows.find(item => item.plaid.id === 11);
     await f.merge(pair);
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => ({ data: {
@@ -236,6 +252,7 @@ test('subsequent Plaid sync updates the kept statement row rather than recreatin
     assert.equal(rows[0].income_role, 'income');
     assert.equal(rows[0].display_name, 'My pay');
     assert.equal(rows[0].category_corrected, true);
+    assert.equal(rows[0].note, 'Payroll clarification', 'sync preserves transaction-specific notes after a merge');
     assert.equal((await f.client.query('SELECT COUNT(*)::int AS count FROM transactions WHERE id=11')).rows[0].count, 0);
   } finally {
     for (const key of envNames) {
