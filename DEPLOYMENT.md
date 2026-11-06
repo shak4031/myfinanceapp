@@ -321,8 +321,8 @@ deployment to refresh totals and forecasts; no bank reconnection is required.
 If the faulty imports already overlapped statement history, review those existing
 duplicates explicitly; the migration does not delete previously accepted records.
 
-For already-imported Plaid / statement duplicates, open **Transactions > Review
-Plaid / statement duplicates**. Review each pair's account, date and description.
+For already-imported Plaid / statement duplicates, open **Transactions > Find
+duplicates in saved transactions**. Review each pair's account, date and description.
 Same amount and direction within three days only indicate a possible match;
 known different account masks are excluded. Posted USD Plaid records are compared
 with existing unlinked statement/manual records. Pending records are not merged.
@@ -335,6 +335,23 @@ record. A stale match, already-linked record, foreign household, or Plaid row wi
 import restore history cannot be merged. There is no Undo. Leave uncertain matches
 and genuine separate deposits unmerged. Totals and forecasts refresh after merging.
 This review does not find statement-only or Plaid-only duplicate pairs.
+
+Both Transactions review panels remain useful: **Review flagged bank imports**
+handles import warnings and older held records; **Find duplicates in saved
+transactions** compares already-saved Plaid and statement/manual entries,
+including overlaps without an import flag. The Knowledge Base explains when
+to use each panel, with examples and links back to the reviews.
+In saved-history review, **Keep both — different transactions** saves a decision
+for that exact pair, keeps both ledger rows and all amounts/settings unchanged,
+and excludes the pair from future scans and bulk selections. Other candidate
+pairs remain reviewable. A matching pending import flag loses only the rejected
+candidate; when its last candidate is rejected, the flag is resolved as separate.
+Candidate refresh honors saved decisions. Decisions survive reloads, sync updates
+and restarts; deleting either transaction removes its associated pair decisions.
+Saving rechecks the pair revision and household ownership, rejects stale choices,
+and is idempotent on retry. The action is audited with transaction IDs, not
+financial descriptions. Leave uncertain pairs undecided rather than declaring
+them different.
 
 Duplicate review supports individual checkboxes, **Select unambiguous on page**,
 **Select all unambiguous (max 500)**, and **Merge selected** with one confirmation.

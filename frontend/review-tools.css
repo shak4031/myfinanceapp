@@ -1,4 +1,25 @@
 .diagnostics-nav { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.duplicate-review-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.duplicate-review-panel { display: grid; gap: 12px; padding: 20px; min-width: 0; }
+.duplicate-review-panel h2 { font-size: 17px; line-height: 1.5; }
+.duplicate-review-panel p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.duplicate-review-panel .btn { justify-self: start; white-space: normal; min-height: 44px; }
+.duplicate-review-help { grid-column: 1 / -1; font-size: 14px; line-height: 1.6; }
+.saved-duplicates-dialog p { line-height: 1.6; margin: 12px 0; overflow-wrap: anywhere; }
+.saved-duplicates-dialog td { overflow-wrap: anywhere; }
+.saved-duplicates-dialog td .btn { margin: 4px 0; white-space: normal; min-height: 44px; }
+.saved-duplicates-dialog .btn { max-width: 100%; min-height: 44px; white-space: normal; }
+@media (max-width: 640px) {
+  .duplicate-review-panels { grid-template-columns: minmax(0, 1fr); }
+  .duplicate-review-panel .btn { width: 100%; }
+  .saved-duplicates-dialog table, .saved-duplicates-dialog tbody { display: block; }
+  .saved-duplicates-dialog thead { display: none; }
+  .saved-duplicates-dialog tr { display: grid; margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
+  .saved-duplicates-dialog td { display: block; padding: 10px 0 !important; min-width: 0; }
+  .saved-duplicates-dialog td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 650; }
+  .saved-duplicates-dialog td input { min-width: 24px; min-height: 24px; }
+  .saved-duplicates-dialog td .btn { width: 100%; }
+}
 .diagnostics-nav > summary { padding: 8px 12px; color: var(--text-secondary); font-size: 12px; font-weight: 650; cursor: pointer; }
 .diagnostics-nav[open] > summary { margin-bottom: 8px; color: var(--primary-dark); }
 body .diagnostics-nav .nav-btn { padding: 11px 12px; font-size: 12px; line-height: 1.5; gap: 9px; }

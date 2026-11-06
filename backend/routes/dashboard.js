@@ -578,6 +578,7 @@ router.get('/all-transactions', async (req, res) => {
         t.direction,
         t.category,
         t.is_fixed,
+        t.is_pending,
         t.pay_mode,
         t.income_role,
         t.user_id,

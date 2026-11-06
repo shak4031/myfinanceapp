@@ -5,7 +5,7 @@ import {
   importReviewedTransaction, loadImportCategorization, refreshImportReviewCandidates, findTransactionCandidates
 } from '../utils/transactionImport.js';
 import { currentUserId } from '../utils/tenant.js';
-import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates, mergeReviewedDuplicate } from '../utils/transactionDuplicates.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates, mergeReviewedDuplicate, keepTransactionDuplicateSeparate } from '../utils/transactionDuplicates.js';
 import { recordAudit } from '../utils/audit.js';
 
 const router = express.Router();
@@ -22,6 +22,16 @@ router.post('/duplicates/merge', async (req, res, next) => {
     const result = await db.transaction(client => mergeTransactionDuplicate(client, req.body));
     await recordAudit(req, 'transaction.duplicate_merged', 'success', { detail: {
       keptTransactionId: result.keptTransactionId, removedTransactionId: result.removedTransactionId
+    } });
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
+router.post('/duplicates/separate', async (req, res, next) => {
+  try {
+    const result = await db.transaction(client => keepTransactionDuplicateSeparate(client, req.body));
+    await recordAudit(req, 'transaction.duplicate_kept_separate', 'success', { detail: {
+      plaidTransactionId: result.plaidId, existingTransactionId: result.existingId
     } });
     res.json(result);
   } catch (error) { next(error); }

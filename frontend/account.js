@@ -8,18 +8,26 @@
   view.className = 'view';
   view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h1>Settings &amp; support</h1>
       <p class="muted">Household members share and can edit financial records. Only the household owner manages support access. Operators can access operational information and audit metadata; support access to financial records requires an owner grant.</p></div></header>
-    <div class="panel plan-card" id="support-ticket-card">
+    <div class="panel plan-card support-ticket-panel" id="support-ticket-card">
       <div><p class="eyebrow">CONTACT SUPPORT</p><h2>Open a support case</h2>
-        <p class="muted">Describe the problem and receive a ticket number you can track here. Support is notified at <a href="mailto:myfinanceapp.support@gmail.com">myfinanceapp.support@gmail.com</a>. Never include passwords, verification codes or full account numbers. Opening a ticket does not grant access to financial records.</p></div>
-      <form id="support-ticket-form">
-        <label for="support-ticket-description">Description (required)</label>
-        <textarea id="support-ticket-description" class="input" rows="5" required minlength="10" maxlength="5000" style="width:100%" placeholder="What happened, and what did you expect?"></textarea>
-        <div class="toolbar"><label>Category (optional)<input id="support-ticket-category" maxlength="80" placeholder="e.g. Bank sync, transactions, sign-in"></label>
-          <button class="btn btn-primary">Submit support case</button></div>
+        <p class="muted">Tell us what went wrong. You will receive a ticket number and can follow its progress below.</p>
+        <p class="muted">Support is notified at <a href="mailto:myfinanceapp.support@gmail.com">myfinanceapp.support@gmail.com</a>.</p></div>
+      <p class="support-ticket-notice">Never include passwords, verification codes or full account numbers. Opening a ticket does not give support access to your financial records.</p>
+      <form id="support-ticket-form" class="support-ticket-form">
+        <div class="support-ticket-field"><label for="support-ticket-description">Description (required)</label>
+          <textarea id="support-ticket-description" class="input" rows="5" required minlength="10" maxlength="5000" aria-describedby="support-description-hint" placeholder="What happened, and what did you expect?"></textarea>
+          <small id="support-description-hint">Use 10 to 5,000 characters. Include the page name and any error message.</small></div>
+        <div class="support-ticket-field"><label for="support-ticket-category">Category (optional)</label>
+          <input id="support-ticket-category" maxlength="80" placeholder="e.g. Bank sync or sign-in"></div>
+        <div><button type="submit" class="btn btn-primary">Submit support case</button></div>
       </form>
-      <p id="support-ticket-status" role="status"></p>
-      <div class="toolbar"><h3>Your latest 20 tickets</h3><button type="button" class="btn btn-secondary" id="support-ticket-refresh">Refresh tickets</button></div>
-      <div id="support-ticket-history" class="table-scroll"></div>
+      <p id="support-ticket-status" role="status" aria-live="polite"></p>
+      <section class="support-ticket-history-section" aria-labelledby="support-history-title">
+        <div class="support-ticket-history-heading"><h3 id="support-history-title">Your latest 20 tickets</h3><button type="button" class="btn btn-secondary" id="support-ticket-refresh">Refresh tickets</button></div>
+        <p class="muted">Open = received. In progress = support is working on it. Resolved = completed.</p>
+        <div id="support-ticket-history"></div>
+      </section>
+      <a href="#knowledge-base" class="support-ticket-guide">How support tickets and support access work</a>
     </div>
     <div class="panel plan-card">
       <div><p class="eyebrow">SUPPORT ACCESS</p><h2>Let support help with a problem</h2>
@@ -264,11 +272,15 @@
     try {
       const tickets = await ticketApi('/api/support-tickets');
       if (generation !== ticketGeneration || loadGeneration !== ticketLoadGeneration) return;
-      const labels = { open: 'Open', in_progress: 'In-Progress', resolved: 'Resolved' };
-      $('support-ticket-history').innerHTML = tickets.length ? `<table><thead><tr><th>Ticket</th><th>Description</th><th>Status</th><th>Updated</th></tr></thead><tbody>${tickets.map(ticket =>
-        `<tr><td><strong>${escape(ticket.number)}</strong><br><small>${escape(when(ticket.createdAt))}</small></td>
-          <td><details><summary>${escape(ticket.category || 'Support case')}</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(ticket.description)}</p></details>${ticket.emailStatus !== 'sent' ? '<small>Email notification pending or failed; support can retry it. Do not submit again.</small>' : ''}</td>
-          <td>${escape(labels[ticket.status])}</td><td>${escape(when(ticket.updatedAt))}</td></tr>`).join('')}</tbody></table>`
+      const labels = { open: 'Open', in_progress: 'In progress', resolved: 'Resolved' };
+      $('support-ticket-history').innerHTML = tickets.length ? `<ul class="support-ticket-list">${tickets.map(ticket =>
+        `<li class="support-ticket-item">
+          <div class="support-ticket-item-heading"><h4>${escape(ticket.number)}</h4><span class="support-ticket-badge">${escape(labels[ticket.status])}</span></div>
+          <dl class="support-ticket-meta"><div><dt>Category</dt><dd>${escape(ticket.category || 'Not specified')}</dd></div>
+            <div><dt>Opened</dt><dd>${escape(when(ticket.createdAt))}</dd></div><div><dt>Last updated</dt><dd>${escape(when(ticket.updatedAt))}</dd></div></dl>
+          <details class="support-ticket-details"><summary>View description</summary><p>${escape(ticket.description)}</p></details>
+          ${ticket.emailStatus !== 'sent' ? '<p class="support-ticket-notice">Email notification pending or failed; support can retry it. Your ticket is saved. Do not submit again.</p>' : ''}
+        </li>`).join('')}</ul>`
         : '<p class="muted">You have no support tickets yet.</p>';
     } catch (error) {
       if (generation !== ticketGeneration || loadGeneration !== ticketLoadGeneration) return;

@@ -88,6 +88,9 @@ async function findPlaidCandidates(client, transaction) {
       AND (a.kind IS NULL OR pa.subtype IS NULL OR a.kind='unknown'
         OR a.kind=CASE WHEN pa.type='credit' THEN 'credit_card' ELSE pa.subtype END)
       AND (pa.iso_currency_code IS NULL OR pa.iso_currency_code='USD')
+      AND NOT EXISTS (SELECT 1 FROM transaction_duplicate_decisions d WHERE d.user_id=t.user_id
+        AND d.existing_transaction_id=t.id AND d.plaid_transaction_id=(
+          SELECT p.id FROM transactions p WHERE p.user_id=t.user_id AND p.plaid_transaction_id=$6))
     ORDER BY t.date DESC,t.id`, [transaction.amount, transaction.direction, transaction.date,
     transaction.resolution_transaction_id ?? null, transaction.plaidAccountId, transaction.plaidTransactionId ?? transaction.plaid_transaction_id])).rows;
   const key = merchantKey(transaction.description);

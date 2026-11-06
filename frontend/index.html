@@ -492,7 +492,7 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261105-review">
+  <link rel="stylesheet" href="refresh.css?v=20261106-pending-payments">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
   <link rel="stylesheet" href="analytics.css?v=20261028-ledger">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
@@ -501,9 +501,9 @@
   <link rel="stylesheet" href="welcome.css?v=20261030c">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
-  <link rel="stylesheet" href="review-tools.css?v=20261031-cleanup">
+  <link rel="stylesheet" href="review-tools.css?v=20261106-duplicate-panels">
   <link rel="stylesheet" href="marketing.css?v=20261102-trust">
-  <link rel="stylesheet" href="household.css?v=20261024-signup">
+  <link rel="stylesheet" href="household.css?v=20261106-mobile-support">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
@@ -765,6 +765,7 @@
               <button type="button" data-kb-filter="analytics" aria-pressed="false">Analytics</button>
               <button type="button" data-kb-filter="planning" aria-pressed="false">Debt &amp; goals</button>
               <button type="button" data-kb-filter="security" aria-pressed="false">MFA &amp; sign-in security</button>
+              <button type="button" data-kb-filter="support" aria-pressed="false">Support tickets &amp; access</button>
             </div>
             <div class="kb-topic-grid" aria-label="Popular questions">
               <button type="button" data-kb-anchor="knowledge-base-transactions"><span>🧾</span><strong>Find a transaction</strong><small>Search, filter, and understand where it came from</small></button>
@@ -772,6 +773,7 @@
               <button type="button" data-kb-anchor="knowledge-base-bills"><span>📅</span><strong>Resolve an unpaid bill</strong><small>Carryover, paid confirmations, and one-time ignores</small></button>
               <button type="button" data-kb-anchor="knowledge-base-analytics"><span>🧭</span><strong>Read the Spending Compass</strong><small>Personal patterns, comparison data, and limitations</small></button>
               <button type="button" data-kb-anchor="knowledge-base-mfa"><span>🔐</span><strong>Protect my sign-in with MFA</strong><small>Phone setup, recovery codes, and trusted browsers</small></button>
+              <button type="button" data-kb-anchor="knowledge-base-support"><span>?</span><strong>Get help and track my ticket</strong><small>Open a case, follow its status, and share access safely</small></button>
             </div>
           </section>
           <section class="kb-section" data-kb-topic="start" aria-labelledby="kb-start-title">
@@ -808,14 +810,25 @@
             <div class="kb-jump-links"><a class="btn btn-primary" href="#transactions" data-view="transactions">Open Transactions</a><a class="btn btn-secondary" href="#tutorials/transactions">Transaction tutorial</a><a class="btn btn-secondary" href="#tutorials/account-filter">Account filter tutorial</a></div>
           </section>
           <section class="kb-section" id="knowledge-base-imports" data-kb-topic="transactions" aria-labelledby="kb-imports-title">
-            <div class="kb-section-heading"><p class="eyebrow">IMPORTS &amp; DUPLICATES</p><h2 id="kb-imports-title">Bring data in, then review what happened</h2><p>Import results are immediate; possible duplicates are reported separately instead of being silently added twice.</p></div>
+            <div class="kb-section-heading"><p class="eyebrow">IMPORTS &amp; DUPLICATES</p><h2 id="kb-imports-title">Which duplicate-review panel should I use?</h2><p>Both panels are on Transactions. One reviews warnings from imports; the other searches records already saved. Suggestions are not proof of a duplicate, and nothing is merged automatically.</p></div>
             <div class="kb-grid">
               <article class="kb-card"><h3>Understand import results</h3><p>Current CSV, OFX/QFX, PDF, and Plaid imports show imported rows, duplicates, warnings, and errors in the result. Valid new transactions save to history after any required account mapping review. Check the selected account and result before retrying an import.</p></article>
               <article class="kb-card"><h3>Clean up possible duplicates in bulk</h3><p>Open duplicate review, compare each pair, and select only records that are the same real transaction. “Select all unambiguous” excludes ambiguous matches and selects at most 500; competing matches must be resolved individually. Review the batch before merging: the existing record and its settings are kept, extra Plaid rows are removed, and merges cannot be undone.</p><a class="kb-card-link" href="#tutorials/duplicate-cleanup">Watch: bulk duplicate cleanup</a></article>
-              <article class="kb-card"><h3>Do not merge lookalikes</h3><p>Similar amounts or descriptions can still be separate purchases, split deposits, or activity from different accounts. Leave uncertain pairs separate. The whole batch is rejected if a selected pair changed while you were reviewing it.</p></article>
+              <article class="kb-card"><h3>Do not merge lookalikes</h3><p>Similar amounts or descriptions can still be separate purchases, split deposits, or activity from different accounts. In saved-history duplicate review, choose <strong>Keep both — different transactions</strong> after verifying a pair is different. Both records and their totals remain unchanged, and that pair will not be suggested again. Leave uncertain pairs undecided. The whole merge batch is rejected if a selected pair changed while you were reviewing it.</p></article>
+              <article class="kb-card"><h3>Review flagged bank imports</h3><p>Use this panel after a bank sync reports a possible duplicate. It lists bank imports that have an unresolved warning, plus older held imports. Most flagged bank records are <strong>already included in history and totals</strong>. Choose <strong>Keep both</strong> if the records are different, or <strong>Merge into selected existing</strong> if they are the same payment. For an older record labeled <strong>Not yet included</strong>, Add to history saves it. Clearing a warning does not start a scan of all your history.</p><p><strong>Example:</strong> a new bank sync flags a payment that looks like one you imported earlier.</p><a class="kb-card-link" href="#etl" data-view="etl">Open: Review flagged bank imports</a></article>
+              <article class="kb-card"><h3>Find duplicates in saved transactions</h3><p>Use this panel when you have both a bank connection and uploaded statements or manual entries, or when totals look double-counted but no import warning appeared. It scans saved bank-connected records against saved statement/manual records. It does not search for two statement-only or two bank-only duplicates.</p><p><strong>Example:</strong> the same purchase appears in a statement upload and in bank-connected history. Compare the account, date, description and amount. Merge only the same real transaction; choose <strong>Keep both — different transactions</strong> for a verified non-duplicate. That exact pair is remembered. Other possible matches still need review. Keeping both in the flagged-import panel also clears that bank record from this scan.</p><a class="kb-card-link" href="#transactions" data-view="transactions">Open Transactions, then Find duplicates in saved transactions</a></article>
               <article class="kb-card"><h3>Plaid sync is not the same as a full re-import</h3><p>Linked accounts use incremental updates when the institution reports changes; institutions control when fresh activity is available. Review connection status and account details under Accounts. A new connection does not automatically make every previously imported statement duplicate-proof—inspect suggested pairs before merging.</p></article>
             </div>
             <div class="kb-jump-links"><a class="btn btn-primary" href="#transactions" data-view="transactions">Open Transactions</a><a class="btn btn-secondary" href="#tutorials/transactions/import">Import tutorial</a></div>
+          </section>
+          <section class="kb-section" id="knowledge-base-support" data-kb-topic="support" aria-labelledby="kb-support-title">
+            <div class="kb-section-heading"><p class="eyebrow">GET HELP</p><h2 id="kb-support-title">Support tickets and support access are different</h2><p>A ticket asks for help. An access grant lets support inspect financial records only when the household owner chooses to allow it.</p></div>
+            <div class="kb-grid">
+              <article class="kb-card"><h3>Open a support case</h3><p>In <strong>Settings &amp; support</strong>, describe what happened, what you expected, the page name and any error message. Description is required (10 to 5,000 characters); category is optional. Choose <strong>Submit support case</strong>. You will see an <strong>MFA-</strong> ticket number, and an email notification is sent to myfinanceapp.support@gmail.com. Never include passwords, verification codes or full account numbers.</p></article>
+              <article class="kb-card"><h3>Track your latest 20 tickets</h3><p>Each ticket card shows its number, category, opened date and last update. Tap <strong>View description</strong> to read your original request. <strong>Open</strong> means received, <strong>In progress</strong> means support is working on it, and <strong>Resolved</strong> means completed. Support updates the status; choose <strong>Refresh tickets</strong> to see changes. History belongs to your sign-in, not everyone in your household.</p><p>If an email notification fails, the ticket is still saved. Do not submit it again; support can retry the email. A ticket does not grant access to financial records.</p></article>
+              <article class="kb-card"><h3>Let support inspect a problem safely</h3><p>The separate <strong>Let support help with a problem</strong> panel is optional. Only the household owner can grant access. Choose a reason, view-only or view-and-edit access, and a duration. View only is recommended. Access expires automatically, can be revoked at any time, and support activity is logged in that panel. Household members can open tickets without being able to grant support access.</p></article>
+            </div>
+            <div class="kb-jump-links"><a class="btn btn-primary" href="#settings" data-view="settings">Open Settings &amp; support</a></div>
           </section>
           <section class="kb-section" id="knowledge-base-accounts" data-kb-topic="accounts" aria-labelledby="kb-accounts-title">
             <div class="kb-section-heading"><p class="eyebrow">ACCOUNTS &amp; CONNECTIONS</p><h2 id="kb-accounts-title">Keep account identity and balances clear</h2><p>Accounts tell you which bank or card supplied a record; connection status tells you when linked data last refreshed.</p></div>
@@ -833,6 +846,7 @@
               <article class="kb-card"><h3>Set up fixed bills and real income</h3><p>Mark recurring bills as Fixed and actual paychecks as Income. Transfers, refunds, and repayments are not paychecks. Choose Auto or Manual for bills when known; manual items are called out for attention. Correct categories separately to describe what the transaction was for.</p><a class="kb-card-link" href="#tutorials/fixed">Watch: bills and income</a></article>
               <article class="kb-card"><h3>Why last month's unpaid estimate remains</h3><p>A missed estimated payment from the immediately previous month stays visible as unpaid. Older months are not carried forward. The estimate clears when a matching payment from that same calendar month is recorded, or when you resolve that occurrence yourself.</p><a class="kb-card-link" href="#tutorials/bill-follow-up">Watch: resolve an unpaid bill</a></article>
               <article class="kb-card"><h3>Mark paid or ignore one occurrence</h3><p>“Mark paid” records your confirmation for that bill instance; it does not create a transaction, change a balance, or mark other months paid. “Ignore this payment” dismisses only that month's estimate. A later matching transaction can still be recorded normally.</p></article>
+              <article class="kb-card"><h3>A bank payment is visible, but the bill still shows due</h3><p>Check for <strong>Pending bank transaction</strong> on Transactions. A pending payment can appear in history and totals before the bank posts it; it does not automatically settle a fixed-payment forecast. Sync again after your bank posts it. A uniquely matched posted payment settles its own calendar month's bill even when its amount or payment day changes. Account identity, payee and competing matches are checked; different accounts and ambiguous payments are not guessed. Use Mark paid only if you independently confirm payment, not just because a pending entry exists.</p></article>
               <article class="kb-card"><h3>Stop future projections</h3><p>Unmarking a recurring bill stops future projections, but does not erase a still-unpaid estimate from last month. Update the source transaction if a bill ended; resolve a carried item separately if it was paid or should not be tracked.</p></article>
             </div>
             <p class="kb-caveat">A forecast cannot confirm a creditor's records. Verify actual payment status with the biller or your bank; estimates can be wrong when transaction descriptions, dates, or account history are incomplete.</p>
@@ -959,9 +973,19 @@
       <section id="transactions-view" class="view">
         <header class="header">
           <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
-          <div class="header-actions"><a class="btn btn-secondary" href="#etl" data-view="etl">Review possible duplicates</a><button type="button" class="btn btn-secondary" data-transaction-duplicates>Review Plaid / statement duplicates</button></div>
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
+        <section class="duplicate-review-panels" aria-label="Two ways to review duplicate transactions">
+          <article class="panel duplicate-review-panel"><h2>Review flagged bank imports</h2>
+            <p>Check bank transactions flagged as possible duplicates when they were imported. This also includes older imports still waiting to be added.</p>
+            <a class="btn btn-secondary" href="#etl" data-view="etl">Review flagged bank imports</a>
+          </article>
+          <article class="panel duplicate-review-panel"><h2>Find duplicates in saved transactions</h2>
+            <p>Scan your saved history for bank transactions that may also appear in an uploaded statement or a manual entry, even if no import warning appeared.</p>
+            <button type="button" class="btn btn-secondary" data-transaction-duplicates>Find duplicates in saved transactions</button>
+          </article>
+          <a class="duplicate-review-help" href="#knowledge-base">Not sure which to use? See the duplicate-review guides in the Knowledge Base.</a>
+        </section>
           <div class="filter-panel panel">
             <label for="txn-filter-search" class="search-filter">Search transactions
             <input id="txn-filter-search" type="search" placeholder="e.g. Netflix, Zelle, 42.50" autocomplete="off" spellcheck="false"></label>
@@ -1061,11 +1085,11 @@
       <!-- ETL STAGING -->
       <section id="etl-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">TRANSACTION QUALITY</p><h1>Import review</h1><p class="muted">Review uncertain matches without blocking new bank activity. CSV and PDF imports show their results and review steps in the import dialog.</p></div>
+          <div><p class="eyebrow">TRANSACTION QUALITY</p><h1>Review flagged bank imports</h1><p class="muted">Check possible duplicates flagged during bank import, plus older imports waiting to be added. To scan all saved bank and statement records instead, use Find duplicates in saved transactions on Transactions.</p></div>
           <a class="btn btn-secondary" href="#transactions" data-view="transactions">Back to Transactions</a>
         </header>
         <div class="panel" style="padding: 24px; margin-bottom: 16px;">
-          <h2>Possible duplicate transactions</h2>
+          <h2>Bank imports that need a decision</h2>
           <p style="color: var(--text-secondary); margin: 8px 0 16px; font-size: 13px;">
             New Plaid records are already included in history and totals. A flag is not proof of a duplicate: both entries count until merged. Verified exact matches link automatically. Choose Keep both for different real transactions, or Merge into selected existing for the same payment. Older held records are labeled Not yet included.
           </p>
@@ -2555,10 +2579,10 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261105-review"></script>
+  <script src="refresh.js?v=20261106-pending-payments"></script>
   <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
-  <script src="account.js?v=20261106-support-tickets"></script>
+  <script src="account.js?v=20261106-mobile-support"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
@@ -2568,9 +2592,9 @@
   <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="transaction-duplicates.js?v=20261101b"></script>
+  <script src="transaction-duplicates.js?v=20261106-clear-labels"></script>
   <script src="knowledge-base.js?v=20261103-topics"></script>
-  <script src="tutorial.js?v=20261106-playback"></script>
+  <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261024-household"></script>
   <script src="household.js?v=20261024-plan-changes"></script>
   <script>FinanceSession.start();</script>

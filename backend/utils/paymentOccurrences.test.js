@@ -268,6 +268,35 @@ test('variable-amount shortened merchant descriptions match only with a verified
   }
 });
 
+test('OLLO mobile-pay history with two September payments settles the shortened November payment', () => {
+  const metadata = { account_institution: 'TD Bank', account_last4: '5261', account_kind: 'checking',
+    display_name: 'OLLO Card', category: 'Credit Cards', pay_mode: 'auto' };
+  for (const crossSource of [false, true]) {
+    const source = { account_id: 9 };
+    const history = [
+      tx(1, '2026-09-03', { ...metadata, ...source, description: 'OLLO CC MOBILE PAY', amount: 250 }),
+      tx(2, '2026-09-08', { ...metadata, ...source, description: 'OLLO CC MOBILE PAY', amount: 164 }),
+      tx(3, '2026-10-06', { ...metadata, ...source, description: 'OLLO CC MOBILE PAY', amount: 155 }),
+      tx(4, '2026-10-09', { account_id: 10, description: 'Interest Charge on Purchases', amount: 104.25,
+        category: 'Interest Charges', is_fixed: false })
+    ];
+    const paid = tx(5, '2026-11-05', { ...metadata,
+      ...(crossSource ? { plaid_account_id: 'td-checking-5261' } : source),
+      description: 'OLLO CC', amount: 150 });
+    const initial = build(history, [], new Date(2026, 10, 4));
+    const pending = build([...history, { ...paid, is_pending: true }], initial.occurrences, new Date(2026, 10, 6));
+    assert.equal(pending.items.find(item => item.dueDate === '2026-11-06').status, 'projected');
+    assert.equal(pending.items.find(item => item.dueDate === '2026-11-06').amount, 155);
+    assert.equal(pending.occurrences.some(row => row.matched_transaction_id === paid.id), false);
+    const result = build([...history, { ...paid, is_pending: false }], pending.occurrences, new Date(2026, 10, 6));
+    assert.equal(result.items.some(item => item.status === 'projected' && item.date.startsWith('2026-11')), false);
+    assert.equal(result.occurrences.find(row => row.due_date === '2026-11-06').matched_transaction_id, paid.id);
+    assert.equal(result.items.find(item => item.id === paid.id).amount, 150);
+    assert.equal(result.items.find(item => item.status === 'projected').amount, 150);
+    assert.deepEqual(build([...history, paid], result.occurrences, new Date(2026, 10, 6)).items, result.items);
+  }
+});
+
 test('CSV and Plaid bill identities require matching institution, source mask and account kind', () => {
   const metadata = { account_institution: 'Example Bank', account_last4: '5261', account_kind: 'checking' };
   const original = tx(1, '2026-10-06', { ...metadata, description: 'OLLO PAYMENT X1234', amount: 155, account_id: 9 });

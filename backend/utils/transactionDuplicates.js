@@ -22,6 +22,8 @@ const MATCH = `FROM transactions p
   WHERE p.user_id=$1 AND p.source='plaid' AND p.plaid_transaction_id IS NOT NULL AND NOT p.is_pending
     AND (pa.iso_currency_code IS NULL OR pa.iso_currency_code='USD')
     AND (pa.mask IS NULL OR a.last4 IS NULL OR pa.mask=a.last4)
+    AND NOT EXISTS (SELECT 1 FROM transaction_duplicate_decisions d WHERE d.user_id=p.user_id
+      AND d.plaid_transaction_id=p.id AND d.existing_transaction_id=e.id)
     AND NOT EXISTS (SELECT 1 FROM transaction_import_reviews r WHERE r.user_id=p.user_id
       AND r.resolution_transaction_id=p.id AND r.status='separate')`;
 const revision = pair => createHash('sha256').update(JSON.stringify([pair.plaid, pair.existing])).digest('hex');
@@ -50,6 +52,35 @@ export async function listTransactionDuplicates(client, input = {}) {
 
 export async function mergeTransactionDuplicate(client, input) {
   return mergeDuplicate(client, input, true);
+}
+
+export async function keepTransactionDuplicateSeparate(client, input) {
+  validatePair(input);
+  const userId = currentUserId();
+  await client.query('SELECT pg_advisory_xact_lock($1::integer,193647)', [userId]);
+  const locked = (await client.query(`SELECT id FROM transactions
+    WHERE user_id=$1 AND id=ANY($2::integer[]) ORDER BY id FOR UPDATE`,
+  [userId, [input.plaidId, input.existingId]])).rows;
+  if (locked.length !== 2) throw failure(409, 'The selected transactions are no longer available. Refresh duplicate review; no decision was saved.');
+  const saved = (await client.query(`SELECT id FROM transaction_duplicate_decisions
+    WHERE user_id=$1 AND plaid_transaction_id=$2 AND existing_transaction_id=$3`,
+  [userId, input.plaidId, input.existingId])).rows[0];
+  if (saved) return { success: true, alreadyResolved: true, plaidId: input.plaidId, existingId: input.existingId };
+  const pair = (await client.query(`SELECT ${snapshot('p')} AS plaid,${snapshot('e')} AS existing
+    ${MATCH} AND p.id=$2 AND e.id=$3`, [userId, input.plaidId, input.existingId])).rows[0];
+  if (!pair || revision(pair) !== input.revision) {
+    throw failure(409, 'The selected match or its settings changed. Refresh duplicate review before confirming; no decision was saved.');
+  }
+  await client.query(`INSERT INTO transaction_duplicate_decisions(user_id,plaid_transaction_id,existing_transaction_id)
+    VALUES($1,$2,$3)`, [userId, input.plaidId, input.existingId]);
+  // Clear this candidate in the import queue too; other possible matches still need review.
+  await client.query(`UPDATE transaction_import_reviews SET
+      candidate_transaction_ids=array_remove(candidate_transaction_ids,$3),
+      status=CASE WHEN cardinality(array_remove(candidate_transaction_ids,$3))=0 THEN 'separate' ELSE status END,
+      resolved_at=CASE WHEN cardinality(array_remove(candidate_transaction_ids,$3))=0 THEN NOW() ELSE resolved_at END
+    WHERE user_id=$1 AND resolution_transaction_id=$2 AND status='pending'
+      AND candidate_transaction_ids @> ARRAY[$3]::integer[]`, [userId, input.plaidId, input.existingId]);
+  return { success: true, plaidId: input.plaidId, existingId: input.existingId };
 }
 
 export async function mergeReviewedDuplicate(client, review, existingId) {
@@ -88,7 +119,7 @@ function validatePair(input) {
     || !Number.isSafeInteger(input.existingId) || input.existingId < 1
     || input.plaidId === input.existingId || typeof input.revision !== 'string'
     || !/^[a-f0-9]{64}$/.test(input.revision)) {
-    throw failure(400, 'Review and confirm one Plaid transaction and its existing match before merging');
+    throw failure(400, 'Review and confirm one Plaid transaction and its existing match before saving a decision');
   }
 }
 

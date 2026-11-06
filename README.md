@@ -61,12 +61,25 @@ Cases receive an `MFA-` ticket number, notify the support mailbox, and show
 Open, In-Progress or Resolved status. Each login sees its latest 20 tickets;
 administrators manage cases in the admin console's **Support tickets** tab.
 Opening a case does not grant access to financial records.
+Transactions labels pending bank activity explicitly. Pending records remain
+visible in history/totals but do not automatically settle fixed-payment forecasts;
+matching is retried when Plaid supplies the posted record.
 Do not email passwords, verification codes, or full account numbers.
 
 Selecting a tutorial brings its player into view and moves keyboard focus to it.
 Play works independently of narration; a stalled speech engine falls back to
 captions rather than blocking chapter advancement. Reduced-motion preferences
 still disable autoplay.
+
+Transactions has two explanatory panels: **Review flagged bank imports** for
+import warnings and older held records, and **Find duplicates in saved transactions**
+for already-imported bank/statement overlaps, even without an import warning. In
+the saved-transaction scan, choose **Keep both — different transactions** for a verified non-duplicate
+pair. Both records and totals stay unchanged, and that exact pair is remembered
+and excluded from subsequent suggestions. Other candidate pairs still need review.
+The Knowledge Base explains both panels with examples and includes a
+**Support tickets & access** topic. Support history uses responsive ticket cards
+with labeled dates, status and expandable descriptions instead of a cramped table.
 
 Goal planning includes competing car, college, emergency, and other savings
 targets. Dated goals share one observed monthly surplus in priority order;

@@ -577,6 +577,10 @@ test('support case submission shows the number, delivery warning and escaped per
   assert.deepEqual(JSON.parse(sent.options.body), { description: 'Payment remained unpaid.', category: '' });
   assert.match(f.node('support-ticket-status').textContent, /MFA-17[\s\S]*email notification failed/);
   assert.match(f.node('support-ticket-history').innerHTML, /&lt;Sync&gt;[\s\S]*&lt;script&gt;private text/);
+  assert.match(f.node('support-ticket-history').innerHTML, /support-ticket-list[\s\S]*support-ticket-badge[\s\S]*Opened[\s\S]*Last updated[\s\S]*View description/);
+  assert.doesNotMatch(f.node('support-ticket-history').innerHTML, /<table/);
+  assert.match(view.innerHTML, /for="support-ticket-category"/);
+  assert.match(view.innerHTML, /aria-describedby="support-description-hint"/);
   assert.doesNotMatch(f.node('support-ticket-history').innerHTML, /<script>/);
   assert.equal(f.node('support-ticket-description').value, '');
   assert.equal(f.node('support-ticket-form').querySelector('button').disabled, false);
@@ -2307,6 +2311,21 @@ test('marking a fixed bill offers similar payments and flags only the confirmed 
     if (url === '/api/categories') return response(200, [{ name: 'Subscriptions' }]);
     if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
     return response(200, { success: true, updated: 2 });
+  });
+  test('pending transactions explain why fixed-payment forecasts have not settled and posted rows do not show the notice', async () => {
+    const transactions = [
+      { id: '1', date: '2026-09-29', description: 'OLLO CC', display_name: 'OLLO Card', amount: 150,
+        direction: 'DEBIT', category: 'Credit Cards', is_fixed: true, is_pending: true },
+      { id: '2', date: '2026-09-28', description: 'OLLO CC MOBILE PAY', amount: 155,
+        direction: 'DEBIT', category: 'Credit Cards', is_fixed: true, is_pending: false }
+    ];
+    const f = fixture(async url => response(200, url === '/api/dashboard/all-transactions'
+      ? { transactions } : [{ name: 'Credit Cards' }]));
+    f.run('refresh.js');
+    await f.context.loadAllTransactions();
+    const html = f.node('full-txn-table').innerHTML;
+    assert.equal((html.match(/Pending bank transaction/g) || []).length, 1);
+    assert.match(html, /Not yet posted[\s\S]*forecasts wait for it to post/);
   });
   f.run('refresh.js');
   await f.context.loadAllTransactions();
@@ -4473,11 +4492,24 @@ test('legacy import review leaves the main menu but remains reachable from Trans
   const html = source('index.html');
   assert.doesNotMatch(html, /class="nav-btn" data-view="etl"/);
   assert.match(html, /Import review and older tools[\s\S]*href="#etl" data-view="etl">Import review/);
-  assert.match(html, /href="#etl" data-view="etl">Review possible duplicates/);
+  assert.match(html, /href="#etl" data-view="etl">Review flagged bank imports/);
   assert.match(html, /uncertain transactions into history and totals/);
   assert.match(html, /href="#tutorials\/accounts">How Accounts works/);
   assert.match(html, /Older queued import records/);
   assert.doesNotMatch(html, /forcePushStaging|dismissStaging|Watch the 1-min tour/);
+});
+test('duplicate panels and support Knowledge Base explain the workflows with mobile layouts', () => {
+  const html = source('index.html');
+  assert.match(html, /duplicate-review-panels[\s\S]*Review flagged bank imports[\s\S]*Find duplicates in saved transactions/);
+  assert.match(html, /data-kb-filter="support"/);
+  assert.match(html, /id="knowledge-base-support"[\s\S]*Track your latest 20 tickets[\s\S]*View description/);
+  assert.match(html, /Which duplicate-review panel should I use\?/);
+  assert.match(html, /Example:[\s\S]*bank sync flags[\s\S]*Example:[\s\S]*same purchase/);
+  assert.doesNotMatch(html, /Review possible duplicates · import queue|Review Plaid \/ statement duplicates · saved history/);
+  const css = source('household.css');
+  assert.match(css, /support-ticket-field input[\s\S]*font-size: 16px/);
+  assert.match(css, /@media \(max-width: 600px\)[\s\S]*support-ticket-meta \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(source('review-tools.css'), /@media \(max-width: 640px\)[\s\S]*duplicate-review-panels \{ grid-template-columns: minmax\(0, 1fr\)/);
 });
 test('legacy queue failures show explicit errors and successful actions refresh only after confirmation', async () => {
   const messages = [], requests = [];

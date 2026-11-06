@@ -49,6 +49,9 @@ test('Plaid overlaps are included with flags, file overlaps stay held, and repla
       user_id INTEGER NOT NULL,resolution_transaction_id INTEGER,matched_transaction_id INTEGER,resolved_at TIMESTAMPTZ
     );
     CREATE TABLE accounts(id SERIAL PRIMARY KEY,user_id INT,last4 TEXT,institution TEXT,kind TEXT);
+    CREATE TABLE transaction_duplicate_decisions (
+      id SERIAL PRIMARY KEY,user_id INT,plaid_transaction_id INT,existing_transaction_id INT
+    );
     CREATE TABLE plaid_accounts(id SERIAL PRIMARY KEY,user_id INT,account_id TEXT,connection_id INT,mask TEXT,subtype TEXT,type TEXT,iso_currency_code TEXT);
     CREATE TABLE plaid_connections(id SERIAL PRIMARY KEY,user_id INT,institution_name TEXT);
     CREATE UNIQUE INDEX import_reviews_user_plaid_transaction_key
@@ -90,6 +93,14 @@ test('Plaid overlaps are included with flags, file overlaps stay held, and repla
       assert.equal(repeatedCsvRow.imported, 0);
       assert.equal(repeatedCsvRow.needsReview, 1);
       assert.equal((await client.query('SELECT id FROM transactions')).rows.length, 3);
+
+      await client.query(`INSERT INTO transaction_duplicate_decisions(user_id,plaid_transaction_id,existing_transaction_id)
+        VALUES(1,$1,1)`, [review.resolution_transaction_id]);
+      assert.equal(await refreshImportReviewCandidates(client, review), true);
+      assert.deepEqual((await client.query('SELECT candidate_transaction_ids FROM transaction_import_reviews WHERE id=$1',
+        [review.id])).rows[0].candidate_transaction_ids, []);
+      const refreshedReview = (await client.query('SELECT * FROM transaction_import_reviews WHERE id=$1', [review.id])).rows[0];
+      assert.equal(await refreshImportReviewCandidates(client, refreshedReview), false, 'refresh must not restore a rejected candidate');
     });
   } finally {
     await pg.close();

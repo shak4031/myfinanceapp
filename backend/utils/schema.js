@@ -9,7 +9,7 @@ export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
   'credit_cards', 'savings_goals', 'plaid_connections', 'plaid_accounts', 'transaction_import_reviews',
   'accounts', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews',
-  'fixed_payment_occurrences'
+  'fixed_payment_occurrences', 'transaction_duplicate_decisions'
 ];
 
 export const DEFAULT_CATEGORIES = [
@@ -124,6 +124,14 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correction_timestamp TIMESTAMPTZ;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS plaid_transaction_id TEXT;
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS plaid_account_id TEXT;
+    CREATE TABLE IF NOT EXISTS transaction_duplicate_decisions (
+      id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      plaid_transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+      existing_transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id,plaid_transaction_id,existing_transaction_id),
+      CHECK(plaid_transaction_id <> existing_transaction_id)
+    );
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_pending BOOLEAN NOT NULL DEFAULT FALSE;
     -- 'auto' = autopay / recurring pull, 'manual' = the user must pay it, NULL = not set.
     -- The first migration pre-fills debits whose statement wording makes the method clear (see utils/payMode.js).

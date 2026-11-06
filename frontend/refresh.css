@@ -55,6 +55,7 @@ progress { width: 100%; accent-color: #226452; height: 10px; }
 #auth-error { color: #b84239; font-size: 13px; }
 .auth-footnote { color: #63716a; font-size: 12px; text-align: center; margin-top: 24px; }
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 14px 0; }
+.tx-pending-notice { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; white-space: normal; }
 .plan-card { padding: 24px; display: grid; gap: 12px; }
 .coach-note { background: #f4f6ef; border-left: 3px solid #90a366; border-radius: 8px; padding: 18px; margin: 12px 0; line-height: 1.7; }
 .coach-note.warning, .coach-note.danger { border-left-color: #b86a45; }

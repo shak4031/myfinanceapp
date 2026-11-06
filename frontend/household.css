@@ -11,7 +11,39 @@
 .household-error { color: var(--danger, #ae2020); }
 #household-billing-dialog { padding: clamp(18px, 4vw, 36px); max-height: 90vh; overflow: auto; }
 #household-billing-dialog:focus-visible, .household-card :focus-visible { outline: 3px solid #126cd3; outline-offset: 3px; }
+.support-ticket-panel { min-width: 0; line-height: 1.6; }
+.support-ticket-panel > div > .muted { margin-top: 8px; }
+.support-ticket-panel a, .support-ticket-panel p, .support-ticket-meta dd { overflow-wrap: anywhere; }
+.support-ticket-form { display: grid; gap: 18px; min-width: 0; }
+.support-ticket-field { display: grid; gap: 8px; min-width: 0; }
+.support-ticket-field label { font-size: 14px; font-weight: 650; }
+.support-ticket-field input, .support-ticket-field textarea { width: 100%; min-width: 0; font-size: 16px; }
+.support-ticket-field textarea { resize: vertical; min-height: 150px; }
+.support-ticket-field small { color: var(--text-secondary); }
+.support-ticket-notice { padding: 12px 14px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+#support-ticket-status:empty { display: none; }
+#support-ticket-status:not(:empty) { padding: 12px 14px; border-left: 3px solid var(--primary); background: var(--bg-primary); border-radius: 6px; overflow-wrap: anywhere; }
+.support-ticket-history-section { display: grid; gap: 14px; padding-top: 22px; margin-top: 6px; border-top: 1px solid var(--border); min-width: 0; }
+.support-ticket-history-heading, .support-ticket-item-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.support-ticket-history-heading h3 { font-size: 18px; }
+.support-ticket-list { display: grid; gap: 14px; padding: 0; list-style: none; }
+.support-ticket-item { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
+.support-ticket-item h4 { font-size: 16px; overflow-wrap: anywhere; }
+.support-ticket-badge { padding: 4px 10px; border-radius: 999px; background: var(--bg-tertiary); color: var(--text-primary); font-size: 13px; font-weight: 650; }
+.support-ticket-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.support-ticket-meta dt { color: var(--text-secondary); font-size: 12px; }
+.support-ticket-meta dd { margin-top: 4px; font-size: 14px; }
+.support-ticket-details { border-top: 1px solid var(--border); padding-top: 8px; min-width: 0; }
+.support-ticket-details summary { padding: 10px 0; min-height: 44px; cursor: pointer; font-weight: 650; }
+.support-ticket-details p { white-space: pre-wrap; margin-top: 8px; }
+.support-ticket-panel .btn { min-height: 44px; white-space: normal; }
+.support-ticket-guide { padding: 8px 0; }
+.support-ticket-panel :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 @media (max-width: 600px) {
+  .support-ticket-panel { padding: 18px; }
+  .support-ticket-meta { grid-template-columns: minmax(0, 1fr); }
+  .support-ticket-form .btn, .support-ticket-history-heading .btn { width: 100%; }
+  .support-ticket-item { padding: 14px; }
   .household-members li { align-items: flex-start; flex-direction: column; }
   .household-card .upgrade-plans, #household-billing-dialog .upgrade-plans { grid-template-columns: 1fr; }
 }

@@ -9,7 +9,8 @@ import dashboardRouter from '../routes/dashboard.js';
 import { syncConnection } from '../routes/plaid.js';
 import { encryptPlaidToken } from './plaid.js';
 import { migratePrivateSchema, seedUserCategories } from './schema.js';
-import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates } from './transactionDuplicates.js';
+import { listTransactionDuplicates, mergeTransactionDuplicate, mergeTransactionDuplicates, keepTransactionDuplicateSeparate } from './transactionDuplicates.js';
+import { refreshImportReviewCandidates } from './transactionImport.js';
 import { detectIncomeStreams, incomeSources } from './income.js';
 import { withUser, currentUserId } from './tenant.js';
 
@@ -287,6 +288,20 @@ test('duplicate HTTP endpoints list only tenant matches and reject invalid merge
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: [], acknowledged: true })
     });
     assert.equal(invalidBulk.status, 400);
+    const invalidSeparate = await fetch(`${base}/duplicates/separate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acknowledged: false })
+    });
+    assert.equal(invalidSeparate.status, 400);
+    const pair = (await f.list()).rows[0];
+    const before = (await f.client.query('SELECT * FROM transactions ORDER BY id')).rows;
+    const separate = await fetch(`${base}/duplicates/separate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plaidId: pair.plaid.id, existingId: pair.existing.id, revision: pair.revision, acknowledged: true })
+    });
+    assert.equal(separate.status, 200);
+    assert.equal((await separate.json()).success, true);
+    assert.equal((await (await fetch(`${base}/duplicates`)).json()).total, 2);
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
   } finally { await new Promise(resolve => server.close(resolve)); await f.pg.close(); }
 });
 
@@ -347,6 +362,57 @@ test('review decisions clear immediately, accept still-valid selections, remain 
 });
 
 const choice = pair => ({ plaidId: pair.plaid.id, existingId: pair.existing.id, revision: pair.revision });
+
+test('keep-both decisions retain records and totals, persist through migration and exclude only the chosen pair', async () => {
+  const f = await fixture();
+  try {
+    await f.client.query(`INSERT INTO transactions(id,user_id,date,description,amount,direction,source)
+      VALUES(14,1,'2026-10-21','WELLS FARGO BANK PAYROLL',6200,'CREDIT','another-statement.csv');
+      INSERT INTO transaction_import_reviews(user_id,source,date,description,amount,direction,
+        plaid_transaction_id,plaid_account_id,candidate_transaction_ids,resolution_transaction_id)
+      VALUES(1,'plaid','2026-10-21','WELLS FARGO BANK PAYROLL',6200,'CREDIT','pay-2','bank-1','{2,14}',11)`);
+    await f.pg.transaction(tx => migratePrivateSchema(adapter(tx)));
+    const pair = (await f.list()).rows.find(pair => pair.plaid.id === 11 && pair.existing.id === 2);
+    const before = (await f.client.query('SELECT * FROM transactions ORDER BY id')).rows;
+    const input = { ...choice(pair), acknowledged: true };
+    const save = () => f.run(1, client => keepTransactionDuplicateSeparate(client, input));
+    assert.equal((await save()).success, true);
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
+    assert.equal((await save()).alreadyResolved, true);
+    const remaining = (await f.list()).rows.filter(pair => pair.plaid.id === 11);
+    assert.deepEqual(remaining.map(pair => pair.existing.id), [14]);
+    assert.equal((await f.list(1, { selection: 'all' })).rows.some(pair => pair.plaid.id === 11 && pair.existing.id === 2), false);
+    let review = (await f.client.query('SELECT * FROM transaction_import_reviews WHERE resolution_transaction_id=11')).rows[0];
+    assert.equal(review.status, 'pending');
+    assert.deepEqual(review.candidate_transaction_ids, [14]);
+    await f.run(1, client => refreshImportReviewCandidates(client, review));
+    review = (await f.client.query('SELECT * FROM transaction_import_reviews WHERE id=$1', [review.id])).rows[0];
+    assert.equal(review.candidate_transaction_ids.includes(2), false, 'refresh never restores a rejected pair');
+    await f.run(1, client => keepTransactionDuplicateSeparate(client, { ...choice(remaining[0]), acknowledged: true }));
+    review = (await f.client.query('SELECT * FROM transaction_import_reviews WHERE id=$1', [review.id])).rows[0];
+    assert.equal(review.status, 'separate', 'the last rejected candidate clears the import flag');
+    assert.ok(review.resolved_at);
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
+    await f.pg.transaction(tx => migratePrivateSchema(adapter(tx)));
+    assert.equal((await f.list()).rows.some(pair => pair.plaid.id === 11), false);
+    assert.deepEqual((await f.client.query('SELECT * FROM transactions ORDER BY id')).rows, before);
+    assert.equal((await f.run(2, client => client.query('SELECT * FROM transaction_duplicate_decisions'))).rows.length, 0);
+    await assert.rejects(f.merge(pair), { status: 409 }, 'a dismissed pair cannot be merged from a stale selection');
+  } finally { await f.pg.close(); }
+});
+
+test('keep-both rejects stale, invalid and foreign decisions without writing', async () => {
+  const f = await fixture();
+  try {
+    const pair = (await f.list()).rows[0];
+    const input = { ...choice(pair), acknowledged: true };
+    await assert.rejects(f.run(1, client => keepTransactionDuplicateSeparate(client, { ...input, acknowledged: false })), { status: 400 });
+    await assert.rejects(f.run(2, client => keepTransactionDuplicateSeparate(client, input)), { status: 409 });
+    await f.client.query("UPDATE transactions SET note='Changed after review' WHERE id=$1", [pair.existing.id]);
+    await assert.rejects(f.run(1, client => keepTransactionDuplicateSeparate(client, input)), { status: 409 });
+    assert.equal((await f.client.query('SELECT * FROM transaction_duplicate_decisions')).rows.length, 0);
+  } finally { await f.pg.close(); }
+});
 
 test('bulk merge cleans multiple pairs atomically and retains bank identities and user settings', async () => {
   const f = await fixture();
