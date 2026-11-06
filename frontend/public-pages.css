@@ -23,6 +23,10 @@ section { margin-top: 40px; }
 .cards h3 { margin-top: 0; }
 .trust-note { background: #edf3e7; }
 .contact-link { display: inline-block; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.public-price { font-size: 32px; font-weight: 750; margin: 12px 0; }
+.public-price span { font-size: 16px; font-weight: 400; }
+.public-cta { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; background: #285b47; color: #fff; border-radius: 8px; text-decoration: none; }
+.cards article { min-width: 0; overflow-wrap: anywhere; }
 .site-footer { border-top: 1px solid #d7e1d4; font-size: 13px; }
 @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } main { padding-top: 32px; } .site-header nav { gap: 16px; } }
 .document-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 24px 0; border-block: 1px solid #d7e1d4; }

@@ -166,6 +166,13 @@ or revoke its license, and password-reset emails are never sent for it. Set
 
 ## Responsive workspace and activity filters
 
+Public discovery pages are available at `/features`, `/pricing` and `/debt-payoff`,
+alongside About, Contact and Security. The server supplies initial HTML, canonical
+and social metadata, product structured data, `/robots.txt` and `/sitemap.xml`.
+Private API/HTML and app fallback responses are excluded from indexing; existing
+signed-in hash routes are preserved. See [DEPLOYMENT.md](./DEPLOYMENT.md#public-search-indexing)
+for Search Console/Bing registration, DNS verification and sitemap submission.
+
 PDF uploads detect card versus bank statements and reconcile transactions before
 committing. Card imports capture New Balance and purchase APR, with latest
 statement facts visible on Accounts. See the [PDF import guide](PDF_IMPORT_GUIDE.md)

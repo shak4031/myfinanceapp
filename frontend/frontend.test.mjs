@@ -4510,6 +4510,7 @@ test('duplicate panels and support Knowledge Base explain the workflows with mob
   assert.match(css, /support-ticket-field input[\s\S]*font-size: 16px/);
   assert.match(css, /@media \(max-width: 600px\)[\s\S]*support-ticket-meta \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(source('review-tools.css'), /@media \(max-width: 640px\)[\s\S]*duplicate-review-panels \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.doesNotMatch(source('account.js'), /<h1>/, 'hidden settings must not add another homepage H1');
 });
 test('legacy queue failures show explicit errors and successful actions refresh only after confirmation', async () => {
   const messages = [], requests = [];

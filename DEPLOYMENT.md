@@ -664,6 +664,50 @@ entry. Stack traces are only in the hosting provider's restricted stdout logs;
 the app does not serve raw operator log files to the browser. Frontend HTML, JavaScript and CSS responses require
 revalidation so deployments do not silently reuse stale cached app assets.
 
+## Public search indexing
+
+The server renders `/`, `/features`, `/pricing`, `/debt-payoff`, `/about`,
+`/security` and `/contact` as public HTML. Each has one initial H1, a canonical
+URL, Open Graph and summary-card metadata. Product pages include
+`SoftwareApplication` JSON-LD with Basic/Pro USD monthly prices from the billing
+constants. No invented ratings or reviews are published.
+
+`/sitemap.xml` lists only these public canonical URLs. `/robots.txt` allows
+public crawling and disallows API, admin, app and account-verification paths.
+API responses, non-public HTML and SPA fallback paths carry
+`X-Robots-Tag: noindex, nofollow`. Direct public `.html` aliases redirect to their
+canonical routes. Robots rules are not access control; authentication continues
+to protect private APIs. Existing `/#transactions` and other signed-in hash
+routes remain unchanged: fragments are not separate server URLs, so the shared
+homepage stays indexable while private financial content is loaded only after
+authentication. A separate app origin is not introduced in this change.
+
+Set production `APP_ORIGIN=https://myfinanceapp.us` (no trailing slash). Ensure
+the reverse proxy does not add a `noindex` header to public pages and redirect
+alternate hostnames/HTTP to this HTTPS origin at the edge.
+
+After deploying:
+
+1. In [Google Search Console](https://search.google.com/search-console), add a
+   **Domain property** for `myfinanceapp.us`. Copy Google's issued TXT record
+   into the domain's DNS at the root, wait for propagation, then verify.
+   Keep the verification record. Do not invent or reuse someone else's value.
+2. In [Bing Webmaster Tools](https://www.bing.com/webmasters), add the site and
+   use the DNS verification record Bing provides, or import a verified Search
+   Console property if offered. Keep its required DNS record too.
+3. Submit `https://myfinanceapp.us/sitemap.xml` in both consoles. Inspect
+   `https://myfinanceapp.us/` in Google's URL Inspection and request indexing;
+   use Bing's URL submission/inspection tools for the homepage and new pages.
+4. Confirm the live HTML, sitemap and headers after deployment. Search engines
+   decide when and whether to index; submission does not guarantee ranking.
+   Recheck coverage reports over the following days and weeks.
+
+Account registration, DNS records, console verification/submission and directory
+or community listings are manual operator actions, not performed by this code.
+Prioritize useful original pages and genuine links; do not buy links or generate
+bulk articles. The feature and debt-payoff pages target bill-calendar,
+30-day cash-flow and bill-aware debt-planning searches without keyword stuffing.
+
 ## Numbered support cases
 
 Every signed-in non-demo login, including household members and users without

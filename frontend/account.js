@@ -6,7 +6,7 @@
   const view = document.createElement('section');
   view.id = 'settings-view';
   view.className = 'view';
-  view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h1>Settings &amp; support</h1>
+  view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h2>Settings &amp; support</h2>
       <p class="muted">Household members share and can edit financial records. Only the household owner manages support access. Operators can access operational information and audit metadata; support access to financial records requires an owner grant.</p></div></header>
     <div class="panel plan-card support-ticket-panel" id="support-ticket-card">
       <div><p class="eyebrow">CONTACT SUPPORT</p><h2>Open a support case</h2>

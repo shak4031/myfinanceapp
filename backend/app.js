@@ -31,6 +31,7 @@ import activity from './routes/activity.js';
 import billing, { stripeWebhook, requireSubscription } from './routes/billing.js';
 import household from './routes/household.js';
 import publicMetrics from './routes/publicMetrics.js';
+import { PUBLIC_PAGES, renderPublicPage, publicRobots, publicSitemap } from './utils/publicSeo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,6 +61,7 @@ app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('X-Frame-Options', 'DENY');
   res.set('Referrer-Policy', 'same-origin');
+  if (req.path.startsWith('/api/')) res.set('X-Robots-Tag', 'noindex, nofollow');
   if (process.env.NODE_ENV === 'production') res.set('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
@@ -160,18 +162,24 @@ app.use('/api/logs', (req, res) => res.status(403).json({ error: 'Use the admin 
 app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found' }));
 
 // Static files (after API routes)
-app.get('/about', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/about.html')));
-app.get('/contact', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/contact.html')));
-app.get('/security', (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').sendFile(join(__dirname, '../frontend/security.html')));
+app.get('/robots.txt', (req, res) => res.type('text/plain').send(publicRobots()));
+app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(publicSitemap()));
+app.get(['/index.html', '/about.html', '/contact.html', '/security.html'], (req, res) =>
+  res.redirect(301, req.path === '/index.html' ? '/' : req.path.replace(/\.html$/, '')));
+for (const path of Object.keys(PUBLIC_PAGES)) {
+  app.get(path, (req, res) => res.set('Cache-Control', 'no-cache, must-revalidate').type('html').send(renderPublicPage(path)));
+}
 app.use(express.static(join(__dirname, '../frontend'), {
   setHeaders(res, path) {
     if (/\.(?:html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    if (/\.html$/.test(path)) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   }
 }));
 
 // Serve frontend
 app.get('*', (req, res) => {
   res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
   res.sendFile(join(__dirname, '../frontend/index.html'));
 });
 

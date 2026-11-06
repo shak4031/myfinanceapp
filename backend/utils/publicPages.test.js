@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import application from '../app.js';
+import { PUBLIC_PAGES } from './publicSeo.js';
+import { PRICES } from './billing.js';
 
 test('About and Contact have separate public URLs, accessible navigation and honest security copy', async () => {
   const server = application.listen(0, '127.0.0.1');
@@ -72,5 +74,58 @@ test('About and Contact have separate public URLs, accessible navigation and hon
     assert.match(home, /href="\/security">Security/);
     assert.match(home, /Read the technical security whitepaper/);
     assert.equal((await fetch(base + '/public-pages.css')).status, 200);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('public SEO serves crawlable HTML, accurate pricing and only canonical public URLs in the sitemap', async () => {
+  const server = application.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const origin = process.env.APP_ORIGIN || 'https://myfinanceapp.us';
+  try {
+    for (const path of Object.keys(PUBLIC_PAGES)) {
+      const response = await fetch(base + path + '?campaign=test');
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('x-robots-tag'), null);
+      const html = await response.text();
+      assert.equal((html.match(/<h1\b/gi) || []).length, 1, path);
+      assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
+      assert.ok(html.includes(`rel="canonical" href="${origin}${path}"`));
+      assert.match(html, /property="og:title"/);
+      assert.match(html, /property="og:url"/);
+      assert.doesNotMatch(html, /<meta[^>]+noindex/i);
+      if (['/', '/features', '/pricing', '/debt-payoff'].includes(path)) {
+        const schema = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+        assert.equal(schema['@type'], 'SoftwareApplication');
+        assert.deepEqual(schema.offers.map(offer => offer.price), Object.values(PRICES).map(cents => (cents / 100).toFixed(2)));
+        assert.ok(schema.offers.every(offer => offer.priceCurrency === 'USD' && offer.priceSpecification.unitText === 'MONTH'));
+      }
+      if (path === '/pricing') {
+        assert.match(html, /\$9\.99/);
+        assert.match(html, /\$14\.99/);
+        assert.match(html, /15-day Pro trial/);
+        assert.match(html, /bills automatically/);
+      }
+      if (path === '/features') assert.match(html, /30-day cash flow forecast/);
+      if (path === '/debt-payoff') assert.match(html, /Snowball or avalanche/);
+    }
+    const robots = await (await fetch(base + '/robots.txt')).text();
+    assert.match(robots, /User-agent: \*\nAllow: \//);
+    assert.ok(robots.includes(`Sitemap: ${origin}/sitemap.xml`));
+    assert.match(robots, /Disallow: \/api\//);
+    const sitemapResponse = await fetch(base + '/sitemap.xml');
+    assert.match(sitemapResponse.headers.get('content-type'), /xml/);
+    const sitemap = await sitemapResponse.text();
+    assert.match(sitemap, /xmlns="http:\/\/www.sitemaps.org\/schemas\/sitemap\/0.9"/);
+    assert.deepEqual([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(match => match[1]),
+      Object.keys(PUBLIC_PAGES).map(path => origin + path));
+    for (const path of ['/admin.html', '/reset-password.html', '/app', '/unknown-page', '/api/health']) {
+      assert.match((await fetch(base + path)).headers.get('x-robots-tag'), /noindex/);
+    }
+    for (const [path, target] of [['/index.html', '/'], ['/about.html', '/about'], ['/contact.html', '/contact'], ['/security.html', '/security']]) {
+      const response = await fetch(base + path, { redirect: 'manual' });
+      assert.equal(response.status, 301);
+      assert.equal(response.headers.get('location'), target);
+    }
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
