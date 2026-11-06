@@ -2,14 +2,14 @@ import { createHash } from 'node:crypto';
 import { isFixedPayment, sameBill } from './fixedPayments.js';
 import { parseTxDate, getCanonicalMerchant } from './normalize.js';
 import { currentReadOnly, currentUserId } from './tenant.js';
+import { sameSourceAccount, sourceAccountsCompatible, TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from './transactionAccount.js';
 
 const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const keyFor = (id, date) => createHash('sha256').update(`${id}:${date}`).digest('hex');
 const confirmationDate = row => row.resolved_at ? iso(new Date(row.resolved_at)) : null;
 
 function accountCompatible(a, b) {
-  if (a.plaid_account_id != null && b.plaid_account_id != null && a.plaid_account_id !== b.plaid_account_id) return false;
-  if (a.account_id != null && b.account_id != null && String(a.account_id) !== String(b.account_id)) return false;
+  if (!sourceAccountsCompatible(a, b)) return false;
   const mask = tx => (tx.description || '').match(/(?:\bx+|\*{2,})(\d{2,4})\b/i)?.[1];
   return !mask(a) || !mask(b) || mask(a) === mask(b);
 }
@@ -17,15 +17,17 @@ function accountCompatible(a, b) {
 function samePayment(a, b) {
   if (!accountCompatible(a, b)) return false;
   if (a.id != null && String(a.id) === String(b.id)) return true;
+  const crossSource = (a.account_id != null && a.plaid_account_id == null && b.plaid_account_id != null && b.account_id == null)
+    || (b.account_id != null && b.plaid_account_id == null && a.plaid_account_id != null && a.account_id == null);
+  if (crossSource) return false;
   // Renames are presentation, not a different bill identity.
   return sameBill(a, b) || sameBill({ ...a, display_name: null }, { ...b, display_name: null });
 }
 
 function descriptionVariant(a, b) {
-  if (!accountCompatible(a, b) || Number(a.amount) !== Number(b.amount)) return false;
-  const knownAccount = (a.plaid_account_id != null && a.plaid_account_id === b.plaid_account_id)
-    || (a.account_id != null && b.account_id != null && String(a.account_id) === String(b.account_id));
-  if (!knownAccount) return false;
+  if (!accountCompatible(a, b) || !sameSourceAccount(a, b)) return false;
+  if (sameBill(a, b, { allowMissingMask: true })
+    || sameBill({ ...a, display_name: null }, { ...b, display_name: null }, { allowMissingMask: true })) return true;
   const words = tx => new Set(getCanonicalMerchant(tx.description).toUpperCase().split(/[^A-Z]+/)
     .filter(word => word.length >= 3 && !['GOOGLE', 'PAYPAL', 'ONLINE', 'PAYMENT', 'CARD', 'PREMIUM', 'THE', 'AND', 'FOR'].includes(word)));
   const left = words(a), right = words(b);
@@ -47,7 +49,8 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       }
       return { ...tx, date: parsed.iso, amount: Number(tx.amount) };
     }).filter(tx => tx.date <= todayKey).sort((a, b) => a.date.localeCompare(b.date) || Number(a.id) - Number(b.id));
-  const occurrences = stored.filter(row => row.due_date >= previousMonthStart).map(row => ({ ...row, template: { ...row.template }, amount: Number(row.amount),
+  const occurrences = stored.filter(row => row.due_date >= previousMonthStart).map(row => ({ ...row,
+    template: { ...row.template, ...debits.find(tx => String(tx.id) === String(row.template.id)) }, amount: Number(row.amount),
     resolved_at: row.resolved_at instanceof Date ? row.resolved_at.toISOString() : row.resolved_at }));
   // Rebuild automatic matches: legacy oldest-first assignments could consume a
   // payment from a different month and leave its actual month's bill unpaid.
@@ -67,8 +70,21 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     if (!group) { group = { template: tx, templates: [], payments: [], occurrences: [] }; groups.push(group); }
     group.templates.push(tx);
   }
-  // Prefer exact identities. A shortened provider description can settle a bill
-  // only with equal amount, a known shared account and one unambiguous candidate.
+  // Consolidate changed provider identities only when both groups have a unique partner.
+  const partners = group => groups.filter(other => other !== group
+    && group.templates.every(left => other.templates.every(right => accountCompatible(left, right)))
+    && !group.templates.some(left => isFixedPayment(left)
+      && other.templates.some(right => isFixedPayment(right) && left.date.slice(0, 7) === right.date.slice(0, 7)))
+    && group.templates.some(left => other.templates.some(right => descriptionVariant(left, right))));
+  for (const group of [...groups]) {
+    if (!groups.includes(group)) continue;
+    const matches = partners(group);
+    if (matches.length === 1 && partners(matches[0]).length === 1) {
+      group.templates.push(...matches[0].templates);
+      groups.splice(groups.indexOf(matches[0]), 1);
+    }
+  }
+  // Amounts vary month to month; identity, verified source and ambiguity decide matches.
   for (const tx of debits) {
     const exact = groups.filter(group => group.templates.some(template => samePayment(template, tx)));
     const matches = exact.length ? exact : groups.filter(group => group.templates.some(template => descriptionVariant(template, tx)));
@@ -151,7 +167,8 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       const paid = row.status === 'paid';
       const transaction = paid ? debits.find(tx => String(tx.id) === String(row.matched_transaction_id)) : null;
       const date = paid ? transaction?.date || confirmationDate(row) : row.due_date;
-      const mode = [...debits].reverse().find(tx => samePayment(row.template, tx) && ['auto', 'manual'].includes(tx.pay_mode))?.pay_mode;
+      const group = groups.find(group => group.occurrences.includes(row));
+      const mode = [...(group?.payments || [])].reverse().find(tx => ['auto', 'manual'].includes(tx.pay_mode))?.pay_mode;
       return {
         paymentKey: row.payment_key, dueDate: row.due_date, date, dayOfMonth: Number(date.slice(8, 10)),
         ...(!paid && debits.some(tx => String(tx.id) === String(row.template.id) && isFixedPayment(tx))
@@ -174,9 +191,10 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
 export async function loadFixedPaymentOccurrences(client, today, through) {
   const userId = currentUserId();
   if (!currentReadOnly()) await client.query('SELECT pg_advisory_xact_lock($1,193647)', [userId]);
-  const transactions = (await client.query(`SELECT id,date,description,display_name,category,amount,direction,
-    account_id,plaid_account_id,is_fixed,pay_mode,is_pending FROM transactions
-    WHERE user_id=$1 AND date IS NOT NULL AND date::date <= $2::date`, [userId, iso(today)])).rows;
+  const transactions = (await client.query(`SELECT t.id,t.date,t.description,t.display_name,t.category,t.amount,t.direction,
+    t.account_id,t.plaid_account_id,t.is_fixed,t.pay_mode,t.is_pending,${TRANSACTION_ACCOUNT_FIELDS}
+    FROM transactions t ${TRANSACTION_ACCOUNT_JOINS}
+    WHERE t.user_id=$1 AND t.date IS NOT NULL AND t.date::date <= $2::date`, [userId, iso(today)])).rows;
   const stored = (await client.query('SELECT * FROM fixed_payment_occurrences WHERE user_id=$1', [userId])).rows;
   const result = reconcilePaymentOccurrences(transactions, stored, today, through);
   if (!currentReadOnly()) {

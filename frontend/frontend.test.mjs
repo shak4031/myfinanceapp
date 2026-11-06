@@ -503,9 +503,13 @@ test('migrated legacy paid licenses retain all advanced features under new Pro',
   }
 });
 
-test('member Settings hides support grants, explains household sharing and skips support requests', async () => {
+test('member Settings hides support grants but allows personal support tickets', async () => {
   const calls = [];
-  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); throw new Error('Members must not request support access.'); });
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/support-tickets') return response(200, []);
+    throw new Error('Members must not request support access.');
+  });
   f.context.FinanceTools = { escape: String };
   f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => null, currentUser: () => ({ household: { role: 'member' } }) };
   f.run('account.js');
@@ -516,7 +520,8 @@ test('member Settings hides support grants, explains household sharing and skips
   assert.match(f.node('support-status').textContent, /members already share access/);
   assert.equal(f.node('support-grants').innerHTML, '');
   assert.equal(f.node('support-activity').innerHTML, '');
-  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa']);
+  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa', '/api/support-tickets']);
+  assert.equal(f.node('support-ticket-form').hidden, false);
   const actual = [...new Set([...f.context.document.querySelector('.main-content').options])].find(node => node.id === 'settings-view');
   await actual.listeners.submit({ target: { id: 'support-grant-form' }, preventDefault() {} });
   await actual.listeners.click({ target: { dataset: { revoke: '1' } } });
@@ -527,7 +532,7 @@ test('member Settings hides support grants, explains household sharing and skips
 
 test('owner Settings retains support access while support sessions cannot manage grants', async () => {
   const calls = [];
-  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); return response(200, { grants: [], activity: [], browsers: [] }); });
+  const f = fixture(async (url, options = {}) => { calls.push({ url, options }); return response(200, url === '/api/support-tickets' ? [] : { grants: [], activity: [], browsers: [] }); });
   let support = null;
   f.context.FinanceTools = { escape: String };
   f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => support, currentUser: () => ({ household: { role: 'owner' } }) };
@@ -535,13 +540,93 @@ test('owner Settings retains support access while support sessions cannot manage
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(f.node('support-grant-form').hidden, false);
-  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa', '/api/auth/mfa/trusted-browsers', '/api/support-access']);
+  assert.deepEqual(calls.map(call => call.url), ['/api/auth/mfa', '/api/auth/mfa/trusted-browsers', '/api/support-tickets', '/api/support-access']);
   support = { id: 1 };
   f.context.showView('settings');
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(f.node('support-grant-form').hidden, true);
   assert.match(f.node('support-status').textContent, /hidden during a support session/);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
+  assert.equal(f.node('support-ticket-form').hidden, true);
+});
+
+test('support case submission shows the number, delivery warning and escaped personal history', async () => {
+  const calls = [];
+  let tickets = [], fail = false;
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/support-tickets' && options.method === 'POST') {
+      if (fail) return response(400, { error: 'Describe the problem in 10 to 5,000 characters.' });
+      tickets = [{ id: 17, number: 'MFA-17', description: '<script>private text</script>', category: '<Sync>',
+        status: 'open', emailStatus: 'failed', createdAt: '2026-11-06', updatedAt: '2026-11-06' }];
+      return response(201, { ticket: tickets[0], warning: 'Your ticket was saved but its email notification failed.' });
+    }
+    if (url === '/api/support-tickets') return response(200, tickets);
+    return response(200, { browsers: [] });
+  });
+  f.context.FinanceTools = { escape: value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') };
+  f.context.FinanceSession = { isAuthenticated: () => true, currentSupport: () => null, currentUser: () => ({ household: { role: 'member' } }) };
+  f.run('account.js');
+  f.context.showView('settings');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const view = f.node('.main-content').options.find(node => node.id === 'settings-view');
+  f.node('support-ticket-description').value = 'Payment remained unpaid.';
+  f.node('support-ticket-category').value = '';
+  await view.listeners.submit({ target: { id: 'support-ticket-form' }, preventDefault() {} });
+  const sent = calls.find(call => call.options.method === 'POST');
+  assert.deepEqual(JSON.parse(sent.options.body), { description: 'Payment remained unpaid.', category: '' });
+  assert.match(f.node('support-ticket-status').textContent, /MFA-17[\s\S]*email notification failed/);
+  assert.match(f.node('support-ticket-history').innerHTML, /&lt;Sync&gt;[\s\S]*&lt;script&gt;private text/);
+  assert.doesNotMatch(f.node('support-ticket-history').innerHTML, /<script>/);
+  assert.equal(f.node('support-ticket-description').value, '');
+  assert.equal(f.node('support-ticket-form').querySelector('button').disabled, false);
+  fail = true;
+  f.node('support-ticket-description').value = 'bad';
+  await view.listeners.submit({ target: { id: 'support-ticket-form' }, preventDefault() {} });
+  assert.match(f.node('support-ticket-status').textContent, /Describe the problem/);
+  assert.equal(f.node('support-ticket-description').value, 'bad', 'failed submissions retain the draft');
+  f.context.FinanceSupportTickets.reset();
+  assert.equal(f.node('support-ticket-history').textContent, '');
+  assert.equal(f.node('support-ticket-description').value, '');
+});
+
+test('admin ticket actions update status, expose failures and retry email without granting financial access', async () => {
+  const calls = [];
+  let status = 'open', fail = false, emailStatus = 'failed';
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    let data = { stats: {} }, code = 200;
+    if (url === '/api/auth/me') data = { user: { role: 'admin', name: 'Operator', email: 'operator@example.test' } };
+    if (url.startsWith('/api/admin/support-tickets?')) data = { tickets: [{
+      id: 17, number: 'MFA-17', description: '<Private description>', category: 'Bank sync', status, emailStatus,
+      userName: 'Customer', userEmail: 'customer@example.test', createdAt: '2026-11-06', updatedAt: '2026-11-06'
+    }], nextBeforeId: null };
+    if (url === '/api/admin/support-tickets/17') {
+      if (fail) { code = 409; data = { error: 'Ticket status changed. Refresh.' }; }
+      else { status = JSON.parse(options.body).status; data = { status }; }
+    }
+    if (url.endsWith('/retry-email')) { emailStatus = 'sent'; data = { ticket: { emailStatus } }; }
+    return { ok: code === 200, status: code, text: async () => JSON.stringify(data), headers: { get: () => null } };
+  });
+  f.run('admin.js');
+  await f.node('ticket-refresh').listeners.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(f.node('tickets').innerHTML, /MFA-17[\s\S]*&lt;Private description&gt;[\s\S]*Start: In-Progress[\s\S]*Retry email/);
+  const button = { dataset: { ticket: '17', ticketStatus: 'in_progress' }, disabled: false };
+  const click = () => f.node('tickets').listeners.click({ target: { closest: () => button } });
+  await click();
+  assert.equal(status, 'in_progress');
+  assert.match(f.node('tickets').innerHTML, /Mark Resolved/);
+  fail = true;
+  button.dataset.ticketStatus = 'resolved';
+  await click();
+  assert.equal(status, 'in_progress');
+  assert.match(f.node('admin-toast').textContent, /Ticket status changed/);
+  button.dataset = { ticketEmail: '17' };
+  await click();
+  assert.equal(emailStatus, 'sent');
+  assert.doesNotMatch(f.node('tickets').innerHTML, /Retry email/);
+  assert.equal(calls.some(call => call.url.includes('/support-sessions')), false);
 });
 
 test('MFA login challenge never reloads or authenticates before the second factor is submitted', async () => {
@@ -1277,7 +1362,8 @@ test('public About and Contact links are visible and the Knowledge Base sits abo
   assert.doesNotMatch(html, /id="marketing-about"|id="marketing-contact"/);
   assert.match(source('about.html'), /eligible U\.S\. bank through Plaid/);
   assert.match(source('about.html'), /disconnect any time to stop future bank updates/);
-  assert.match(source('contact.html'), /href="mailto:ashak4031@gmail\.com">ashak4031@gmail\.com/);
+  assert.match(source('contact.html'), /href="mailto:myfinanceapp\.support@gmail\.com">myfinanceapp\.support@gmail\.com/);
+  assert.match(source('contact.html'), /numbered support case and track its status/);
   assert.match(source('contact.html'), /Never email passwords, verification codes, full account numbers/);
   assert.match(source('about.html'), /AES-256-GCM|No online service can guarantee zero risk/);
   assert.match(source('about.html'), /Authorized operators retain infrastructure access/);
@@ -4110,6 +4196,50 @@ test('tutorial deep links open the right walkthrough and chapter', () => {
   tours.go(99);
   assert.equal(tours.state.index, tours.state.tutorial.scenes.length - 1);
   assert.match(f.node('tutorial-root').innerHTML, /All tutorials/);
+});
+test('every tutorial chapter renders and playback advances without narration', () => {
+  const f = fixture();
+  browserBits(f, { reduced: false });
+  let frame;
+  f.context.requestAnimationFrame = callback => { frame = callback; return 1; };
+  f.node('tutorials-view').classList.add('active');
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  for (const tutorial of tours.list()) {
+    for (const chapter of tutorial.chapters) {
+      tours.open(`${tutorial.id}/${chapter}`);
+      assert.match(f.node('tut-canvas').innerHTML, /\w/, `${tutorial.id}/${chapter}`);
+      assert.equal(tours.state.playing, true);
+    }
+    tours.open(tutorial.id);
+    for (let now = 250; tours.state.index === 0 && now < 120000; now += 250) frame(now);
+    assert.equal(tours.state.index, 1, `${tutorial.id} advances from its opening chapter`);
+  }
+});
+test('tutorial selection brings the player into view and stuck narration cannot block playback', () => {
+  const f = fixture();
+  const store = browserBits(f, { reduced: false });
+  store.set('mf.tutorials.voice', '1');
+  let frame;
+  const spoken = [];
+  f.context.requestAnimationFrame = callback => { frame = callback; return 1; };
+  f.context.SpeechSynthesisUtterance = function(text) { this.text = text; };
+  f.context.speechSynthesis = { cancel() {}, speak: utterance => spoken.push(utterance), resume() {}, pause() {} };
+  const scrolls = [], focuses = [];
+  f.node('tut-player').scrollIntoView = options => scrolls.push(options);
+  f.node('tut-player').focus = options => focuses.push(options);
+  f.node('tutorials-view').classList.add('active');
+  f.run('tutorial.js');
+  const tours = f.context.FinanceTutorials;
+  tours.open('goals');
+  assert.equal(scrolls.length, 1);
+  assert.equal(scrolls[0].block, 'start');
+  assert.equal(focuses.length, 1);
+  for (let now = 250; tours.state.index === 0 && now < 120000; now += 250) frame(now);
+  assert.equal(tours.state.index, 1, 'a speech engine that never calls onend cannot freeze a chapter');
+  const current = tours.state.utterance;
+  spoken[0].onend();
+  assert.equal(tours.state.utterance, current, 'a cancelled old utterance cannot clear current narration');
 });
 test('MFA tutorial and knowledge base explain manual setup, recovery and trusted browsers without exposing credentials', () => {
   const f = fixture();

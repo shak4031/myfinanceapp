@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 
 let transport;
 let testTransport;
+export const SUPPORT_EMAIL = 'myfinanceapp.support@gmail.com';
 
 export function setMailTransportForTests(value) {
   testTransport = value;
@@ -49,4 +50,16 @@ export async function sendSecurityNotice(user, subject, text) {
   if (!mail || !user?.email) return false;
   await mail.sendMail({ from: process.env.SMTP_FROM || 'MyFinanceApp <no-reply@localhost>', to: user.email, subject, text });
   return true;
+}
+
+export async function sendSupportTicketEmail(req, user, ticket) {
+  const mail = getTransport();
+  if (!mail) throw new Error('Support notification SMTP is not configured.');
+  await mail.sendMail({
+    from: process.env.SMTP_FROM || `MyFinanceApp <${SUPPORT_EMAIL}>`,
+    to: SUPPORT_EMAIL,
+    replyTo: user.email,
+    subject: `MyFinanceApp support ticket MFA-${ticket.id}`,
+    text: `Ticket: MFA-${ticket.id}\nFrom: ${user.name} <${user.email}>\nCategory: ${ticket.category || 'Not specified'}\nStatus: ${{ open: 'Open', in_progress: 'In-Progress', resolved: 'Resolved' }[ticket.status]}\n\n${ticket.description}\n\nManage this ticket in the administrator console:\n${appOrigin(req)}/admin.html\n\nOpening a ticket does not grant access to financial records.`
+  });
 }

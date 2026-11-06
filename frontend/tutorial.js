@@ -769,7 +769,7 @@
 
   const sceneDuration = scene => scene.duration || Math.max(6500, scene.caption.split(/\s+/).length * 330 + 1800);
 
-  const state = { tutorial: TUTORIALS[0], index: 0, elapsed: 0, playing: false, last: 0, raf: 0, voice: storage.get('mf.tutorials.voice') === '1', speaking: false, ended: false, built: false, observer: null };
+  const state = { tutorial: TUTORIALS[0], index: 0, elapsed: 0, playing: false, last: 0, raf: 0, voice: storage.get('mf.tutorials.voice') === '1', speaking: false, utterance: null, ended: false, built: false, observer: null };
 
   function totalTime(tutorial) { return tutorial.scenes.reduce((sum, scene) => sum + sceneDuration(scene), 0); }
   const clock = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -796,6 +796,7 @@
             <button type="button" class="tut-ctl" data-tut="full" aria-label="Full screen">${icon('full', 16)}</button>
           </div>
           <p class="tut-caption" id="tut-caption" aria-live="polite"></p>
+          <p class="muted" id="tut-narration-status" role="status"></p>
         </div>
         <aside class="tut-side">
           <div class="tut-side-head"><p class="eyebrow" id="tut-side-eyebrow"></p><h2 id="tut-side-title"></h2></div>
@@ -901,17 +902,37 @@
     $('tut-time').textContent = `${clock(before + state.elapsed)} / ${clock(totalTime(t))}`;
   }
 
+  function cancelNarration() {
+    state.utterance = null;
+    state.speaking = false;
+    window.speechSynthesis?.cancel();
+  }
+
+  function narrationFailed() {
+    cancelNarration();
+    $('tut-narration-status').textContent = 'Voice narration is unavailable. The tutorial will keep playing with captions.';
+  }
+
   function speak(text) {
     const synth = window.speechSynthesis;
     if (!synth) return;
-    synth.cancel();
-    state.speaking = false;
+    cancelNarration();
     if (!state.voice || !text) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.02;
-    utterance.onend = utterance.onerror = () => { state.speaking = false; };
-    state.speaking = true;
-    synth.speak(utterance);
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.02;
+      utterance.onend = () => {
+        if (state.utterance === utterance) { state.speaking = false; state.utterance = null; }
+      };
+      utterance.onerror = () => { if (state.utterance === utterance) narrationFailed(); };
+      state.utterance = utterance;
+      state.speaking = true;
+      $('tut-narration-status').textContent = '';
+      synth.speak(utterance);
+    } catch (error) {
+      console.warn('Tutorial narration could not start:', error.message);
+      narrationFailed();
+    }
   }
 
   function frame(now) {
@@ -920,10 +941,12 @@
     state.elapsed += Math.min(250, now - state.last);
     state.last = now;
     const duration = sceneDuration(state.tutorial.scenes[state.index]);
+    // Some browser speech engines never report completion; captions must still advance.
+    if (state.speaking && state.elapsed >= duration + 5000) narrationFailed();
     if (state.elapsed >= duration && !state.speaking) {
       if (state.index < state.tutorial.scenes.length - 1) { state.index += 1; renderScene(); }
       else return finish();
-    } else if (state.elapsed > duration) state.elapsed = duration;
+    }
     updateProgress();
     state.raf = requestAnimationFrame(frame);
   }
@@ -935,8 +958,8 @@
     syncStage();
     const synth = window.speechSynthesis;
     if (state.voice && synth) {
-      if (synth.paused) synth.resume();
-      else if (!synth.speaking && state.elapsed < 400) speak(state.tutorial.scenes[state.index].caption);
+      if (synth.paused && state.utterance) synth.resume();
+      else if (!state.utterance) speak(state.tutorial.scenes[state.index].caption);
     }
     cancelAnimationFrame(state.raf);
     state.raf = requestAnimationFrame(frame);
@@ -951,8 +974,7 @@
   function go(index) {
     const count = state.tutorial.scenes.length;
     state.index = Math.max(0, Math.min(count - 1, index));
-    window.speechSynthesis?.cancel();
-    state.speaking = false;
+    cancelNarration();
     renderScene();
     if (state.playing) { state.last = performance.now(); }
   }
@@ -982,6 +1004,7 @@
     const sceneId = alias ? alias[1] : rawScene;
     const changed = tutorial !== state.tutorial || !$('tut-chapters').children.length;
     pause();
+    cancelNarration();
     state.tutorial = tutorial;
     renderShell();
     const sceneIndex = sceneId ? tutorial.scenes.findIndex(scene => scene.id === sceneId) : -1;
@@ -990,12 +1013,20 @@
     window.FinanceWelcome?.markTourSeen?.();
     // Deep links start playing straight away; reduced-motion users press play themselves.
     if (sub && !reducedMotion()) play();
-    $('tut-player')?.focus({ preventScroll: true });
+    const player = $('tut-player');
+    player?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    player?.focus({ preventScroll: true });
   }
 
   document.addEventListener('click', event => {
     const root = $('tutorial-root');
     if (!root || !root.contains(event.target)) return;
+    const card = event.target.closest('a[href^="#tutorials/"]');
+    if (card && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      window.showView(card.getAttribute('href').slice(1));
+      return;
+    }
     const target = event.target.closest('[data-tut],[data-tut-go],#tut-bigplay');
     if (!target) return;
     if (target.id === 'tut-bigplay') return play();
@@ -1008,7 +1039,7 @@
       case 'voice':
         state.voice = !state.voice;
         storage.set('mf.tutorials.voice', state.voice ? '1' : '0');
-        if (!state.voice) { window.speechSynthesis?.cancel(); state.speaking = false; }
+        if (!state.voice) { cancelNarration(); $('tut-narration-status').textContent = ''; }
         else if (state.playing) speak(state.tutorial.scenes[state.index].caption);
         return syncStage();
       case 'full': {

@@ -62,7 +62,7 @@
     const s = data.stats;
     const stat = (label, value, bad) => `<div class="stat ${bad ? 'bad' : ''}"><span class="eyebrow">${esc(label)}</span><b>${esc(value)}</b></div>`;
     const warnings = [
-      !data.emailConfigured && 'Email (SMTP) is not configured, so customers cannot receive password reset links. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.',
+      !data.emailConfigured && 'Email (SMTP) is not configured. Password reset links, security notices and support-ticket notifications cannot be delivered. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.',
       !data.alertWebhookConfigured && 'No ALERT_WEBHOOK_URL is set, so server errors and lockouts are logged but nobody is notified.'
     ].filter(Boolean);
     $('overview').innerHTML = `${warnings.map(text => `<div class="warn">${esc(text)}</div>`).join('')}
@@ -397,6 +397,47 @@
     } catch (error) { toast(error.message); }
   });
 
+  let nextTicketId = null;
+  let ticketRows = [];
+  let ticketGeneration = 0;
+  async function loadTickets(append = false) {
+    const generation = ++ticketGeneration;
+    const cursor = append && nextTicketId ? `&beforeId=${nextTicketId}` : '';
+    const data = await api(`/api/admin/support-tickets?status=${encodeURIComponent($('ticket-filter').value)}${cursor}`);
+    if (generation !== ticketGeneration) return;
+    ticketRows = append ? [...ticketRows, ...data.tickets] : data.tickets;
+    nextTicketId = data.nextBeforeId;
+    $('ticket-more').hidden = !nextTicketId;
+    const labels = { open: 'Open', in_progress: 'In-Progress', resolved: 'Resolved' };
+    $('tickets').innerHTML = ticketRows.length ? `<table><thead><tr><th>Ticket / customer</th><th>Case</th><th>Status</th><th>Actions</th></tr></thead><tbody>${ticketRows.map(ticket =>
+      `<tr><td><strong>${esc(ticket.number)}</strong><br>${esc(ticket.userName)}<br><small>${esc(ticket.userEmail)}</small></td>
+        <td><strong>${esc(ticket.category || 'Uncategorized')}</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(ticket.description)}</p><small>Opened ${esc(when(ticket.createdAt))}<br>Updated ${esc(when(ticket.updatedAt))}</small></td>
+        <td>${esc(labels[ticket.status])}<br><small>Email: ${esc(ticket.emailStatus)}</small></td>
+        <td>${ticket.status !== 'resolved' ? `<button class="btn btn-primary" data-ticket="${ticket.id}" data-ticket-status="${ticket.status === 'open' ? 'in_progress' : 'resolved'}">${ticket.status === 'open' ? 'Start: In-Progress' : 'Mark Resolved'}</button>` : ''}
+          ${ticket.emailStatus !== 'sent' ? `<button class="btn btn-secondary" data-ticket-email="${ticket.id}">Retry email notification</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted">No tickets match this status.</p>';
+  }
+  $('ticket-refresh').addEventListener('click', () => loadTickets().catch(error => toast(error.message)));
+  $('ticket-filter').addEventListener('change', () => loadTickets().catch(error => toast(error.message)));
+  $('ticket-more').addEventListener('click', async () => {
+    $('ticket-more').disabled = true;
+    try { await loadTickets(true); } catch (error) { toast(error.message); }
+    finally { $('ticket-more').disabled = false; }
+  });
+  $('tickets').addEventListener('click', async event => {
+    const button = event.target.closest('[data-ticket],[data-ticket-email]');
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const data = button.dataset.ticketEmail
+        ? await api(`/api/admin/support-tickets/${encodeURIComponent(button.dataset.ticketEmail)}/retry-email`, { method: 'POST' })
+        : await api(`/api/admin/support-tickets/${encodeURIComponent(button.dataset.ticket)}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.ticketStatus }) });
+      toast(data.warning || (button.dataset.ticketEmail ? 'Support notification sent.' : 'Ticket status updated.'));
+      await loadTickets();
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+  });
+
   async function loadApi() {
     if ($('api').dataset.loaded) return;
     const spec = await api('/api/admin/openapi.json');
@@ -445,7 +486,7 @@
     } catch (error) { output.textContent = `Request not sent: ${error.message}`; }
   });
 
-  const loaders = { overview: loadOverview, traffic: loadTraffic, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, api: loadApi };
+  const loaders = { overview: loadOverview, traffic: loadTraffic, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, tickets: () => loadTickets(), api: loadApi };
 
   (async () => {
     try {

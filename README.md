@@ -56,8 +56,17 @@ or a recommendation to open or transfer credit.
 
 The public sign-in page explains the optional Plaid connection, how to disconnect
 it, and what happens to imported history. Customers can contact MyFinance at
-ashak4031@gmail.com or use the signed-in support options in Settings & support.
+myfinanceapp.support@gmail.com or open a support case in Settings & support.
+Cases receive an `MFA-` ticket number, notify the support mailbox, and show
+Open, In-Progress or Resolved status. Each login sees its latest 20 tickets;
+administrators manage cases in the admin console's **Support tickets** tab.
+Opening a case does not grant access to financial records.
 Do not email passwords, verification codes, or full account numbers.
+
+Selecting a tutorial brings its player into view and moves keyboard focus to it.
+Play works independently of narration; a stalled speech engine falls back to
+captions rather than blocking chapter advancement. Reduced-motion preferences
+still disable autoplay.
 
 Goal planning includes competing car, college, emergency, and other savings
 targets. Dated goals share one observed monthly surplus in priority order;

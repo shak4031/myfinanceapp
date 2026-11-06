@@ -98,6 +98,7 @@
         <button data-tab="errors">Error logs</button>
         <button data-tab="audit">Audit trail</button>
         <button data-tab="support">Support sessions</button>
+        <button data-tab="tickets">Support tickets</button>
         <button data-tab="api">API explorer</button>
       </nav>
       <section data-panel="overview"><div id="overview"></div></section>
@@ -169,6 +170,15 @@
           <div id="grants" class="table-scroll"></div>
         </div>
       </section>
+      <section data-panel="tickets" hidden>
+        <div class="card">
+          <h2>Customer support tickets</h2>
+          <p class="muted">Cases are emailed to myfinanceapp.support@gmail.com. Opening a case does not grant financial access. Use a separate customer-approved support session if needed. Status moves from Open to In-Progress to Resolved and is visible in the customer's ticket history.</p>
+          <div class="filters"><label>Status<select id="ticket-filter"><option value="">All statuses</option><option value="open">Open</option><option value="in_progress">In-Progress</option><option value="resolved">Resolved</option></select></label><button class="btn btn-primary" id="ticket-refresh">Refresh tickets</button></div>
+          <div id="tickets" class="table-scroll" aria-live="polite"></div>
+          <button class="btn btn-secondary" id="ticket-more" hidden>Load older tickets</button>
+        </div>
+      </section>
       <section data-panel="api" hidden>
         <div class="warn">Requests run as <b>you</b> and can access only your own account. Customer data is available only through a support session the customer has approved.</div>
         <div id="api"></div>
@@ -207,6 +217,6 @@
   <div id="admin-toast" hidden role="status"></div>
   <script src="ui.js?v=20261017r"></script>
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="admin.js?v=20261104-mfa-reset"></script>
+  <script src="admin.js?v=20261106-support-tickets"></script>
 </body>
 </html>

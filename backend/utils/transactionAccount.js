@@ -16,3 +16,28 @@ export const TRANSACTION_ACCOUNT_FIELDS = `
     ELSE NULL END,a.kind) AS account_kind,
   COALESCE(pa.mask,a.last4) AS account_last4,
   COALESCE(pc.institution_name,a.institution) AS account_institution`;
+
+export function sameSourceAccount(a, b) {
+  if (a.plaid_account_id != null && b.plaid_account_id != null) {
+    return String(a.plaid_account_id) === String(b.plaid_account_id);
+  }
+  if (a.account_id != null && b.account_id != null) return String(a.account_id) === String(b.account_id);
+  const identified = tx => tx.account_id != null || tx.plaid_account_id != null;
+  const identity = tx => {
+    const institution = String(tx.account_institution || '').trim().toLowerCase();
+    const mask = String(tx.account_last4 || '');
+    const kind = tx.account_kind;
+    return institution && /^\d{4}$/.test(mask) && kind && !['unknown', 'other', 'depository'].includes(kind)
+      ? JSON.stringify([institution, mask, kind]) : null;
+  };
+  const left = identity(a);
+  return identified(a) && identified(b) && !!left && left === identity(b);
+}
+
+export function sourceAccountsCompatible(a, b) {
+  if (a.plaid_account_id != null && b.plaid_account_id != null && String(a.plaid_account_id) !== String(b.plaid_account_id)) return false;
+  if (a.account_id != null && b.account_id != null && String(a.account_id) !== String(b.account_id)) return false;
+  const crossSource = (a.account_id != null && a.plaid_account_id == null && b.plaid_account_id != null && b.account_id == null)
+    || (b.account_id != null && b.plaid_account_id == null && a.plaid_account_id != null && a.account_id == null);
+  return !crossSource || sameSourceAccount(a, b);
+}

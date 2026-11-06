@@ -36,6 +36,13 @@ export function openApiSpec() {
         post: op('Support', 'Customer: grant support access', body({ accessLevel: 'read', hours: 24, reason: 'Upcoming payments look wrong' }))
       },
       '/api/support-access/{id}': { delete: op('Support', 'Customer: revoke a support grant immediately', pathId) },
+      '/api/support-tickets': {
+        get: op('Support', 'Latest 20 tickets for this login, including status and email delivery state; available without a subscription'),
+        post: op('Support', 'Open a numbered case and notify myfinanceapp.support@gmail.com; description required (10-5000 characters), category optional (up to 80). Saved tickets with failed email return an explicit warning; no financial access is granted.', body({ description: 'A synced payment still appears unpaid.', category: 'Bank sync' }))
+      },
+      '/api/admin/support-tickets': { get: op('Admin', 'Customer-submitted cases, 100 per page; nextBeforeId selects older pages. No automatic financial data access.', query('status', 'beforeId')) },
+      '/api/admin/support-tickets/{id}': { patch: op('Admin', 'Move a ticket from Open to In-Progress to Resolved; stale or invalid transitions return 409', { ...pathId, ...body({ status: 'in_progress' }) }) },
+      '/api/admin/support-tickets/{id}/retry-email': { post: op('Admin', 'Retry a failed or pending support notification; already-sent email is not resent', pathId) },
       '/api/admin/overview': { get: op('Admin', 'Health, configuration and 24-hour security/error counts') },
       '/api/admin/traffic': { get: op('Admin', 'UTC calendar-day public views, signup clicks, successful demo logins and registrations; days: 1, 7, 30, 90 or 365', query('days')) },
       '/api/admin/users': { get: op('Admin', 'Search accounts (no financial data)', query('q')) },
@@ -50,7 +57,7 @@ export function openApiSpec() {
       '/api/admin/support-grants': { get: op('Admin', 'Active support grants customers have given') },
       '/api/admin/support-sessions': { post: op('Admin', 'Start a consented support session (view as customer)', body({ grantId: 1 })) },
       '/api/dashboard/summary': { post: op('Finance', 'Income, spending and balance summary', body({ dateFilter: 'current' })) },
-      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Next 30 days plus last-month unpaid estimates for recently observed fixed bills and current-month paid history. Match original descriptions despite renames; shortened descriptions require an unambiguous same-account equal-amount match. Repair saved duplicate and stale automatic estimates.', body({})) },
+      '/api/dashboard/upcoming-payments': { post: op('Finance', 'Next 30 days plus last-month unpaid estimates for recently observed fixed bills and current-month paid history. Match original descriptions despite renames and variable amounts; shortened descriptions require an unambiguous verified same-account payee. CSV/Plaid source identity requires matching institution, mask and account kind. Repair saved duplicate and stale automatic estimates.', body({})) },
       '/api/dashboard/fixed-payments/{key}/resolve': { post: op('Finance', 'Confirm paid or ignore only this monthly occurrence. Does not create a ledger transaction or change recorded balances. Household scoped; stale resolutions return 409.', {
         parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-f0-9]{64}$' } }],
         ...body({ status: 'paid' })

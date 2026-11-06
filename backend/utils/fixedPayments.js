@@ -1,4 +1,5 @@
 import { getCanonicalMerchant, normalizeDescription, parseTxDate } from './normalize.js';
+import { sourceAccountsCompatible } from './transactionAccount.js';
 
 export const FIXED_BILL_RULES = [
   { pattern: '\\b(?:pennymac|mortgage|rent\\s+payment)\\b', category: 'Mortgage' },
@@ -40,10 +41,10 @@ function accountKey(tx) {
   return (tx.description || '').match(/(?:\bx+|\*{2,})\d{2,4}\b/i)?.[0].toUpperCase().replace(/^[X*]+/, '') || '';
 }
 
-export function sameBill(a, b) {
-  if (a.plaid_account_id != null && b.plaid_account_id != null && String(a.plaid_account_id) !== String(b.plaid_account_id)) return false;
-  if (a.account_id != null && b.account_id != null && String(a.account_id) !== String(b.account_id)) return false;
-  if (accountKey(a) !== accountKey(b)) return false;
+export function sameBill(a, b, { allowMissingMask = false } = {}) {
+  if (!sourceAccountsCompatible(a, b)) return false;
+  const leftMask = accountKey(a), rightMask = accountKey(b);
+  if (leftMask !== rightMask && (!allowMissingMask || (leftMask && rightMask))) return false;
   const merchant = merchantKey(a);
   return !!merchant && merchant === merchantKey(b);
 }

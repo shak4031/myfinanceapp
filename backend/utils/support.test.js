@@ -68,6 +68,59 @@ test('audit logging, password reset, admin console and consented support access'
     const customer = await call('/api/auth/register', { body: { name: 'Customer', email: 'customer@example.com', password } });
     let customerCookie = cookieFrom(customer);
     sent.length = 0; // Verification mail is separate from the password-reset assertions below.
+    // Tickets are per login and remain available before purchasing a subscription.
+    assert.equal((await call('/api/support-tickets')).status, 401);
+    assert.equal((await call('/api/support-tickets', { body: { description: 'short' }, cookie: customerCookie })).status, 400);
+    assert.equal((await call('/api/support-tickets', { body: { description: 'The bank sync did not finish.', category: {} }, cookie: customerCookie })).status, 400);
+    const opened = await call('/api/support-tickets', { body: {
+      description: 'OLLO payment amount changed and the estimate is still unpaid.', category: ' Bank sync '
+    }, cookie: customerCookie });
+    assert.equal(opened.status, 201);
+    assert.match(opened.body.ticket.number, /^MFA-\d+$/);
+    assert.equal(opened.body.ticket.status, 'open');
+    assert.equal(opened.body.ticket.emailStatus, 'sent');
+    assert.equal(opened.body.ticket.category, 'Bank sync');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, 'myfinanceapp.support@gmail.com');
+    assert.equal(sent[0].replyTo, 'customer@example.com');
+    assert.match(sent[0].text, /OLLO payment amount changed/);
+    assert.ok(sent[0].subject.includes(opened.body.ticket.number));
+    const ticketId = opened.body.ticket.id;
+    assert.equal((await call('/api/support-tickets', { cookie: customerCookie })).body[0].id, ticketId);
+    assert.deepEqual((await call('/api/support-tickets', { cookie: adminCookie })).body, []);
+    assert.equal((await call('/api/admin/support-tickets', { cookie: customerCookie })).status, 403);
+    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved' }, cookie: adminCookie })).status, 409);
+    const progress = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress' }, cookie: adminCookie });
+    assert.equal(progress.status, 200);
+    assert.equal(progress.body.status, 'in_progress');
+    assert.equal((await call('/api/support-tickets', { cookie: customerCookie })).body[0].status, 'in_progress');
+    const resolved = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved' }, cookie: adminCookie });
+    assert.equal(resolved.body.status, 'resolved');
+    assert.ok(resolved.body.resolvedAt);
+    assert.equal(sent.length, 1, 'status updates do not send unsolicited customer email');
+    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress' }, cookie: adminCookie })).status, 409);
+    assert.equal((await call('/api/admin/support-tickets?status=resolved', { cookie: adminCookie })).body.tickets[0].number, opened.body.ticket.number);
+    assert.equal((await call('/api/admin/support-tickets?status=invalid', { cookie: adminCookie })).status, 400);
+    assert.equal((await call('/api/admin/support-tickets?beforeId=bad', { cookie: adminCookie })).status, 400);
+    setMailTransportForTests({ sendMail: async () => { throw new Error('Test SMTP failure'); } });
+    const failedEmail = await call('/api/support-tickets', { body: { description: 'A second support case without a category.' }, cookie: customerCookie });
+    assert.equal(failedEmail.status, 201);
+    assert.equal(failedEmail.body.ticket.category, null);
+    assert.equal(failedEmail.body.ticket.emailStatus, 'failed');
+    assert.match(failedEmail.body.warning, /saved[\s\S]*email notification failed/);
+    setMailTransportForTests({ sendMail: async message => { sent.push(message); } });
+    const retry = await call(`/api/admin/support-tickets/${failedEmail.body.ticket.id}/retry-email`, { cookie: adminCookie, body: {} });
+    assert.equal(retry.body.ticket.emailStatus, 'sent');
+    await call(`/api/admin/support-tickets/${failedEmail.body.ticket.id}/retry-email`, { cookie: adminCookie, body: {} });
+    assert.equal(sent.length, 2, 'retry does not email an already-notified ticket');
+    await database.query(`INSERT INTO support_tickets(user_id,description)
+      SELECT $1,'History ticket number ' || n FROM generate_series(1,21) n`, [customer.body.user.id]);
+    const ticketHistory = await call('/api/support-tickets', { cookie: customerCookie });
+    assert.equal(ticketHistory.body.length, 20);
+    assert.ok(ticketHistory.body.every((row, index, rows) => index === 0 || row.id < rows[index - 1].id));
+    assert.equal(ticketHistory.body.some(row => row.id === ticketId), false);
+    assert.deepEqual((await call('/api/support-tickets', { cookie: adminCookie })).body, []);
+    sent.length = 0;
     await grantFixtureAccess(database, customer.body.user.id);
     assert.equal(customer.body.user.role, 'user');
     assert.equal((await call('/api/goals', { body: { name: 'Customer car', target_amount: 30000, target_date: '2027-01-01' }, cookie: customerCookie })).status, 200);
@@ -184,6 +237,8 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal((await call('/api/auth/password', { body: { currentPassword: password, newPassword: 'support-chosen-password' }, cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/admin/overview', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-access', { cookie: supportCookie })).status, 403);
+    assert.equal((await call('/api/support-tickets', { cookie: supportCookie })).status, 403);
+    assert.equal((await call('/api/support-tickets', { body: { description: 'An operator must not submit as the customer.' }, cookie: supportCookie })).status, 403);
     await settle();
     const activity = await call('/api/support-access', { cookie: customerCookie });
     assert.ok(activity.body.activity.some(row => row.event_type === 'support.session_started' && row.actor_name === 'Owner'));

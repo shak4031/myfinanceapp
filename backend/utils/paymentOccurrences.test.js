@@ -221,11 +221,11 @@ test('stale fixed flags do not revive ended bills and saved false positives are 
   assert.deepEqual(build([tx(1, '2026-08-10', { description: 'OLD FIXED FEE' })]).items, []);
 });
 
-test('description variants never settle another account, amount, generic merchant or ambiguous bill', () => {
+test('description variants never settle another account, generic merchant or ambiguous bill', () => {
   const original = tx(1, '2026-09-24', { description: 'GOOGLE CLAUDE BY ANTH', display_name: 'Personal subscription',
     plaid_account_id: 'same-bank', amount: 21.32 });
   for (const changes of [
-    { plaid_account_id: 'other-bank' }, { amount: 20 }, { description: 'GOOGLE OTHER SUBSCRIPTION' },
+    { plaid_account_id: 'other-bank' }, { description: 'GOOGLE OTHER SUBSCRIPTION' },
     { plaid_account_id: null }
   ]) {
     const result = build([original, tx(2, '2026-10-26', { description: 'CLAUDE BY ANTH', plaid_account_id: 'same-bank',
@@ -236,4 +236,64 @@ test('description variants never settle another account, amount, generic merchan
     { ...original, id: 3, description: 'CLAUDE BY ANTH BUSINESS', display_name: 'Business subscription' },
     tx(2, '2026-10-26', { description: 'CLAUDE BY ANTH', plaid_account_id: 'same-bank', amount: 21.32, is_fixed: false })]);
   assert.equal(ambiguous.items.filter(item => item.date.startsWith('2026-10') && item.status === 'projected').length, 2);
+});
+
+test('OLLO Plaid payments settle the correct month despite a changed amount and missing masked reference', () => {
+  for (const isFixed of [true, false]) {
+    const original = tx(1, '2026-10-06', { description: 'OLLO PAYMENT X1234', display_name: 'OLLO Card',
+      account_id: 9, amount: 155, pay_mode: 'auto' });
+    const paid = tx(2, '2026-11-05', { description: 'OLLO CC', display_name: 'OLLO Card', account_id: 9,
+      amount: 150, is_fixed: isFixed });
+    const initial = build([original], [], new Date(2026, 10, 6));
+    const result = build([original, paid], initial.occurrences, new Date(2026, 10, 6));
+    assert.equal(result.items.filter(item => item.status === 'projected' && item.date.startsWith('2026-11')).length, 0);
+    const item = result.items.find(item => item.id === 2);
+    assert.equal(item.amount, 150);
+    assert.equal(item.date, '2026-11-05');
+    assert.equal(item.payMode, 'auto');
+    assert.equal(result.items.find(item => item.status === 'projected').amount, 150);
+    assert.deepEqual(build([original, paid], result.occurrences, new Date(2026, 10, 6)).items, result.items);
+  }
+});
+
+test('variable-amount shortened merchant descriptions match only with a verified unique source account', () => {
+  const original = tx(1, '2026-10-06', { description: 'GOOGLE CLAUDE BY ANTH', amount: 155, account_id: 9 });
+  const paid = tx(2, '2026-11-05', { description: 'CLAUDE BY ANTH', amount: 150, account_id: 9, is_fixed: false });
+  const result = build([original, paid], [], new Date(2026, 10, 6));
+  assert.equal(result.items.some(item => item.status === 'projected' && item.date.startsWith('2026-11')), false);
+  assert.equal(build([original, { ...paid, is_fixed: true }], [], new Date(2026, 10, 6)).items
+    .some(item => item.status === 'projected' && item.date.startsWith('2026-11')), false);
+  for (const changes of [{ account_id: 10 }, { account_id: null }, { description: 'OTHER SUBSCRIPTION' }]) {
+    assert.equal(build([original, { ...paid, ...changes }], [], new Date(2026, 10, 6)).items[0].status, 'projected');
+  }
+});
+
+test('CSV and Plaid bill identities require matching institution, source mask and account kind', () => {
+  const metadata = { account_institution: 'Example Bank', account_last4: '5261', account_kind: 'checking' };
+  const original = tx(1, '2026-10-06', { ...metadata, description: 'OLLO PAYMENT X1234', amount: 155, account_id: 9 });
+  const paid = tx(2, '2026-11-05', { ...metadata, description: 'OLLO CC', amount: 150, plaid_account_id: 'plaid-checking' });
+  const result = build([original, paid], [], new Date(2026, 10, 6));
+  assert.equal(result.items.filter(item => item.date.startsWith('2026-11') && item.status === 'projected').length, 0);
+  for (const changes of [{ account_institution: 'Other Bank' }, { account_last4: '9999' }, { account_kind: 'savings' },
+    { account_institution: null }, { account_kind: 'unknown' }, { description: 'OLLO PAYMENT X5678' }]) {
+    const unmatched = build([original, { ...paid, ...changes }], [], new Date(2026, 10, 6));
+    assert.ok(unmatched.items.some(item => item.date.startsWith('2026-11') && item.status === 'projected'));
+  }
+});
+
+test('a shortened OLLO payee cannot settle either of two differently masked cards', () => {
+  const original = tx(1, '2026-10-06', { description: 'OLLO PAYMENT X1234', amount: 155, account_id: 9 });
+  const other = { ...original, id: 3, description: 'OLLO PAYMENT X5678', amount: 90 };
+  const paid = tx(2, '2026-11-05', { description: 'OLLO CC', amount: 150, account_id: 9 });
+  const result = build([original, other, paid], [], new Date(2026, 10, 6));
+  assert.equal(result.items.filter(item => item.date.startsWith('2026-11') && item.status === 'projected').length, 2);
+});
+
+test('a CSV source identity shared by two different Plaid accounts is ambiguous', () => {
+  const metadata = { account_institution: 'Example Bank', account_last4: '5261', account_kind: 'checking' };
+  const original = tx(1, '2026-10-06', { ...metadata, description: 'OLLO PAYMENT', account_id: 9, amount: 155 });
+  const paid = tx(2, '2026-11-05', { ...metadata, description: 'OLLO CC', plaid_account_id: 'first', amount: 150 });
+  const duplicateMask = { ...paid, id: 3, plaid_account_id: 'second' };
+  const result = build([original, paid, duplicateMask], [], new Date(2026, 10, 6));
+  assert.ok(result.items.some(item => item.status === 'projected' && item.date.startsWith('2026-11')));
 });

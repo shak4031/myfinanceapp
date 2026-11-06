@@ -117,13 +117,13 @@ STRIPE_WEBHOOK_SECRET=<signing secret for this deployment's webhook endpoint>
 STRIPE_BASIC_PRICE_ID=<active USD 9.99 monthly recurring price>
 STRIPE_PRO_PRICE_ID=<active USD 14.99 monthly recurring price>
 
-# Password-reset and security-notice email (required for self-service reset)
+# Password-reset, security-notice and support-ticket email
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
 SMTP_SECURE=false            # true for implicit TLS, usually port 465
-SMTP_USER=<smtp-user>
+SMTP_USER=myfinanceapp.support@gmail.com
 SMTP_PASS=<smtp-password>
-SMTP_FROM="MyFinanceApp <no-reply@your-domain>"
+SMTP_FROM="MyFinanceApp <myfinanceapp.support@gmail.com>"
 
 # Optional Plaid connection and transaction sync
 PLAID_CLIENT_ID=<Plaid Dashboard client ID>
@@ -259,9 +259,14 @@ explicit paid/ignore choices are preserved. Pending transactions do not resolve
 an occurrence. Matching uses the existing bill/merchant and
 account rules, not a creditor's invoice or a guaranteed due date.
 Renamed and original descriptions are compared independently so a display-name
-change does not create a second bill. Shortened provider descriptions may match
-only with equal amount, a known shared owning account, at least two distinctive
-merchant words, and a single candidate. Categories and the newer payment's Fixed
+change does not create a second bill. Amount changes do not prevent matching:
+the recorded amount resolves its own month's estimate, and the latest amount
+supplies future estimates. Shortened provider descriptions may match only with
+a known shared owning account and a single candidate: either an exact payee
+with a missing masked reference or at least two distinctive merchant words.
+Conflicting masked payees are never matched. CSV/Plaid source accounts require
+matching institution, four-digit source mask and known account kind.
+Missing source identity and competing payees remain unmatched. Categories and the newer payment's Fixed
 flag do not determine whether it settles a bill. Saved duplicate monthly estimates
 are consolidated while explicit paid/ignore choices are retained.
 New forecasts require a fixed payment within the current or previous two calendar
@@ -287,7 +292,7 @@ options and selections.
 Public `/about` and `/contact` pages are accessible without signing in. Welcome
 and About explain verified protections (household database access rules, password
 hashing, HTTPS in production, encrypted Plaid tokens and consented support), without
-claiming certification or zero risk. Contact keeps the existing support address
+claiming certification or zero risk. Contact uses myfinanceapp.support@gmail.com
 and warns against emailing credentials or financial records. Production HTTPS
 and infrastructure controls remain deployment responsibilities.
 Updates to merged statement/manual records preserve their existing descriptions
@@ -641,6 +646,37 @@ Use the request ID shown in the Error logs or App logs view to find the matching
 entry. Stack traces are only in the hosting provider's restricted stdout logs;
 the app does not serve raw operator log files to the browser. Frontend HTML, JavaScript and CSS responses require
 revalidation so deployments do not silently reuse stale cached app assets.
+
+## Numbered support cases
+
+Every signed-in non-demo login, including household members and users without
+an active subscription, can open a case in **Settings & support**. A description
+of 10-5,000 characters is required; category is optional (up to 80 characters).
+Cases receive an `MFA-<id>` number and are saved in PostgreSQL. The user can
+refresh their latest 20 cases and see **Open**, **In-Progress**, or **Resolved**.
+Older tickets remain stored and available to administrators; the 20-ticket
+limit is a history display limit, not deletion. Deleting a login deletes its cases.
+
+The **Support tickets** admin tab filters and pages through cases, advances
+statuses Open -> In-Progress -> Resolved, and retries failed email notifications.
+New cases are emailed to **myfinanceapp.support@gmail.com**, with the submitter
+as Reply-To. SMTP failures do not discard cases: the customer sees an explicit
+delivery warning, the administrator sees the failure, and a redacted error is
+logged. A retry never resends an already-notified case. Status changes are
+visible on the site and do not send additional customer email.
+
+Configure and test SMTP using the support mailbox (for Gmail use its supported
+SMTP authentication, such as an app password; never put credentials in source).
+The code changes do not transfer ownership or update registrations in Gmail,
+GitHub, Railway, Plaid, Stripe or other external services. Update their owner,
+contact and notification settings manually, and change deployment SMTP secrets.
+Existing database login email addresses are not rewritten by this migration.
+
+Cases contain only customer-entered text; no transactions or account records
+are attached automatically. Do not submit passwords, MFA codes or full account
+numbers. Opening a case does not grant financial access. Creation, status
+changes and notification retries are audited using the ticket ID, not case text.
+Demo and support sessions cannot open or read personal cases.
 
 ## Consent-based support access
 

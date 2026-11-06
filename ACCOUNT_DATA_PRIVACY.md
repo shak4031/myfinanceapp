@@ -160,6 +160,15 @@ Implementation: [households](backend/utils/households.js),
 
 ## Support and administrator access
 
+Support tickets are private to the submitting login, not shared household
+financial records. Administrators can read submitted case descriptions and
+update statuses; the latest 20 cases are shown to the user. Cases are retained
+until the login is deleted. Opening a case sends its description, optional
+category and contact email to myfinanceapp.support@gmail.com via configured
+SMTP. No bank records are attached automatically; users are warned not to
+include credentials or full account numbers. Case text is not added to audit
+logs. Opening a ticket does not grant financial access.
+
 An administrator's normal financial requests use their own workspace, not a
 customer's. The in-app support workflow requires the customer to create a grant
 with a reason, a duration of 1 to 72 hours, and read or write access. Read-only
@@ -175,6 +184,7 @@ Administrative account recovery and access to backups/logs are also part of the
 trust boundary. The data is not end-to-end encrypted with user-held keys.
 
 Implementation: [support grants](backend/routes/supportAccess.js),
+[support tickets](backend/routes/supportTickets.js),
 [session authorization](backend/routes/auth.js), [admin operations](backend/routes/admin.js),
 and [audit recording](backend/utils/audit.js).
 

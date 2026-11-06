@@ -65,6 +65,17 @@ export async function migratePrivateSchema(client) {
       revoked_at TIMESTAMPTZ, last_used_at TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS support_grants_user_idx ON support_grants (user_id, expires_at);
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      description TEXT NOT NULL CHECK (length(description) BETWEEN 10 AND 5000),
+      category TEXT CHECK (length(category) BETWEEN 1 AND 80),
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','in_progress','resolved')),
+      email_status TEXT NOT NULL DEFAULT 'pending' CHECK (email_status IN ('pending','sent','failed')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS support_tickets_user_idx ON support_tickets (user_id,id DESC);
+    CREATE INDEX IF NOT EXISTS support_tickets_status_idx ON support_tickets (status,id DESC);
     ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actor_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
     ALTER TABLE sessions ADD COLUMN IF NOT EXISTS support_grant_id INTEGER REFERENCES support_grants(id) ON DELETE CASCADE;
     CREATE TABLE IF NOT EXISTS audit_events (

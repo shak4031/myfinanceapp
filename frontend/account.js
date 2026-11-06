@@ -8,6 +8,19 @@
   view.className = 'view';
   view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h1>Settings &amp; support</h1>
       <p class="muted">Household members share and can edit financial records. Only the household owner manages support access. Operators can access operational information and audit metadata; support access to financial records requires an owner grant.</p></div></header>
+    <div class="panel plan-card" id="support-ticket-card">
+      <div><p class="eyebrow">CONTACT SUPPORT</p><h2>Open a support case</h2>
+        <p class="muted">Describe the problem and receive a ticket number you can track here. Support is notified at <a href="mailto:myfinanceapp.support@gmail.com">myfinanceapp.support@gmail.com</a>. Never include passwords, verification codes or full account numbers. Opening a ticket does not grant access to financial records.</p></div>
+      <form id="support-ticket-form">
+        <label for="support-ticket-description">Description (required)</label>
+        <textarea id="support-ticket-description" class="input" rows="5" required minlength="10" maxlength="5000" style="width:100%" placeholder="What happened, and what did you expect?"></textarea>
+        <div class="toolbar"><label>Category (optional)<input id="support-ticket-category" maxlength="80" placeholder="e.g. Bank sync, transactions, sign-in"></label>
+          <button class="btn btn-primary">Submit support case</button></div>
+      </form>
+      <p id="support-ticket-status" role="status"></p>
+      <div class="toolbar"><h3>Your latest 20 tickets</h3><button type="button" class="btn btn-secondary" id="support-ticket-refresh">Refresh tickets</button></div>
+      <div id="support-ticket-history" class="table-scroll"></div>
+    </div>
     <div class="panel plan-card">
       <div><p class="eyebrow">SUPPORT ACCESS</p><h2>Let support help with a problem</h2>
         <p class="muted">Support never needs your password. The household owner can grant an administrator time-limited access to shared financial records. Support requests are logged below, and the owner can revoke access at any time.</p></div>
@@ -195,6 +208,7 @@
 
   async function loadSettings() {
     await loadMfa();
+    await loadTickets();
     renderPerformance();
     renderPasswordCard();
     const status = $('support-status');
@@ -219,7 +233,69 @@
     }</tbody></table>` : '<p class="muted">No support activity yet.</p>';
   }
 
+  let ticketGeneration = 0;
+  let ticketLoadGeneration = 0;
+  const canOpenTickets = () => !FinanceSession.currentSupport()
+    && FinanceSession.currentUser?.()?.email?.toLowerCase() !== 'demo@myfinance.app';
+  window.FinanceSupportTickets = { reset() {
+    ticketGeneration++;
+    $('support-ticket-history').textContent = '';
+    $('support-ticket-status').textContent = '';
+    $('support-ticket-description').value = '';
+    $('support-ticket-category').value = '';
+  } };
+  async function ticketApi(path, options = {}) {
+    const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json' } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to complete the support request.');
+    return data;
+  }
+  async function loadTickets() {
+    const generation = ticketGeneration;
+    const loadGeneration = ++ticketLoadGeneration;
+    const allowed = canOpenTickets();
+    $('support-ticket-form').hidden = !allowed;
+    $('support-ticket-refresh').hidden = !allowed;
+    if (!allowed) {
+      $('support-ticket-history').innerHTML = '';
+      $('support-ticket-status').textContent = 'Support cases are unavailable in demo or support sessions.';
+      return;
+    }
+    try {
+      const tickets = await ticketApi('/api/support-tickets');
+      if (generation !== ticketGeneration || loadGeneration !== ticketLoadGeneration) return;
+      const labels = { open: 'Open', in_progress: 'In-Progress', resolved: 'Resolved' };
+      $('support-ticket-history').innerHTML = tickets.length ? `<table><thead><tr><th>Ticket</th><th>Description</th><th>Status</th><th>Updated</th></tr></thead><tbody>${tickets.map(ticket =>
+        `<tr><td><strong>${escape(ticket.number)}</strong><br><small>${escape(when(ticket.createdAt))}</small></td>
+          <td><details><summary>${escape(ticket.category || 'Support case')}</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(ticket.description)}</p></details>${ticket.emailStatus !== 'sent' ? '<small>Email notification pending or failed; support can retry it. Do not submit again.</small>' : ''}</td>
+          <td>${escape(labels[ticket.status])}</td><td>${escape(when(ticket.updatedAt))}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted">You have no support tickets yet.</p>';
+    } catch (error) {
+      if (generation !== ticketGeneration || loadGeneration !== ticketLoadGeneration) return;
+      $('support-ticket-status').textContent = `Unable to load tickets: ${error.message}`;
+    }
+  }
+  async function createTicket() {
+    if (!canOpenTickets()) return;
+    const button = $('support-ticket-form').querySelector('button');
+    button.disabled = true;
+    const generation = ticketGeneration;
+    try {
+      const data = await ticketApi('/api/support-tickets', { method: 'POST', body: JSON.stringify({
+        description: $('support-ticket-description').value.trim(), category: $('support-ticket-category').value.trim()
+      }) });
+      if (generation !== ticketGeneration) return;
+      $('support-ticket-description').value = '';
+      $('support-ticket-category').value = '';
+      $('support-ticket-status').textContent = `Ticket ${data.ticket.number} opened. ${data.warning || 'Support has been notified by email. Track its status below.'}`;
+      await loadTickets();
+    } catch (error) {
+      if (generation === ticketGeneration) $('support-ticket-status').textContent = error.message;
+    } finally { button.disabled = false; }
+  }
+
   view.addEventListener('submit', async event => {
+    if (event.target.id === 'support-ticket-form') { event.preventDefault(); await createTicket(); return; }
     if (event.target.id === 'mfa-form') {
       event.preventDefault();
       await changeMfa(mfaEnabled ? 'disable' : mfaPending ? 'confirm' : 'enroll');
@@ -240,6 +316,11 @@
     } catch (error) { $('support-status').textContent = error.message; }
   });
   view.addEventListener('click', async event => {
+    if (event.target.closest?.('#support-ticket-refresh')) {
+      $('support-ticket-status').textContent = '';
+      await loadTickets();
+      return;
+    }
     const action = event.target.closest?.('[data-performance]')?.dataset.performance;
     if (action) {
       window.FinancePerformance[action]();

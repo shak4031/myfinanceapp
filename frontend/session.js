@@ -34,6 +34,7 @@ window.FinanceSession = (() => {
     window.FinanceTransactionDuplicates?.reset();
     window.FinanceAccounts?.reset();
     window.FinanceMfa?.reset();
+    window.FinanceSupportTickets?.reset();
     mfaRequired = false;
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');
