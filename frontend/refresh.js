@@ -1096,6 +1096,7 @@
         if (row) window.openRenameDialog(rows[Number(row.dataset.transaction)]);
       };
       table.onchange = async event => {
+        if (!['[data-income]', '[data-fixed]', '[data-paymode]', '[data-category]'].some(selector => event.target.matches(selector))) return;
         const row = event.target.closest('[data-transaction]');
         if (!row) return;
         const item = rows[Number(row.dataset.transaction)];
@@ -1125,7 +1126,7 @@
             const extra = similar.length ? await promptSimilarTransactions(item, { payMode }, similar, query) : 0;
             const verb = payMode ? `Set to ${payLabel(payMode)}` : 'Payment method cleared';
             notify(`${verb} for this${extra ? ` and ${extra} similar payment${extra === 1 ? '' : 's'}` : ' payment only'}.`);
-          } else {
+          } else if (event.target.matches('[data-category]')) {
             const category = event.target.value;
             const similar = window.findSimilarTransactions(candidates, item, category);
             const updated = await promptSimilarTransactions(item, category, similar, query);

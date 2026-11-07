@@ -2319,6 +2319,39 @@ test('transaction notes render escaped, support search, save and clear, and expo
   assert.equal(button.disabled, false);
   assert.equal(editor.value, 'Retry later', 'failed edits remain available to retry');
 });
+test('editing a transaction note never opens category review and saves only that note', async () => {
+  const rows = activity.map(tx => ({ ...tx, note: '' }));
+  const calls = [];
+  const f = fixture(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/note')) return response(200, { note: JSON.parse(options.body).note });
+    return response(200, url === '/api/categories' ? categoryData
+      : url.endsWith('categorization-rules') ? { categories: categoryData, rules: [] } : { transactions: rows });
+  });
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 9, 16, 12])); } };
+  f.run('refresh.js');
+  await f.context.loadAllTransactions();
+  const table = f.node('full-txn-table');
+  const editor = { value: 'A transaction-specific comment', disabled: false, matches: () => false,
+    closest: () => ({ dataset: { transaction: '0' } }) };
+  const initialCalls = calls.length;
+  await table.onchange({ target: editor });
+  const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
+  assert.equal(!!dialog.open, false);
+  assert.equal(calls.length, initialCalls, 'blurring the note must not make any request');
+  assert.equal(editor.disabled, false);
+  const status = {};
+  const row = { dataset: { transaction: '0' }, querySelector: selector => selector === '[data-note]' ? editor : status };
+  const button = { disabled: false, closest: () => row };
+  await table.onclick({ target: { closest: selector => selector === '[data-save-note]' ? button : null } });
+  const writes = calls.filter(call => call.options.method && call.options.method !== 'GET');
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].url, /^\/api\/transactions\/\d+\/note$/);
+  assert.equal(writes[0].options.method, 'PATCH');
+  assert.deepEqual(JSON.parse(writes[0].options.body), { note: editor.value });
+  assert.match(table.innerHTML, /A transaction-specific comment/);
+});
 test('Plaid sync reports included flags without claiming the bank delivered current activity', async () => {
   const f = fixture();
   f.context.plaidRequest = async () => ({ added: 3, imported: 2, autoMatched: 1, modified: 1, removed: 0, pendingReviews: 0, flaggedReviews: 2 });
@@ -2577,7 +2610,7 @@ test('pay-mode column, filter and similar-payment prompt mark auto-pay and manua
     });
     f.run('refresh.js');
     await f.context.loadAllTransactions();
-    const select = { value: 'Dining', matches: () => false, closest: () => ({ dataset: { transaction: '0' } }) };
+    const select = { value: 'Dining', matches: selector => selector === '[data-category]', closest: () => ({ dataset: { transaction: '0' } }) };
     const pending = f.node('full-txn-table').onchange({ target: select });
     await new Promise(resolve => setTimeout(resolve, 0));
     const dialog = f.node('body').options.find(child => child.id === 'similar-dialog');
