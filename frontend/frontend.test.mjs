@@ -287,6 +287,16 @@ test('retained access shows plan options without pretending it is a Stripe subsc
   }
 });
 
+test('complimentary owner and demo access is not presented as a changeable Stripe plan', () => {
+  const f = householdFixture();
+  for (const source of ['owner', 'demo']) {
+    const html = f.context.FinanceHousehold.billingMarkup({ owner: true, entitlement: { tier: 'pro', active: true, plusActive: true, source }, subscription: null });
+    assert.match(html, /complimentary Pro access/);
+    assert.match(html, /no Stripe subscription to manage/);
+    assert.doesNotMatch(html, /membership-plan|household-checkout-form|data-household-cancel|Contact support/);
+  }
+});
+
 test('members and support sessions cannot start checkout or manage billing', async () => {
   for (const support of [false, true]) {
     const f = householdFixture({ owner: support });

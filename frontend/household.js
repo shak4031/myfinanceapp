@@ -24,12 +24,13 @@
     const managedSubscription = subscription && !['canceled', 'incomplete_expired'].includes(subscription.status);
     const owner = data.owner && !support();
     const retainedAccess = entitlement.active && entitlement.source !== 'self-service-trial' && !managedSubscription;
+    const complimentaryAccess = retainedAccess && ['owner', 'demo'].includes(entitlement.source);
     const canChoosePlan = owner && !managedSubscription && !retainedAccess;
     const canUpgrade = subscription?.plan === 'basic' && subscription.status === 'active' && !subscription.cancel_at_period_end && !subscription.schedule_managed;
     const canDowngrade = subscription?.plan === 'pro' && ['active', 'trialing'].includes(subscription.status)
       && !subscription.cancel_at_period_end && !subscription.pending_change && !subscription.schedule_managed;
     const displayedPlan = managedSubscription ? subscription.plan : entitlement.tier;
-    const showPlanChoices = (managedSubscription || retainedAccess) && ['basic', 'pro'].includes(displayedPlan);
+    const showPlanChoices = (managedSubscription || (retainedAccess && !complimentaryAccess)) && ['basic', 'pro'].includes(displayedPlan);
     const alternateAvailable = retainedAccess || canUpgrade || canDowngrade;
     const verificationRequired = window.FinanceSession?.currentUser?.()?.emailVerified === false;
     return `<h2>Your household plan</h2>
@@ -65,7 +66,7 @@
       ${subscription && ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="household-cancel-link" data-household-cancel>Cancel membership</button>' : ''}
       ${subscription?.pending_change ? '<button type="button" class="btn btn-secondary" data-household-keep-pro>Keep Pro · remove scheduled downgrade</button><p>Remove the scheduled downgrade before opening Stripe to cancel your subscription. Keeping Pro retains your USD 14.99/month renewal.</p>' : subscription?.schedule_managed ? '<p>A Stripe schedule manages this subscription. Contact support before changing or cancelling it.</p>' : ''}
       ${canChoosePlan && !data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator.</p>' : ''}
-      ${retainedAccess ? '<p>Your access is not a Stripe subscription. <a href="#settings">Contact support</a> to change it.</p>' : ''}`}
+      ${complimentaryAccess ? '<p>This account includes complimentary Pro access and has no Stripe subscription to manage.</p>' : retainedAccess ? '<p>Your access is not a Stripe subscription. <a href="#settings">Contact support</a> to change it.</p>' : ''}`}
       <p class="household-error" role="alert"></p>`;
   }
   function bindBilling(root, data) {
