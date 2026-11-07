@@ -13,6 +13,11 @@
     if (target.protocol !== 'https:' || target.username || target.password) throw new Error('Billing returned an invalid secure redirect.');
     location.assign(target.href);
   }
+  function planCard(plan, name, checked, disabled = false) {
+    const basic = plan === 'basic';
+    return `<label class="household-plan-option${basic ? '' : ' household-plan-pro'}"><input type="radio" name="${name}" value="${plan}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}>
+      <span class="household-plan-heading"><strong>${basic ? 'Basic' : 'Pro'}</strong><span class="household-plan-check" aria-hidden="true">&#10003;</span></span><span class="household-plan-price">${basic ? '$9.99' : '$14.99'} <small>/ month</small></span><span>${basic ? 'Everyday finances and imports.' : 'Basic plus analytics and planning.'}</span></label>`;
+  }
   function billingMarkup(data, reason = '', selected = 'pro') {
     const entitlement = data.entitlement || {};
     const subscription = data.subscription;
@@ -23,6 +28,9 @@
     const canUpgrade = subscription?.plan === 'basic' && subscription.status === 'active' && !subscription.cancel_at_period_end && !subscription.schedule_managed;
     const canDowngrade = subscription?.plan === 'pro' && ['active', 'trialing'].includes(subscription.status)
       && !subscription.cancel_at_period_end && !subscription.pending_change && !subscription.schedule_managed;
+    const displayedPlan = managedSubscription ? subscription.plan : entitlement.tier;
+    const showPlanChoices = (managedSubscription || retainedAccess) && ['basic', 'pro'].includes(displayedPlan);
+    const alternateAvailable = retainedAccess || canUpgrade || canDowngrade;
     const verificationRequired = window.FinanceSession?.currentUser?.()?.emailVerified === false;
     return `<h2>Your household plan</h2>
       ${reason ? `<p>${esc(reason)}</p>` : ''}
@@ -34,28 +42,27 @@
       ${!owner ? '<p class="coach-note">Ask your household owner to choose or manage the subscription. Members cannot change billing.</p>' : `
       ${canChoosePlan && verificationRequired ? `<div class="coach-note"><h3>Verify your email before checkout</h3><p>Open your verification email, then return here.</p><button type="button" class="btn btn-secondary" data-resend-verification>Resend verification email</button><button type="button" class="btn btn-secondary" data-refresh-verification>I verified my email · refresh</button><p class="verification-status" role="status"></p></div>` : ''}
       ${canChoosePlan ? `<form id="household-checkout-form">
-        <fieldset class="upgrade-plans"><legend>Choose a household plan</legend>
-          <label class="upgrade-option"><input type="radio" name="household-plan" value="basic"${selected === 'basic' ? ' checked' : ''}> <strong>Basic · USD 9.99/month</strong><p>Everyday finances and imports.</p></label>
-          <label class="upgrade-option upgrade-plus"><input type="radio" name="household-plan" value="pro"${selected !== 'basic' ? ' checked' : ''}> <strong>Pro · USD 14.99/month</strong><p>Basic plus analytics and planning.</p></label>
+        <fieldset class="household-plan-options"><legend>Choose a household plan</legend>
+          ${planCard('basic', 'household-plan', selected === 'basic')}
+          ${planCard('pro', 'household-plan', selected !== 'basic')}
         </fieldset>
         <p>Stripe charges immediately and renews monthly until cancelled. Subscribing ends any remaining trial.</p>
         <label class="household-consent"><input type="checkbox" id="household-consent" required> I agree to the immediate and recurring monthly charge.</label>
         <div class="pro-actions"><button class="btn btn-primary"${!data.configured || verificationRequired ? ' disabled' : ''}>Continue to Stripe</button></div>
       </form>` : ''}
-      ${managedSubscription || retainedAccess ? `<div class="household-plan-options" aria-label="Household plan options">
-        <section class="household-plan-option"><h3>Basic · USD 9.99/month</h3><p>Everyday finances and imports.</p>
-          ${subscription?.plan === 'basic' || (retainedAccess && entitlement.tier === 'basic') ? '<strong>Current plan</strong>' : canDowngrade ? `<form data-household-downgrade-form>
-            <label><input type="checkbox" id="household-downgrade-consent" required> I agree to Basic at USD 9.99/month from ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}, renewing monthly until cancelled.</label>
-            <p>Pro continues until then. No charge or credit today; saved data is retained, but Pro tools become unavailable.</p>
-            <button type="submit" class="btn btn-secondary" data-household-downgrade>Switch to Basic</button></form>` : ''}
-        </section>
-        <section class="household-plan-option household-plan-pro"><h3>Pro · USD 14.99/month</h3><p>Basic plus analytics and planning.</p>
-          ${subscription?.plan === 'pro' || (retainedAccess && entitlement.tier === 'pro') ? '<strong>Current access</strong>' : canUpgrade ? '<button type="button" class="btn btn-primary" data-household-upgrade>Upgrade to Pro in Stripe</button><p>Review the prorated charge in Stripe; your renewal date stays the same.</p>' : ''}
-        </section>
-      </div>` : ''}
+      ${showPlanChoices ? `<fieldset class="household-plan-options"><legend>Choose your plan</legend>
+        ${planCard('basic', 'membership-plan', displayedPlan === 'basic', displayedPlan !== 'basic' && !alternateAvailable)}
+        ${planCard('pro', 'membership-plan', displayedPlan === 'pro', displayedPlan !== 'pro' && !alternateAvailable)}
+      </fieldset>
+      ${canDowngrade ? `<form data-household-downgrade-form hidden>
+        <p>Pro continues until ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}. No charge or credit today; saved data stays, but Pro tools become unavailable.</p>
+        <label class="household-consent"><input type="checkbox" id="household-downgrade-consent" required> I agree to Basic at USD 9.99/month from that date, renewing monthly until cancelled.</label>
+        <button type="submit" class="btn btn-primary" data-household-downgrade>Confirm switch to Basic</button></form>` : ''}
+      ${canUpgrade ? '<div data-household-upgrade-options hidden><p>Review the prorated charge in Stripe; your renewal date stays the same.</p><button type="button" class="btn btn-primary" data-household-upgrade>Upgrade to Pro in Stripe</button></div>' : ''}
+      ${retainedAccess ? '<div data-household-license-options hidden><p>To change this access, contact support.</p><a href="#settings">Contact support &rarr;</a></div>' : ''}` : ''}
       ${managedSubscription && !canUpgrade && !canDowngrade && !subscription.pending_change && !subscription.schedule_managed ? `<p>${subscription.cancel_at_period_end ? 'Manage billing in Stripe to change your scheduled cancellation.' : subscription.status === 'trialing' ? 'Plan changes are available after your Stripe trial ends.' : !['active'].includes(subscription.status) ? 'Manage billing in Stripe before changing plans.' : ''}</p>` : ''}
       ${subscription && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-portal>Manage billing in Stripe</button>' : ''}
-      ${subscription && ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-cancel>Cancel membership</button>' : ''}
+      ${subscription && ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="household-cancel-link" data-household-cancel>Cancel membership</button>' : ''}
       ${subscription?.pending_change ? '<button type="button" class="btn btn-secondary" data-household-keep-pro>Keep Pro · remove scheduled downgrade</button><p>Remove the scheduled downgrade before opening Stripe to cancel your subscription. Keeping Pro retains your USD 14.99/month renewal.</p>' : subscription?.schedule_managed ? '<p>A Stripe schedule manages this subscription. Contact support before changing or cancelling it.</p>' : ''}
       ${canChoosePlan && !data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator.</p>' : ''}
       ${retainedAccess ? '<p>Your access is not a Stripe subscription. <a href="#settings">Contact support</a> to change it.</p>' : ''}`}
@@ -63,6 +70,22 @@
   }
   function bindBilling(root, data) {
     const error = root.querySelector('.household-error');
+    const currentPlan = data.subscription && !['canceled', 'incomplete_expired'].includes(data.subscription.status)
+      ? data.subscription.plan : data.entitlement?.tier;
+    const updatePlanChoice = event => {
+      const selected = event.target.value;
+      const downgrade = root.querySelector('[data-household-downgrade-form]');
+      const upgrade = root.querySelector('[data-household-upgrade-options]');
+      const license = root.querySelector('[data-household-license-options]');
+      if (downgrade) downgrade.hidden = selected !== 'basic' || selected === currentPlan;
+      if (upgrade) upgrade.hidden = selected !== 'pro' || selected === currentPlan;
+      if (license) license.hidden = selected === currentPlan;
+      const consent = root.querySelector('#household-downgrade-consent');
+      if (consent && downgrade?.hidden) consent.checked = false;
+      error.textContent = '';
+    };
+    root.querySelector('input[name="membership-plan"][value="basic"]')?.addEventListener('change', updatePlanChoice);
+    root.querySelector('input[name="membership-plan"][value="pro"]')?.addEventListener('change', updatePlanChoice);
     root.querySelector('[data-resend-verification]')?.addEventListener('click', async event => {
       event.target.disabled = true;
       try {
