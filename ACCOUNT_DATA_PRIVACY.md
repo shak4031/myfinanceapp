@@ -162,7 +162,9 @@ Implementation: [households](backend/utils/households.js),
 
 Support tickets are private to the submitting login, not shared household
 financial records. Administrators can read submitted case descriptions and
-update statuses; the latest 20 cases are shown to the user. Cases are retained
+update statuses with a required customer-visible progress or resolution message;
+timestamped messages are retained in ticket history and shown to the submitting
+login with the latest 20 cases. Cases are retained
 until the login is deleted. Opening a case sends its description, optional
 category and contact email to myfinanceapp.support@gmail.com via configured
 SMTP. No bank records are attached automatically; users are warned not to
@@ -171,11 +173,24 @@ logs. Opening a ticket does not grant financial access.
 
 An administrator's normal financial requests use their own workspace, not a
 customer's. The in-app support workflow requires the customer to create a grant
-with a reason, a duration of 1 to 72 hours, and read or write access. Read-only
+with a duration of 1 to 72 hours and read or write access. Case details stay in
+the ticket card; new grants record a standard consent purpose rather than ask
+for the same problem description again. Ticket events are not shown in grant
+activity. Read-only
 is the default. Grants expire and can be revoked; revocation removes associated
 support sessions. Each support request records the actor, subject workspace,
 grant, outcome, and request ID. Read-only support is enforced both at the route
 layer and by a PostgreSQL read-only transaction.
+
+The optional floating assistant is rule-based, not an external generative AI.
+Its financial findings use the runtime connection and household row-level
+security, never administrative queries or a browser-provided target user ID.
+No bank tokens are included in guidance responses. It can see the signed-in
+user's intentionally shared household workspace, not unrelated customers.
+The browser clears findings on session lock and discards in-flight responses
+after account changes or disabling. Only a login-keyed on/off preference is
+stored locally. The assistant is off by default and hidden during support
+sessions; it does not modify financial data automatically.
 
 This is **not** a promise that nobody else can access the data. Authorized
 database/hosting operators retain infrastructure-level access, and the server

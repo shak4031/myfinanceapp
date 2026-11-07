@@ -411,9 +411,9 @@
     const labels = { open: 'Open', in_progress: 'In-Progress', resolved: 'Resolved' };
     $('tickets').innerHTML = ticketRows.length ? `<table><thead><tr><th>Ticket / customer</th><th>Case</th><th>Status</th><th>Actions</th></tr></thead><tbody>${ticketRows.map(ticket =>
       `<tr><td><strong>${esc(ticket.number)}</strong><br>${esc(ticket.userName)}<br><small>${esc(ticket.userEmail)}</small></td>
-        <td><strong>${esc(ticket.category || 'Uncategorized')}</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(ticket.description)}</p><small>Opened ${esc(when(ticket.createdAt))}<br>Updated ${esc(when(ticket.updatedAt))}</small></td>
+        <td><strong>${esc(ticket.category || 'Uncategorized')}</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(ticket.description)}</p><small>Opened ${esc(when(ticket.createdAt))}<br>Updated ${esc(when(ticket.updatedAt))}</small>${(ticket.updates || []).map(update => `<p style="white-space:pre-wrap;overflow-wrap:anywhere"><strong>${esc(labels[update.status])} · ${esc(when(update.at))}</strong><br>${esc(update.message)}</p>`).join('')}</td>
         <td>${esc(labels[ticket.status])}<br><small>Email: ${esc(ticket.emailStatus)}</small></td>
-        <td>${ticket.status !== 'resolved' ? `<button class="btn btn-primary" data-ticket="${ticket.id}" data-ticket-status="${ticket.status === 'open' ? 'in_progress' : 'resolved'}">${ticket.status === 'open' ? 'Start: In-Progress' : 'Mark Resolved'}</button>` : ''}
+        <td>${ticket.status !== 'resolved' ? `<label for="ticket-update-${ticket.id}">Customer-visible update (required)</label><textarea id="ticket-update-${ticket.id}" minlength="10" maxlength="5000" rows="4" placeholder="Explain what you are doing or what was resolved. Do not include internal notes or secrets."></textarea><button class="btn btn-primary" data-ticket="${ticket.id}" data-ticket-status="${ticket.status === 'open' ? 'in_progress' : 'resolved'}">${ticket.status === 'open' ? 'Start: In-Progress' : 'Mark Resolved'}</button>` : ''}
           ${ticket.emailStatus !== 'sent' ? `<button class="btn btn-secondary" data-ticket-email="${ticket.id}">Retry email notification</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted">No tickets match this status.</p>';
   }
@@ -431,7 +431,7 @@
     try {
       const data = button.dataset.ticketEmail
         ? await api(`/api/admin/support-tickets/${encodeURIComponent(button.dataset.ticketEmail)}/retry-email`, { method: 'POST' })
-        : await api(`/api/admin/support-tickets/${encodeURIComponent(button.dataset.ticket)}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.ticketStatus }) });
+        : await api(`/api/admin/support-tickets/${encodeURIComponent(button.dataset.ticket)}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.ticketStatus, message: $(`ticket-update-${button.dataset.ticket}`).value.trim() }) });
       toast(data.warning || (button.dataset.ticketEmail ? 'Support notification sent.' : 'Ticket status updated.'));
       await loadTickets();
     } catch (error) { toast(error.message); }

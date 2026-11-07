@@ -31,9 +31,8 @@
     </div>
     <div class="panel plan-card">
       <div><p class="eyebrow">SUPPORT ACCESS</p><h2>Let support help with a problem</h2>
-        <p class="muted">Support never needs your password. The household owner can grant an administrator time-limited access to shared financial records. Support requests are logged below, and the owner can revoke access at any time.</p></div>
+        <p class="muted">Support never needs your password. The household owner can grant an administrator time-limited access to shared financial records. Access and actions are logged below, and the owner can revoke access at any time. Case descriptions and updates belong in the support card above.</p></div>
       <form id="support-grant-form" class="toolbar" hidden>
-        <label>What do you need help with?<input id="support-reason" required minlength="5" maxlength="300" placeholder="e.g. Upcoming payments show the wrong amount"></label>
         <label>Access<select id="support-level"><option value="read">View only (recommended)</option><option value="write">View and make changes</option></select></label>
         <label>Duration<select id="support-hours"><option value="1">1 hour</option><option value="4">4 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option></select></label>
         <button class="btn btn-primary">Grant access</button>
@@ -42,6 +41,11 @@
       <h3>Your grants</h3><div id="support-grants" class="table-scroll"></div>
       <h3>Support activity on your account</h3><div id="support-activity" class="table-scroll"></div>
     </div>
+    <div class="panel plan-card" id="assistant-settings"><div><p class="eyebrow">YOUR APP GUIDE</p><h2>MyFinance assistant</h2>
+      <p class="muted">Optional, rule-based guidance from your current household workspace. No external AI service, cross-customer data or automatic financial changes. Household members already share this workspace.</p></div>
+      <label><input type="checkbox" id="assistant-enabled"> Enable the floating assistant</label>
+      <p class="muted">Off by default. This preference is saved for your login in this browser. Minimize it when focusing, or turn it off here at any time.</p>
+      <p id="assistant-preference-status" role="status"></p></div>
     <div class="panel plan-card"><div><p class="eyebrow">LEARN MYFINANCE</p><h2>Watch the tutorials</h2>
       <p class="muted">One-minute narrated tours of the dashboard, the debt-free plan and savings goals.</p></div>
       <div><a class="btn btn-secondary" href="#tutorials">Open tutorials</a></div></div>
@@ -229,8 +233,8 @@
       return;
     }
     const data = await (await fetch('/api/support-access')).json();
-    $('support-grants').innerHTML = data.grants.length ? `<table><thead><tr><th>Reason</th><th>Access</th><th>Expires</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody>${
-      data.grants.map(grant => `<tr><td>${escape(grant.reason)}</td><td>${grant.accessLevel === 'write' ? 'View &amp; edit' : 'View only'}</td><td>${escape(when(grant.expiresAt))}</td><td>${escape(when(grant.lastUsedAt))}</td>
+    $('support-grants').innerHTML = data.grants.length ? `<table><thead><tr><th>Access</th><th>Expires</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody>${
+      data.grants.map(grant => `<tr><td>${grant.accessLevel === 'write' ? 'View &amp; edit' : 'View only'}</td><td>${escape(when(grant.expiresAt))}</td><td>${escape(when(grant.lastUsedAt))}</td>
         <td>${grant.active ? '<span class="pill">Active</span>' : grant.revokedAt ? 'Revoked' : 'Expired'}</td>
         <td>${grant.active ? `<button class="btn btn-secondary" data-revoke="${Number(grant.id)}">Revoke now</button>` : ''}</td></tr>`).join('')
     }</tbody></table>` : '<p class="muted">You have not granted support access.</p>';
@@ -279,6 +283,8 @@
           <dl class="support-ticket-meta"><div><dt>Category</dt><dd>${escape(ticket.category || 'Not specified')}</dd></div>
             <div><dt>Opened</dt><dd>${escape(when(ticket.createdAt))}</dd></div><div><dt>Last updated</dt><dd>${escape(when(ticket.updatedAt))}</dd></div></dl>
           <details class="support-ticket-details"><summary>View description</summary><p>${escape(ticket.description)}</p></details>
+          <section aria-label="Support updates"><h4>Updates from support</h4>${ticket.updates?.length ? ticket.updates.map(update =>
+            `<p><strong>${escape(labels[update.status])} &middot; ${escape(when(update.at))}</strong><br><span style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(update.message)}</span></p>`).join('') : '<p class="muted">No support update yet.</p>'}</section>
           ${ticket.emailStatus !== 'sent' ? '<p class="support-ticket-notice">Email notification pending or failed; support can retry it. Your ticket is saved. Do not submit again.</p>' : ''}
         </li>`).join('')}</ul>`
         : '<p class="muted">You have no support tickets yet.</p>';
@@ -321,8 +327,7 @@
     if (level === 'write' && !await FinanceUI.confirm('Allow support to make changes to your data? Changes are logged, and you can revoke access at any time.')) return;
     try {
       await fetch('/api/support-access', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: $('support-reason').value.trim(), accessLevel: level, hours: Number($('support-hours').value) }) });
-      $('support-reason').value = '';
+        body: JSON.stringify({ accessLevel: level, hours: Number($('support-hours').value) }) });
       $('support-status').textContent = 'Access granted. Tell support it is ready; they will not see your password.';
       await loadSettings();
     } catch (error) { $('support-status').textContent = error.message; }

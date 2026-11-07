@@ -74,6 +74,7 @@ export async function migratePrivateSchema(client) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       resolved_at TIMESTAMPTZ, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
     );
+    ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updates JSONB NOT NULL DEFAULT '[]'::jsonb;
     CREATE INDEX IF NOT EXISTS support_tickets_user_idx ON support_tickets (user_id,id DESC);
     CREATE INDEX IF NOT EXISTS support_tickets_status_idx ON support_tickets (status,id DESC);
     ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actor_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;

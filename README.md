@@ -46,21 +46,46 @@ Matching is always limited to the current household; later uploads match its
 saved accounts automatically when possible.
 Each account receives its own import-history batch. See
 [import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
-Financial Checkup uses local calculations to compare up to three completed
-months of recorded cash flow with dated savings goals and link users to the
-relevant analytics and debt-planning views. Missing months are not treated as
+Financial Checkup leads with findings from up to 12 recorded completed months:
+annualized recognized take-home income (not gross salary), leading spending
+categories and merchants, and potentially discretionary spending with its
+largest category/merchant drivers. Actual totals and annualized pace are
+distinct. Income detection honors income-review overrides; pending entries
+and classified transfers are excluded. Imported months may be incomplete and
+possible saved duplicates remain in totals until reviewed.
+The existing three-month debt/goal cash-flow comparison remains available below
+the findings. Missing months are not treated as
 zero spending; results remain estimates and do not account for obligations not
 entered in the app. No financial records are sent to an external AI service.
 It is planning support, not individualized financial, tax, or investment advice
 or a recommendation to open or transfer credit.
 
+The floating **MyFinance guide** is opt-in under **Settings & support**.
+It explains the current page and surfaces possible saved duplicates, bank
+connections with no successful sync or a sync at least three days old, current-month
+Other transactions, unbudgeted categories, spending/income gaps and large
+current-month purchases without notes (at least $1,000 and 20% of average
+recorded monthly spend). Review links use the app's existing tools; it never
+changes financial records automatically. This is a rule-based assistant, not
+generative chat. `/api/guidance` uses the same tenant-scoped runtime connection
+and database row-level security as other financial endpoints, accepts no target
+user ID, and returns no bank tokens or other customers' data. Members see only
+their intentionally shared household workspace. Support sessions do not display
+the assistant. Guidance is cleared on sign-out/session changes; only an on/off
+preference keyed by login is persisted in this browser, never findings. Users can
+minimize it, turn it off, refresh it, or retry an explicit loading error.
+
 The public sign-in page explains the optional Plaid connection, how to disconnect
 it, and what happens to imported history. Customers can contact MyFinance at
 myfinanceapp.support@gmail.com or open a support case in Settings & support.
 Cases receive an `MFA-` ticket number, notify the support mailbox, and show
-Open, In-Progress or Resolved status. Each login sees its latest 20 tickets;
+Open, In-Progress or Resolved status. Every administrator status transition
+requires a customer-visible update explaining progress or resolution; timestamped
+updates are retained in each ticket's history. Each login sees its latest 20 tickets;
 administrators manage cases in the admin console's **Support tickets** tab.
-Opening a case does not grant access to financial records.
+Opening a case does not grant access to financial records. Access grants ask only
+for access level and duration; case details and ticket events stay in the earlier
+support card, not the consent/activity card.
 Transactions labels pending bank activity explicitly. Pending records remain
 visible in history/totals but do not automatically settle fixed-payment forecasts;
 matching is retried when Plaid supplies the posted record.

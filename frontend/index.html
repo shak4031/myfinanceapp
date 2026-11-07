@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance Basic or Pro. Start a 15-day Pro trial with a selected plan and payment details in Stripe Checkout.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261106-support-tickets"></script>
+  <script src="session.js?v=20261106-private-guide"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -504,6 +504,7 @@
   <link rel="stylesheet" href="review-tools.css?v=20261106-duplicate-panels">
   <link rel="stylesheet" href="marketing.css?v=20261102-trust">
   <link rel="stylesheet" href="household.css?v=20261106-mobile-support">
+  <link rel="stylesheet" href="assistant.css?v=20261106-private-guide">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
@@ -826,8 +827,9 @@
             <div class="kb-section-heading"><p class="eyebrow">GET HELP</p><h2 id="kb-support-title">Support tickets and support access are different</h2><p>A ticket asks for help. An access grant lets support inspect financial records only when the household owner chooses to allow it.</p></div>
             <div class="kb-grid">
               <article class="kb-card"><h3>Open a support case</h3><p>In <strong>Settings &amp; support</strong>, describe what happened, what you expected, the page name and any error message. Description is required (10 to 5,000 characters); category is optional. Choose <strong>Submit support case</strong>. You will see an <strong>MFA-</strong> ticket number, and an email notification is sent to myfinanceapp.support@gmail.com. Never include passwords, verification codes or full account numbers.</p></article>
-              <article class="kb-card"><h3>Track your latest 20 tickets</h3><p>Each ticket card shows its number, category, opened date and last update. Tap <strong>View description</strong> to read your original request. <strong>Open</strong> means received, <strong>In progress</strong> means support is working on it, and <strong>Resolved</strong> means completed. Support updates the status; choose <strong>Refresh tickets</strong> to see changes. History belongs to your sign-in, not everyone in your household.</p><p>If an email notification fails, the ticket is still saved. Do not submit it again; support can retry the email. A ticket does not grant access to financial records.</p></article>
-              <article class="kb-card"><h3>Let support inspect a problem safely</h3><p>The separate <strong>Let support help with a problem</strong> panel is optional. Only the household owner can grant access. Choose a reason, view-only or view-and-edit access, and a duration. View only is recommended. Access expires automatically, can be revoked at any time, and support activity is logged in that panel. Household members can open tickets without being able to grant support access.</p></article>
+              <article class="kb-card"><h3>Track your latest 20 tickets</h3><p>Each ticket card shows its number, category, opened date and last update. Tap <strong>View description</strong> to read your original request. <strong>Open</strong> means received, <strong>In progress</strong> means support is working on it, and <strong>Resolved</strong> means completed. Every status change includes a timestamped message in <strong>Updates from support</strong> explaining progress or resolution; choose <strong>Refresh tickets</strong> to see changes. History belongs to your sign-in, not everyone in your household.</p><p>If an email notification fails, the ticket is still saved. Do not submit it again; support can retry the email. A ticket does not grant access to financial records.</p></article>
+              <article class="kb-card"><h3>Let support inspect a problem safely</h3><p>The separate <strong>Let support help with a problem</strong> panel is optional. Only the household owner can grant access. Choose view-only or view-and-edit access and a duration; keep your case description in the ticket card. View only is recommended. Access expires automatically, can be revoked at any time, and support activity is logged in that panel. Household members can open tickets without being able to grant support access.</p></article>
+              <article class="kb-card"><h3>Get help from the app guide</h3><p>Enable the optional <strong>MyFinance assistant</strong> in Settings &amp; support. It explains the current page and highlights data-health and spending findings from your own household workspace. It uses app rules, not an external AI service, and never changes records automatically. Minimize it to focus, or turn it off at any time. The on/off preference is specific to your login in this browser.</p></article>
             </div>
             <div class="kb-jump-links"><a class="btn btn-primary" href="#settings" data-view="settings">Open Settings &amp; support</a></div>
           </section>
@@ -946,13 +948,13 @@
       <!-- FINANCIAL CHECKUP -->
       <section id="insights-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">THE BIGGER PICTURE</p><h1>Financial Checkup</h1><p class="muted">See how your recorded cash flow, debt plan and savings goals fit together—and where to look next.</p></div>
+          <div><p class="eyebrow">THE BIGGER PICTURE</p><h1>Financial Checkup</h1><p class="muted">Your income estimate, spending drivers and potentially discretionary purchases, followed by how debts and savings goals fit.</p></div>
           <button class="btn btn-primary" id="run-insights-btn" onclick="generateInsights()">Refresh checkup</button>
         </header>
 
         <div id="insights-container" class="financial-checkup">
           <section class="checkup-hero">
-            <div class="checkup-hero-copy"><p class="checkup-kicker">A LITTLE CLARITY GOES A LONG WAY</p><h2>Let’s take an honest look at your money.</h2><p>No judgment, no perfect-budget expectations. Just your real numbers, your goals, and a thoughtful next step.</p><button type="button" class="btn btn-primary checkup-review" onclick="generateInsights()">Take my checkup <span aria-hidden="true">&rarr;</span></button></div>
+            <div class="checkup-hero-copy"><p class="checkup-kicker">YOUR FINANCIAL FINDINGS</p><h2>Let’s take an honest look at your money.</h2><p>See estimated annual take-home income, the categories and merchants driving spending, and potentially discretionary purchases worth reducing. Then see how debts and goals fit.</p><button type="button" class="btn btn-primary checkup-review" onclick="generateInsights()">Take my checkup <span aria-hidden="true">&rarr;</span></button></div>
             <svg class="checkup-illustration" viewBox="0 0 300 220" role="img" aria-label="Illustration of a growing plant beside a savings jar">
               <ellipse cx="153" cy="199" rx="119" ry="12" fill="#204b3b" opacity=".11"/>
               <circle cx="223" cy="53" r="31" fill="#e2ecb8"/>
@@ -2580,10 +2582,10 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261106-pending-payments"></script>
+  <script src="refresh.js?v=20261106-private-guide"></script>
   <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
-  <script src="account.js?v=20261106-public-seo"></script>
+  <script src="account.js?v=20261106-private-guide"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
@@ -2598,6 +2600,7 @@
   <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261024-household"></script>
   <script src="household.js?v=20261024-plan-changes"></script>
+  <script src="assistant.js?v=20261106-private-guide"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

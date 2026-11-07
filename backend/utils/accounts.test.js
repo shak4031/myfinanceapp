@@ -83,6 +83,16 @@ test('HTTP account setup, registration, sessions, CSRF and private records work 
     const secondRows = await (await request('/private/records', undefined, secondCookie)).json();
     assert.equal(secondRows.length, 1);
     assert.equal(secondRows[0].description, 'Second private bill');
+    const ownerGuidance = await request('/app/api/guidance?userId=2', undefined, ownerCookie);
+    assert.equal(ownerGuidance.status, 200);
+    assert.match(ownerGuidance.headers.get('cache-control'), /no-store/);
+    const ownerFindings = await ownerGuidance.json();
+    assert.match(JSON.stringify(ownerFindings), /Owner private mortgage/i);
+    assert.doesNotMatch(JSON.stringify(ownerFindings), /Second private bill/i);
+    const secondFindings = await (await request('/app/api/guidance?userId=1', undefined, secondCookie)).json();
+    assert.match(JSON.stringify(secondFindings), /Second private bill/i);
+    assert.doesNotMatch(JSON.stringify(secondFindings), /Owner private mortgage/i);
+    assert.equal((await request('/app/api/guidance')).status, 401);
     const goalResponse = await request('/app/api/goals', {
       name: 'Owner college', target_amount: 12000, current_amount: 1000, target_date: '2027-04-01'
     }, ownerCookie);

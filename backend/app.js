@@ -11,6 +11,7 @@ import supportTickets, { adminSupportTickets } from './routes/supportTickets.js'
 import { recordAudit, structuredLog } from './utils/audit.js';
 import { requestContext } from './utils/logger.js';
 import dashboard from './routes/dashboard.js';
+import guidance from './routes/guidance.js';
 import transactions from './routes/transactions.js';
 import debts from './routes/debts.js';
 import goals from './routes/goals.js';
@@ -140,6 +141,7 @@ app.use('/api/household', household);
 app.get('/api/health', (req, res) => res.json({ status: 'healthy' }));
 app.use('/api', requireSubscription);
 app.use('/api/dashboard', dashboard);
+app.use('/api/guidance', guidance);
 app.use('/api/transactions', transactions);
 app.use('/api/staging', staging);
 app.use('/api/dashboard', transactions); // Alias for update-transaction support

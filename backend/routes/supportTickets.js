@@ -13,7 +13,7 @@ const parseId = value => /^[1-9]\d*$/.test(String(value)) && Number.isSafeIntege
 const view = row => ({
   id: row.id, number: `MFA-${row.id}`, description: row.description, category: row.category,
   status: row.status, emailStatus: row.email_status, createdAt: row.created_at,
-  updatedAt: row.updated_at, resolvedAt: row.resolved_at,
+  updatedAt: row.updated_at, resolvedAt: row.resolved_at, updates: row.updates || [],
   ...(row.email ? { userEmail: row.email, userName: row.name } : {})
 });
 
@@ -92,15 +92,18 @@ adminSupportTickets.patch('/:id', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     const status = req.body?.status;
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!id) return res.status(404).json({ error: 'Ticket not found.' });
     if (!['in_progress', 'resolved'].includes(status)) return res.status(400).json({ error: 'Choose In-Progress or Resolved.' });
+    if (message.length < 10 || message.length > 5000) return res.status(400).json({ error: 'Provide a customer-visible update in 10 to 5,000 characters explaining the progress or resolution.' });
     const ticket = await administrativeTransaction(async client => {
       const row = (await client.query('SELECT * FROM support_tickets WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!row) return null;
       if (statuses.indexOf(status) !== statuses.indexOf(row.status) + 1) return false;
       return (await client.query(`UPDATE support_tickets SET status=$2,updated_at=NOW(),updated_by=$3,
+        updates=updates || jsonb_build_array(jsonb_build_object('status',$2::text,'message',$4::text,'at',NOW())),
         resolved_at=CASE WHEN $2='resolved' THEN NOW() ELSE NULL END WHERE id=$1 RETURNING *`,
-      [id, status, req.user.id])).rows[0];
+      [id, status, req.user.id, message])).rows[0];
     });
     if (ticket === null) return res.status(404).json({ error: 'Ticket not found.' });
     if (ticket === false) return res.status(409).json({ error: 'Ticket status changed or the transition is invalid. Refresh; tickets move from Open to In-Progress to Resolved.' });

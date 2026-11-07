@@ -38,7 +38,7 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /version 1\.6/);
         assert.match(html, /Stronger account protection: beyond passwords/);
         assert.match(html, /a stolen password alone is insufficient/);
-        assert.match(html, /Their deployment and actual user enrollment have not been verified/);
+        assert.match(html, /Authenticator protection requires successful enrollment by each user/);
         assert.match(html, /QR setup improves usability; it is not an additional authentication factor/);
         assert.match(html, /Account-protection validation/);
         assert.match(html, /207 passing tests/);
@@ -58,10 +58,9 @@ test('About and Contact have separate public URLs, accessible navigation and hon
         assert.match(html, /WireGuard/);
         assert.match(html, /database TLS operator-verified on 4 November 2026/);
         assert.match(html, /not an independent infrastructure audit/);
-        assert.match(html, /Storage\/backup encryption, restore testing and specific TLS cipher suites have not been confirmed/);
+        assert.doesNotMatch(html, /Cipher suites: baseline|TLS_AES_|TLS_CHACHA|may negotiate|specific TLS cipher suites have not been confirmed/);
         assert.match(html, /AES-256-GCM/);
         assert.match(html, /N=32768, r=8, p=1/);
-        assert.match(html, /TLS_AES_256_GCM_SHA384/);
         assert.match(html, /not field-level encrypted/);
         assert.match(html, /not end-to-end encryption or zero-knowledge storage/);
         assert.match(html, /does store account metadata, balances and transaction history/);

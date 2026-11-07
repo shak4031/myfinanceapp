@@ -89,16 +89,26 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal((await call('/api/support-tickets', { cookie: customerCookie })).body[0].id, ticketId);
     assert.deepEqual((await call('/api/support-tickets', { cookie: adminCookie })).body, []);
     assert.equal((await call('/api/admin/support-tickets', { cookie: customerCookie })).status, 403);
-    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved' }, cookie: adminCookie })).status, 409);
-    const progress = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress' }, cookie: adminCookie });
+    for (const message of [undefined, '', 'short', 'x'.repeat(5001), {}]) {
+      assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress', message }, cookie: adminCookie })).status, 400);
+    }
+    assert.equal((await call('/api/support-tickets', { cookie: customerCookie })).body[0].status, 'open', 'invalid updates do not change the ticket');
+    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved', message: 'Premature resolution message.' }, cookie: adminCookie })).status, 409);
+    const progress = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress', message: '  We are investigating the sync issue.  ' }, cookie: adminCookie });
     assert.equal(progress.status, 200);
     assert.equal(progress.body.status, 'in_progress');
+    assert.equal(progress.body.updates[0].message, 'We are investigating the sync issue.');
+    assert.ok(progress.body.updates[0].at);
     assert.equal((await call('/api/support-tickets', { cookie: customerCookie })).body[0].status, 'in_progress');
-    const resolved = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved' }, cookie: adminCookie });
+    const resolved = await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'resolved', message: 'Reconnected the bank and verified the latest payment.' }, cookie: adminCookie });
     assert.equal(resolved.body.status, 'resolved');
     assert.ok(resolved.body.resolvedAt);
+    const userUpdates = (await call('/api/support-tickets', { cookie: customerCookie })).body[0].updates;
+    assert.deepEqual(userUpdates.map(update => update.status), ['in_progress', 'resolved']);
+    assert.equal(userUpdates[1].message, 'Reconnected the bank and verified the latest payment.');
+    assert.deepEqual((await call('/api/support-tickets', { cookie: adminCookie })).body, [], 'updates cannot leak to another login');
     assert.equal(sent.length, 1, 'status updates do not send unsolicited customer email');
-    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress' }, cookie: adminCookie })).status, 409);
+    assert.equal((await call(`/api/admin/support-tickets/${ticketId}`, { method: 'PATCH', body: { status: 'in_progress', message: 'A stale transition must not be saved.' }, cookie: adminCookie })).status, 409);
     assert.equal((await call('/api/admin/support-tickets?status=resolved', { cookie: adminCookie })).body.tickets[0].number, opened.body.ticket.number);
     assert.equal((await call('/api/admin/support-tickets?status=invalid', { cookie: adminCookie })).status, 400);
     assert.equal((await call('/api/admin/support-tickets?beforeId=bad', { cookie: adminCookie })).status, 400);
@@ -214,9 +224,10 @@ test('audit logging, password reset, admin console and consented support access'
     // Support access requires the customer's grant.
     assert.equal((await call('/api/admin/support-sessions', { body: { grantId: 1 }, cookie: adminCookie })).status, 404);
     assert.equal((await call('/api/support-access', { body: { accessLevel: 'read', hours: 2, reason: 'x' }, cookie: customerCookie })).status, 400);
-    const grant = await call('/api/support-access', { body: { accessLevel: 'read', hours: 2, reason: 'Upcoming payments look wrong' }, cookie: customerCookie });
+    const grant = await call('/api/support-access', { body: { accessLevel: 'read', hours: 2 }, cookie: customerCookie });
     assert.equal(grant.status, 200);
     assert.equal(grant.body.accessLevel, 'read');
+    assert.equal(grant.body.reason, 'Customer-approved support access');
     assert.equal((await call('/api/admin/support-grants', { cookie: adminCookie })).body[0].id, grant.body.id);
     assert.equal((await call('/api/admin/support-sessions', { body: { grantId: grant.body.id }, cookie: customerCookie })).status, 403);
     const started = await call('/api/admin/support-sessions', { body: { grantId: grant.body.id }, cookie: adminCookie });
@@ -237,10 +248,12 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal((await call('/api/auth/password', { body: { currentPassword: password, newPassword: 'support-chosen-password' }, cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/admin/overview', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-access', { cookie: supportCookie })).status, 403);
+    assert.equal((await call('/api/guidance', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-tickets', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-tickets', { body: { description: 'An operator must not submit as the customer.' }, cookie: supportCookie })).status, 403);
     await settle();
     const activity = await call('/api/support-access', { cookie: customerCookie });
+    assert.equal(activity.body.activity.some(row => row.event_type.startsWith('support.ticket_')), false, 'ticket events stay out of access activity');
     assert.ok(activity.body.activity.some(row => row.event_type === 'support.session_started' && row.actor_name === 'Owner'));
     assert.ok(activity.body.activity.some(row => row.event_type === 'support.request' && row.path === '/api/goals' && row.method === 'GET'));
     assert.ok(activity.body.activity.some(row => row.event_type === 'support.request' && row.status === 403));

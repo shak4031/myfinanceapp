@@ -558,7 +558,8 @@ test('support case submission shows the number, delivery warning and escaped per
     if (url === '/api/support-tickets' && options.method === 'POST') {
       if (fail) return response(400, { error: 'Describe the problem in 10 to 5,000 characters.' });
       tickets = [{ id: 17, number: 'MFA-17', description: '<script>private text</script>', category: '<Sync>',
-        status: 'open', emailStatus: 'failed', createdAt: '2026-11-06', updatedAt: '2026-11-06' }];
+        status: 'open', emailStatus: 'failed', createdAt: '2026-11-06', updatedAt: '2026-11-06',
+        updates: [{ status: 'in_progress', message: '<script>Investigating your connection.</script>', at: '2026-11-06T12:00:00Z' }] }];
       return response(201, { ticket: tickets[0], warning: 'Your ticket was saved but its email notification failed.' });
     }
     if (url === '/api/support-tickets') return response(200, tickets);
@@ -582,6 +583,8 @@ test('support case submission shows the number, delivery warning and escaped per
   assert.match(view.innerHTML, /for="support-ticket-category"/);
   assert.match(view.innerHTML, /aria-describedby="support-description-hint"/);
   assert.doesNotMatch(f.node('support-ticket-history').innerHTML, /<script>/);
+  assert.match(f.node('support-ticket-history').innerHTML, /Updates from support[\s\S]*&lt;script&gt;Investigating your connection/);
+  assert.doesNotMatch(view.innerHTML, /id="support-reason"|<th>Reason<\/th>/);
   assert.equal(f.node('support-ticket-description').value, '');
   assert.equal(f.node('support-ticket-form').querySelector('button').disabled, false);
   fail = true;
@@ -616,10 +619,15 @@ test('admin ticket actions update status, expose failures and retry email withou
   await f.node('ticket-refresh').listeners.click();
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.match(f.node('tickets').innerHTML, /MFA-17[\s\S]*&lt;Private description&gt;[\s\S]*Start: In-Progress[\s\S]*Retry email/);
+  assert.match(f.node('tickets').innerHTML, /Customer-visible update \(required\)[\s\S]*maxlength="5000"/);
+  f.node('ticket-update-17').value = 'We are investigating the sync failure.';
   const button = { dataset: { ticket: '17', ticketStatus: 'in_progress' }, disabled: false };
   const click = () => f.node('tickets').listeners.click({ target: { closest: () => button } });
   await click();
   assert.equal(status, 'in_progress');
+  assert.deepEqual(JSON.parse(calls.find(call => call.url === '/api/admin/support-tickets/17').options.body), {
+    status: 'in_progress', message: 'We are investigating the sync failure.'
+  });
   assert.match(f.node('tickets').innerHTML, /Mark Resolved/);
   fail = true;
   button.dataset.ticketStatus = 'resolved';
@@ -1415,10 +1423,24 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
     anomalies: [{ type: 'charge', merchant: 'Electronics shop', amount: 350, typical: 50, date: '2026-10-12' }],
     forecast: { projected: 3000, lastMonth: 2800 }
   };
+  const findings = {
+    period: { from: '2026-01', to: '2026-10', months: 10 },
+    annualIncome: 72000, monthlyIncome: 6000, monthlySpend: 6100,
+    categories: [{ name: '<Dining>', amount: 32000, count: 100 }],
+    merchants: [{ name: '<Restaurant>', amount: 32000, count: 100 }],
+    discretionary: { total: 47000, share: 77, annualized: 56400,
+      categories: [{ name: '<Dining>', amount: 32000, count: 100 }], merchants: [{ name: '<Restaurant>', amount: 32000, count: 100 }] },
+    methodology: 'Recognized deposits, not gross salary.', signals: []
+  };
   const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan)
     : url === '/api/plan' ? response(200, moneyPlan)
-      : url === '/api/analytics' ? response(200, analytics) : response(200, {}));
+      : url === '/api/analytics' ? response(200, analytics)
+        : url === '/api/guidance' ? response(200, findings) : response(200, {}));
   f.run('refresh.js');
+  f.context.FinanceSession.currentUser = () => ({ id: 1 });
+  f.context.FinanceSession.currentSupport = () => null;
+  f.context.localStorage = { getItem: () => null };
+  f.run('assistant.js');
   f.node('account-name').textContent = 'Asha Shah';
   const generate = f.context.generateInsights;
   f.context.generateInsights = () => Promise.resolve();
@@ -1427,6 +1449,14 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
   f.context.generateInsights = generate;
   await generate();
   const html = f.node('insights-container').innerHTML;
+  assert.match(html, /Estimated annual take-home income: \$72,000\.00/);
+  assert.match(html, /\$47,000\.00 in potentially discretionary purchases/);
+  assert.match(html, /\$56,400\.00 at an annualized pace/);
+  assert.match(html, /Largest spending categories/);
+  assert.match(html, /Largest spending merchants/);
+  assert.match(html, /&lt;Restaurant&gt;/);
+  assert.doesNotMatch(html, /<Restaurant>/);
+  assert.ok(html.indexOf('SUMMARY OF FINDINGS') < html.indexOf('checkup-tabs'));
   assert.match(html, /Hey, Asha\. Your goals are asking a lot of your monthly surplus/);
   assert.match(html, /about \$200\.00 a month is available for goals/);
   assert.match(html, /future deadlines call for roughly \$450\.00 a month/);

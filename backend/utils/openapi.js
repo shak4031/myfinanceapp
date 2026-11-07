@@ -33,15 +33,16 @@ export function openApiSpec() {
       '/api/auth/end-support': { post: op('Support', 'End the current support session') },
       '/api/support-access': {
         get: op('Support', 'Customer: list my support grants and support activity on my account'),
-        post: op('Support', 'Customer: grant support access', body({ accessLevel: 'read', hours: 24, reason: 'Upcoming payments look wrong' }))
+        post: op('Support', 'Customer: grant support access independently of ticket details', body({ accessLevel: 'read', hours: 24 }))
       },
       '/api/support-access/{id}': { delete: op('Support', 'Customer: revoke a support grant immediately', pathId) },
+      '/api/guidance': { get: op('Guidance', 'Private household-scoped financial findings and rule-based app guidance; active subscription required. No target user parameter or external AI service.') },
       '/api/support-tickets': {
-        get: op('Support', 'Latest 20 tickets for this login, including status and email delivery state; available without a subscription'),
+        get: op('Support', 'Latest 20 tickets for this login, including customer-visible update history, status and email delivery state; available without a subscription'),
         post: op('Support', 'Open a numbered case and notify myfinanceapp.support@gmail.com; description required (10-5000 characters), category optional (up to 80). Saved tickets with failed email return an explicit warning; no financial access is granted.', body({ description: 'A synced payment still appears unpaid.', category: 'Bank sync' }))
       },
       '/api/admin/support-tickets': { get: op('Admin', 'Customer-submitted cases, 100 per page; nextBeforeId selects older pages. No automatic financial data access.', query('status', 'beforeId')) },
-      '/api/admin/support-tickets/{id}': { patch: op('Admin', 'Move a ticket from Open to In-Progress to Resolved; stale or invalid transitions return 409', { ...pathId, ...body({ status: 'in_progress' }) }) },
+      '/api/admin/support-tickets/{id}': { patch: op('Admin', 'Move a ticket from Open to In-Progress to Resolved with a required customer-visible message (10-5000 characters); stale or invalid transitions return 409', { ...pathId, ...body({ status: 'in_progress', message: 'We are investigating the bank connection and will report our findings here.' }) }) },
       '/api/admin/support-tickets/{id}/retry-email': { post: op('Admin', 'Retry a failed or pending support notification; already-sent email is not resent', pathId) },
       '/api/admin/overview': { get: op('Admin', 'Health, configuration and 24-hour security/error counts') },
       '/api/admin/traffic': { get: op('Admin', 'UTC calendar-day public views, signup clicks, successful demo logins and registrations; days: 1, 7, 30, 90 or 365', query('days')) },

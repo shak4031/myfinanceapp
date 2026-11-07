@@ -24,7 +24,7 @@ router.get('/', async (req, res, next) => {
       const activity = (await client.query(`
         SELECT a.created_at, a.event_type, a.outcome, a.method, a.path, a.status, a.support_grant_id, u.name AS actor_name
         FROM audit_events a LEFT JOIN users u ON u.id = a.actor_user_id
-        WHERE a.subject_user_id = $1 AND (a.support_grant_id IS NOT NULL OR a.event_type LIKE 'support.%')
+        WHERE a.subject_user_id = $1 AND a.support_grant_id IS NOT NULL
         ORDER BY a.created_at DESC LIMIT 200
       `, [req.user.id])).rows;
       return { grants: grants.map(grantView), activity };
@@ -37,7 +37,7 @@ router.post('/', async (req, res, next) => {
   try {
     const accessLevel = req.body?.accessLevel === 'write' ? 'write' : 'read';
     const hours = Number(req.body?.hours ?? 24);
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'Customer-approved support access';
     if (!Number.isInteger(hours) || hours < 1 || hours > 72) return res.status(400).json({ error: 'Access can last from 1 to 72 hours' });
     if (reason.length < 5 || reason.length > 300) return res.status(400).json({ error: 'Describe the issue support is helping with (5 to 300 characters)' });
     const grant = await administrativeTransaction(async client => {
