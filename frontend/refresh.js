@@ -368,7 +368,7 @@
     document.querySelector('.main-content').scrollTop = 0;
     const loaders = {
       dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories,
-      transactions: loadAllTransactions,
+      transactions: () => { window.FinanceTransactionDuplicates?.refreshCounts(); return loadAllTransactions(); },
       'transaction-review': () => window.FinanceReviewTools?.loadTransfers({ refreshImports: true }),
       activity: () => window.FinanceReviewTools?.loadActivity(),
       accounts: () => window.FinanceAccounts?.loadPage(),

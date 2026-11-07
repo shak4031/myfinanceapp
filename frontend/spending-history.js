@@ -3,7 +3,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const money = value => value == null ? 'No data' : Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   const monthLabel = month => new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
-  let cache = null, pending = null, generation = 0, active = null, popup = null, openTimer = null, closeTimer = null, suppressed = null, proState = null;
+  let cache = null, pending = null, generation = 0, active = null, popup = null, openTimer = null, suppressed = null, proState = null;
 
   function renderCategory(category, pro) {
     const points = category.series;
@@ -73,7 +73,7 @@
     else card?.removeAttribute('aria-describedby');
   }
   function dismiss({ suppress = false, restoreFocus = false } = {}) {
-    clearTimeout(openTimer); clearTimeout(closeTimer);
+    clearTimeout(openTimer);
     if (suppress) suppressed = active;
     setExpanded(false);
     if (popup) popup.hidden = true;
@@ -103,7 +103,6 @@
   }
   async function show(wrapper) {
     if (!wrapper || suppressed === wrapper) return;
-    clearTimeout(closeTimer);
     if (active !== wrapper) { setExpanded(false); active = wrapper; }
     const name = wrapper.querySelector('.mtd-category-card')?.dataset.category;
     if (!name) return;
@@ -131,20 +130,13 @@
   }
   const wrapperFor = target => target?.closest?.('#mtd-spending-section .mtd-card-wrap');
   const inside = target => !!(active?.contains(target) || popup?.contains(target));
-  function delayedClose() {
-    clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => {
-      const trigger = active?.querySelector('.mtd-history-trigger');
-      if (document.activeElement !== trigger && !popup?.contains(document.activeElement) && !trigger?.matches(':hover') && !popup?.matches(':hover')) dismiss();
-    }, 180);
-  }
   document.addEventListener('pointerover', event => {
     if (event.pointerType === 'touch' || document.documentElement.clientWidth < 640) return;
-    if (popup?.contains(event.target)) { clearTimeout(closeTimer); return; }
+    if (active || popup?.contains(event.target)) return;
     const trigger = event.target.closest?.('.mtd-history-trigger');
     const wrapper = trigger && wrapperFor(trigger);
     if (!wrapper || trigger.contains(event.relatedTarget)) return;
-    clearTimeout(openTimer); clearTimeout(closeTimer);
+    clearTimeout(openTimer);
     openTimer = setTimeout(() => show(wrapper), 260);
   });
   document.addEventListener('pointerout', event => {
@@ -153,20 +145,17 @@
     if (wrapper && !trigger.contains(event.relatedTarget)) {
       clearTimeout(openTimer);
       if (suppressed === wrapper) suppressed = null;
-      if (!popup?.contains(event.relatedTarget)) delayedClose();
-    } else if (popup?.contains(event.target) && !popup.contains(event.relatedTarget) && !inside(event.relatedTarget)) delayedClose();
+    }
   });
   document.addEventListener('focusin', event => {
-    if (popup?.contains(event.target)) { clearTimeout(closeTimer); return; }
+    if (popup?.contains(event.target)) return;
     const wrapper = event.target.closest?.('.mtd-history-trigger') && wrapperFor(event.target);
     if (wrapper && event.target.matches?.(':focus-visible')) show(wrapper);
     else dismiss();
   });
   document.addEventListener('focusout', event => {
     if (suppressed?.contains(event.target) && !suppressed.contains(event.relatedTarget)) suppressed = null;
-    if (inside(event.target) && !inside(event.relatedTarget)) {
-      delayedClose();
-    }
+    if (inside(event.target) && event.relatedTarget && !inside(event.relatedTarget)) dismiss();
   });
   document.addEventListener('click', event => {
     const trigger = event.target.closest?.('[data-spending-history]');
@@ -198,7 +187,7 @@
   });
   window.addEventListener('resize', position);
   window.addEventListener('hashchange', dismiss);
-  window.addEventListener('scroll', event => { if (active && !popup?.contains(event.target)) dismiss(); }, true);
+  window.addEventListener('scroll', position, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) dismiss(); });
   window.FinanceSpendingHistory = { reset, renderCategory };
 })();

@@ -501,7 +501,7 @@
   <link rel="stylesheet" href="welcome.css?v=20261030c">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
-  <link rel="stylesheet" href="review-tools.css?v=20261106-duplicate-panels">
+  <link rel="stylesheet" href="review-tools.css?v=20261107-review-counts">
   <link rel="stylesheet" href="marketing.css?v=20261107-trial">
   <link rel="stylesheet" href="household.css?v=20261107-profile-plans">
 </head>
@@ -983,7 +983,9 @@
           <div><p class="eyebrow">THE LITTLE DETAILS · THE BIGGER STORY</p><h1>Transactions</h1><p class="muted">Every purchase has a plot. Give it a category, untangle the repeats, and make your money story easier to follow.</p></div>
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
-        <section class="duplicate-review-panels" aria-label="Two ways to review duplicate transactions">
+        <details class="duplicate-review-disclosure">
+          <summary><span><strong>Review possible duplicates</strong><small>Compare before making changes</small></span><span class="duplicate-review-counts"><span id="duplicate-import-count" role="status">Bank import reviews: loading</span><span id="duplicate-saved-count" role="status">Saved transaction pairs: loading</span></span></summary>
+          <section class="duplicate-review-panels" aria-label="Two ways to review duplicate transactions">
           <article class="panel duplicate-review-panel"><span class="activity-sticker" aria-hidden="true">⌕</span><p class="eyebrow">A QUICK DOUBLE-CHECK</p><h2>Review flagged bank imports</h2>
             <p>Check bank transactions flagged as possible duplicates when they were imported. This also includes older imports still waiting to be added.</p>
             <a class="btn btn-secondary" href="#etl" data-view="etl">Review flagged bank imports</a>
@@ -993,7 +995,9 @@
             <button type="button" class="btn btn-secondary" data-transaction-duplicates>Find duplicates in saved transactions</button>
           </article>
           <a class="duplicate-review-help" href="#knowledge-base">Not sure which to use? See the duplicate-review guides in the Knowledge Base.</a>
-        </section>
+          <button type="button" class="btn btn-secondary duplicate-review-refresh" data-duplicate-counts-refresh>Refresh counts</button>
+          </section>
+        </details>
           <div class="filter-panel panel">
             <label for="txn-filter-search" class="search-filter">Search transactions
             <input id="txn-filter-search" type="search" placeholder="e.g. Netflix, Zelle, 42.50" autocomplete="off" spellcheck="false"></label>
@@ -2296,6 +2300,7 @@
         document.getElementById(`import-review-${id}`)?.remove();
         document.getElementById('import-review-status').textContent = action === 'duplicate' ? `Review #${id} resolved: kept the selected existing transaction.` : `Review #${id} resolved: bank transaction kept in history.`;
         await loadTransactionImportReviews();
+        window.FinanceTransactionDuplicates?.refreshCounts();
         try {
           await loadDashboard();
           if (typeof loadAllTransactions === 'function') await loadAllTransactions();
@@ -2587,20 +2592,20 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261107-transaction-notes"></script>
+  <script src="refresh.js?v=20261107-review-counts"></script>
   <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261107-support-layout"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
-  <script src="spending-history.js?v=20261025b"></script>
+  <script src="spending-history.js?v=20261107-persistent"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
   <script src="analytics.js?v=20261106-recurring-filters"></script>
   <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>
-  <script src="transaction-duplicates.js?v=20261106-clear-labels"></script>
+  <script src="transaction-duplicates.js?v=20261107-review-counts"></script>
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261107-imports"></script>

@@ -4760,6 +4760,9 @@ test('legacy import review leaves the main menu but remains reachable from Trans
 });
 test('duplicate panels and support Knowledge Base explain the workflows with mobile layouts', () => {
   const html = source('index.html');
+  assert.match(html, /<details class="duplicate-review-disclosure">\s*<summary>/);
+  assert.match(html, /id="duplicate-import-count"[^>]*>Bank import reviews: loading/);
+  assert.match(html, /id="duplicate-saved-count"[^>]*>Saved transaction pairs: loading/);
   assert.match(html, /duplicate-review-panels[\s\S]*Review flagged bank imports[\s\S]*Find duplicates in saved transactions/);
   assert.match(html, /data-kb-filter="support"/);
   assert.match(html, /id="knowledge-base-support"[\s\S]*Track your latest 20 tickets[\s\S]*View description/);
@@ -4771,6 +4774,25 @@ test('duplicate panels and support Knowledge Base explain the workflows with mob
   assert.match(css, /@media \(max-width: 600px\)[\s\S]*support-ticket-meta \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(source('review-tools.css'), /@media \(max-width: 640px\)[\s\S]*duplicate-review-panels \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.doesNotMatch(source('account.js'), /<h1>/, 'hidden settings must not add another homepage H1');
+});
+test('duplicate review counts load independently, handle failure, and clear on reset', async () => {
+  let failure = false;
+  const f = fixture(async url => {
+    if (url.includes('/reviews?')) return response(200, { total: 3 });
+    if (url.includes('/duplicates?')) return failure ? response(503, { error: 'Offline' }) : response(200, { total: 12 });
+    return response(404, { error: 'Unexpected request' });
+  });
+  f.run('transaction-duplicates.js');
+  await f.context.FinanceTransactionDuplicates.refreshCounts();
+  assert.equal(f.node('duplicate-import-count').textContent, 'Bank import reviews: 3');
+  assert.equal(f.node('duplicate-saved-count').textContent, 'Saved transaction pairs: 12');
+  failure = true;
+  await f.context.FinanceTransactionDuplicates.refreshCounts();
+  assert.equal(f.node('duplicate-import-count').textContent, 'Bank import reviews: 3');
+  assert.match(f.node('duplicate-saved-count').textContent, /unavailable.*retry/);
+  f.context.FinanceTransactionDuplicates.reset();
+  assert.match(f.node('duplicate-import-count').textContent, /loading/);
+  assert.match(f.node('duplicate-saved-count').textContent, /loading/);
 });
 test('legacy queue failures show explicit errors and successful actions refresh only after confirmation', async () => {
   const messages = [], requests = [];

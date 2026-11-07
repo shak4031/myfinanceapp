@@ -1,10 +1,20 @@
 .diagnostics-nav { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.duplicate-review-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.duplicate-review-disclosure { margin-bottom: 20px; border: 1px solid #d5dfd1; border-radius: 16px; background: #fff; }
+.duplicate-review-disclosure > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 14px 18px; cursor: pointer; list-style: none; }
+.duplicate-review-disclosure > summary::-webkit-details-marker { display: none; }
+.duplicate-review-disclosure > summary::after { content: '▾'; margin-left: auto; color: #356a51; }
+.duplicate-review-disclosure[open] > summary::after { content: '▴'; }
+.duplicate-review-disclosure > summary:focus-visible { outline: 3px solid #126cd3; outline-offset: 3px; border-radius: 16px; }
+.duplicate-review-disclosure > summary small { display: block; color: var(--text-secondary); font-size: 12px; }
+.duplicate-review-counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.duplicate-review-counts span { padding: 5px 10px; border-radius: 999px; background: #edf4e5; color: #315746; font-size: 12px; font-weight: 650; }
+.duplicate-review-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 0 18px 18px; }
 .duplicate-review-panel { display: grid; gap: 12px; padding: 20px; min-width: 0; }
 .duplicate-review-panel h2 { font-size: 17px; line-height: 1.5; }
 .duplicate-review-panel p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
 .duplicate-review-panel .btn { justify-self: start; white-space: normal; min-height: 44px; }
 .duplicate-review-help { grid-column: 1 / -1; font-size: 14px; line-height: 1.6; }
+.duplicate-review-refresh { justify-self: start; }
 .saved-duplicates-dialog p { line-height: 1.6; margin: 12px 0; overflow-wrap: anywhere; }
 .saved-duplicates-dialog td { overflow-wrap: anywhere; }
 .saved-duplicates-dialog td .btn { margin: 4px 0; white-space: normal; min-height: 44px; }

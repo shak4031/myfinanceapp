@@ -37,7 +37,7 @@
   document.body.appendChild(dialog);
   const statusNode = dialog.querySelector('#duplicates-status');
   const body = dialog.querySelector('#duplicates-rows');
-  let rows = [], offset = 0, total = 0, busy = false, generation = 0;
+  let rows = [], offset = 0, total = 0, busy = false, generation = 0, countGeneration = 0;
   const selected = new Map();
   const pairKey = pair => `${pair.plaid.id}:${pair.existing.id}`;
   const conflicts = pair => [...selected.values()].some(item => pairKey(item) !== pairKey(pair)
@@ -71,6 +71,25 @@
     if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
     return result;
   }
+  async function refreshCounts() {
+    const importCount = document.getElementById('duplicate-import-count');
+    const savedCount = document.getElementById('duplicate-saved-count');
+    if (!importCount || !savedCount) return;
+    const current = ++countGeneration;
+    const counts = [
+      { node: importCount, label: 'Bank import reviews', url: '/api/import-review/reviews?offset=0&mode=all' },
+      { node: savedCount, label: 'Saved transaction pairs', url: '/api/import-review/duplicates?offset=0' }
+    ];
+    await Promise.all(counts.map(async ({ node, label, url }) => {
+      try {
+        const data = await request(url);
+        if (!Number.isSafeInteger(data.total) || data.total < 0) throw new Error('Invalid count');
+        if (current === countGeneration) node.textContent = `${label}: ${data.total.toLocaleString()}`;
+      } catch (error) {
+        if (current === countGeneration) node.textContent = `${label}: unavailable (expand to retry)`;
+      }
+    }));
+  }
   const cell = row => `<strong>${esc(row.display_name || row.description)}</strong>
     <p>${esc(row.date)} &middot; ${esc(money(row))}</p>
     <small>${esc(row.description)}<br>${esc(row.source || 'Unknown source')} &middot; #${esc(row.id)}
@@ -86,6 +105,8 @@
       return load(Math.floor((data.total - 1) / 50) * 50);
     }
     rows = data.rows; total = data.total; offset = data.offset;
+    const count = document.getElementById('duplicate-saved-count');
+    if (count) count.textContent = `Saved transaction pairs: ${total.toLocaleString()}`;
     for (const pair of rows) {
       if (selected.has(pairKey(pair)) && selected.get(pairKey(pair)).revision !== pair.revision) {
         selected.delete(pairKey(pair));
@@ -149,6 +170,7 @@
       const failed = refreshed.some(item => item.status === 'rejected' || item.value === false);
       await load(offset);
       if (current !== generation) return;
+      refreshCounts();
       status(`Decision saved: kept both transactions. Amounts and totals unchanged. ${total} possible pairs remain.${failed ? ' Some views could not refresh; reload the app.' : ''}`, failed);
     } catch (error) {
       if (current === generation) {
@@ -191,6 +213,7 @@
       const failed = refreshed.some(item => item.status === 'rejected' || item.value === false);
       await load(0);
       if (current !== generation) return;
+      refreshCounts();
       status(`${success} ${failed ? 'Some views could not refresh; reload the app.' : 'Totals and forecasts refreshed.'} ${total} possible pairs remain.`, failed);
     } catch (error) {
       if (current === generation) {
@@ -230,11 +253,16 @@
     if (busy && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
   });
   document.addEventListener('click', event => {
+    if (event.target.closest('[data-duplicate-counts-refresh]')) { refreshCounts(); return; }
     if (!event.target.closest('[data-transaction-duplicates]') || busy) return;
     dialog.showModal(); runLoad(0);
   });
-  window.FinanceTransactionDuplicates = { reset() {
-    generation++; selected.clear(); rows = []; offset = 0; total = 0; busy = false; body.innerHTML = ''; status('');
+  window.FinanceTransactionDuplicates = { refreshCounts, reset() {
+    generation++; countGeneration++; selected.clear(); rows = []; offset = 0; total = 0; busy = false; body.innerHTML = ''; status('');
+    const importCount = document.getElementById('duplicate-import-count');
+    const savedCount = document.getElementById('duplicate-saved-count');
+    if (importCount) importCount.textContent = 'Bank import reviews: loading';
+    if (savedCount) savedCount.textContent = 'Saved transaction pairs: loading';
     if (dialog.open) dialog.close();
     update();
   } };

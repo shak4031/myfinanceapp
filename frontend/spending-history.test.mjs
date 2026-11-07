@@ -35,7 +35,7 @@ function fixture(fetchImpl = async () => ({ ok: true, json: async () => ({ pro: 
   vm.runInNewContext(code, context);
   const click = () => listeners.get('click')({ target: trigger, detail: 1, preventDefault() {} });
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
-  return { context, listeners, popups, wrapper, trigger, card, click, flush };
+  return { context, listeners, windows, popups, wrapper, trigger, card, click, flush };
 }
 test('historical preview is lazy, readable and clearly labels current-budget comparisons', () => {
   const f = fixture();
@@ -119,6 +119,33 @@ test('hovering the card body never loads history, only the footer triggers it', 
   f.listeners.get('pointerover')({ target: f.trigger, pointerType: 'mouse', relatedTarget: f.card });
   await new Promise(resolve => setTimeout(resolve, 280));
   assert.equal(requests, 1);
+  f.context.FinanceSpendingHistory.reset();
+});
+test('history stays open after pointer leave and scroll, until focus or clicks move elsewhere', async () => {
+  const f = fixture();
+  f.click(); await f.flush();
+  const popup = f.popups[0];
+  f.listeners.get('pointerout')({ target: f.trigger, relatedTarget: null });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(popup.hidden, false);
+  f.windows.get('scroll')({ target: {} });
+  assert.equal(popup.hidden, false);
+  const outside = { closest: () => null };
+  f.listeners.get('focusin')({ target: outside });
+  assert.equal(popup.hidden, true);
+  f.click(); await f.flush();
+  f.listeners.get('click')({ target: outside });
+  assert.equal(popup.hidden, true);
+});
+test('hovered history remains open without hovering and does not switch on incidental hover', async () => {
+  const f = fixture();
+  f.listeners.get('pointerover')({ target: f.trigger, pointerType: 'mouse', relatedTarget: null });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  await f.flush();
+  assert.equal(f.popups[0].hidden, false);
+  f.listeners.get('pointerout')({ target: f.trigger, relatedTarget: null });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(f.popups[0].hidden, false);
   f.context.FinanceSpendingHistory.reset();
 });
 test('card markup keeps transaction counts visible and history controls outside the drill-down button', () => {
