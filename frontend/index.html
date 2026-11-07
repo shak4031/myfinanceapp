@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance. Start a 15-day Pro trial without payment details.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261107-trial"></script>
+  <script src="session.js?v=20261107-membership"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -503,7 +503,7 @@
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261106-duplicate-panels">
   <link rel="stylesheet" href="marketing.css?v=20261107-trial">
-  <link rel="stylesheet" href="household.css?v=20261106-mobile-support">
+  <link rel="stylesheet" href="household.css?v=20261107-profile">
 </head>
 <body class="auth-pending">
   <section id="auth-screen" class="auth-screen marketing-page" aria-label="MyFinance introduction and account access">
@@ -655,8 +655,15 @@
     <main class="main-content">
       <div class="workspace-bar">
         <nav aria-label="Breadcrumb"><a href="#dashboard">Workspace</a><span aria-hidden="true">/</span><span id="current-page" aria-current="page">Dashboard</span></nav>
-        <span class="workspace-badge"><span aria-hidden="true"></span>Private workspace</span>
+        <div class="workspace-actions"><span class="workspace-badge"><span aria-hidden="true"></span>Private workspace</span>
+          <a class="workspace-profile" href="#membership" aria-label="Profile and membership"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg><span>Profile &amp; membership</span></a>
+        </div>
       </div>
+      <section id="membership-view" class="view membership-view" aria-labelledby="membership-title">
+        <header class="membership-hero"><div><p class="eyebrow">YOUR ACCOUNT</p><h1 id="membership-title">Your household, your plan.</h1><p>Manage your membership, billing and the people you share with.</p><p id="membership-profile"></p><div><button id="membership-choose-plan" class="btn btn-primary" type="button" hidden>Choose a paid plan &rarr;</button></div></div><span class="membership-hero-icon" aria-hidden="true">&#10022;</span></header>
+        <div class="membership-layout"><div id="household-billing" class="panel plan-card household-card membership-card"></div><div id="household-members" class="panel plan-card household-card membership-card"></div></div>
+        <a class="membership-settings-link" href="#settings">Need help or sign-in security? Visit Settings &amp; support &rarr;</a>
+      </section>
       
       <!-- DASHBOARD -->
       <section id="dashboard-view" class="view active">
@@ -2580,10 +2587,10 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261106-playful-checkup"></script>
+  <script src="refresh.js?v=20261107-membership"></script>
   <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
-  <script src="account.js?v=20261106-remove-guide"></script>
+  <script src="account.js?v=20261107-support-layout"></script>
   <script src="pro-charts.js?v=20261031c"></script>
   <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
@@ -2597,7 +2604,7 @@
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261107-imports"></script>
-  <script src="household.js?v=20261024-plan-changes"></script>
+  <script src="household.js?v=20261107-membership"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

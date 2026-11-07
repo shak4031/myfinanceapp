@@ -600,6 +600,10 @@ The primary operator and public synthetic demo retain full access.
 
 #### Choosing a plan
 
+The Profile & membership link in the workspace header opens the household plan,
+Stripe billing controls and member invitations in one place. Settings & support
+links to that page and keeps support cases and sign-in security separate.
+
 Account creation does not require plan selection or Stripe Checkout. Email
 verification is required before subscribing. Unpaid households whose trial has
 expired see subscription onboarding instead

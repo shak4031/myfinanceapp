@@ -5,9 +5,14 @@
   const when = value => value ? new Date(value).toLocaleString() : '—';
   const view = document.createElement('section');
   view.id = 'settings-view';
-  view.className = 'view';
-  view.innerHTML = `<header class="header"><div><p class="eyebrow">YOUR ACCOUNT</p><h2>Settings &amp; support</h2>
-      <p class="muted">Household members share and can edit financial records. Only the household owner manages support access. Operators can access operational information and audit metadata; support access to financial records requires an owner grant.</p></div></header>
+  view.className = 'view settings-view';
+  view.innerHTML = `<header class="settings-hero"><div><p class="eyebrow">YOUR WORKSPACE, YOUR WAY</p><h2>How can we help?</h2>
+      <p>Get support, look after your sign-in security, or find your household plan.</p></div><span class="settings-hero-icon" aria-hidden="true">&#10022;</span></header>
+    <nav class="settings-shortcuts" aria-label="Account and support shortcuts">
+      <a href="#membership"><strong>Profile &amp; membership</strong><span>Choose a plan or manage your household &rarr;</span></a>
+      <a href="#knowledge-base"><strong>Knowledge Base</strong><span>Find answers and helpful guides &rarr;</span></a>
+      <a href="#tutorials"><strong>Tutorials</strong><span>Explore MyFinance at your own pace &rarr;</span></a>
+    </nav>
     <div class="panel plan-card support-ticket-panel" id="support-ticket-card">
       <div><p class="eyebrow">CONTACT SUPPORT</p><h2>Open a support case</h2>
         <p class="muted">Tell us what went wrong. You will receive a ticket number and can follow its progress below.</p>
@@ -31,7 +36,7 @@
     </div>
     <div class="panel plan-card">
       <div><p class="eyebrow">SUPPORT ACCESS</p><h2>Let support help with a problem</h2>
-        <p class="muted">Support never needs your password. The household owner can grant an administrator time-limited access to shared financial records. Access and actions are logged below, and the owner can revoke access at any time. Case descriptions and updates belong in the support card above.</p></div>
+        <p class="muted">Support never needs your password. Operators can access operational information and audit metadata; access to financial records requires an owner grant. The household owner can grant an administrator time-limited access to shared financial records. Access and actions are logged below, and the owner can revoke access at any time. Case descriptions and updates belong in the support card above.</p></div>
       <form id="support-grant-form" class="toolbar" hidden>
         <label>Access<select id="support-level"><option value="read">View only (recommended)</option><option value="write">View and make changes</option></select></label>
         <label>Duration<select id="support-hours"><option value="1">1 hour</option><option value="4">4 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option></select></label>

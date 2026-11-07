@@ -337,7 +337,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { subscription: 'Household subscription', dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';

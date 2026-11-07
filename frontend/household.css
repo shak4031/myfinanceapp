@@ -1,4 +1,28 @@
 .household-card { max-width: 960px; padding: clamp(18px, 3vw, 32px); }
+.workspace-actions { display: flex; align-items: center; gap: 16px; }
+.workspace-profile { display: inline-flex; align-items: center; gap: 9px; padding: 7px 12px 7px 7px; border: 1px solid #d5e0d1; border-radius: 999px; background: #fff; color: #234938 !important; font-size: 13px; font-weight: 750; text-decoration: none !important; }
+.workspace-profile svg { width: 34px; height: 34px; padding: 7px; border-radius: 50%; background: #dceec9; color: #285d46; }
+.workspace-profile:hover { background: #eef6e6; }
+.workspace-profile:focus-visible, .settings-shortcuts a:focus-visible, .membership-settings-link:focus-visible { outline: 3px solid #2c8058; outline-offset: 3px; }
+.membership-view, .settings-view { padding: 24px 0 48px; }
+.membership-hero, .settings-hero { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: clamp(22px, 3vw, 36px); border: 1px solid #d7e5cd; border-radius: 24px; background: linear-gradient(120deg, #eaf5df, #f8f6e8); color: #244735; }
+.membership-hero h1, .settings-hero h2 { margin: 0 0 10px; font-size: clamp(27px, 3vw, 40px); line-height: 1.15; letter-spacing: -.8px; }
+.membership-hero p, .settings-hero p { line-height: 1.6; }
+.membership-hero .eyebrow, .settings-hero .eyebrow { color: #477151; }
+.membership-hero-icon, .settings-hero-icon { display: grid; place-items: center; flex: 0 0 auto; width: 76px; height: 76px; border-radius: 24px; background: #d3eba1; color: #316749; font-size: 38px; transform: rotate(8deg); }
+#membership-profile:not(:empty) { display: inline-block; margin-top: 12px; padding: 6px 12px; border-radius: 999px; background: #fff; font-size: 13px; overflow-wrap: anywhere; }
+#membership-choose-plan { margin-top: 14px; }
+.membership-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 20px 0; align-items: start; }
+.membership-layout .membership-card { max-width: none; min-width: 0; margin: 0; border-radius: 20px; }
+.membership-settings-link { display: inline-block; margin: 0 4px; font-weight: 700; }
+.settings-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.settings-shortcuts a { display: grid; gap: 6px; padding: 18px; border: 1px solid #d9e3d4; border-radius: 16px; background: #fff; color: #234938; text-decoration: none; }
+.settings-shortcuts a:nth-child(2) { background: #f3edfa; border-color: #e4d7f0; }
+.settings-shortcuts a:nth-child(3) { background: #fff4dc; border-color: #f0dfb8; }
+.settings-shortcuts a:hover { box-shadow: 0 5px 16px #284b351a; }
+.settings-shortcuts span { color: #52685a; font-size: 13px; line-height: 1.45; }
+.settings-view > .plan-card { border-radius: 20px; }
+.settings-view .support-ticket-panel { border-color: #cfe0c6; background: #fcfff9; }
 .household-card h2 { margin-top: 0; }
 .household-setup-steps { display: flex; flex-wrap: wrap; gap: 10px 24px; list-style: none; padding: 0; margin: 0 0 20px; font-size: 13px; }
 .household-setup-steps li[aria-current] { font-weight: 750; text-decoration: underline; text-underline-offset: 5px; }
@@ -40,6 +64,11 @@
 .support-ticket-guide { padding: 8px 0; }
 .support-ticket-panel :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 @media (max-width: 600px) {
+  .workspace-actions { margin-left: auto; }
+  .workspace-profile { padding: 5px; }
+  .workspace-profile span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .membership-layout, .settings-shortcuts { grid-template-columns: 1fr; }
+  .membership-hero-icon, .settings-hero-icon { width: 54px; height: 54px; font-size: 28px; }
   .support-ticket-panel { padding: 18px; }
   .support-ticket-meta { grid-template-columns: minmax(0, 1fr); }
   .support-ticket-form .btn, .support-ticket-history-heading .btn { width: 100%; }

@@ -96,6 +96,32 @@ test('household billing clearly discloses both plans, trial payment consent and 
   assert.match(trial, /Subscribing charges the selected plan immediately and renews monthly/);
   assert.match(trial, /remaining free trial ends/);
   assert.match(trial, /&lt;script&gt;oops&lt;\/script&gt;/);
+  const selfTrial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { tier: 'trial', source: 'self-service-trial', active: true, trialEndsAt: '2026-11-01' }, subscription: null });
+  assert.match(selfTrial, /No payment details are required/);
+  assert.doesNotMatch(selfTrial, /existing paid access is retained/);
+});
+
+test('profile and membership are accessible during trial, expiry and paid access', async () => {
+  const page = source('index.html');
+  assert.match(page, /class="workspace-profile" href="#membership"/);
+  assert.match(page, /id="membership-view"/);
+  assert.match(source('account.js'), /href="#membership"><strong>Profile &amp; membership/);
+  for (const entitlement of [
+    { tier: 'trial', source: 'self-service-trial', active: true, plusActive: true },
+    { tier: 'none', active: false, plusActive: false },
+    { tier: 'basic', active: true, plusActive: false }
+  ]) {
+    const f = householdFixture({ entitlement }, url => url === '/api/household' ? response(200, { name: 'Home', owner: true, members: [], invitations: [] }) : null);
+    f.context.FinanceSession.currentUser = () => ({ name: 'Casey', email: 'casey@example.test', emailVerified: true });
+    await f.context.showView('membership');
+    assert.equal(f.context.lastView, 'membership');
+    assert.match(f.node('household-billing').innerHTML, /Choose a household plan/);
+    assert.equal(f.node('membership-profile').textContent, 'Casey · casey@example.test');
+    assert.equal(f.node('membership-choose-plan').hidden, entitlement.active && entitlement.source !== 'self-service-trial');
+    assert.ok(f.calls.some(call => call.url === '/api/household'));
+    await f.context.showView('settings/billing');
+    assert.equal(f.context.lastView, 'membership', 'Stripe return links open membership');
+  }
 });
 
 test('household checkout needs explicit consent and posts only selected plan before external navigation', async () => {

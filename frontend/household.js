@@ -20,7 +20,7 @@
     const owner = data.owner && !support();
     const verificationRequired = window.FinanceSession?.currentUser?.()?.emailVerified === false;
     return `${!entitlement.active && owner ? `<ol class="household-setup-steps" aria-label="Account setup progress"><li>1. Account created</li><li${verificationRequired ? ' aria-current="step"' : ''}>2. ${verificationRequired ? 'Verify email' : 'Email verified'}</li><li${!verificationRequired ? ' aria-current="step"' : ''}>3. Secure checkout</li></ol>` : ''}
-      <h2 id="household-billing-title">${!entitlement.active && owner ? verificationRequired ? 'Verify your email to continue' : 'Finish setting up your household' : 'Your household plan'}</h2>
+      <h2>${!entitlement.active && owner ? verificationRequired ? 'Verify your email to continue' : 'Choose your household plan' : 'Your household plan'}</h2>
       ${reason ? `<p>${esc(reason)}</p>` : ''}
       <p>One subscription covers your household. Members can edit shared finances; only the owner manages billing and membership.</p>
       ${entitlement.active || subscription ? `<p><strong>${esc(pro().planLabel(entitlement).title)}</strong>${subscription ? ` · ${esc(subscription.status)}` : ''}</p>` : ''}
@@ -46,7 +46,7 @@
       ${subscription?.plan === 'pro' && ['active', 'trialing'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.pending_change ? `<form data-household-downgrade-form><h3>Switch to Basic at next renewal</h3><p>Keep Pro until ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}. Then Basic renews automatically at USD 9.99/month until cancelled. No charge or credit today. Saved data is retained; Pro-only tools become unavailable.</p><label><input type="checkbox" id="household-downgrade-consent" required> I agree to switch to Basic at USD 9.99/month starting ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}, renewing monthly until cancelled.</label><button type="submit" class="btn btn-secondary" data-household-downgrade>Confirm Basic at next renewal</button></form>` : ''}
       ${managedSubscription ? '<p>Use the Stripe billing portal to manage payment details or cancel. A second checkout is not needed.</p>' : ''}
       ${!data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator. Existing paid access is unchanged.</p>' : ''}
-      ${entitlement.active && !subscription ? '<p>Your existing paid access is retained. No new subscription is required.</p>' : ''}`}
+      ${entitlement.active && entitlement.source !== 'self-service-trial' && !subscription ? '<p>Your existing paid access is retained. No new subscription is required.</p>' : ''}`}
       <p class="household-error" role="alert"></p>`;
   }
   function bindBilling(root, data) {
@@ -127,11 +127,22 @@
   }
   async function renderBilling(root, reason, selected) {
     root.innerHTML = '<p role="status">Loading household billing…</p>';
+    const shortcut = root.id === 'household-billing' ? $('membership-choose-plan') : null;
+    if (shortcut) shortcut.hidden = true;
     try {
       const data = await request('/api/billing');
       pro().setEntitlement(data.entitlement);
       root.innerHTML = billingMarkup(data, reason, selected);
       bindBilling(root, data);
+      if (shortcut && data.owner && !support() && (!data.subscription || ['canceled', 'incomplete_expired'].includes(data.subscription.status))
+        && (!data.entitlement.active || data.entitlement.source === 'self-service-trial')) {
+        shortcut.hidden = false;
+        shortcut.onclick = () => {
+          const form = root.querySelector('#household-checkout-form');
+          form?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+          form?.querySelector('input[name="household-plan"]:checked')?.focus({ preventScroll: true });
+        };
+      }
     } catch (error) {
       root.innerHTML = `<p role="alert">${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-household-retry>Retry billing</button>`;
       root.querySelector('[data-household-retry]').onclick = () => renderBilling(root, reason, selected);
@@ -143,7 +154,7 @@
       dialog = document.createElement('dialog');
       dialog.id = 'household-billing-dialog';
       dialog.className = 'editor pro-dialog';
-      dialog.setAttribute('aria-labelledby', 'household-billing-title');
+      dialog.setAttribute('aria-label', 'Household billing');
       document.body.appendChild(dialog);
     }
     dialog.innerHTML = '<div id="household-dialog-content"></div><div class="pro-actions"><button type="button" class="btn btn-secondary" data-household-close>Close</button></div>';
@@ -182,31 +193,35 @@
     } catch (error) { root.innerHTML = `<p role="alert">${esc(error.message)}</p>`; }
   }
   async function loadSettings() {
-    const settings = $('settings-view');
-    if (!settings) return;
+    const membership = $('membership-view');
+    if (!membership) return;
+    const profile = $('membership-profile');
+    const user = window.FinanceSession?.currentUser?.();
+    if (profile) profile.textContent = [user?.name, user?.email].filter(Boolean).join(' · ');
     let billing = $('household-billing');
     let members = $('household-members');
     if (!billing) {
       billing = document.createElement('div');
       billing.id = 'household-billing';
-      billing.className = 'panel plan-card household-card';
-      settings.appendChild(billing);
+      billing.className = 'panel plan-card household-card membership-card';
+      membership.appendChild(billing);
       members = document.createElement('div');
       members.id = 'household-members';
-      members.className = 'panel plan-card household-card';
-      settings.appendChild(members);
+      members.className = 'panel plan-card household-card membership-card';
+      membership.appendChild(members);
     }
     await Promise.all([renderBilling(billing), renderMembers(members)]);
   }
   const baseShowView = window.showView;
   window.showView = async function(route = 'dashboard') {
     if (!window.FinanceSession?.isAuthenticated?.()) return;
+    if (route === 'settings/billing') route = 'membership';
     const ticket = ++routeGeneration;
     const name = route.split('/')[0];
-    const accessible = ['settings', 'tutorials', 'knowledge-base'];
+    const accessible = ['membership', 'settings', 'tutorials', 'knowledge-base'];
     if (accessible.includes(name)) {
       baseShowView(route);
-      if (name === 'settings') await loadSettings();
+      if (name === 'membership') await loadSettings();
       return;
     }
     try {
