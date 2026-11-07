@@ -7,6 +7,25 @@
   --card-depth: inset 0 1px 0 #fff, inset 0 -3px 0 #23365005, 0 3px 5px #23365008, 0 14px 24px -18px #23365060;
   --card-depth-raised: inset 0 1px 0 #fff, 0 6px 10px -6px #23365024, 0 22px 30px -20px #23365060;
 }
+#transactions-view > .header, #analytics-view > .header { position: relative; padding: 28px; margin-bottom: 24px; border: 1px solid #d5e0cf; border-radius: 24px; background: radial-gradient(ellipse at 100% 0, #f4e9c7, transparent 45%), linear-gradient(120deg, #f7faf1, #eaf3e7); }
+#transactions-view > .header h1, #analytics-view > .header h1 { color: #254a35; letter-spacing: -1px; }
+#transactions-view > .header .muted, #analytics-view > .header .muted { max-width: 650px; line-height: 1.7; color: #627562; }
+#transactions-view .duplicate-review-panel { border-radius: 22px; border-color: #e8d5c4; background: linear-gradient(130deg, #fffaf5, #fcf0e5); padding: 24px; }
+#transactions-view .duplicate-review-panel:nth-child(2) { border-color: #d7cee4; background: linear-gradient(130deg, #fbfaff, #f0ebf8); }
+.activity-sticker { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 13px; color: #9b7452; background: #f4ddc4; font-size: 23px; transform: rotate(-7deg); }
+.duplicate-review-panel:nth-child(2) .activity-sticker { color: #8a73a6; background: #e4daf3; transform: rotate(7deg); }
+#transactions-view .duplicate-review-panel h2 { color: #3b4d3d; margin: 8px 0; font-size: 20px; letter-spacing: -.4px; }
+#transactions-view .filter-panel { border-radius: 20px; background: #fffdf8; border-color: #e1ddcf; padding: 24px; }
+#transactions-view #txn-summary .metric-card { position: relative; overflow: hidden; border-radius: 22px; border-color: #d3e0ce; background: #f0f7eb; }
+#transactions-view #txn-summary .metric-card.expense { background: #fff3e9; border-color: #ead5c3; }
+#transactions-view #txn-summary .metric-card.net { background: #f2eef9; border-color: #dcd2e8; }
+#transactions-view #txn-summary .metric-card::after { position: absolute; right: -14px; top: -20px; width: 70px; height: 70px; border: 12px solid #ffffff70; border-radius: 50%; content: ""; pointer-events: none; }
+#transactions-view .transaction-panel { border-radius: 22px; overflow-x: auto; }
+#transactions-view .transactions-table thead { background: #f7f8ef; }
+@media (max-width: 600px) {
+  #transactions-view > .header, #analytics-view > .header { padding: 22px; }
+  #transactions-view .header-actions { flex-wrap: wrap; }
+}
 [hidden] { display: none !important; }
 /* Loaded before the legacy stylesheet; these scoped rules retain the light palette. */
 html body { background: #f5f5f1; color: #202e2a; font-family: "Segoe UI", system-ui, sans-serif; }

@@ -486,3 +486,29 @@ div.pro-empty.panel { padding: 24px; display: flex; gap: 12px; align-items: cent
   .pro-kpis, .pro-kpi-row, .pro-summary, .pro-locked-preview .pro-kpis { grid-template-columns: minmax(0,1fr); }
   .pro-forecast-head, .pro-mini-stats { grid-template-columns: minmax(0,1fr); }
 }
+/* Playful accents stay on the analytics surface; charts and ledger values remain unchanged. */
+#analytics-view .pro-card { border-radius: 22px; }
+#analytics-view .pro-card > header { padding-bottom: 16px; border-bottom: 1px dashed #dbe2d4; }
+#analytics-view .pro-card > header h2 { color: #314d3b; letter-spacing: -.35px; }
+#analytics-view .pro-kpi { position: relative; overflow: hidden; border-radius: 20px; background: #f0f6ea; border-color: #d5e0ce; }
+#analytics-view .pro-kpi:nth-child(3n + 2) { background: #fff3e8; border-color: #e9d7c7; }
+#analytics-view .pro-kpi:nth-child(3n) { background: #f2eef8; border-color: #d9cee5; }
+#analytics-view .pro-grid > .pro-card:nth-child(3n + 1) { border-top: 4px solid #b8cfa6; }
+#analytics-view .pro-grid > .pro-card:nth-child(3n + 2) { border-top: 4px solid #e4bf9d; }
+#analytics-view .pro-grid > .pro-card:nth-child(3n) { border-top: 4px solid #c3b5d8; }
+#analytics-view .pro-tabs { border-radius: 18px; background: #fafbf5; }
+#analytics-view #recurring-payment-card { min-width: 0; }
+#analytics-view .recurring-discovery { height: 100%; background: linear-gradient(135deg, #fbfaf3, #f4f7ee); border-color: #d9dec7; border-top: 4px solid #c9bd81; }
+.recurring-scope { font-size: 11px; line-height: 1.6; color: #6c7866; }
+.recurring-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 10px; }
+.recurring-filters label { display: grid; gap: 6px; color: #53664d; font-size: 12px; font-weight: 650; }
+.recurring-filters input, .recurring-filters select { width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box; border: 1px solid #d3ddcb; border-radius: 12px; background: #fffefb; padding: 10px; color: #334832; font: inherit; }
+.recurring-search { grid-column: 1 / -1; }
+.recurring-count { font-size: 12px; font-weight: 700; color: #6e7955; }
+#analytics-view .recurring-candidates > li { padding: 16px 12px; margin: 8px 0; border: 1px solid #e0e4d6; border-radius: 14px; background: #ffffffb3; }
+#analytics-view .recurring-candidates > li.is-inactive { background: #f4f2ec; }
+@media (max-width: 600px) {
+  .recurring-filters { grid-template-columns: 1fr; }
+  .recurring-filters input, .recurring-filters select { font-size: 16px; }
+  #analytics-view .recurring-candidates > li { flex-wrap: wrap; gap: 12px; }
+}

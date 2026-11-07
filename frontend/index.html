@@ -492,9 +492,9 @@
     .tx-transfer-badge.saved { background: rgba(54, 156, 133, 0.16); color: var(--success); }
     .tx-transfer-badge.unknown { background: rgba(255, 184, 77, 0.18); color: var(--warning); }
   </style>
-  <link rel="stylesheet" href="refresh.css?v=20261106-playful-checkup">
+  <link rel="stylesheet" href="refresh.css?v=20261106-playful-pages">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
-  <link rel="stylesheet" href="analytics.css?v=20261028-ledger">
+  <link rel="stylesheet" href="analytics.css?v=20261106-recurring-filters">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261031a">
@@ -740,7 +740,7 @@
       <!-- PRO ANALYTICS -->
       <section id="analytics-view" class="view">
         <header class="header">
-          <div><p class="eyebrow" id="analytics-eyebrow">MYFINANCE PRO &middot; ANALYTICS</p><h1 id="analytics-heading">Your spending, like a market</h1><p class="muted" id="analytics-intro">Trends, moving averages, forecasts and signals across every category, so you can act before the month gets away from you.</p></div>
+          <div><p class="eyebrow" id="analytics-eyebrow">MYFINANCE PRO &middot; FOLLOW THE CLUES</p><h1 id="analytics-heading">Your money, under the magnifying glass</h1><p class="muted" id="analytics-intro">Spot the patterns, meet your spending habits, and find the little changes that make room for what matters.</p></div>
           <div class="pro-header-actions" id="analytics-actions"></div>
         </header>
         <div id="analytics-content" class="analytics-content" aria-live="polite"></div>
@@ -973,15 +973,15 @@
       <!-- TRANSACTIONS -->
       <section id="transactions-view" class="view">
         <header class="header">
-          <div><p class="eyebrow">EVERY DETAIL, IN ONE PLACE</p><h1>Transactions</h1><p class="muted">Review your activity, refine categories, and keep track of recurring bills.</p></div>
+          <div><p class="eyebrow">THE LITTLE DETAILS · THE BIGGER STORY</p><h1>Transactions</h1><p class="muted">Every purchase has a plot. Give it a category, untangle the repeats, and make your money story easier to follow.</p></div>
           <div class="header-actions"><a class="btn btn-secondary header-tour" href="#tutorials/transactions"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/></svg>Watch the tour</a><a class="btn btn-secondary header-tour" href="#tutorials/fixed" title="How fixed bills and regular income power your forecast">Fixed &amp; income tour</a><button type="button" class="btn btn-secondary" data-income-review>Review income</button><button class="btn btn-primary" onclick="openImportModal()">Import statements</button></div>
         </header>
         <section class="duplicate-review-panels" aria-label="Two ways to review duplicate transactions">
-          <article class="panel duplicate-review-panel"><h2>Review flagged bank imports</h2>
+          <article class="panel duplicate-review-panel"><span class="activity-sticker" aria-hidden="true">⌕</span><p class="eyebrow">A QUICK DOUBLE-CHECK</p><h2>Review flagged bank imports</h2>
             <p>Check bank transactions flagged as possible duplicates when they were imported. This also includes older imports still waiting to be added.</p>
             <a class="btn btn-secondary" href="#etl" data-view="etl">Review flagged bank imports</a>
           </article>
-          <article class="panel duplicate-review-panel"><h2>Find duplicates in saved transactions</h2>
+          <article class="panel duplicate-review-panel"><span class="activity-sticker" aria-hidden="true">✦</span><p class="eyebrow">ONE PURCHASE, ONE STORY</p><h2>Find duplicates in saved transactions</h2>
             <p>Scan your saved history for bank transactions that may also appear in an uploaded statement or a manual entry, even if no import warning appeared.</p>
             <button type="button" class="btn btn-secondary" data-transaction-duplicates>Find duplicates in saved transactions</button>
           </article>
@@ -2589,7 +2589,7 @@
   <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261025b"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
-  <script src="analytics.js?v=20261028-ledger"></script>
+  <script src="analytics.js?v=20261106-recurring-filters"></script>
   <script src="plan.js?v=20261031-household"></script>
   <script src="welcome.js?v=20261030c"></script>
   <script src="income-review.js?v=20261020b"></script>

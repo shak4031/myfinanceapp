@@ -3,6 +3,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
+  const recurringFilters = { status: 'active', kind: 'all', search: '' };
   const compassRanges = new Map();
   const panelFlow = key => compassRanges.get(key)?.data || current?.moneyFlow;
   const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
@@ -172,12 +173,21 @@
     const active = unmarked.filter(s => s.active);
     const monthly = active.reduce((sum, s) => sum + s.monthlyCost, 0);
     const increases = active.filter(s => s.priceChangePct > 0.02);
-    const list = unmarked.slice(0, 12).map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; ${s.active ? `next ${dateShort(s.nextDate)}` : 'stopped'}${s.likelyBill ? ' &middot; looks like a bill' : ''}</small></div>
+    const shown = unmarked.filter(s => (recurringFilters.status === 'all' || (recurringFilters.status === 'active' ? s.active : !s.active))
+      && (recurringFilters.kind === 'all' || (recurringFilters.kind === 'bill' ? s.likelyBill : !s.likelyBill))
+      && `${s.merchant} ${s.category}`.toLowerCase().includes(recurringFilters.search.trim().toLowerCase()));
+    const list = shown.map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; ${s.active ? `next ${dateShort(s.nextDate)}` : 'stopped'}${s.likelyBill ? ' &middot; looks like a bill' : ''}</small></div>
       <div class="num"><strong>${money(s.amount)}</strong>${s.priceChangePct > 0.02 ? `<small class="pro-move is-bad">▲ ${Math.round(s.priceChangePct * 100)}% price increase</small>` : `<small>${money(s.annualCost, true)} / yr</small>`}${s.active && s.id != null ? `<button type="button" class="btn btn-secondary btn-compact" data-analytics-action="mark-fixed" data-id="${esc(s.id)}" data-merchant="${esc(s.merchant)}" title="Mark every ${esc(s.merchant)} charge as a fixed payment, including future imports">Mark fixed</button>` : ''}</div></li>`).join('');
     const note = fixedCount ? `<p class="muted">${fixedCount} other recurring payment${fixedCount === 1 ? ' is' : 's are'} already marked fixed and on your bill calendar.</p>` : '';
-    const body = `<div class="pro-mini-stats"><div><span>Not marked fixed${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly) where none of the charges is marked as a fixed payment. Groceries, gas, dining, shopping and transfers between your own accounts are left out. Mark real bills as fixed so they appear on your bill calendar and month-end forecast; review the rest and cancel what you no longer use.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
-      ${list ? `<ul class="pro-list is-scroll">${list}</ul>` : `<p class="pro-empty">${all.length ? 'Every recurring charge is already marked fixed.' : 'No recurring charges detected yet.'}</p>`}${note}`;
-    return card('Recurring charges not marked fixed', 'Payments that repeat on a schedule but are not marked as fixed bills. Mark the real bills fixed; review the rest.', body);
+    const option = (value, label, selected) => `<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`;
+    const body = `<p class="eyebrow">SPOT THE REPEAT · BUILD YOUR BILL CALENDAR</p><div class="pro-mini-stats"><div><span>Not marked fixed${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly) where none of the charges is marked as a fixed payment. Groceries, gas, dining, shopping and transfers between your own accounts are left out. Mark real bills as fixed so they appear on your bill calendar and month-end forecast; review the rest and cancel what you no longer use.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
+      <p class="recurring-scope">Totals cover all active candidates, regardless of the filters below. Stopped payments are historical patterns, not upcoming bills.</p>
+      <div class="recurring-filters"><label>Payment status<select data-recurring-filter="status">${option('active', 'Active payments', recurringFilters.status)}${option('stopped', 'Stopped patterns', recurringFilters.status)}${option('all', 'All patterns', recurringFilters.status)}</select></label>
+        <label>Payment type<select data-recurring-filter="kind">${option('all', 'All types', recurringFilters.kind)}${option('bill', 'Likely bills', recurringFilters.kind)}${option('other', 'Other recurring charges', recurringFilters.kind)}</select></label>
+        <label class="recurring-search">Find a payment<input type="search" data-recurring-filter="search" placeholder="Merchant or category" value="${esc(recurringFilters.search)}"></label></div>
+      <p class="recurring-count" role="status">${shown.length} of ${unmarked.length} unmarked patterns shown · no list cutoff</p>
+      ${list ? `<ul class="pro-list is-scroll recurring-candidates">${list}</ul>` : `<p class="pro-empty">${unmarked.length ? 'No payments match these filters. Try All patterns or a different search.' : all.length ? 'Every recurring charge is already marked fixed.' : 'No recurring charges detected yet.'}</p>`}${note}`;
+    return `<section id="recurring-payment-card" aria-label="Recurring payment candidates">${card('Recurring charges not marked fixed', 'A familiar rhythm? Turn real recurring bills into fixed payments, so your calendar can do the remembering.', body, 'recurring-discovery')}</section>`;
   }
 
   function anomaliesCard(a) {
@@ -676,7 +686,7 @@
   }
 
   const HEADERS = {
-    overview: ['MYFINANCE PRO &middot; ANALYTICS', 'Your spending, like a market', 'Trends, moving averages, forecasts and signals across every category, so you can act before the month gets away from you.'],
+    overview: ['MYFINANCE PRO &middot; FOLLOW THE CLUES', 'Your money, under the magnifying glass', 'Spot the patterns, meet your spending habits, and find the little changes that make room for what matters.'],
     compass: ['MYFINANCE PRO &middot; SPENDING COMPASS', 'Spending Compass', 'How your everyday spending compares with similar households, which way each category is heading, and where you could realistically save.']
   };
 
@@ -807,6 +817,10 @@
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';
   });
   document.addEventListener('change', event => {
+    if (event.target?.dataset?.recurringFilter && current) {
+      if (event.target.dataset.recurringFilter !== 'search') updateRecurringFilter(event.target);
+      return;
+    }
     const form = event.target?.closest?.('[data-compass-range]');
     if (!form) return;
     if (event.target.name !== 'preset') return;
@@ -818,6 +832,21 @@
     const end = lastCompleteMonth(), start = end - Number(preset) + 1;
     form.querySelector('[name="from"]').value = monthKey(start);
     form.querySelector('[name="to"]').value = monthKey(end);
+  });
+  function updateRecurringFilter(target) {
+    const key = target.dataset.recurringFilter;
+    if (!Object.hasOwn(recurringFilters, key)) return;
+    recurringFilters[key] = target.value;
+    const host = $('recurring-payment-card');
+    if (!host) return;
+    const start = target.selectionStart, end = target.selectionEnd;
+    host.outerHTML = recurringCard(current);
+    const replacement = document.querySelector(`#recurring-payment-card [data-recurring-filter="${key}"]`);
+    replacement?.focus({ preventScroll: true });
+    if (key === 'search' && start !== null) replacement?.setSelectionRange(start, end);
+  }
+  document.addEventListener('input', event => {
+    if (event.target?.dataset?.recurringFilter === 'search' && current) updateRecurringFilter(event.target);
   });
   document.addEventListener('submit', async event => {
     const form = event.target?.closest?.('[data-compass-range]');
@@ -844,7 +873,7 @@
     if (tab === 'compass') render(current);
   });
   document.addEventListener('pro:entitlement', event => {
-    if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; stopField(); }
+    if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
   });
   document.addEventListener('finance:analytics-invalidated', () => {
     request++;

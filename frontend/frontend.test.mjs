@@ -3963,6 +3963,46 @@ test('analytics page shows a locked preview without Pro', async () => {
   assert.match(f.node('analytics-actions').innerHTML, /pro-lock/);
 });
 
+test('recurring discovery shows every candidate and filters status, type and merchant without altering totals', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const payload = buildAnalytics({ transactions: [], today: new Date() });
+  payload.recurring = Array.from({ length: 18 }, (_, i) => ({
+    id: i + 1, merchant: i === 17 ? '<Last utility>' : `Bill ${i + 1}`,
+    category: i % 2 ? 'Utilities' : 'Subscriptions', active: i !== 16, fixed: false,
+    likelyBill: i % 2 === 1, monthlyCost: 10, annualCost: 120, amount: 10,
+    cadence: 'monthly', nextDate: '2026-12-01', charges: 4
+  }));
+  const f = loadPro(async url => url === '/api/license'
+    ? response(200, { tier: 'pro', active: true, plusActive: true, features: [] })
+    : response(200, payload));
+  await f.context.loadAnalyticsPage(true, '');
+  const html = f.node('analytics-content').innerHTML;
+  assert.match(html, /17 of 18 unmarked patterns shown/);
+  assert.match(html, /&lt;Last utility&gt;/);
+  assert.match(html, /data-id="18"/);
+  assert.match(html, /Totals cover all active candidates/);
+  const setFilter = (key, value, input = false) => {
+    const target = { dataset: { recurringFilter: key }, value, selectionStart: null };
+    f.listeners.get(`document:${input ? 'input' : 'change'}`)({ target });
+    return f.node('recurring-payment-card').outerHTML;
+  };
+  assert.match(setFilter('status', 'all'), /18 of 18 unmarked patterns shown/);
+  const stopped = setFilter('status', 'stopped');
+  assert.match(stopped, /1 of 18 unmarked patterns shown/);
+  assert.match(stopped, /Bill 17/);
+  assert.doesNotMatch(stopped, /data-analytics-action="mark-fixed"/);
+  setFilter('status', 'active');
+  assert.match(setFilter('kind', 'bill'), /9 of 18 unmarked patterns shown/);
+  const searched = setFilter('search', 'LAST UTILITY', true);
+  assert.match(searched, /1 of 18 unmarked patterns shown/);
+  assert.match(searched, /data-id="18"/);
+  assert.equal(setFilter('search', 'ignored blur change'), searched, 'search blur does not replace the focused card again');
+  assert.match(setFilter('search', 'no match', true), /No payments match these filters/);
+  const originalStats = html.match(/<div class="pro-mini-stats">[\s\S]*?<\/div><\/div>/)[0];
+  assert.ok(searched.includes(originalStats), 'filtering leaves all-active totals unchanged');
+  assert.doesNotMatch(source('analytics.js'), /unmarked\.slice\(0, 12\)/);
+});
+
 test('Compass date ranges offer only four month presets and custom dates, update independently and show errors', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
@@ -4065,7 +4105,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(overview, /href="#analytics\/compass" data-view="analytics\/compass"[^>]*>Spending Compass<span class="pro-tab-badge">\$\d[\d,]*\/mo/);
   assert.doesNotMatch(overview, /YOUR COMPASS FOUND|Where your money flows|Technical readings/);
   assert.doesNotMatch(overview, /#tutorials\/compass/);
-  assert.equal(f.node('analytics-heading').textContent, 'Your spending, like a market');
+  assert.equal(f.node('analytics-heading').textContent, 'Your money, under the magnifying glass');
 
   await f.context.loadAnalyticsPage(false, 'compass');
   const html = f.node('analytics-content').innerHTML;

@@ -76,6 +76,15 @@ as other financial endpoints. It accepts no target user ID and returns no bank
 tokens or unrelated customers' data. Members see only their intentionally shared
 household workspace. Findings are unavailable during support sessions.
 
+Transactions and Analytics use the same pastel, playful visual language as
+Financial Checkup, while preserving readable ledger tables and existing controls.
+Analytics' recurring-payment discovery lists all unmarked detected patterns
+without a 12-item cutoff. Filter active/stopped patterns, likely bills/other
+charges, or search merchant/category names. Totals always describe all active
+unmarked candidates, regardless of filters. Only active candidates offer Mark
+fixed; the existing action applies to similar and future transactions. Pattern
+detection and fixed-payment behavior are unchanged.
+
 The public sign-in page explains the optional Plaid connection, how to disconnect
 it, and what happens to imported history. Customers can contact MyFinance at
 myfinanceapp.support@gmail.com or open a support case in Settings & support.
