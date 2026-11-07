@@ -36,7 +36,7 @@ export function openApiSpec() {
         post: op('Support', 'Customer: grant support access independently of ticket details', body({ accessLevel: 'read', hours: 24 }))
       },
       '/api/support-access/{id}': { delete: op('Support', 'Customer: revoke a support grant immediately', pathId) },
-      '/api/guidance': { get: op('Guidance', 'Private household-scoped financial findings and rule-based app guidance; active subscription required. No target user parameter or external AI service.') },
+      '/api/dashboard/findings': { get: op('Dashboard', 'Private household-scoped financial checkup findings; active subscription required. No target user parameter or external AI service.') },
       '/api/support-tickets': {
         get: op('Support', 'Latest 20 tickets for this login, including customer-visible update history, status and email delivery state; available without a subscription'),
         post: op('Support', 'Open a numbered case and notify myfinanceapp.support@gmail.com; description required (10-5000 characters), category optional (up to 80). Saved tickets with failed email return an explicit warning; no financial access is granted.', body({ description: 'A synced payment still appears unpaid.', category: 'Bank sync' }))

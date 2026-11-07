@@ -248,7 +248,7 @@ test('audit logging, password reset, admin console and consented support access'
     assert.equal((await call('/api/auth/password', { body: { currentPassword: password, newPassword: 'support-chosen-password' }, cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/admin/overview', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-access', { cookie: supportCookie })).status, 403);
-    assert.equal((await call('/api/guidance', { cookie: supportCookie })).status, 403);
+    assert.equal((await call('/api/dashboard/findings', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-tickets', { cookie: supportCookie })).status, 403);
     assert.equal((await call('/api/support-tickets', { body: { description: 'An operator must not submit as the customer.' }, cookie: supportCookie })).status, 403);
     await settle();

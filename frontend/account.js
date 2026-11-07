@@ -41,11 +41,6 @@
       <h3>Your grants</h3><div id="support-grants" class="table-scroll"></div>
       <h3>Support activity on your account</h3><div id="support-activity" class="table-scroll"></div>
     </div>
-    <div class="panel plan-card" id="assistant-settings"><div><p class="eyebrow">YOUR APP GUIDE</p><h2>MyFinance assistant</h2>
-      <p class="muted">Optional, rule-based guidance from your current household workspace. No external AI service, cross-customer data or automatic financial changes. Household members already share this workspace.</p></div>
-      <label><input type="checkbox" id="assistant-enabled"> Enable the floating assistant</label>
-      <p class="muted">Off by default. This preference is saved for your login in this browser. Minimize it when focusing, or turn it off here at any time.</p>
-      <p id="assistant-preference-status" role="status"></p></div>
     <div class="panel plan-card"><div><p class="eyebrow">LEARN MYFINANCE</p><h2>Watch the tutorials</h2>
       <p class="muted">One-minute narrated tours of the dashboard, the debt-free plan and savings goals.</p></div>
       <div><a class="btn btn-secondary" href="#tutorials">Open tutorials</a></div></div>

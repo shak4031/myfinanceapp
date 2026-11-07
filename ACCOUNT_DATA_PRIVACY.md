@@ -182,15 +182,13 @@ support sessions. Each support request records the actor, subject workspace,
 grant, outcome, and request ID. Read-only support is enforced both at the route
 layer and by a PostgreSQL read-only transaction.
 
-The optional floating assistant is rule-based, not an external generative AI.
-Its financial findings use the runtime connection and household row-level
+Financial Checkup findings use the runtime connection and household row-level
 security, never administrative queries or a browser-provided target user ID.
-No bank tokens are included in guidance responses. It can see the signed-in
-user's intentionally shared household workspace, not unrelated customers.
-The browser clears findings on session lock and discards in-flight responses
-after account changes or disabling. Only a login-keyed on/off preference is
-stored locally. The assistant is off by default and hidden during support
-sessions; it does not modify financial data automatically.
+No bank tokens are included in findings responses. Results cover only the
+signed-in user's intentionally shared household workspace, not unrelated
+customers. Session lock clears financial views and the session fetch wrapper
+discards responses after account changes. Findings are unavailable during support
+sessions and are not sent to an external AI service.
 
 This is **not** a promise that nobody else can access the data. Authorized
 database/hosting operators retain infrastructure-level access, and the server

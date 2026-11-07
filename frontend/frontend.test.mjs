@@ -53,6 +53,15 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 
+test('the floating assistant and settings are removed without removing financial checkup', () => {
+  for (const file of ['index.html', 'account.js', 'session.js', 'refresh.js']) {
+    assert.doesNotMatch(source(file), /FinanceAssistant|assistant-enabled|assistant-settings|assistant\.js|assistant\.css|finance-assistant|MyFinance guide/);
+  }
+  assert.match(source('refresh.js'), /json\('\/api\/dashboard\/findings'\)/);
+  assert.match(source('refresh.js'), /renderFinancialFindings\(findings\)/);
+  assert.match(source('refresh.css'), /\.checkup-findings-grid/);
+});
+
 function householdFixture(billing = {}, handler) {
   const calls = [];
   const f = fixture(async (url, options = {}) => {
@@ -1425,22 +1434,21 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
   };
   const findings = {
     period: { from: '2026-01', to: '2026-10', months: 10 },
-    annualIncome: 72000, monthlyIncome: 6000, monthlySpend: 6100,
+    annualIncome: 72000, monthlyIncome: 6000, monthlySpend: 6100, totalSpend: 61000, observedMonthlyIncome: 5500,
+    incomeEstimate: { basis: 'paycheck-cadence', incomeMonths: 10, streams: [
+      { name: '<Employer>', amount: 6000, label: 'Monthly', cadence: 'monthly', paychecksPerYear: 12, annualIncome: 72000, lastDate: '2026-11-01' }
+    ] },
     categories: [{ name: '<Dining>', amount: 32000, count: 100 }],
     merchants: [{ name: '<Restaurant>', amount: 32000, count: 100 }],
     discretionary: { total: 47000, share: 77, annualized: 56400,
       categories: [{ name: '<Dining>', amount: 32000, count: 100 }], merchants: [{ name: '<Restaurant>', amount: 32000, count: 100 }] },
-    methodology: 'Recognized deposits, not gross salary.', signals: []
+    methodology: 'Recognized deposits, not gross salary.'
   };
   const f = fixture(async url => url === '/api/goals/funding-analysis' ? response(200, plan)
     : url === '/api/plan' ? response(200, moneyPlan)
       : url === '/api/analytics' ? response(200, analytics)
-        : url === '/api/guidance' ? response(200, findings) : response(200, {}));
+        : url === '/api/dashboard/findings' ? response(200, findings) : response(200, {}));
   f.run('refresh.js');
-  f.context.FinanceSession.currentUser = () => ({ id: 1 });
-  f.context.FinanceSession.currentSupport = () => null;
-  f.context.localStorage = { getItem: () => null };
-  f.run('assistant.js');
   f.node('account-name').textContent = 'Asha Shah';
   const generate = f.context.generateInsights;
   f.context.generateInsights = () => Promise.resolve();
@@ -1449,7 +1457,15 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
   f.context.generateInsights = generate;
   await generate();
   const html = f.node('insights-container').innerHTML;
-  assert.match(html, /Estimated annual take-home income: \$72,000\.00/);
+  assert.match(html, /Estimated annual take-home income<\/p><strong[^>]*>\$72,000\.00/);
+  assert.match(html, /Your paycheck, zoomed out/);
+  assert.match(html, /typical paycheck × <b>12<\/b> \/ year/);
+  assert.match(html, /&lt;Employer&gt;/);
+  assert.doesNotMatch(html, /<Employer>/);
+  assert.match(html, /data-income-review/);
+  assert.match(html, /Current pay pace and historical spending cover different windows/);
+  assert.match(html, /findings-ranking/);
+  assert.match(html, /findings-donut/);
   assert.match(html, /\$47,000\.00 in potentially discretionary purchases/);
   assert.match(html, /\$56,400\.00 at an annualized pace/);
   assert.match(html, /Largest spending categories/);
@@ -1503,6 +1519,32 @@ test('Financial Checkup combines cash flow, debt, goal timelines and actionable 
   assert.equal(focused, true);
   assert.equal(tabs[1].tabIndex, 0);
   assert.equal(panels[1].hidden, false);
+  findings.annualIncome = 171600;
+  findings.monthlyIncome = 14300;
+  findings.incomeEstimate.streams = [{ name: 'Example Payroll', amount: 6600, label: 'Every other Wednesday', cadence: 'biweekly', paychecksPerYear: 26, annualIncome: 171600, lastDate: '2026-11-04' }];
+  await generate();
+  const scheduledHtml = f.node('insights-container').innerHTML;
+  assert.match(scheduledHtml, /\$6,600\.00<\/b> typical paycheck × <b>26<\/b> \/ year/);
+  assert.match(scheduledHtml, /\$14,300\.00<\/b> monthly equivalent/);
+  assert.doesNotMatch(scheduledHtml, /Spending exceeds estimated current income/);
+  findings.incomeEstimate = { basis: 'recorded-income-months', incomeMonths: 2, streams: [] };
+  findings.annualIncome = 60000;
+  findings.monthlyIncome = 5000;
+  await generate();
+  const fallbackHtml = f.node('insights-container').innerHTML;
+  assert.match(fallbackHtml, /from 2 income-recorded months/);
+  assert.match(fallbackHtml, /No active pay schedule detected/);
+  assert.match(fallbackHtml, /not a reliable salary forecast/);
+  findings.incomeEstimate = { basis: 'insufficient-data', incomeMonths: 0, streams: [] };
+  findings.annualIncome = findings.monthlyIncome = findings.monthlySpend = findings.observedMonthlyIncome = null;
+  findings.categories = findings.merchants = [];
+  findings.discretionary = { total: 0, share: null, annualized: null, categories: [], merchants: [] };
+  findings.period = { months: 0, from: null, to: null };
+  await generate();
+  const emptyHtml = f.node('insights-container').innerHTML;
+  assert.match(emptyHtml, /More history needed/);
+  assert.match(emptyHtml, /A few missing puzzle pieces/);
+  assert.doesNotMatch(emptyHtml, /NaN|undefined|Infinity/);
 });
 test('dashboard category drill-down opens a dialog with only matching category and month transactions', async () => {
   const f = fixture(async url => url === '/api/dashboard/all-transactions'

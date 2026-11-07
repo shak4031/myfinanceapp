@@ -35,7 +35,6 @@ window.FinanceSession = (() => {
     window.FinanceAccounts?.reset();
     window.FinanceMfa?.reset();
     window.FinanceSupportTickets?.reset();
-    window.FinanceAssistant?.reset();
     mfaRequired = false;
     window.FinancePerformance?.clear();
     document.body.classList.add('auth-pending');
@@ -67,7 +66,6 @@ window.FinanceSession = (() => {
       throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, code: body.code, entitlement: body.entitlement });
     }
     const method = String(options.method || resource?.method || 'GET').toUpperCase();
-    if (!auth && response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)) window.FinanceAssistant?.invalidate();
     if (!auth && response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)
       && /^\/api\/(?:transactions|categories|categorizations|import|bulk-import|staging|accounts|debts|goals|analytics|plan)(?:\/|$)/.test(url.pathname)) {
       window.FinancePro?.invalidateAnalytics?.();

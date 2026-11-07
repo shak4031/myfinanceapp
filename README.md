@@ -47,10 +47,20 @@ saved accounts automatically when possible.
 Each account receives its own import-history batch. See
 [import account mapping and recovery](IMPORT_SYSTEM_DOCS.md).
 Financial Checkup leads with findings from up to 12 recorded completed months:
-annualized recognized take-home income (not gross salary), leading spending
+current paycheck-based annualized take-home income (not gross salary), leading spending
 categories and merchants, and potentially discretionary spending with its
 largest category/merchant drivers. Actual totals and annualized pace are
-distinct. Income detection honors income-review overrides; pending entries
+distinct. The income estimate uses active detected pay schedules and the median
+of the last three pay dates per source: 52 weekly, 26 biweekly, 24 twice-monthly
+or 12 monthly checks per year. The monthly equivalent is annual pay divided by
+12, not every month's deposited amount. Payroll/Pay suffixes are normalized so
+employer description variants do not split one pay source. If no current
+schedule is detected, an explicitly limited fallback averages only completed
+months containing recognized income, not all months containing spending.
+Historical income is disclosed separately; incomplete imports, undetected
+sources and changing employment can affect estimates. The findings use
+illustrated pastel cards, ranked spending bars and a discretionary-spend ring.
+Income detection honors income-review overrides; pending entries
 and classified transfers are excluded. Imported months may be incomplete and
 possible saved duplicates remain in totals until reviewed.
 The existing three-month debt/goal cash-flow comparison remains available below
@@ -60,20 +70,11 @@ entered in the app. No financial records are sent to an external AI service.
 It is planning support, not individualized financial, tax, or investment advice
 or a recommendation to open or transfer credit.
 
-The floating **MyFinance guide** is opt-in under **Settings & support**.
-It explains the current page and surfaces possible saved duplicates, bank
-connections with no successful sync or a sync at least three days old, current-month
-Other transactions, unbudgeted categories, spending/income gaps and large
-current-month purchases without notes (at least $1,000 and 20% of average
-recorded monthly spend). Review links use the app's existing tools; it never
-changes financial records automatically. This is a rule-based assistant, not
-generative chat. `/api/guidance` uses the same tenant-scoped runtime connection
-and database row-level security as other financial endpoints, accepts no target
-user ID, and returns no bank tokens or other customers' data. Members see only
-their intentionally shared household workspace. Support sessions do not display
-the assistant. Guidance is cleared on sign-out/session changes; only an on/off
-preference keyed by login is persisted in this browser, never findings. Users can
-minimize it, turn it off, refresh it, or retry an explicit loading error.
+Financial Checkup retrieves its findings through `/api/dashboard/findings`,
+using the same tenant-scoped runtime connection and database row-level security
+as other financial endpoints. It accepts no target user ID and returns no bank
+tokens or unrelated customers' data. Members see only their intentionally shared
+household workspace. Findings are unavailable during support sessions.
 
 The public sign-in page explains the optional Plaid connection, how to disconnect
 it, and what happens to imported history. Customers can contact MyFinance at
