@@ -607,6 +607,9 @@ Owners can choose **Cancel membership**, confirm they want to continue, and then
 finish cancellation in Stripe. The app prompt alone does not cancel the plan;
 Stripe schedules cancellation at the end of the current billing period. A
 no-card trial expires automatically and has no Stripe subscription to cancel.
+Paid subscribers see both plan choices and the applicable upgrade or downgrade
+action on the membership page. Retained manual access has no Stripe subscription
+to change or cancel; contact support for changes.
 
 Account creation does not require plan selection or Stripe Checkout. Email
 verification is required before subscribing. Unpaid households whose trial has

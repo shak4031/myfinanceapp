@@ -140,6 +140,9 @@ test('paid membership cancellation requires confirmation and is finalized in Str
   const root = f.node('household-dialog-content');
   assert.match(root.innerHTML, /Cancel membership/);
   assert.doesNotMatch(root.innerHTML, /household-checkout-form/);
+  assert.match(root.innerHTML, /Basic · USD 9\.99\/month/);
+  assert.match(root.innerHTML, /Pro · USD 14\.99\/month/);
+  assert.match(root.innerHTML, /Switch to Basic/);
   const button = root.querySelector('[data-household-cancel]');
   await button.listeners.click({ target: button });
   assert.equal(f.calls.some(call => call.url === '/api/billing/portal'), false);
@@ -207,7 +210,10 @@ test('Basic owners review a prorated Pro upgrade in Stripe without creating a se
   await f.context.FinanceHousehold.openBilling('', 'pro');
   const root = f.node('household-dialog-content');
   assert.match(root.innerHTML, /Upgrade to Pro in Stripe/);
-  assert.match(root.innerHTML, /prorated upgrade charge/);
+  assert.match(root.innerHTML, /prorated charge/);
+  assert.match(root.innerHTML, /Basic · USD 9\.99\/month/);
+  assert.match(root.innerHTML, /Pro · USD 14\.99\/month/);
+  assert.match(root.innerHTML, /Current plan/);
   const button = root.querySelector('[data-household-upgrade]');
   await button.listeners.click({ target: button });
   const sent = f.calls.find(call => call.url === '/api/billing/portal');
@@ -234,6 +240,8 @@ test('Pro downgrade keeps access until renewal and needs explicit owner consent'
   const root = f.node('household-dialog-content');
   assert.match(root.innerHTML, /data-household-downgrade/);
   assert.match(root.innerHTML, /9\.99/);
+  assert.doesNotMatch(root.innerHTML, /<details>/);
+  assert.match(root.innerHTML, /Pro continues until then/);
   const button = root.querySelector('[data-household-downgrade]');
   root.querySelector('#household-downgrade-consent').checked = false;
   await button.listeners.click({ target: button });
@@ -245,6 +253,18 @@ test('Pro downgrade keeps access until renewal and needs explicit owner consent'
   assert.deepEqual(JSON.parse(sent.options.body), { consent: true, effectiveAt });
   assert.equal(f.context.FinancePro.isPlusActive(), true, 'scheduling does not remove Pro access');
   assert.match(root.innerHTML, /data-household-keep-pro/);
+});
+
+test('retained access shows plan options without pretending it is a Stripe subscription', () => {
+  const f = householdFixture();
+  for (const tier of ['basic', 'pro']) {
+    const html = f.context.FinanceHousehold.billingMarkup({ owner: true, entitlement: { tier, active: true, source: 'license' }, subscription: null });
+    assert.match(html, /Basic · USD 9\.99\/month/);
+    assert.match(html, /Pro · USD 14\.99\/month/);
+    assert.match(html, /not a Stripe subscription/);
+    assert.match(html, /Contact support/);
+    assert.doesNotMatch(html, /data-household-cancel|data-household-upgrade|data-household-downgrade|household-checkout-form/);
+  }
 });
 
 test('members and support sessions cannot start checkout or manage billing', async () => {
