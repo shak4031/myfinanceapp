@@ -85,19 +85,19 @@ function householdFixture(billing = {}, handler) {
 test('household billing clearly discloses both plans, trial payment consent and cancellation retention', () => {
   const f = householdFixture();
   const html = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { tier: 'trial', active: true, plusActive: true, trialEndsAt: '2026-11-01', trialAvailable: false }, subscription: { status: 'trialing', plan: 'basic', cancel_at_period_end: true, trial_ends_at: '2026-11-01' } });
-  assert.match(html, /Basic · USD 9\.99\/month/);
-  assert.match(html, /Pro · USD 14\.99\/month/);
-  assert.match(html, /Cancellation scheduled. Access continues until/);
-  assert.match(html, /Selected renewal plan: <strong>Basic/);
-  assert.match(html, /Manage plan or cancel in Stripe/);
+  assert.match(html, /Cancellation scheduled. Subscription ends/);
+  assert.match(html, /Current plan: <strong>Basic/);
+  assert.match(html, /Manage billing in Stripe/);
   assert.doesNotMatch(html, /card-number|cardNumber|Pro Plus|7-day|no charge/);
   const trial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { trialAvailable: true }, subscription: null }, '<script>oops</script>', 'basic');
   assert.match(trial, /value="basic" checked/);
-  assert.match(trial, /Subscribing charges the selected plan immediately and renews monthly/);
-  assert.match(trial, /remaining free trial ends/);
+  assert.match(trial, /Stripe charges immediately and renews monthly until cancelled/);
+  assert.match(trial, /Subscribing ends any remaining trial/);
   assert.match(trial, /&lt;script&gt;oops&lt;\/script&gt;/);
   const selfTrial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { tier: 'trial', source: 'self-service-trial', active: true, trialEndsAt: '2026-11-01' }, subscription: null });
   assert.match(selfTrial, /No payment details are required/);
+  assert.match(selfTrial, /access ends automatically unless you subscribe/);
+  assert.doesNotMatch(selfTrial, /data-household-cancel/);
   assert.doesNotMatch(selfTrial, /existing paid access is retained/);
 });
 
@@ -115,13 +115,70 @@ test('profile and membership are accessible during trial, expiry and paid access
     f.context.FinanceSession.currentUser = () => ({ name: 'Casey', email: 'casey@example.test', emailVerified: true });
     await f.context.showView('membership');
     assert.equal(f.context.lastView, 'membership');
-    assert.match(f.node('household-billing').innerHTML, /Choose a household plan/);
+    if (entitlement.active && entitlement.source !== 'self-service-trial') assert.doesNotMatch(f.node('household-billing').innerHTML, /household-checkout-form/);
+    else assert.match(f.node('household-billing').innerHTML, /Choose a household plan/);
     assert.equal(f.node('membership-profile').textContent, 'Casey · casey@example.test');
     assert.equal(f.node('membership-choose-plan').hidden, entitlement.active && entitlement.source !== 'self-service-trial');
     assert.ok(f.calls.some(call => call.url === '/api/household'));
     await f.context.showView('settings/billing');
     assert.equal(f.context.lastView, 'membership', 'Stripe return links open membership');
   }
+});
+
+test('paid membership cancellation requires confirmation and is finalized in Stripe', async () => {
+  const billing = { entitlement: { tier: 'pro', active: true, plusActive: true },
+    subscription: { id: 'sub_test', plan: 'pro', status: 'active', cancel_at_period_end: false } };
+  const f = householdFixture(billing, url => url === '/api/billing/portal' ? response(200, { url: 'https://billing.stripe.com/cancel' }) : null);
+  let confirmed = false;
+  f.context.FinanceUI = { confirm: async (message, options) => {
+    assert.match(message, /takes effect at the end/);
+    assert.match(message, /Stripe to confirm cancellation/);
+    assert.equal(options.title, 'Cancel membership?');
+    return confirmed;
+  } };
+  await f.context.FinanceHousehold.openBilling();
+  const root = f.node('household-dialog-content');
+  assert.match(root.innerHTML, /Cancel membership/);
+  assert.doesNotMatch(root.innerHTML, /household-checkout-form/);
+  const button = root.querySelector('[data-household-cancel]');
+  await button.listeners.click({ target: button });
+  assert.equal(f.calls.some(call => call.url === '/api/billing/portal'), false);
+  assert.equal(button.disabled, false);
+  confirmed = true;
+  await button.listeners.click({ target: button });
+  assert.deepEqual(JSON.parse(f.calls.find(call => call.url === '/api/billing/portal').options.body), { action: 'cancel' });
+  assert.deepEqual(f.redirects, ['https://billing.stripe.com/cancel']);
+  for (const data of [
+    { ...billing, owner: false },
+    { ...billing, owner: true, subscription: { ...billing.subscription, cancel_at_period_end: true } },
+    { ...billing, owner: true, subscription: { ...billing.subscription, pending_change: { plan: 'basic' } } },
+    { owner: true, entitlement: { tier: 'pro', source: 'license', active: true }, subscription: null }
+  ]) assert.doesNotMatch(f.context.FinanceHousehold.billingMarkup(data), /data-household-cancel|household-checkout-form/);
+  const ended = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true,
+    entitlement: { active: false }, subscription: { ...billing.subscription, status: 'canceled' } });
+  assert.match(ended, /Previous plan/);
+  assert.match(ended, /household-checkout-form/);
+  assert.doesNotMatch(ended, /data-household-cancel|Selected renewal plan/);
+  assert.match(f.context.FinanceHousehold.billingMarkup({ owner: true, ...billing,
+    subscription: { ...billing.subscription, status: 'past_due' } }), /data-household-cancel/);
+  f.context.FinanceSession.currentSupport = () => ({ id: 1 });
+  assert.doesNotMatch(f.context.FinanceHousehold.billingMarkup({ owner: true, ...billing }), /data-household-cancel/);
+  await button.listeners.click({ target: button });
+  assert.equal(f.calls.filter(call => call.url === '/api/billing/portal').length, 1);
+});
+
+test('cancellation portal errors are visible and allow retry', async () => {
+  const f = householdFixture({ entitlement: { tier: 'basic', active: true },
+    subscription: { plan: 'basic', status: 'active' } },
+  url => url === '/api/billing/portal' ? response(409, { error: 'Refresh billing before cancelling.' }) : null);
+  f.context.FinanceUI = { confirm: async () => true };
+  await f.context.FinanceHousehold.openBilling();
+  const root = f.node('household-dialog-content');
+  const button = root.querySelector('[data-household-cancel]');
+  await button.listeners.click({ target: button });
+  assert.match(root.querySelector('.household-error').textContent, /Refresh billing/);
+  assert.equal(button.disabled, false);
+  assert.deepEqual(f.redirects, []);
 });
 
 test('household checkout needs explicit consent and posts only selected plan before external navigation', async () => {

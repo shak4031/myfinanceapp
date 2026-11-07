@@ -235,6 +235,18 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/billing/checkout', { plan: 'pro', consent: true }, ownerCookie)).status, 409);
     assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 200);
     assert.equal(portalRequests[0].features.subscription_cancel.mode, 'at_period_end');
+    assert.equal((await call('/api/billing/portal', { action: 'cancel' }, ownerCookie)).status, 200);
+    assert.equal(portalRequests.at(-1).features.subscription_cancel.mode, 'at_period_end');
+    assert.deepEqual(portalSessions.at(-1).flow_data.subscription_cancel, { subscription: subscription.id });
+    assert.equal(portalSessions.at(-1).flow_data.type, 'subscription_cancel');
+    assert.equal((await call('/api/billing/portal', { action: 'unknown' }, ownerCookie)).status, 400);
+    assert.equal((await call('/api/billing/portal', { plan: 'pro', action: 'cancel' }, ownerCookie)).status, 400);
+    subscription.cancel_at_period_end = true;
+    assert.equal((await call('/api/billing/portal', { action: 'cancel' }, ownerCookie)).status, 409);
+    subscription.cancel_at_period_end = false;
+    subscription.status = 'past_due';
+    assert.equal((await call('/api/billing/portal', { action: 'cancel' }, ownerCookie)).status, 200);
+    subscription.status = 'trialing';
     assert.equal((await call('/api/billing/portal', { plan: 'pro' }, ownerCookie)).status, 409, 'trial already includes Pro; upgrade must not end it');
 
     await database.query(`INSERT INTO transactions(user_id,date,description,amount,direction,category)
@@ -247,6 +259,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     const spouse = await call('/api/auth/accept-invite', { ...credentials('Spouse', 'spouse@household.test'), token: invitation });
     assert.equal(spouse.status, 200, JSON.stringify(spouse.body));
     const spouseCookie = spouse.cookie;
+    assert.equal((await call('/api/billing/portal', { action: 'cancel' }, spouseCookie)).status, 403);
     const spouseId = spouse.body.user.id;
     assert.equal((await call('/api/auth/accept-invite', { ...credentials('Spouse', 'spouse@household.test'), token: invitation })).status, 409);
     assert.equal((await call('/api/auth/me', undefined, spouseCookie)).body.user.household.role, 'member');
@@ -360,6 +373,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal(pendingBilling.subscription.schedule_managed, true);
     assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'pro', 'scheduling never removes Pro');
     assert.equal((await call('/api/billing/portal', {}, ownerCookie)).status, 409, 'portal cannot conflict with a pending schedule');
+    assert.equal((await call('/api/billing/portal', { action: 'cancel' }, ownerCookie)).status, 409, 'cancellation cannot conflict with a pending schedule');
     assert.equal(await webhook('evt_schedule_updated', 'subscription_schedule.updated'), 200);
     assert.equal((await call('/api/analytics', undefined, spouseCookie)).status, 200, 'schedule webhook retains Pro until actual transition');
     assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 200);

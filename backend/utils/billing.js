@@ -212,14 +212,17 @@ export async function checkout(household, user, plan, consent) {
   });
 }
 
-export async function billingPortal(household, plan) {
+export async function billingPortal(household, plan, action) {
   if (plan !== undefined && plan !== 'pro') throw failure(400, 'Only an upgrade to Pro is supported.');
+  if (action !== undefined && action !== 'cancel') throw failure(400, 'Unsupported billing action.');
+  if (plan && action) throw failure(400, 'Choose one billing action.');
   const stripe = stripeClient();
   return administrativeTransaction(async client => {
     const row = (await client.query('SELECT * FROM household_subscriptions WHERE household_id=$1 FOR UPDATE', [household.id])).rows[0];
     if (!row?.stripe_customer_id) throw failure(409, 'No Stripe billing account exists yet.');
+    let live;
     if (row.stripe_subscription_id) {
-      const live = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
+      live = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
       if (live.schedule) {
         const schedule = await subscriptionSchedule(stripe, live);
         if (ownsSchedule(schedule, live) && !pendingChange(schedule, live) && live.items.data[0]?.price.id === priceId('basic')) {
@@ -228,6 +231,14 @@ export async function billingPortal(household, plan) {
       }
     }
     let update, flow;
+    if (action === 'cancel') {
+      if (!live || objectId(live.customer) !== row.stripe_customer_id || !['active', 'trialing', 'past_due', 'unpaid'].includes(live.status)
+        || live.cancel_at_period_end || live.cancel_at) {
+        throw failure(409, 'No active subscription is available to cancel. Refresh billing.');
+      }
+      flow = { type: 'subscription_cancel', subscription_cancel: { subscription: live.id },
+        after_completion: { type: 'redirect', redirect: { return_url: `${process.env.APP_ORIGIN}/#settings/billing` } } };
+    }
     if (plan === 'pro') {
       if (row.plan !== 'basic' || row.status !== 'active' || row.cancel_at_period_end || !row.stripe_subscription_id) {
         throw failure(409, 'An active Basic subscription without scheduled cancellation is required to upgrade.');

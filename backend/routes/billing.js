@@ -49,7 +49,7 @@ router.post('/checkout', async (req, res, next) => {
 router.post('/portal', async (req, res, next) => {
   try {
     ownerOnly(req);
-    const result = await billingPortal(req.household, req.body?.plan);
+    const result = await billingPortal(req.household, req.body?.plan, req.body?.action);
     if (req.body?.plan) await recordAudit(req, 'billing.upgrade_started', 'success', { detail: { plan: req.body.plan } });
     res.json(result);
   } catch (error) {

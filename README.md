@@ -603,6 +603,10 @@ The primary operator and public synthetic demo retain full access.
 The Profile & membership link in the workspace header opens the household plan,
 Stripe billing controls and member invitations in one place. Settings & support
 links to that page and keeps support cases and sign-in security separate.
+Owners can choose **Cancel membership**, confirm they want to continue, and then
+finish cancellation in Stripe. The app prompt alone does not cancel the plan;
+Stripe schedules cancellation at the end of the current billing period. A
+no-card trial expires automatically and has no Stripe subscription to cancel.
 
 Account creation does not require plan selection or Stripe Checkout. Email
 verification is required before subscribing. Unpaid households whose trial has

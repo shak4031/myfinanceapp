@@ -18,35 +18,34 @@
     const subscription = data.subscription;
     const managedSubscription = subscription && !['canceled', 'incomplete_expired'].includes(subscription.status);
     const owner = data.owner && !support();
+    const retainedAccess = entitlement.active && entitlement.source !== 'self-service-trial' && !managedSubscription;
+    const canChoosePlan = owner && !managedSubscription && !retainedAccess;
     const verificationRequired = window.FinanceSession?.currentUser?.()?.emailVerified === false;
-    return `${!entitlement.active && owner ? `<ol class="household-setup-steps" aria-label="Account setup progress"><li>1. Account created</li><li${verificationRequired ? ' aria-current="step"' : ''}>2. ${verificationRequired ? 'Verify email' : 'Email verified'}</li><li${!verificationRequired ? ' aria-current="step"' : ''}>3. Secure checkout</li></ol>` : ''}
-      <h2>${!entitlement.active && owner ? verificationRequired ? 'Verify your email to continue' : 'Choose your household plan' : 'Your household plan'}</h2>
+    return `<h2>Your household plan</h2>
       ${reason ? `<p>${esc(reason)}</p>` : ''}
-      <p>One subscription covers your household. Members can edit shared finances; only the owner manages billing and membership.</p>
+      <p>One plan covers your household.</p>
       ${entitlement.active || subscription ? `<p><strong>${esc(pro().planLabel(entitlement).title)}</strong>${subscription ? ` · ${esc(subscription.status)}` : ''}</p>` : ''}
-      ${subscription ? `<p>Selected renewal plan: <strong>${subscription.pending_change?.plan === 'basic' || subscription.plan === 'basic' ? 'Basic · USD 9.99/month' : subscription.plan === 'pro' ? 'Pro · USD 14.99/month' : esc(subscription.plan || 'Not available')}</strong>. ${subscription.cancel_at_period_end ? 'Access ends' : 'Current period ends'}: ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}.</p>` : ''}
-      ${entitlement.tier === 'trial' ? `<p>Your trial includes all Pro features until ${esc(date(entitlement.trialEndsAt || subscription?.trial_ends_at))}. ${entitlement.source === 'self-service-trial' ? 'No payment details are required. If you subscribe now, billing begins immediately and replaces your trial.' : subscription?.cancel_at_period_end ? 'Your trial stays active until then and will not renew.' : 'Your selected renewal plan is charged automatically at the end unless cancelled in Stripe. The owner receives a reminder email 24 hours before the trial ends.'}</p>` : ''}
-      ${subscription?.cancel_at_period_end ? `<p>Cancellation scheduled. Access continues until ${esc(date(subscription.trial_ends_at || subscription.current_period_end))}.</p>` : ''}
+      ${subscription ? `<p>${!managedSubscription ? 'Previous plan' : subscription.cancel_at_period_end ? 'Current plan' : 'Selected renewal plan'}: <strong>${(subscription.pending_change?.plan === 'basic' && !subscription.cancel_at_period_end) || subscription.plan === 'basic' ? 'Basic · USD 9.99/month' : subscription.plan === 'pro' ? 'Pro · USD 14.99/month' : esc(subscription.plan || 'Not available')}</strong>. ${!managedSubscription ? 'Period ended' : subscription.cancel_at_period_end ? 'Cancellation scheduled. Subscription ends' : 'Current period ends'}: ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}.</p>` : ''}
+      ${entitlement.tier === 'trial' ? `<p>Pro trial ends ${esc(date(entitlement.trialEndsAt || subscription?.trial_ends_at))}. ${entitlement.source === 'self-service-trial' ? 'No payment details are required; access ends automatically unless you subscribe.' : subscription?.cancel_at_period_end ? 'Your trial will not renew.' : 'Your selected plan renews automatically; the owner receives a reminder 24 hours before the trial ends.'}</p>` : ''}
       ${subscription?.pending_change ? `<p data-household-pending-change>Basic · USD 9.99/month is scheduled for ${esc(date(subscription.pending_change.effective_at))}. Pro stays available until then. Your saved finances are retained.</p>` : ''}
       ${!owner ? '<p class="coach-note">Ask your household owner to choose or manage the subscription. Members cannot change billing.</p>' : `
-      ${verificationRequired ? `<div class="coach-note"><h3>Verify your email before checkout</h3><p>Open the verification link sent to your email, then return here. Your selected plan is <strong>${selected === 'basic' ? 'Basic · USD 9.99/month' : 'Pro · USD 14.99/month'}</strong>; you can change it below. No subscription starts until you complete Stripe Checkout.</p><button type="button" class="btn btn-secondary" data-resend-verification>Resend verification email</button><button type="button" class="btn btn-secondary" data-refresh-verification>I verified my email · refresh</button><p class="verification-status" role="status"></p></div>` : ''}
-      <form id="household-checkout-form">
+      ${canChoosePlan && verificationRequired ? `<div class="coach-note"><h3>Verify your email before checkout</h3><p>Open your verification email, then return here.</p><button type="button" class="btn btn-secondary" data-resend-verification>Resend verification email</button><button type="button" class="btn btn-secondary" data-refresh-verification>I verified my email · refresh</button><p class="verification-status" role="status"></p></div>` : ''}
+      ${canChoosePlan ? `<form id="household-checkout-form">
         <fieldset class="upgrade-plans"><legend>Choose a household plan</legend>
-          <label class="upgrade-option"><input type="radio" name="household-plan" value="basic"${selected === 'basic' ? ' checked' : ''}> <strong>Basic · USD 9.99/month</strong><p>Imports, accounts, transactions, categories and everyday dashboard.</p></label>
-          <label class="upgrade-option upgrade-plus"><input type="radio" name="household-plan" value="pro"${selected !== 'basic' ? ' checked' : ''}> <strong>Pro · USD 14.99/month</strong><p>Everything in Basic, plus all analytics, budgets, debt planning and savings goals.</p></label>
+          <label class="upgrade-option"><input type="radio" name="household-plan" value="basic"${selected === 'basic' ? ' checked' : ''}> <strong>Basic · USD 9.99/month</strong><p>Everyday finances and imports.</p></label>
+          <label class="upgrade-option upgrade-plus"><input type="radio" name="household-plan" value="pro"${selected !== 'basic' ? ' checked' : ''}> <strong>Pro · USD 14.99/month</strong><p>Basic plus analytics and planning.</p></label>
         </fieldset>
-        <p>Stripe hosted Checkout collects your payment details and confirms your selected plan. No payment details are entered in this app.</p>
-        <p>Subscribing charges the selected plan immediately and renews monthly until cancelled. Any remaining free trial ends when the paid subscription starts. Manage or cancel through the Stripe billing portal.</p>
-        <label class="household-consent"><input type="checkbox" id="household-consent" required> I agree to the selected household plan’s immediate and recurring monthly charge.</label>
-        <div class="pro-actions"><button class="btn btn-primary"${!data.configured || managedSubscription || verificationRequired ? ' disabled' : ''}>Continue to Stripe</button></div>
-      </form>
-      ${subscription && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-portal>Manage plan or cancel in Stripe</button>' : ''}
+        <p>Stripe charges immediately and renews monthly until cancelled. Subscribing ends any remaining trial.</p>
+        <label class="household-consent"><input type="checkbox" id="household-consent" required> I agree to the immediate and recurring monthly charge.</label>
+        <div class="pro-actions"><button class="btn btn-primary"${!data.configured || verificationRequired ? ' disabled' : ''}>Continue to Stripe</button></div>
+      </form>` : ''}
+      ${subscription && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-portal>Manage billing in Stripe</button>' : ''}
+      ${subscription && ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-cancel>Cancel membership</button>' : ''}
       ${subscription?.pending_change ? '<button type="button" class="btn btn-secondary" data-household-keep-pro>Keep Pro · remove scheduled downgrade</button><p>Remove the scheduled downgrade before opening Stripe to cancel your subscription. Keeping Pro retains your USD 14.99/month renewal.</p>' : subscription?.schedule_managed ? '<p>A Stripe schedule manages this subscription. Contact support before changing or cancelling it.</p>' : ''}
       ${subscription?.plan === 'basic' && subscription.status === 'active' && !subscription.cancel_at_period_end && !subscription.schedule_managed ? '<button type="button" class="btn btn-primary" data-household-upgrade>Upgrade to Pro in Stripe</button><p>Review the prorated upgrade charge in Stripe before confirming. Pro unlocks after payment is confirmed. Your monthly renewal date stays the same.</p>' : ''}
-      ${subscription?.plan === 'pro' && ['active', 'trialing'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.pending_change ? `<form data-household-downgrade-form><h3>Switch to Basic at next renewal</h3><p>Keep Pro until ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}. Then Basic renews automatically at USD 9.99/month until cancelled. No charge or credit today. Saved data is retained; Pro-only tools become unavailable.</p><label><input type="checkbox" id="household-downgrade-consent" required> I agree to switch to Basic at USD 9.99/month starting ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}, renewing monthly until cancelled.</label><button type="submit" class="btn btn-secondary" data-household-downgrade>Confirm Basic at next renewal</button></form>` : ''}
-      ${managedSubscription ? '<p>Use the Stripe billing portal to manage payment details or cancel. A second checkout is not needed.</p>' : ''}
-      ${!data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator. Existing paid access is unchanged.</p>' : ''}
-      ${entitlement.active && entitlement.source !== 'self-service-trial' && !subscription ? '<p>Your existing paid access is retained. No new subscription is required.</p>' : ''}`}
+      ${subscription?.plan === 'pro' && ['active', 'trialing'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.pending_change ? `<details><summary>Switch to Basic</summary><form data-household-downgrade-form><p>Keep Pro until ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}. Then Basic renews automatically at USD 9.99/month until cancelled. No charge or credit today. Saved data is retained; Pro-only tools become unavailable.</p><label><input type="checkbox" id="household-downgrade-consent" required> I agree to switch to Basic at USD 9.99/month starting ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}, renewing monthly until cancelled.</label><button type="submit" class="btn btn-secondary" data-household-downgrade>Confirm Basic at next renewal</button></form></details>` : ''}
+      ${canChoosePlan && !data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator.</p>' : ''}
+      ${retainedAccess ? '<p>Your existing access is active. No subscription is required. Contact support about changes to this access.</p>' : ''}`}
       <p class="household-error" role="alert"></p>`;
   }
   function bindBilling(root, data) {
@@ -92,6 +91,17 @@
       error.textContent = '';
       try { external((await post('/api/billing/portal')).url); }
       catch (failure) { error.textContent = failure.message; event.target.disabled = false; }
+    });
+    root.querySelector('[data-household-cancel]')?.addEventListener('click', async event => {
+      if (!data.owner || support() || !data.subscription || !['active', 'trialing', 'past_due', 'unpaid'].includes(data.subscription.status)
+        || data.subscription.cancel_at_period_end || data.subscription.schedule_managed || data.subscription.pending_change) return;
+      event.target.disabled = true;
+      error.textContent = '';
+      try {
+        const confirmed = await window.FinanceUI.confirm('Cancellation takes effect at the end of your billing period or Stripe trial. Continue to Stripe to confirm cancellation?', { title: 'Cancel membership?', action: 'Continue to Stripe' });
+        if (!confirmed) { event.target.disabled = false; return; }
+        external((await post('/api/billing/portal', { action: 'cancel' })).url);
+      } catch (failure) { error.textContent = failure.message; event.target.disabled = false; }
     });
     root.querySelector('[data-household-upgrade]')?.addEventListener('click', async event => {
       if (!data.owner || support()) return;
@@ -167,7 +177,7 @@
     try {
       const data = await request('/api/household');
       const owner = data.owner && !support();
-      root.innerHTML = `<h2>Household · ${esc(data.name)}</h2><p>Everyone in this household can edit shared finances. Only the owner can invite or remove members. Up to 10 members per household; invitation links expire after 48 hours.</p>
+      root.innerHTML = `<h2>Household · ${esc(data.name)}</h2><p>Members can edit shared finances. Up to 10 members; invitations expire after 48 hours.</p>
         <ul class="household-members">${data.members.map(member => `<li><span><strong>${esc(member.name)}</strong><br>${esc(member.email)} · ${esc(member.role)}</span>${owner && member.role !== 'owner' ? `<button type="button" class="btn btn-secondary" data-remove-member="${esc(member.id)}">Remove <span class="sr-only">${esc(member.name)}</span></button>` : ''}</li>`).join('')}</ul>
         ${owner ? `<form id="household-invite-form" class="toolbar"><label>Email address<input type="email" name="email" required autocomplete="email" maxlength="254"></label><button class="btn btn-primary">Invite member</button></form>
           <h3>Pending invitations</h3><ul class="household-members">${data.invitations.map(invite => `<li><span>${esc(invite.email)} · expires ${esc(date(invite.expires_at))}</span><button type="button" class="btn btn-secondary" data-revoke-invite="${esc(invite.id)}">Revoke<span class="sr-only"> invitation to ${esc(invite.email)}</span></button></li>`).join('') || '<li>No pending invitations.</li>'}</ul>` : ''}
