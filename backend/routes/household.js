@@ -77,7 +77,7 @@ router.post('/accept', route(async (req, res) => {
     if (prior.role !== 'owner' || members !== 1) throw failure(409, 'Leave your current shared household before accepting another invitation.');
     const paid = (await client.query(`SELECT 1 FROM household_subscriptions WHERE household_id=$1
       AND (stripe_customer_id IS NOT NULL OR trial_used)
-      UNION ALL SELECT 1 FROM user_licenses WHERE user_id=$2 AND (granted_at IS NOT NULL OR trial_started_at IS NOT NULL)`,
+      UNION ALL SELECT 1 FROM user_licenses WHERE user_id=$2 AND (granted_at IS NOT NULL OR (trial_started_at IS NOT NULL AND NOT self_service_trial))`,
     [prior.id, req.user.id])).rows;
     if (req.user.id === 1 || req.user.role === 'admin' || paid.length) throw failure(409, 'An existing paid or administrative household cannot be merged.');
     const categories = (await client.query('SELECT name,icon,color FROM categories WHERE user_id=$1', [req.user.id])).rows;

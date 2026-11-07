@@ -89,10 +89,14 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(initialAnalytics.body.moneyFlow.range.months, 3);
     assert.equal(initialAnalytics.body.moneyFlow.monthsAnalyzed, 0);
 
-    // Unsubscribed households cannot access any financial endpoints.
+    // New accounts receive a no-card trial, then expired households are gated.
+    const newTrial = await call('/api/license', { cookie: customerCookie });
+    assert.equal(newTrial.body.source, 'self-service-trial');
+    assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 200);
+    await database.query("UPDATE user_licenses SET trial_ends_at=NOW()-INTERVAL '1 second' WHERE user_id=$1", [customerId]);
     const free = await call('/api/license', { cookie: customerCookie });
     assert.equal(free.body.tier, 'none');
-    assert.equal(free.body.trialAvailable, true);
+    assert.equal(free.body.trialAvailable, false);
     const blocked = await call('/api/analytics', { cookie: customerCookie });
     assert.equal(blocked.status, 402);
     assert.equal(blocked.body.code, 'SUBSCRIPTION_REQUIRED');
@@ -101,7 +105,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 402);
     await assertPlanningLocked(customerCookie);
 
-    // Trials require Stripe payment setup and cannot be started via the legacy route.
+    // Trials cannot be restarted via the legacy route.
     const trial = await call('/api/license/trial', { body: {}, cookie: customerCookie });
     assert.equal(trial.status, 409);
     assert.match(trial.body.error, /Stripe Checkout/);

@@ -93,10 +93,8 @@ test('household billing clearly discloses both plans, trial payment consent and 
   assert.doesNotMatch(html, /card-number|cardNumber|Pro Plus|7-day|no charge/);
   const trial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { trialAvailable: true }, subscription: null }, '<script>oops</script>', 'basic');
   assert.match(trial, /value="basic" checked/);
-  assert.match(trial, /15-day trial/);
-  assert.match(trial, /selected plan is charged automatically unless cancelled/);
-  assert.match(trial, /trial access continues to its end/);
-  assert.match(trial, /reminder email 24 hours/);
+  assert.match(trial, /Subscribing charges the selected plan immediately and renews monthly/);
+  assert.match(trial, /remaining free trial ends/);
   assert.match(trial, /&lt;script&gt;oops&lt;\/script&gt;/);
 });
 
@@ -398,7 +396,7 @@ test('successful existing-user invite acceptance drops revoked sessions and requ
   assert.equal(calls.some(call => call.url === '/api/license' || call.url === '/api/billing'), false);
 });
 
-test('register reloads and refreshes /me before unpaid onboarding, ignoring incomplete immediate users', async () => {
+test('register starts on signup and navigates to dashboard without checkout', async () => {
   const calls = [];
   let registered = false;
   const f = fixture(async (url, options = {}) => {
@@ -406,31 +404,20 @@ test('register reloads and refreshes /me before unpaid onboarding, ignoring inco
     if (url === '/api/auth/me') return registered ? response(200, { user: { id: 4, emailVerified: false, household: { id: 8, role: 'owner', name: 'New home' } } }) : response(401, {});
     if (url === '/api/auth/status') return response(200, { registrationEnabled: true });
     if (url === '/api/auth/register') { registered = true; return response(201, { user: { id: 4, emailVerified: false } }); }
-    if (url === '/api/license') return response(200, { tier: 'none', active: false, plusActive: false, trialAvailable: true });
-    if (url === '/api/billing') return response(200, { owner: true, configured: true, entitlement: { tier: 'none', active: false, trialAvailable: true }, subscription: null });
+    if (url === '/api/license') return response(200, { tier: 'trial', source: 'self-service-trial', active: true, plusActive: true, trialAvailable: false });
     throw new Error(`Unexpected request: ${url}`);
   });
+  f.context.location.pathname = '/signup';
   f.run('session.js');
   await f.context.FinanceSession.start();
-  f.node('auth-switch').onclick();
-  f.node('auth-plan-basic').checked = true;
   f.context.location.hash = '#settings';
   f.node('auth-email').value = 'new@example.test';
   f.node('auth-name').value = 'New owner';
   f.node('auth-password').value = 'secure-password-123';
   await f.node('auth-form').onsubmit({ preventDefault() {} });
-  assert.equal(f.context.reloaded, true);
-  assert.equal(f.context.location.hash, '#subscription/basic', 'registration always continues to onboarding, not the previous page');
+  assert.equal(f.context.location.href, '/#dashboard');
   assert.equal(f.context.FinanceSession.currentUser(), null, 'incomplete registration user is never used for routing');
-  f.run('pro-core.js');
-  f.run('household.js');
-  await f.context.FinanceSession.start();
-  assert.equal(f.context.FinanceSession.currentUser().household.role, 'owner');
-  assert.equal(f.context.lastView, 'subscription/basic');
-  assert.match(f.node('subscription-view').innerHTML, /Verify your email before checkout/);
-  assert.match(f.node('subscription-view').innerHTML, /value="basic" checked/);
-  assert.match(f.node('subscription-view').innerHTML, /Your selected plan is <strong>Basic/);
-  assert.deepEqual(calls.slice(-3).map(call => call.url), ['/api/auth/me', '/api/license', '/api/billing']);
+  assert.equal(calls.some(call => call.url === '/api/billing/checkout'), false);
 });
 
 test('signed-in checkout wrapper throws verification errors with code and status intact', async () => {
@@ -446,7 +433,7 @@ test('signed-in checkout wrapper throws verification errors with code and status
     error => error.status === 403 && error.code === 'EMAIL_VERIFICATION_REQUIRED');
 });
 
-test('signup requires an inline plan and carries either choice without browser storage', async () => {
+test('signup needs no plan selection or browser storage', async () => {
   const html = source('index.html');
   assert.match(html, /<fieldset class="auth-plan-options" id="auth-plan-options" hidden>/);
   for (const plan of ['basic', 'pro']) {
@@ -459,32 +446,17 @@ test('signup requires an inline plan and carries either choice without browser s
       throw new Error(`Unexpected request: ${url}`);
     });
     f.context.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+    f.context.location.pathname = '/signup';
     f.run('session.js');
     await f.context.FinanceSession.start();
     assert.equal(f.node('auth-plan-options').hidden, true);
     assert.equal(f.node('auth-plan-basic').disabled, true);
-    f.node('auth-switch').onclick();
     assert.equal(f.node('auth-screen').classList.contains('is-registering'), true);
-    assert.equal(f.node('auth-plan-options').hidden, false);
-    assert.equal(f.node('auth-signup-steps').hidden, false);
-    assert.equal(f.node('auth-plan-basic').required, true);
-    assert.equal(f.node('auth-plan-basic').disabled, false);
+    assert.equal(f.node('auth-signup-steps').hidden, true);
+    assert.equal(f.node('auth-plan-basic').required, false);
     await f.node('auth-form').onsubmit({ preventDefault() {} });
-    assert.match(f.node('auth-error').textContent, /Choose Basic or Pro/);
-    assert.equal(calls.some(call => call.url.endsWith('/register')), false);
-    const input = f.node(`auth-plan-${plan}`);
-    input.checked = true;
-    input.listeners.change({ target: input });
-    assert.equal(f.context.FinanceSession.chosenPlan(), plan);
-    f.node('auth-switch').onclick();
-    assert.equal(f.node('auth-screen').classList.contains('is-registering'), false);
-    assert.equal(input.disabled, true, 'login does not validate hidden plan fields');
-    assert.equal(input.required, false);
-    f.node('auth-switch').onclick();
-    assert.equal(input.checked, true, 'switching between login and signup retains the selection');
-    await f.node('auth-form').onsubmit({ preventDefault() {} });
-    assert.equal(f.context.location.hash, `#subscription/${plan}`);
-    assert.equal(f.context.reloaded, true);
+    assert.equal(calls.some(call => call.url.endsWith('/register')), true);
+    assert.equal(f.context.location.href, '/#dashboard');
     assert.equal(calls.some(call => call.url === '/api/billing/checkout'), false, 'signup does not silently authorize billing');
   }
 });
@@ -3666,10 +3638,19 @@ test('marketing page explains household pricing, Stripe and trial renewal clearl
   assert.match(html, /\$9\.99<span>USD \/ month per household/);
   assert.match(html, /\$14\.99<span>USD \/ month per household/);
   assert.match(html, /15-day trial/);
-  assert.match(html, /Stripe hosted Checkout/);
-  assert.match(html, /automatically charged.*unless cancelled/);
-  assert.match(html, /trial access continues until its end/);
-  assert.doesNotMatch(html, /Pro Plus|PRO PLUS|Start free|data-choose-plan="free"|\$4\.99|\$9\.98/);
+  assert.match(html, /No card or plan choice required/);
+  assert.match(html, /CONNECT OR UPLOAD/);
+  assert.match(html, /text-based PDF statements from multiple banks/);
+  assert.match(html, /PDF compatibility depends on the statement layout/);
+  assert.doesNotMatch(html, /PDF (?:statements )?from TD Bank|TD Bank PDF statements/);
+  assert.match(source('marketing.js'), /text-based PDF statements from multiple banks/);
+  assert.doesNotMatch(source('marketing.js'), /PDF statements from TD Bank/);
+  assert.match(html, /Smart duplicate detection/);
+  assert.match(html, /Spending Compass/);
+  assert.match(html, /Intentional projections/);
+  assert.match(html, /Stripe charges immediately and renews monthly until cancelled/);
+  assert.match(html, /Trial access ends after 15 days without a subscription/);
+  assert.doesNotMatch(html, /Pro Plus|PRO PLUS|data-choose-plan="free"|\$4\.99|\$9\.98/);
   assert.match(source('marketing.css'), /prefers-reduced-motion/);
 });
 test('marketing page scrolls, has section navigation and a feature spotlight', () => {
@@ -3677,7 +3658,7 @@ test('marketing page scrolls, has section navigation and a feature spotlight', (
   const css = source('marketing.css');
   assert.match(css, /body\.auth-pending \{[^}]*overflow: visible/);
   assert.match(css, /\.marketing-nav \{[^}]*position: sticky/);
-  for (const id of ['marketing-spotlight', 'marketing-benefits', 'marketing-pricing', 'marketing-signin']) {
+  for (const id of ['marketing-spotlight', 'marketing-benefits', 'marketing-pricing']) {
     assert.match(html, new RegExp(`id="${id}"`));
     assert.match(html, new RegExp(`data-marketing-jump="${id}"`));
   }
@@ -3720,19 +3701,20 @@ test('feature spotlight rotates through Basic and Pro features', () => {
   assert.equal(prevented, true);
   assert.equal(scrolled, 'pricing');
 });
-test('marketing start opens registration only when registration is enabled', async () => {
+test('signup route opens registration only when registration is enabled', async () => {
   for (const registrationEnabled of [true, false]) {
     const f = fixture(async url => url.endsWith('/me') ? response(401, {}) : response(200, { setupRequired: false, registrationEnabled }));
+    f.context.location.pathname = '/signup';
     f.run('session.js');
     await f.context.FinanceSession.start();
-    f.node('marketing-start').listeners.click();
     assert.equal(f.node('auth-title').textContent, registrationEnabled ? 'Make room for your next chapter.' : 'Welcome back.');
     assert.equal(f.node('auth-switch').hidden, !registrationEnabled);
+    if (!registrationEnabled) assert.match(f.node('auth-description').textContent, /Registration is currently closed/);
   }
 });
 test('traffic reports public views and signup entry clicks, but not signed-in views or closed/invited signup', async () => {
   for (const scenario of [
-    { registrationEnabled: true, signedIn: false, invited: false, views: 1, clicks: 3 },
+    { registrationEnabled: true, signedIn: false, invited: false, views: 1, clicks: 0 },
     { registrationEnabled: false, signedIn: false, invited: false, views: 1, clicks: 0 },
     { registrationEnabled: true, signedIn: true, invited: false, views: 0, clicks: 0 },
     { registrationEnabled: true, signedIn: false, invited: true, views: 0, clicks: 0 }
@@ -3890,12 +3872,12 @@ test('pricing cards preserve a plan for explicit hosted checkout after sign-in',
   assert.equal(out.buttons[0].attrs['aria-pressed'], 'false');
   assert.match(out.buttons[1].textContent, /Pro selected/);
   assert.equal(out.buttons[0].textContent, 'Choose Basic');
-  assert.equal(out.f.node('auth-plan').hidden, true, 'signup uses inline plan cards instead of a duplicate banner');
+  assert.equal(out.f.context.location.href, '/signup');
   assert.equal(out.f.node('auth-plan-pro').checked, true);
-  assert.equal(out.f.node('auth-plan-options').hidden, false);
+  assert.equal(out.f.node('auth-plan-options').hidden, true);
   assert.equal(out.f.node('auth-plan-name').textContent, 'Pro');
   assert.match(out.f.node('auth-plan-note').textContent, /Stripe hosted Checkout/);
-  assert.equal(out.f.node('auth-title').textContent, 'Make room for your next chapter.', 'choosing a plan opens account creation');
+  assert.equal(out.f.node('auth-title').textContent, 'Welcome back.');
   assert.equal(out.calls.some(call => call.url === '/api/license/request'), false, 'nothing is requested while signed out');
 
   const notes = [];

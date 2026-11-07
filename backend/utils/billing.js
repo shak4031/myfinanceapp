@@ -195,8 +195,6 @@ export async function checkout(household, user, plan, consent) {
       await client.query('UPDATE household_subscriptions SET stripe_customer_id=$1 WHERE household_id=$2', [customer.id, household.id]);
       row = { ...row, stripe_customer_id: customer.id };
     }
-    const legacyTrial = (await client.query('SELECT trial_started_at FROM user_licenses WHERE user_id=$1', [household.owner_user_id])).rows[0]?.trial_started_at;
-    const trial = !row.trial_used && !legacyTrial;
     const origin = process.env.APP_ORIGIN;
     if (!origin) throw failure(503, 'The application origin is not configured.');
     const session = await stripe.checkout.sessions.create({
@@ -205,11 +203,8 @@ export async function checkout(household, user, plan, consent) {
       payment_method_collection: 'always', payment_method_types: ['card'],
       success_url: `${origin}/#settings/billing`, cancel_url: `${origin}/#settings/billing`,
       metadata: { household_id: String(household.id), plan },
-      subscription_data: { metadata: { household_id: String(household.id) },
-        ...(trial ? { trial_period_days: BILLING_TRIAL_DAYS, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } } : {}) },
-      custom_text: { submit: { message: trial
-        ? `15 days of Pro, then ${plan === 'basic' ? 'Basic $9.99' : 'Pro $14.99'} USD/month per household automatically unless you cancel before the trial ends. We email the billing owner 24 hours before expiration.`
-        : `${plan === 'basic' ? 'Basic $9.99' : 'Pro $14.99'} USD/month per household. Renews automatically until cancelled.` } }
+      subscription_data: { metadata: { household_id: String(household.id) } },
+      custom_text: { submit: { message: `${plan === 'basic' ? 'Basic $9.99' : 'Pro $14.99'} USD/month per household, charged immediately. Renews automatically until cancelled.` } }
     }, { idempotencyKey: `household-checkout-${household.id}-${plan}-${row.checkout_session_id || 'first'}` });
     await client.query(`UPDATE household_subscriptions SET checkout_session_id=$1,checkout_expires_at=$2,updated_at=NOW()
       WHERE household_id=$3`, [session.id, timestamp(session.expires_at), household.id]);
@@ -299,6 +294,9 @@ export async function syncSubscription(client, stripe, subscriptionId) {
     cancel_at_period_end=$7,trial_used=(trial_used OR $8),updated_at=NOW() WHERE household_id=$9`,
   [subscription.id, plan, subscription.status, timestamp(subscription.trial_start), trialEnd, periodEnd,
     subscription.cancel_at_period_end === true, !!subscription.trial_start, row.household_id]);
+  if (['active', 'trialing'].includes(subscription.status)) {
+    await client.query('UPDATE user_licenses SET self_service_trial=FALSE,updated_at=NOW() WHERE user_id=$1 AND self_service_trial=TRUE', [row.owner_user_id]);
+  }
 }
 
 export async function handleStripeEvent(event) {

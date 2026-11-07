@@ -10,7 +10,7 @@ export const PUBLIC_PAGES = Object.freeze({
   '/features': { title: 'Household budget app with a bill calendar | MyFinance',
     description: 'Explore shared household transactions, a bill calendar, 30-day cash flow forecasts, optional Plaid bank sync and MyFinance Pro planning.' },
   '/pricing': { title: 'MyFinance pricing | Basic and Pro household plans',
-    description: `Compare MyFinance Basic at $${price('basic')}/month and Pro at $${price('pro')}/month per household, with a 15-day Pro trial and payment details required.` },
+    description: `Compare MyFinance Basic at $${price('basic')}/month and Pro at $${price('pro')}/month per household, with a 15-day Pro trial without payment details.` },
   '/debt-payoff': { title: 'Debt payoff planner with bills and savings goals | MyFinance',
     description: 'Plan debt payoff alongside recurring bills and savings goals. Compare snowball and avalanche strategies with MyFinance Pro.' },
   '/about': { title: 'About MyFinance | Privacy, security and purpose',
@@ -39,9 +39,9 @@ const content = {
   '/pricing': `<p class="eyebrow">ONE SUBSCRIPTION PER HOUSEHOLD</p><h1>Simple monthly pricing for your household.</h1>
     <p class="intro">Choose Basic for day-to-day finances or Pro for deeper analysis and planning. Prices are in USD, billed monthly per household.</p>
     <section class="cards" aria-label="Monthly plans">
-      <article><h2>MyFinance Basic</h2><p class="public-price">$${price('basic')} <span>/ month</span></p><p>Shared household transactions, categories, statement imports, optional bank connections, bill tracking and a 30-day cash flow forecast.</p><a class="public-cta" href="/#marketing-signin">Get started with Basic</a></article>
-      <article><h2>MyFinance Pro</h2><p class="public-price">$${price('pro')} <span>/ month</span></p><p>Everything in Basic, plus advanced spending analytics, a debt-free plan and competing savings-goal allocations.</p><a class="public-cta" href="/#marketing-signin">Get started with Pro</a></article>
-    </section><section class="trust-note"><h2>How the 15-day Pro trial works</h2><p>Select your ongoing Basic or Pro plan and provide payment details and consent in Stripe Checkout. The trial includes Pro features for 15 days. Your selected plan bills automatically after the trial unless you cancel before it ends. This is not a free plan or a trial without payment details.</p><p>Manage your subscription from household settings. Cancellation stops renewal; imported history is retained. See the checkout disclosures for your billing dates and applicable terms.</p></section>`,
+      <article><h2>MyFinance Basic</h2><p class="public-price">$${price('basic')} <span>/ month</span></p><p>Shared household transactions, categories, statement imports, optional bank connections, bill tracking and a 30-day cash flow forecast.</p><a class="public-cta" href="/signup">Start your free trial</a></article>
+      <article><h2>MyFinance Pro</h2><p class="public-price">$${price('pro')} <span>/ month</span></p><p>Everything in Basic, plus advanced spending analytics, a debt-free plan and competing savings-goal allocations.</p><a class="public-cta" href="/signup">Start your free trial</a></article>
+    </section><section class="trust-note"><h2>How the 15-day Pro trial works</h2><p>Your trial starts when you create your account, with no payment details required. Access ends after 15 days unless you subscribe. If you subscribe during your trial, Stripe charges immediately and your paid plan replaces the trial. Your subscription bills automatically each month until cancelled.</p><p>Manage your subscription from household settings. Cancellation stops renewal; imported history is retained. See the checkout disclosures for your billing dates and applicable terms.</p></section>`,
   '/debt-payoff': `<p class="eyebrow">MYFINANCE PRO</p><h1>A debt payoff planner that accounts for bills.</h1>
     <p class="intro">A payoff plan needs more than a debt balance. MyFinance Pro combines your recorded income and spending with recurring bills and savings goals to estimate what is available for debt reduction.</p>
     <section class="cards" aria-label="Debt planning">

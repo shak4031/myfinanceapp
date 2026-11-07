@@ -574,33 +574,35 @@ introduction, illustrative progress preview, Basic / Pro comparison,
 and the existing sign-in, registration and password-recovery forms.
 
 The page scrolls normally while signed out and has a sticky top bar (Features,
-Basic vs Pro, Pricing, Sign in) plus links back to sign-in and to the top after
+Highlights, Pricing, Sign in) plus links back to sign-in and to the top after
 pricing. In-page links scroll without touching the app's hash router. Above the
 sign-in card, a "7 quick wins" feature spotlight (`frontend/marketing.js`)
 rotates through Basic and Pro capabilities with varied entrance
 effects. It has dots, arrows and a pause button, pauses on hover or focus and
 in background tabs, and does not auto-rotate when reduced motion is preferred.
+The highlights emphasize optional bank sync, supported statement imports,
+duplicate review, Spending Compass and debt planning. Security claims link to
+the whitepaper for safeguards and limitations.
 
 Prices are USD per month **per household**:
 - **Basic ($9.99):** imports, accounts, transactions, category review and the everyday dashboard.
 - **Pro ($14.99):** Basic plus budgets, analytics, charts, forecasts, recurring-charge
   radar, unusual-charge signals, CSV exports, Debt Free and Savings Goals.
 
-There is no free financial-access tier. Eligible households select a paid plan,
-verify email and add a payment method through Stripe-hosted Checkout to start a
-one-time **15-day Pro trial**. Stripe automatically bills the selected plan after
-the trial unless the owner cancels. The owner receives an email when 24 hours
-remain. Cancelling preserves trial access through its end. Existing paid
+There is no permanent free financial-access tier. New accounts start a one-time
+**15-day Pro trial** immediately on registration, without payment details.
+Access ends when the trial expires unless the owner subscribes. A verified owner
+may subscribe through Stripe-hosted Checkout at any time: the selected plan is
+charged immediately, replaces the remaining trial, and renews monthly until
+cancelled. Existing Stripe-managed trials retain their original terms. Existing paid
 licenses retain Pro access without an automatic charge or Stripe subscription.
 The primary operator and public synthetic demo retain full access.
 
 #### Choosing a plan
 
-Account creation includes Basic and Pro plan cards, followed by email verification
-and Stripe Checkout. The chosen plan carries directly into subscription onboarding,
-including when browser storage is unavailable; account creation alone never starts
-a subscription. The signup layout is centered instead of leaving an empty marketing
-column beside a long form. Unpaid households see subscription onboarding instead
+Account creation does not require plan selection or Stripe Checkout. Email
+verification is required before subscribing. Unpaid households whose trial has
+expired see subscription onboarding instead
 of financial pages. Only the owner can consent
 to billing and open Stripe Checkout or the cancellation/payment-method portal.
 Pro feature badges consistently read PRO, including during a trial. Locked

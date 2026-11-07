@@ -267,6 +267,7 @@ export async function migratePrivateSchema(client) {
     -- A customer's pending plan choice, approved by an administrator (there is no online checkout).
     ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_plan TEXT;
     ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
+    ALTER TABLE user_licenses ADD COLUMN IF NOT EXISTS self_service_trial BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS households (
       id SERIAL PRIMARY KEY, owner_user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
       name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

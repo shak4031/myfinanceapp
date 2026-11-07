@@ -151,8 +151,8 @@ test('32 logins and 24 populated households retain isolation across Stripe subsc
       const registered = await call('/api/auth/register', credentials(owner), owner);
       owner.id = expect(registered).user.id;
       owner.cookie = registered.cookie;
-      assert.equal(expect(await call('/api/license', undefined, owner)).active, false);
-      expect(await call('/api/accounts', undefined, owner), 402);
+      assert.equal(expect(await call('/api/license', undefined, owner)).source, 'self-service-trial');
+      expect(await call('/api/accounts', undefined, owner));
       expect(await call('/api/billing/checkout', { plan: owner.plan, consent: true }, owner), 403);
       expect(await call('/api/auth/verify-email', { token: token(owner.email, 'verify') }, owner));
       expect(await call('/api/billing/checkout', { plan: owner.plan, consent: false }, owner), 400);
@@ -163,10 +163,10 @@ test('32 logins and 24 populated households retain isolation across Stripe subsc
         && request.data.customer && customers.get(request.data.customer).email === owner.email);
       assert.ok(owner.checkout);
       assert.equal(owner.checkout.data.line_items[0].price, `price_scale_${owner.plan}`);
-      assert.equal(owner.checkout.data.subscription_data.trial_period_days, 15);
+      assert.equal(owner.checkout.data.subscription_data.trial_period_days, undefined);
       assert.equal(owner.checkout.data.payment_method_collection, 'always');
       expect(await call('/api/billing/checkout', { plan: owner.plan, consent: true }, owner));
-      expect(await call('/api/accounts', undefined, owner), 402, 'checkout redirect cannot unlock access');
+      expect(await call('/api/accounts', undefined, owner), 200, 'the free trial remains active while checkout is pending');
       owner.subscription = { id: `sub_scale_${owner.index}`, customer: owner.checkout.data.customer,
         status: 'trialing', trial_start: seconds(), trial_end: seconds() + 15 * 86400,
         current_period_end: seconds() + 15 * 86400, cancel_at_period_end: false,

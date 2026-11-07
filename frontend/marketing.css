@@ -42,6 +42,15 @@ body.auth-pending { height: auto; overflow: visible; }
 .marketing-reassurance { color: var(--muted-ink); font-size: 12px; margin: 13px 0 30px; }
 .marketing-access { padding-top: 28px; }
 .marketing-access .auth-card { width: 100%; padding: clamp(24px, 3vw, 38px); background: #fffdf9; border: 1px solid #dce1d4; box-shadow: 0 16px 60px #293d3510; border-radius: 24px; }
+.marketing-page:not(.access-page) .auth-card,
+.marketing-page:not(.access-page) .auth-footnote,
+.marketing-page:not(.access-page) .marketing-first-step { display: none; }
+.marketing-page.access-page .marketing-story,
+.marketing-page.access-page .marketing-spotlight,
+.marketing-page.access-page .marketing-benefits,
+.marketing-page.access-page .marketing-pricing,
+.marketing-page.access-page .marketing-first-step { display: none; }
+.marketing-page.access-page .marketing-hero { grid-template-columns: minmax(0, 1fr); max-width: 720px; }
 .marketing-access .auth-card .brand-mark { width: 48px; height: 48px; margin-bottom: 22px; }
 .marketing-access .auth-card h2 { font-size: 28px; line-height: 1.15; letter-spacing: -.7px; color: var(--ink); margin-bottom: 12px; }
 .marketing-access .auth-card .eyebrow { font-size: 10px; letter-spacing: 1.3px; }
@@ -295,3 +304,7 @@ body.auth-pending { height: auto; overflow: visible; }
 .marketing-trust h2 { font-size: 21px; margin: 0 0 12px; }
 .marketing-trust p { font-size: 14px; line-height: 1.7; }
 .marketing-trust a { color: #285b47; font-weight: 700; }
+.marketing-trust-list { display: grid; gap: 12px; margin: 0 0 16px; padding: 0; list-style: none; }
+.marketing-trust-list li { display: grid; gap: 2px; padding-left: 18px; border-left: 3px solid #82a685; font-size: 13px; line-height: 1.5; }
+.marketing-trust-list span { color: var(--muted-ink); }
+.marketing-benefits > div > p:last-child { color: var(--muted-ink); font-size: 13px; line-height: 1.7; }

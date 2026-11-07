@@ -157,6 +157,11 @@ test('entitlementFromRow covers owner, license, trial, expiry and revocation', (
   const free = entitlementFromRow(2, null, now);
   assert.equal(free.tier, 'none');
   assert.equal(free.trialAvailable, true);
+  const selfTrial = { self_service_trial: true, trial_started_at: '2026-06-01T12:00:00Z', trial_ends_at: '2026-06-16T12:00:00Z' };
+  assert.equal(entitlementFromRow(2, selfTrial, new Date('2026-06-16T11:59:59Z')).source, 'self-service-trial');
+  assert.equal(entitlementFromRow(2, selfTrial, new Date('2026-06-16T12:00:00Z')).active, false);
+  assert.equal(entitlementFromRow(2, { ...selfTrial, subscription: { status: 'active', plan: 'basic', current_period_end: '2026-07-01' } }, now).tier, 'basic');
+  assert.equal(entitlementFromRow(2, { ...selfTrial, subscription: { status: 'incomplete', stripe_subscription_id: 'sub_pending' } }, now).source, 'self-service-trial');
   const trial = entitlementFromRow(2, { subscription: { status: 'trialing', trial_used: true,
     trial_started_at: '2026-06-06T12:00:00Z', trial_ends_at: '2026-06-21T12:00:00Z' } }, now);
   assert.equal(trial.tier, 'trial');

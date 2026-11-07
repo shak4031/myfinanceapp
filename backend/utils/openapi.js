@@ -109,7 +109,7 @@ export function openApiSpec() {
       '/api/plan': { get: op('Pro', 'Debt and savings plan; all plan operations require Pro') },
       '/api/categories': { get: op('Finance', 'List categories') },
       '/api/license': { get: op('Billing', 'Household entitlement: active means Basic/Pro/trial access; plusActive means Pro/trial features. No free tier.') },
-      '/api/license/trial': { post: op('Billing', 'Retired: returns 409; use Stripe Checkout for the 15-day Pro trial', body({})) },
+      '/api/license/trial': { post: op('Billing', 'Retired: returns 409; new accounts start their trial at registration', body({})) },
       '/api/license/request': {
         post: op('Billing', 'Retired: returns 409; select Basic or Pro in Stripe Checkout', body({ plan: 'basic' })),
         delete: op('Billing', 'Clear a legacy pending plan request')
@@ -123,7 +123,7 @@ export function openApiSpec() {
       '/api/household/members/{id}': { delete: op('Household', 'Owner: remove a member and revoke sessions; cannot remove the owner', pathId) },
       '/api/household/accept': { post: op('Household', 'Existing login: accept invitation only if no paid/financial history; revokes sessions for fresh sign-in', body({ token: '<invitation fragment>' })) },
       '/api/billing': { get: op('Billing', 'Household subscription status, entitlement, configuration readiness and billing owner capability') },
-      '/api/billing/checkout': { post: op('Billing', 'Verified owner: Stripe-hosted payment collection and automatic subscription; first eligible trial is 15 days of Pro then selected plan', body({ plan: 'basic', consent: true })) },
+      '/api/billing/checkout': { post: op('Billing', 'Verified owner: Stripe-hosted payment collection and immediate recurring paid subscription', body({ plan: 'basic', consent: true })) },
       '/api/billing/portal': { post: op('Billing', 'Owner: Stripe-hosted invoices/payment methods/cancel at period end', body({})) },
       '/api/billing/webhook': { post: op('Billing', 'Stripe-signed raw-body events; no browser session or CSRF origin required') },
       '/api/budgets': { get: op('Pro', 'Monthly category budgets'), put: op('Pro', 'Replace monthly category budgets', body({ budgets: [{ category: 'Groceries', amount: 600 }] })) },

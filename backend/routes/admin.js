@@ -133,7 +133,7 @@ router.get('/users', async (req, res, next) => {
         (SELECT COUNT(*)::int FROM sessions s WHERE s.user_id = u.id AND s.expires_at > NOW() AND s.last_activity_at > NOW() - INTERVAL '10 minutes' AND s.support_grant_id IS NULL) AS active_sessions,
         (SELECT COUNT(*)::int FROM support_grants g WHERE g.user_id = u.id AND g.revoked_at IS NULL AND g.expires_at > NOW()) AS active_grants,
         l.plan AS license_plan, l.granted_at AS license_granted_at, l.revoked_at AS license_revoked_at,
-        l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at,
+        l.trial_started_at AS license_trial_started_at, l.trial_ends_at AS license_trial_ends_at, l.self_service_trial AS license_self_service_trial,
         l.requested_plan AS license_requested_plan, l.requested_at AS license_requested_at,
         h.owner_user_id AS household_owner_id,to_jsonb(subscription) AS subscription
       FROM users u
@@ -144,10 +144,10 @@ router.get('/users', async (req, res, next) => {
       WHERE u.password_hash IS NOT NULL AND ($1 = '' OR lower(u.email) LIKE '%' || $1 || '%' OR lower(u.name) LIKE '%' || $1 || '%')
       ORDER BY (l.requested_plan IS NOT NULL) DESC, u.id LIMIT 200
     `, [q])).rows);
-    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, license_requested_plan, license_requested_at, subscription, household_owner_id, ...user }) => {
+    res.json(rows.map(({ license_plan, license_granted_at, license_revoked_at, license_trial_started_at, license_trial_ends_at, license_self_service_trial, license_requested_plan, license_requested_at, subscription, household_owner_id, ...user }) => {
       const row = license_granted_at || license_revoked_at || license_trial_started_at || license_requested_plan || subscription
         ? { plan: license_plan, granted_at: license_granted_at, revoked_at: license_revoked_at, trial_started_at: license_trial_started_at, trial_ends_at: license_trial_ends_at,
-            requested_plan: license_requested_plan, requested_at: license_requested_at, subscription }
+            self_service_trial: license_self_service_trial, requested_plan: license_requested_plan, requested_at: license_requested_at, subscription }
         : null;
       const { tier, source, daysLeft, trialEndsAt, plusActive, request } = entitlementFromRow(household_owner_id || user.id, row, new Date(), user.email);
       return { ...user, license: { tier, source, daysLeft, trialEndsAt, plusActive, request } };

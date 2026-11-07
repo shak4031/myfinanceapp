@@ -109,7 +109,8 @@ test('public reporting sends only an event and omits cookies; all signup entry p
   assert.match(source, /body: JSON\.stringify\(\{ event \}\)/);
   assert.match(source, /if \(mode === 'login'\) reportTraffic\('homepage_view'\)/);
   assert.match(source, /if \(mode === 'register'\) reportTraffic\('signup_click'\)/);
-  assert.match(source, /if \(registrationEnabled && !user && !inviteToken\) reportTraffic\('signup_click'\)/);
+  const homepage = await readFile(new URL('../../frontend/index.html', import.meta.url), 'utf8');
+  assert.match(homepage, /href="\/signup">Try MyFinance free for 15 days/);
   const admin = await readFile(new URL('../../frontend/admin.html', import.meta.url), 'utf8');
   assert.match(admin, /data-tab="traffic"/);
   assert.match(admin, /Counts are events, not unique people/);

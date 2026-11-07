@@ -11,6 +11,7 @@ import { sendPasswordResetEmail, sendSecurityNotice, mailConfigured, appOrigin }
 import { isDemoEmail } from '../utils/demo.js';
 import { ensureHousehold, invitedHousehold, joinHousehold } from '../utils/households.js';
 import { newSecret, encryptSecret, decryptSecret, matchingStep, recoveryCodes, consumeFactor } from '../utils/mfa.js';
+import { TRIAL_DAYS } from '../utils/license.js';
 import { TRUST_DAYS, rememberBrowser, browserIsTrusted, revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
 
 const router = Router();
@@ -279,6 +280,10 @@ for (const action of ['setup', 'register']) {
           user.email_verified_at = new Date();
         } else await sendVerification(client, req, user);
         await ensureHousehold(client, user.id);
+        if (action === 'register') {
+          await client.query(`INSERT INTO user_licenses(user_id,trial_started_at,trial_ends_at,self_service_trial)
+            VALUES($1,NOW(),NOW()+($2 * INTERVAL '1 day'),TRUE)`, [user.id, TRIAL_DAYS]);
+        }
         const issued = await issueSession(client, req, res, user);
         await client.query('SET LOCAL ROLE finance_app_runtime');
         await client.query("SELECT set_config('app.user_id', $1, true)", [String(user.id)]);

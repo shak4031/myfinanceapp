@@ -72,6 +72,10 @@ test('About and Contact have separate public URLs, accessible navigation and hon
     const home = await (await fetch(base + '/')).text();
     assert.match(home, /href="\/security">Security/);
     assert.match(home, /Read the technical security whitepaper/);
+    const signup = await fetch(base + '/signup');
+    assert.equal(signup.status, 200);
+    assert.match(signup.headers.get('x-robots-tag'), /noindex/);
+    assert.match(await signup.text(), /id="auth-form"/);
     assert.equal((await fetch(base + '/public-pages.css')).status, 200);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

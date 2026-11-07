@@ -1,7 +1,7 @@
 // Signed-out marketing page: sticky section navigation and the rotating feature spotlight.
 (function () {
   const SLIDES = [
-    { tier: 'BASIC', emoji: '📥', effect: 'rise', title: 'Drop in a statement.', mark: 'Get the story.', body: 'Import CSV or OFX/QFX files from any bank or credit card, or PDF statements from TD Bank. No bank login, no spreadsheet marathon.', chips: ['CSV or OFX from any bank', 'No bank link', '2-minute start'] },
+    { tier: 'BASIC', emoji: '📥', effect: 'rise', title: 'Drop in a statement.', mark: 'Get the story.', body: 'Import supported CSV, OFX/QFX or text-based PDF statements from multiple banks. PDF compatibility depends on the statement layout.', chips: ['Multiple banks', 'No bank link', 'CSV, OFX or PDF'] },
     { tier: 'BASIC', emoji: '🏷️', effect: 'pop', title: 'Every dollar finds', mark: 'its label.', body: 'Fix one coffee shop and MyFinance offers to fix the rest. Your rules sort future imports for you.', chips: ['Smart categories', 'One-tap fix-alls'] },
     { tier: 'BASIC', emoji: '📅', effect: 'swipe', title: 'See bills before', mark: 'they see you.', body: 'Mark fixed bills and paydays once. Your calendar shows the running balance, day by day.', chips: ['Fixed bills', 'Payday forecast', 'Low-balance heads-up'] },
     { tier: 'PRO', emoji: '🔎', effect: 'flip', title: 'Catch the sneaky', mark: 'repeat charges.', body: 'Recurring-charge and unusual-charge alerts flag what quietly drains your account.', chips: ['Recurring charges', 'Unusual charges'] },
@@ -95,6 +95,10 @@
       const link = event.target.closest?.('a[data-marketing-jump]');
       if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
+      if (link.hasAttribute('data-marketing-signin') && !['/signin', '/signup'].includes(location.pathname)) {
+        location.href = '/signin';
+        return;
+      }
       const id = link.dataset.marketingJump;
       const behavior = reducedMotion() ? 'auto' : 'smooth';
       if (id === 'top') window.scrollTo?.({ top: 0, behavior });

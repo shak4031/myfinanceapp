@@ -47,6 +47,11 @@ function baseEntitlement(userId, row, now, email) {
   if (subscription?.status === 'active' && new Date(subscription.current_period_end) > now) {
     return { ...base, tier: subscription.plan, source: 'stripe', active: true, plusActive: subscription.plan === 'pro', trialAvailable: false };
   }
+  if (row?.self_service_trial && new Date(row.trial_ends_at) > now) {
+    const trialEnds = new Date(row.trial_ends_at);
+    return { ...base, tier: 'trial', source: 'self-service-trial', active: true, plusActive: true, trialAvailable: false,
+      trialEndsAt: trialEnds.toISOString(), daysLeft: Math.max(1, Math.ceil((trialEnds - now) / DAY_MS)) };
+  }
   const trialEnds = row?.trial_ends_at ? new Date(row.trial_ends_at) : null;
   return {
     ...base, tier: 'none', source: trialEnds || subscription?.trial_used ? 'trial-expired' : 'none', active: false,
@@ -71,7 +76,7 @@ export async function getEntitlement(userId) {
 }
 
 export async function startTrial(userId, now = new Date()) {
-  return { ok: false, status: 409, error: 'Choose a plan and add payment details in Stripe Checkout to start your 15-day Pro trial.', entitlement: await getEntitlement(userId) };
+  return { ok: false, status: 409, error: 'Trials start when a new account is created. Choose a paid plan in Stripe Checkout to subscribe.', entitlement: await getEntitlement(userId) };
 }
 
 export async function setLicense(client, userId, action, actorId, plan = 'pro') {

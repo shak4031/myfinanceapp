@@ -487,9 +487,8 @@ Keep `ALLOW_REGISTRATION=false` throughout staging. This migration creates a
 household and owner membership for every existing independent user, without
 moving financial records. Both legacy paid tiers become new Pro licenses to
 preserve their features. They are not charged or automatically subscribed in
-Stripe. Unpaid households must select a plan, verify email and complete Checkout;
-old no-card trials do not grant financial access. A previously used trial is
-not restarted. Back up the database before migration; do not roll back application
+Stripe. Newly registered households receive 15 days of Pro without a card.
+Older no-card trials are not restarted. Back up the database before migration; do not roll back application
 code without a compatible schema/plan migration.
 
 1. Create Stripe test-mode recurring monthly prices: Basic **USD 9.99** and Pro
@@ -507,8 +506,8 @@ code without a compatible schema/plan migration.
    sessions or browser CSRF rules. Events are idempotent, fetch authoritative
    subscription state and fail/retry on processing errors.
 3. Test real Stripe **test mode** end to end: hosted Checkout collecting a card,
-   Basic-selected trial with Pro access, successful paid conversion to Basic,
-   Pro conversion, declined payment, cancellation during trial, cancellation
+   no-card registration and expiry, immediate paid subscription to Basic and
+   Pro, declined payment, cancellation of existing Stripe trials, cancellation
    at paid-period end, webhook duplicate/reordering, and return from the portal.
    Confirm there is only one subscription/customer per household. No live
    Stripe requests are made by the automated test suite.
@@ -534,8 +533,8 @@ code without a compatible schema/plan migration.
    scheduled change before the cancellation portal is available; conflicting
    external schedules, cancellation, or payment updates are rejected. Schedule
    events retrieve authoritative live subscription state, not event snapshots.
-5. Keep at least one server instance always running. The startup worker checks
-   every minute for trial reminders due within 24 hours, using database locks
+5. Keep at least one server instance always running. For existing Stripe-managed
+   trials, the startup worker checks every minute for reminders due within 24 hours, using database locks
    across instances. Configure/test SMTP and monitor `billing.reminder_failed`.
    Reminders go to the household owner's app email, not every member or a
    separately edited Stripe receipt email. Downtime can delay reminders; mail
@@ -549,10 +548,11 @@ code without a compatible schema/plan migration.
    processor requirements have been reviewed. Do not reuse test IDs in live mode.
    Then explicitly enable registration when ready.
 
-Trial duration is 15 days and all trial access is Pro, regardless of selected
-post-trial plan. Checkout requires renewal consent and a payment method. A
-subscription automatically charges the selected monthly plan unless cancelled.
-Cancellation keeps access until trial/paid-period end. Expired, unpaid, paused
+New account trial duration is 15 days with Pro access and no payment method.
+Checkout requires renewal consent and a payment method, charges immediately,
+and replaces the remaining free trial. A subscription renews monthly unless
+cancelled. Existing Stripe-managed trials retain their original terms.
+Cancellation keeps access until the applicable trial/paid-period end. Expired, unpaid, paused
 or incomplete subscriptions cannot access financial routes, but billing,
 membership and authentication remain available. Basic includes core accounts,
 imports, transactions and dashboards; Pro adds analytics, budgets, debt planning

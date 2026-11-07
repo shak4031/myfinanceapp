@@ -91,11 +91,11 @@ window.FinanceSession = (() => {
     }
     const recovery = mode === 'forgot' || mode === 'reset';
     el('auth-screen').classList.toggle('is-registering', mode === 'register');
-    el('auth-signup-steps').hidden = mode !== 'register';
-    el('auth-plan-options').hidden = mode !== 'register';
+    el('auth-signup-steps').hidden = true;
+    el('auth-plan-options').hidden = true;
     for (const plan of ['basic', 'pro']) {
-      el(`auth-plan-${plan}`).disabled = mode !== 'register';
-      el(`auth-plan-${plan}`).required = mode === 'register';
+      el(`auth-plan-${plan}`).disabled = true;
+      el(`auth-plan-${plan}`).required = false;
     }
     el('auth-form').hidden = false;
     el('auth-title').textContent = ['invite', 'accept'].includes(mode) ? 'Join your household.' : mode === 'setup' ? 'Your fresh start begins here.' : mode === 'register' ? 'Make room for your next chapter.'
@@ -118,7 +118,7 @@ window.FinanceSession = (() => {
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
     el('auth-switch').hidden = inviteToken || recovery || mode === 'setup' ? false : !registrationEnabled;
     el('auth-switch').textContent = mode === 'accept' ? 'Keep my current household' : mode === 'invite' ? 'Already have an account? Sign in to join' : inviteToken && mode === 'login' ? 'Create a login for this invitation' : recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
-    if (mode === 'register') el('auth-description').textContent = 'Choose your household plan and create your login below. Next, verify your email and add payment details in Stripe Checkout to start your 15-day Pro trial. No subscription starts when you create this account.';
+    if (mode === 'register') el('auth-description').textContent = 'Create your account to start 15 days of Pro access. No payment details or plan selection required. Your trial starts immediately; verify your email to subscribe later.';
     if (mode === 'invite') el('auth-description').textContent = 'Create your own login to edit your household’s shared finances. The household owner manages billing and members.';
     if (mode === 'accept') el('auth-description').textContent = 'Join with your existing login to edit the invited household’s shared finances. You can join only if your current household has no financial data or paid access. The invited household’s owner manages billing and membership.';
     el('auth-forgot').hidden = mode !== 'login';
@@ -133,7 +133,7 @@ window.FinanceSession = (() => {
   const PLAN_KEY = 'myfinance.chosenPlan';
   const PLANS = {
     basic: { name: 'Basic', price: 'USD 9.99 / month per household', note: 'Core finances for your household. Continue after sign-in to select your plan and provide payment details in Stripe hosted Checkout.' },
-    pro: { name: 'Pro', price: 'USD 14.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Continue after sign-in to Stripe hosted Checkout. The 15-day trial includes all Pro features and auto-charges your selected plan unless cancelled.' }
+    pro: { name: 'Pro', price: 'USD 14.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Stripe hosted Checkout charges immediately and renews monthly until cancelled.' }
   };
   let chosenPlan = '';
   const store = {
@@ -174,8 +174,9 @@ window.FinanceSession = (() => {
   }
   async function start() {
     cleanAppMarkup = document.querySelector('.app-container').innerHTML;
+    el('auth-screen').classList.toggle('access-page', ['/signup', '/signin'].includes(location.pathname) || !!inviteToken || !!verifyToken || location.hash.startsWith('#reset-token=') || ['#owner-setup', '#marketing-signin'].includes(location.hash));
     const focusAccess = () => {
-      if (registrationEnabled && !user && !inviteToken) reportTraffic('signup_click');
+      if (location.pathname !== '/signup') { location.href = '/signup'; return; }
       if (registrationEnabled && mode === 'login') { mode = 'register'; renderMode(); }
       (el('marketing-signin') || el('marketing-access'))?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
       (mode === 'setup' || mode === 'register' ? el('auth-name') : el('auth-email'))?.focus({ preventScroll: true });
@@ -195,6 +196,7 @@ window.FinanceSession = (() => {
     }
     el('auth-switch').onclick = () => {
       if (mode === 'accept') { inviteToken = ''; location.reload(); return; }
+      if (mode === 'login' && !inviteToken && registrationEnabled && location.pathname !== '/signup') { location.href = '/signup'; return; }
       mode = mode === 'login' ? (inviteToken ? 'invite' : registrationEnabled ? 'register' : 'login') : 'login';
       if (mode === 'register') reportTraffic('signup_click');
       if (location.hash.startsWith('#reset-token=')) history.replaceState(null, '', location.pathname);
@@ -209,9 +211,7 @@ window.FinanceSession = (() => {
       el('auth-submit').disabled = true;
       el('auth-error').textContent = '';
       try {
-        const signupPlan = mode === 'register' ? ['basic', 'pro'].find(plan => el(`auth-plan-${plan}`).checked) : '';
-        if (mode === 'register' && !signupPlan) throw new Error('Choose Basic or Pro before creating your account.');
-        if (signupPlan) store.set(signupPlan);
+        const registering = mode === 'register';
         if (mode === 'accept') {
           const accepted = await fetch('/api/household/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: inviteToken }) });
           const result = await accepted.json();
@@ -263,7 +263,7 @@ window.FinanceSession = (() => {
           return;
         }
         inviteToken = '';
-        if (signupPlan) location.hash = `#subscription/${signupPlan}`;
+        if (registering) { location.href = '/#dashboard'; return; }
         location.reload();
       } catch (error) { el('auth-error').textContent = error.message; }
       finally { el('auth-submit').disabled = false; }
@@ -311,9 +311,11 @@ window.FinanceSession = (() => {
       if (!statusResponse.ok) throw new Error('Account service unavailable. Please reload to retry.');
       const status = await statusResponse.json();
       setupRequired = !!status.setupRequired;
-      mode = inviteToken ? 'invite' : setupRequired && location.hash === '#owner-setup' ? 'setup' : 'login';
+      mode = inviteToken ? 'invite' : setupRequired && location.hash === '#owner-setup' ? 'setup' : location.pathname === '/signup' && status.registrationEnabled ? 'register' : 'login';
       registrationEnabled = !!status.registrationEnabled;
       renderMode();
+      if (mode === 'register') reportTraffic('signup_click');
+      if (location.pathname === '/signup' && !registrationEnabled) el('auth-description').textContent = 'Registration is currently closed.';
       if (mode === 'login') reportTraffic('homepage_view');
     } catch (error) { el('auth-description').textContent = error.message; }
   }
