@@ -103,6 +103,13 @@ test('public SEO serves crawlable HTML, accurate pricing and only canonical publ
         assert.deepEqual(schema.offers.map(offer => offer.price), Object.values(PRICES).map(cents => (cents / 100).toFixed(2)));
         assert.ok(schema.offers.every(offer => offer.priceCurrency === 'USD' && offer.priceSpecification.unitText === 'MONTH'));
       }
+      if (['/features', '/pricing', '/debt-payoff'].includes(path)) {
+        assert.match(html, /class="public-landing"/);
+        assert.match(html, /class="public-hero(?: [^"]*)?"/);
+        assert.match(html, /href="\/signup"/);
+        assert.match(html, /No payment details required/);
+        assert.match(html, /Planning results are estimates/);
+      }
       if (path === '/pricing') {
         assert.match(html, /\$9\.99/);
         assert.match(html, /\$14\.99/);

@@ -29,6 +29,89 @@ section { margin-top: 40px; }
 .cards article { min-width: 0; overflow-wrap: anywhere; }
 .site-footer { border-top: 1px solid #d7e1d4; font-size: 13px; }
 @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } main { padding-top: 32px; } .site-header nav { gap: 16px; } }
+
+.public-landing { --landing-ink: #193e35; --landing-green: #24634d; background: #f8f8ef; color: var(--landing-ink); }
+.public-landing .site-header, .public-landing .site-footer { padding-inline: max(24px, calc((100vw - 1200px) / 2)); }
+.public-landing .site-header { padding-block: 18px; background: #f8f8efe8; border-color: #e2e8d9; }
+.public-landing .site-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--landing-ink); letter-spacing: -.8px; }
+.public-landing .site-brand::before { content: 'M'; display: grid; place-items: center; width: 38px; height: 38px; color: white; background: var(--landing-ink); border-radius: 13px; font-size: 19px; font-weight: 850; }
+.public-landing .site-header nav { align-items: center; gap: 6px; }
+.public-landing .site-header nav a { padding: 9px 12px; color: #435d51; border-radius: 999px; font-size: 14px; font-weight: 650; text-decoration: none; }
+.public-landing .site-header nav a:hover, .public-landing .site-header nav a[aria-current] { color: var(--landing-ink); background: #e5efd7; }
+.public-landing .site-header nav a:last-child { padding-inline: 18px; color: white; background: var(--landing-ink); }
+.public-landing main { max-width: 1248px; padding: 0 24px 80px; }
+.public-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .87fr); gap: clamp(40px, 7vw, 100px); align-items: center; padding: clamp(60px, 8vw, 110px) 0 76px; }
+.public-hero-copy { position: relative; z-index: 1; }
+.public-landing .eyebrow { color: #39745a; font-size: 11px; font-weight: 800; letter-spacing: 1.8px; }
+.public-landing .eyebrow span { color: #c97b48; font-size: 16px; }
+.public-hero h1 { max-width: 650px; margin: 20px 0 24px; font-size: clamp(48px, 5.9vw, 78px); line-height: 1.02; letter-spacing: -.065em; }
+.public-hero h1 em, .art-heading em { font-family: Georgia, serif; font-weight: 400; color: #36795b; }
+.public-hero .intro { max-width: 580px; margin: 0; color: #53675c; font-size: clamp(17px, 1.5vw, 19px); line-height: 1.7; }
+.public-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin-top: 30px; }
+.public-landing .public-cta { min-height: 51px; gap: 16px; padding: 13px 20px; border-radius: 12px; background: var(--landing-ink); font-size: 15px; font-weight: 750; transition: background .2s, transform .2s; }
+.public-landing .public-cta:hover { background: #337257; transform: translateY(-2px); }
+.public-text-link { color: var(--landing-ink); font-size: 14px; font-weight: 750; text-decoration-thickness: 1px; }
+.hero-caption { margin: 13px 0 0; color: #677b6c; font-size: 12px; }
+.hero-art { position: relative; padding: 30px; border: 1px solid #d5e0c8; border-radius: 27px; background: #e5efda; box-shadow: 12px 12px 0 #d9e7d0, 0 30px 60px #193e3514; transform: rotate(2deg); }
+.art-label { display: flex; justify-content: space-between; gap: 12px; color: #4a7056; font-size: 10px; font-weight: 850; letter-spacing: 1.2px; }
+.art-heading { margin: 28px 0 22px; font-size: clamp(28px, 3vw, 39px); line-height: 1.12; font-weight: 750; letter-spacing: -1.5px; }
+.art-calendar { display: grid; gap: 9px; }
+.art-calendar > div { display: flex; align-items: center; gap: 13px; min-width: 0; padding: 12px; border: 1px solid #e8eee1; border-radius: 13px; background: #fffef9; }
+.art-calendar > div > span:nth-child(2) { flex: 1; min-width: 0; }
+.art-calendar b, .art-calendar small, .plan-path small { display: block; }
+.art-calendar b { font-size: 13px; }
+.art-calendar small, .plan-path small { margin-top: 2px; color: #718174; font-size: 11px; }
+.art-calendar strong { white-space: nowrap; font-size: 13px; }
+.art-calendar .art-positive { color: #317a58; }
+.art-date { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 11px; background: #e3f1d7; color: #276343; font-size: 15px; font-weight: 850; line-height: 1; }
+.art-date small { margin: 0; color: inherit; font-size: 8px; }
+.art-date-lilac { background: #ede5fa; color: #775a98; }
+.art-date-peach { background: #fce8d9; color: #a45b3a; }
+.art-foot { margin-top: 20px; color: #587362; font-size: 12px; font-weight: 700; }
+.art-foot span { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 5px; border-radius: 50%; background: #cae7bc; color: #276343; }
+.art-spark { position: absolute; color: #d18455; font-size: 36px; line-height: 1; }
+.art-spark-one { top: -20px; right: 32px; }
+.art-spark-two { right: -18px; bottom: 42px; color: #9c79bb; font-size: 48px; }
+.hero-art-note { background: #f3e9dc; border-color: #e8d7c6; box-shadow: 12px 12px 0 #ebdecf, 0 30px 60px #193e3514; }
+.note-number { margin-top: 32px; color: var(--landing-ink); font-family: Georgia, serif; font-size: clamp(80px, 10vw, 125px); line-height: 1; letter-spacing: -8px; }
+.note-number span { display: inline-block; color: #538266; font-family: system-ui, sans-serif; font-size: 17px; font-weight: 750; line-height: 1.3; letter-spacing: 0; }
+.hero-art-note > p { max-width: 280px; color: #596e5f; font-size: 16px; }
+.note-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.note-pills span { padding: 8px 11px; border: 1px solid #decfbc; border-radius: 999px; background: #fff9f0; font-size: 11px; font-weight: 700; }
+.plan-path { display: grid; gap: 10px; }
+.plan-path > div { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 12px; background: #fffaf4; }
+.plan-path b { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: #e3edd6; color: #367052; font-size: 11px; }
+.plan-path span { font-size: 13px; font-weight: 750; }
+.public-landing .section-intro { padding-top: 30px; border-top: 1px solid #dce5d5; }
+.public-landing .section-intro h2 { margin: 10px 0; font-size: clamp(30px, 3.4vw, 42px); letter-spacing: -1.5px; }
+.public-landing .section-intro p:last-child { margin: 0; color: #66796c; }
+.public-landing .cards { margin-top: 24px; gap: 18px; }
+.public-landing .cards article { position: relative; padding: 30px; border: 1px solid #dce7d8; border-radius: 20px; background: #fffefa; box-shadow: 0 10px 30px #193e3509; }
+.public-landing .cards article::before { content: '\2726'; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #e5f1d9; color: #397557; font-size: 19px; }
+.public-landing .cards article:nth-child(4n+2)::before { background: #f8e6d9; color: #b46a47; }
+.public-landing .cards article:nth-child(4n+3)::before { background: #eee7f6; color: #8662a2; }
+.public-landing .cards h2 { margin: 20px 0 10px; font-size: 22px; letter-spacing: -.5px; }
+.public-landing .cards article p:not(.public-price) { color: #5a6e61; font-size: 15px; }
+.public-landing .public-price { color: var(--landing-ink); font-size: 40px; }
+.public-landing .trust-note { margin-top: 28px; padding: 30px; border-color: #d5e5ce; border-radius: 20px; background: #eaf3e3; }
+.public-landing .trust-note h2 { margin-top: 0; font-size: 24px; }
+.public-landing .site-footer { background: #eff3e8; border-color: #dce5d5; }
+@media (max-width: 850px) {
+  .public-landing .site-header { align-items: flex-start; }
+  .public-landing .site-header nav { gap: 3px; }
+  .public-hero { grid-template-columns: 1fr; gap: 40px; padding: 50px 0 60px; }
+  .hero-art { max-width: 540px; margin: 0 12px 0 0; }
+}
+@media (max-width: 620px) {
+  .public-landing .site-header { gap: 12px; }
+  .public-landing .site-header nav { flex: 1 1 100%; min-width: 0; gap: 2px; }
+  .public-landing .site-header nav a { padding: 7px 9px; font-size: 13px; }
+  .public-landing main { padding: 0 20px 55px; }
+  .public-hero h1 { font-size: clamp(43px, 11vw, 60px); }
+  .hero-art { padding: 22px; transform: rotate(1deg); }
+  .public-landing .cards article, .public-landing .trust-note { padding: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .public-landing .public-cta { transition: none; } }
 .document-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 24px 0; border-block: 1px solid #d7e1d4; }
 .document-meta dt, .section-number { font-size: 12px; font-weight: 750; letter-spacing: 1px; text-transform: uppercase; color: #526958; }
 .document-meta dd { margin: 6px 0 0; }

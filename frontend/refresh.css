@@ -303,6 +303,24 @@ body .editor { padding: 28px; }
 dialog [role=alert] { color: var(--danger); font-size: 13px; }
 dialog [role=alert]:empty { display: none; }
 body .floating-dialog { width: min(600px,calc(100vw - 40px)); padding: 0; }
+body #fixed-estimate-dialog { width: min(480px,calc(100vw - 32px)); }
+.fixed-estimate-body { padding: 28px; }
+.fixed-estimate-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.fixed-estimate-header h2 { margin: 3px 0 4px; font-size: 23px; line-height: 1.2; letter-spacing: -.5px; }
+.fixed-estimate-eyebrow { margin: 0; color: #047857; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }
+.fixed-estimate-name { margin: 0; color: var(--text-secondary); font-size: 14px; overflow-wrap: anywhere; }
+.fixed-estimate-intro { margin: 20px 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.fixed-estimate-label { display: block; margin-bottom: 8px; color: var(--text-primary); font-size: 13px; font-weight: 700; }
+.fixed-estimate-input { display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
+.fixed-estimate-input:focus-within { border-color: var(--primary); outline: 3px solid #10b98133; }
+.fixed-estimate-input span { color: #64748b; font-size: 18px; font-weight: 700; }
+.fixed-estimate-input input { width: 100%; min-width: 0; min-height: 50px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-size: 18px; font-weight: 700; box-shadow: none; }
+.fixed-estimate-note { margin-top: 20px; padding: 14px 16px; border: 1px solid #d5eae1; border-radius: 12px; background: #f0faf5; color: #355d4d; font-size: 13px; line-height: 1.55; }
+.fixed-estimate-note strong { color: #166348; }
+.fixed-estimate-note p { margin: 5px 0 0; }
+.fixed-estimate-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.fixed-estimate-footer .btn { min-height: 44px; }
+@media (max-width: 480px) { .fixed-estimate-body { padding: 22px; } .fixed-estimate-footer .btn { flex: 1; } }
 #add-goal-modal { width: min(520px,calc(100vw - 40px)); }
 .floating-dialog-body { width: 100%; }
 .dialog-close, .mtd-dialog-close { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; background: #f1f5f9; color: #334155; border: 1px solid var(--border); font-size: 24px; cursor: pointer; }
@@ -584,10 +602,17 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .category-selection-chips { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
 .category-selection-chips button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface, #fff); color: var(--text-primary); cursor: pointer; }
 #upcoming-section .pay-history > ol.pay-list { display: block; margin: 0 12px 12px; }
-.pay-resolution { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.pay-card .pay-resolution { order: 4; flex-basis: 100%; }
-.pay-resolution button { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface, #fff); color: var(--text-primary); font: inherit; font-size: 11px; cursor: pointer; }
-.pay-resolution button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pay-actions { min-width: 0; margin-top: 5px; color: var(--text-primary); font-size: 12px; }
+.pay-card .pay-actions { order: 4; flex-basis: 100%; }
+.pay-actions summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid #d7e2e8; border-radius: 8px; background: #fff; color: #365367; font-weight: 700; cursor: pointer; list-style: none; }
+.pay-actions summary::-webkit-details-marker { display: none; }
+.pay-actions summary span { color: #58758a; font-size: 17px; line-height: 1; }
+.pay-actions[open] summary { border-color: #9acbbc; background: #f0faf5; color: #08684d; }
+.pay-actions-options { display: grid; gap: 2px; margin-top: 5px; padding: 4px; border: 1px solid #dce5eb; border-radius: 9px; background: #fff; }
+.pay-actions-options button { width: 100%; min-height: 40px; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: #263d4e; font: inherit; text-align: left; cursor: pointer; }
+.pay-actions-options button:hover, .pay-actions-options button:focus-visible { background: #edf7f3; color: #08684d; }
+.pay-actions summary:focus-visible, .pay-actions-options button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (hover: none) { .pay-actions summary { min-height: 44px; } }
 .pay-carried { margin: 20px 0; padding: 16px; border: 1px solid #d97706; border-radius: 14px; }
 .pay-carried h3 { margin: 0 0 8px; }
 .pay-carried p { color: var(--text-secondary); font-size: 13px; }

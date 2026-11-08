@@ -3021,6 +3021,10 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   const markup = f.node('dashboard-payments').innerHTML;
   assert.match(markup, /Last month &middot; still unpaid/);
   assert.match(markup, /Earlier &lt;utility&gt;/);
+  assert.match(markup, /<details class="pay-actions"><summary aria-label="Actions for Earlier &lt;utility&gt;">/);
+  assert.match(markup, /data-payment-status="paid">Mark paid/);
+  assert.match(markup, /data-payment-status="ignored">Ignore this payment/);
+  assert.doesNotMatch(markup, /class="pay-resolution"/);
   assert.match(markup, /Projected balance in 30 days<\/span><strong>\$400\.00/);
   assert.doesNotMatch(markup, /data-date="2026-10|Expired old estimate/);
   assert.match(source('refresh.css'), /\.pay-history \{ margin: 20px 0 24px/);
@@ -3066,6 +3070,7 @@ test('bill estimate editor saves the monthly amount and displays partial progres
   vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
   await f.context.loadDashboard();
   assert.match(f.node('dashboard-payments').innerHTML, /\$300\.00 paid of \$600\.00 estimate/);
+  assert.match(f.node('dashboard-payments').innerHTML, /data-estimate-amount="600">Edit estimate/);
   assert.match(f.node('dashboard-payments').innerHTML, /Approximately complete/);
   assert.match(f.node('dashboard-payments').innerHTML, /\$10\.00 difference/);
   assert.match(f.node('dashboard-payments').innerHTML, /Projected balance in 30 days<\/span><strong>\$700\.00/);
@@ -3077,6 +3082,23 @@ test('bill estimate editor saves the monthly amount and displays partial progres
   await f.node('fixed-estimate-form').onsubmit({ preventDefault() {}, submitter: { disabled: false } });
   assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/estimate')).options.body).amount, '650');
   assert.equal(f.node('fixed-estimate-dialog').open, false);
+});
+test('bill action menus close and return focus on Escape', async () => {
+  const f = fixture(async url => response(200, url.endsWith('/summary')
+    ? { balance: 1000, income: 0, expenses: 0, netCashflow: 0 } : []));
+  f.context.FinanceUI = { howCalc: () => '' };
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  let focused = false, prevented = false;
+  const menu = { open: true, querySelector: () => ({ focus() { focused = true; } }) };
+  f.node('dashboard-payments').onkeydown({ key: 'Escape', target: { closest: () => menu },
+    preventDefault() { prevented = true; }, stopPropagation() {} });
+  assert.equal(menu.open, false);
+  assert.equal(focused, true);
+  assert.equal(prevented, true);
 });
 test('a closed category dialog discards a late transaction response', async () => {
   let finish;
