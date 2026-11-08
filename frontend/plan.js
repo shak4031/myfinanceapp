@@ -28,7 +28,8 @@
       flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', piggy: '<path d="M4 11a7 6 0 0 1 13-3h2v4l-2 1v3h-3v2h-3v-2H8v2H5v-3a6 6 0 0 1-1-4Z"/><circle cx="14.5" cy="10.5" r=".8"/>',
       info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', check: '<path d="m5 12 5 5 9-10"/>',
       alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/>', bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7Z"/>',
-      play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/>'
+      play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z" fill="currentColor"/>',
+      home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'
     };
     return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
   };
@@ -39,7 +40,8 @@
   };
   const KIND_LABEL = { general: 'Savings', car: 'Car', college: 'College', emergency: 'Emergency fund' };
 
-  const state = { plan: null, pending: null, whatIf: { extra: 0, lumpSum: 0, result: null }, goalWhatIf: {} };
+  const state = { plan: null, pending: null, whatIf: { extra: 0, lumpSum: 0, result: null }, goalWhatIf: {}, tab: 'plan',
+    mortgage: { data: null, selected: null, editing: false, sim: null, scenario: { extraMonthly: 0, extraYearly: 0, extraYearlyMonth: 12, lumpSum: 0, lumpSumMonth: '', biweekly: false } } };
   let plusAccess = false;
   const isPro = () => state.plan ? !!state.plan.pro : !!window.FinancePro?.isPlusActive?.();
   // Older rows store a word ("Save") instead of an emoji.
@@ -80,7 +82,10 @@
   // A saved change makes any open what-if stale.
   function resetScenarios() { state.whatIf = { extra: 0, lumpSum: 0, result: null }; state.goalWhatIf = {}; }
   function renderAll() {
-    if ($('plan-debt-root')) renderDebt();
+    if ($('plan-debt-root')) {
+      if (state.tab === 'mortgage') { if (state.mortgage.data) renderMortgage(); }
+      else renderDebt();
+    }
     if ($('plan-goals-root')) renderGoals();
   }
 
@@ -358,7 +363,7 @@
     const tieNote = twins.length > 1 && twins.some(item => item.id === d.strategy)
       ? `<p class="plan-strategy-note">${icon('info', 14)}<span><b>${esc(twins.map(item => item.name).join(', ').replace(/, ([^,]*)$/, ' and $1'))}</b> attack your debts in the same order with these balances and rates, so their dates and interest match. Switching between them changes nothing today; it will once your balances or rates diverge.</span></p>` : '';
     const strategyIntro = `Each card compares the same ${money(d.budget)}/mo budget. Recommended means lowest modeled interest among available strategies, not a judgment about what will motivate you. Compare the first finish as well as the final date: snowball may offer an earlier win at a higher interest cost. Every funded strategy covers all minimums and rolls freed payments forward. A starred debt overrides the order.`;
-    root.innerHTML = `${hasDebts ? debtHero(p) : ''}
+    root.innerHTML = `${planTabs()}${hasDebts ? debtHero(p) : ''}
       ${hasDebts ? debtAssessment(p) : ''}
       ${d.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Your saved strategy needs MyFinance Pro, so the plan is using Avalanche. <button type="button" class="link-btn" data-act="unlock" data-reason="Advanced payoff strategies are part of MyFinance Pro">Renew Pro</button></p>` : ''}
       ${hasDebts ? `<section class="panel plan-card"><header class="plan-card-head"><div><h3>Choose your strategy${active ? ` <span class="plan-strategy-current">Using ${esc(active.name)}</span>` : ''}</h3><p>${strategyIntro}</p></div><a class="plan-help-link" href="#tutorials/debt-strategies" title="How strategies work">${icon('play', 13)} How it works</a></header>${strategyCards(strategies, d.strategy, 'debt', numbers)}${active ? `<p class="plan-quiet">${esc(active.detail)}</p>` : ''}${tieNote}</section>` : ''}
@@ -377,6 +382,278 @@
         </aside>
       </div>
       <p class="plan-footnote">Estimates assume monthly compounding, no new charges and on-time payments. Lender calculations may differ. This is planning guidance, not financial advice.</p>`;
+  }
+
+  // ---------- mortgage ----------
+  const planTabs = () => `<nav class="plan-tabs" aria-label="Debt tools">
+      <a href="#payoff" class="plan-tab${state.tab === 'plan' ? ' is-active' : ''}"${state.tab === 'plan' ? ' aria-current="page"' : ''}>${icon('flag', 15)} Debt-free plan</a>
+      <a href="#payoff/mortgage" class="plan-tab${state.tab === 'mortgage' ? ' is-active' : ''}"${state.tab === 'mortgage' ? ' aria-current="page"' : ''}>${icon('home', 15)} Mortgage</a>
+    </nav>`;
+  const currentMonthKey = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; };
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const selectedMortgage = () => {
+    const list = state.mortgage.data?.mortgages || [];
+    return list.find(item => String(item.id) === String(state.mortgage.selected)) || list[0] || null;
+  };
+  const hasTerms = m => m && m.original_amount > 0 && m.term_months > 0 && /^\d{4}-\d{2}$/.test(m.first_payment_month || '');
+  const mortgageInputs = m => ({
+    principal: m.original_amount, apr: m.apr, termMonths: m.term_months, firstPaymentMonth: m.first_payment_month,
+    currentBalance: m.balance > 0 ? m.balance : null, escrow: m.escrow_payment || 0, ...state.mortgage.scenario
+  });
+  const scenarioActive = () => {
+    const s = state.mortgage.scenario;
+    return s.extraMonthly > 0 || s.extraYearly > 0 || s.lumpSum > 0 || s.biweekly;
+  };
+
+  function mortgageForm(m) {
+    const terms = [40, 30, 25, 20, 15, 10].map(years => years * 12);
+    const term = m?.term_months || 360;
+    if (!terms.includes(term)) terms.push(term);
+    const value = (key, fallback = '') => m?.[key] == null ? fallback : m[key];
+    const isNew = !m;
+    return `<section class="panel plan-card mtg-setup">
+      <header class="plan-card-head"><div><p class="plan-eyebrow">${icon('home', 12)} ${isNew ? 'SET UP YOUR MORTGAGE' : 'MORTGAGE DETAILS'}</p>
+        <h3>${isNew ? 'Your biggest debt deserves its own plan' : hasTerms(m) ? `Edit ${esc(m.name)}` : `Complete ${esc(m.name)}`}</h3>
+        <p>Enter the numbers from your closing disclosure or monthly statement. We build the full amortization schedule and show what extra payments would save.</p></div>
+        ${state.mortgage.editing && hasTerms(selectedMortgage()) ? '<button type="button" class="btn btn-secondary btn-sm" data-act="mtg-cancel">Cancel</button>' : ''}</header>
+      <form id="mtg-form" class="mtg-form" novalidate>
+        <label class="plan-field mtg-wide">Name<input name="name" maxlength="100" required value="${esc(value('name', 'Home mortgage'))}"></label>
+        <label class="plan-field">Original loan amount<span class="plan-money-input"><span>$</span><input name="original_amount" type="number" min="1" step="1000" required value="${esc(value('original_amount'))}" placeholder="350000"></span></label>
+        <label class="plan-field">Interest rate<span class="plan-money-input is-suffix"><input name="apr" type="number" min="0" max="40" step=".001" required value="${esc(value('apr'))}" placeholder="6.25"><span>%</span></span></label>
+        <label class="plan-field">Term<select name="term_months">${terms.sort((a, b) => b - a).map(months => `<option value="${months}"${months === term ? ' selected' : ''}>${months % 12 ? `${months} months` : `${months / 12} years`}</option>`).join('')}</select></label>
+        <label class="plan-field">First payment month<input name="first_payment_month" type="month" required value="${esc(value('first_payment_month'))}"></label>
+        <label class="plan-field">Escrow per month <small>taxes &amp; insurance</small><span class="plan-money-input"><span>$</span><input name="escrow_payment" type="number" min="0" step="1" value="${esc(value('escrow_payment'))}" placeholder="0"></span></label>
+        <label class="plan-field">Current balance <small>optional</small><span class="plan-money-input"><span>$</span><input name="balance" type="number" min="0" step=".01" value="${esc(m?.balance > 0 ? m.balance : '')}" placeholder="From schedule"></span></label>
+        <label class="plan-field mtg-wide">How payments appear on statements <small>optional</small><input name="payment_match" maxlength="100" value="${esc(value('payment_match'))}" placeholder="e.g. ROCKET MORTGAGE"></label>
+        <label class="mtg-check mtg-wide"><input name="included" type="checkbox"${m?.included ? ' checked' : ''}> Include in my debt-free program <small>Most people keep the mortgage separate and pay off other debts first.</small></label>
+        <p id="mtg-error" class="mtg-error mtg-wide" role="alert"></p>
+        <div class="mtg-wide mtg-form-actions"><button type="submit" class="btn btn-primary">${isNew ? 'Build my schedule' : 'Save details'}</button></div>
+      </form></section>`;
+  }
+
+  function mortgageChart(sim) {
+    const charts = window.ProCharts;
+    if (!charts || !sim?.series?.length) return '';
+    const xMax = sim.series.at(-1).offset;
+    const baseline = sim.series.map(point => ({ x: point.offset, v: point.baseline }));
+    const scenario = sim.series.map(point => ({ x: point.offset, v: point.scenario }));
+    const start = monthDate(sim.series[0].month) || new Date();
+    const xTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(xMax * f)).map(x => ({ x, label: String(new Date(start.getFullYear(), start.getMonth() + x, 1).getFullYear()) }));
+    const series = [{ points: baseline, className: 'plan-baseline', dashed: scenarioActive(), area: !scenarioActive() }];
+    if (scenarioActive()) series.push({ points: scenario.filter((point, index) => index === 0 || point.v > 0 || scenario[index - 1].v > 0), className: 'plan-line', area: true, dot: true });
+    const measured = $('mtg-chart-root')?.clientWidth;
+    const room = measured > 0 ? measured - 14 : (($('plan-debt-root')?.clientWidth || 1040) - 64) * (window.innerWidth > 1000 ? 0.6 : 1);
+    const width = Math.round(Math.max(300, Math.min(980, room)));
+    return `<figure class="plan-chart mtg-chart">${charts.plot({ series, xMax, xTicks: width < 560 ? xTicks.filter((_, i) => i % 2 === 0) : xTicks, width, height: width < 560 ? 200 : 240, label: 'Remaining mortgage balance by year' })}
+      <figcaption><span class="key ${scenarioActive() ? 'key-base' : 'key-plan'}">Current schedule</span>${scenarioActive() ? '<span class="key key-plan">With extra payments</span>' : ''}</figcaption></figure>`;
+  }
+
+  function mortgageResult(sim) {
+    if (!sim) return '';
+    if (!scenarioActive()) {
+      return `<div class="mtg-result is-idle"><span class="mtg-result-icon">${icon('spark', 20)}</span><div><strong>Try an extra payment</strong>
+        <p>Even ${money(100)} a month goes straight to principal. Move the slider to see your new payoff date.</p></div></div>`;
+    }
+    const s = sim.savings;
+    return `<div class="mtg-result">
+      <div><span>New payoff</span><strong>${monthLabel(sim.scenario.payoffMonth, 'short')}</strong><small>was ${monthLabel(sim.baseline.payoffMonth, 'short')}</small></div>
+      <div class="is-good"><span>Time saved</span><strong>${s.months ? duration(s.months) : '—'}</strong><small>${s.months ? 'sooner' : 'no change'}</small></div>
+      <div class="is-good"><span>Interest saved</span><strong>${money(s.interest)}</strong><small>${money(sim.scenario.totalInterest)} left to pay</small></div>
+    </div>`;
+  }
+
+  function paintMortgageSim() {
+    const sim = state.mortgage.sim;
+    const result = $('mtg-sim-result');
+    if (result) result.innerHTML = mortgageResult(sim);
+    const chartRoot = $('mtg-chart-root');
+    if (chartRoot) chartRoot.innerHTML = mortgageChart(sim);
+  }
+
+  function amortizationTable(sim) {
+    const year = String(new Date().getFullYear());
+    const years = sim.original.years;
+    const maxPaid = Math.max(...years.map(row => row.paid), 1);
+    return `<section class="panel plan-card mtg-schedule">
+      <header class="plan-card-head"><div><h3>Amortization schedule</h3><p>Your original ${duration(sim.input.termMonths)} schedule at ${esc(sim.input.apr)}%. Open a year to see each payment.</p></div>
+        <span class="mtg-legend"><span class="key-principal">Principal</span><span class="key-interest">Interest</span></span></header>
+      <div class="mtg-years" role="list">${years.map(row => `<details class="mtg-year${row.year === year ? ' is-current' : ''}${row.year < year ? ' is-past' : ''}" role="listitem">
+        <summary><span class="mtg-year-label">${esc(row.year)}${row.year === year ? '<em>This year</em>' : ''}</span>
+          <span class="mtg-year-bar" aria-hidden="true" style="width:${Math.max(8, Math.round(row.paid / maxPaid * 100))}%"><i class="is-principal" style="width:${row.paid ? Math.round(row.principal / row.paid * 100) : 0}%"></i><i class="is-interest"></i></span>
+          <span class="mtg-year-num"><small>Principal</small>${money(row.principal)}</span><span class="mtg-year-num"><small>Interest</small>${money(row.interest)}</span><span class="mtg-year-num"><small>Balance</small>${money(row.endBalance)}</span></summary>
+        <div class="mtg-months"><table><thead><tr><th scope="col">Month</th><th scope="col">Payment</th><th scope="col">Principal</th><th scope="col">Interest</th><th scope="col">Balance</th></tr></thead>
+          <tbody>${row.months.map(item => `<tr${item.month === currentMonthKey() ? ' class="is-current"' : ''}><th scope="row">${MONTH_NAMES[Number(item.month.slice(5)) - 1]}</th><td>${cents(item.payment)}</td><td>${cents(item.principal)}</td><td>${cents(item.interest)}</td><td>${cents(item.balance)}</td></tr>`).join('')}</tbody></table></div>
+      </details>`).join('')}</div></section>`;
+  }
+
+  function renderMortgage() {
+    const root = $('plan-debt-root');
+    if (!root) return;
+    const m = selectedMortgage();
+    const list = state.mortgage.data?.mortgages || [];
+    if (!m || state.mortgage.editing || !hasTerms(m)) {
+      const formTarget = state.mortgage.editing === 'new' ? null : m;
+      root.innerHTML = `${planTabs()}${!m ? `<div class="mtg-intro">
+          <div><p class="plan-eyebrow">${icon('home', 12)} MORTGAGE PLANNER</p><h2>See every dollar of your mortgage, and how to shrink it</h2>
+          <p>Build your amortization schedule, track the interest you pay each year, and test extra payments, a yearly bonus, a lump sum, or bi-weekly payments.</p></div>
+          <ul class="mtg-intro-points"><li>${icon('check', 15)} Full payment-by-payment schedule</li><li>${icon('check', 15)} Payoff simulator with interest saved</li><li>${icon('check', 15)} Interest feeds your Analytics interest panel</li></ul>
+        </div>` : ''}${mortgageForm(formTarget)}`;
+      return;
+    }
+    const sim = state.mortgage.sim || m.simulation;
+    if (!sim) {
+      root.innerHTML = `${planTabs()}<div class="panel plan-empty"><h3>We couldn't build this schedule</h3><p>Check the loan amount, rate and term.</p><button type="button" class="btn btn-primary" data-act="mtg-edit">Edit details</button></div>`;
+      return;
+    }
+    const s = state.mortgage.scenario;
+    const paidPct = sim.input.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - sim.balance / sim.input.principal) * 100))) : 0;
+    const drift = sim.toDate.months > 0 && Math.abs(sim.balance - sim.toDate.scheduledBalance) >= 1;
+    const maxExtra = Math.max(2000, Math.ceil(sim.payment / 500) * 500);
+    root.innerHTML = `${planTabs()}
+      <section class="panel mtg-hero">
+        <div class="mtg-hero-main">
+          <p class="plan-eyebrow">${icon('home', 12)} ${esc(String(m.name).toUpperCase())}</p>
+          ${list.length > 1 ? `<label class="mtg-switch">Mortgage<select id="mtg-select">${list.map(item => `<option value="${esc(item.id)}"${item.id === m.id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label>` : ''}
+          <h2>Paid off <b>${monthLabel(sim.baseline.payoffMonth, 'long')}</b></h2>
+          <p>${duration(sim.baseline.months)} to go · ${money(sim.balance)} remaining of ${money(sim.input.principal)}</p>
+          <div class="mtg-progress" role="img" aria-label="${paidPct}% of the original loan repaid"><span style="width:${paidPct}%"></span></div>
+          <p class="mtg-progress-text"><b>${paidPct}%</b> of principal repaid</p>
+          ${drift ? `<p class="mtg-drift">${icon('info', 14)}<span>Your balance is ${money(Math.abs(sim.balance - sim.toDate.scheduledBalance))} ${sim.balance < sim.toDate.scheduledBalance ? 'ahead of' : 'behind'} the original schedule${sim.balance < sim.toDate.scheduledBalance ? '. Nice work.' : '.'}</span></p>` : ''}
+          <div class="mtg-hero-actions"><button type="button" class="btn btn-secondary btn-sm" data-act="mtg-edit">${icon('edit', 14)} Edit details</button>${drift ? '<button type="button" class="link-btn" data-act="mtg-sync-balance">Use scheduled balance</button>' : ''}<button type="button" class="link-btn" data-act="mtg-add">${icon('plus', 13)} Add another mortgage</button></div>
+        </div>
+        <dl class="mtg-stats">
+          <div><dt>Monthly payment</dt><dd>${cents(sim.totalPayment)}</dd><small>${cents(sim.payment)} principal &amp; interest${sim.input.escrow ? ` + ${cents(sim.input.escrow)} escrow` : ''}</small></div>
+          <div><dt>Interest left</dt><dd>${money(sim.baseline.totalInterest)}</dd><small>if you pay as scheduled</small></div>
+          <div><dt>Interest paid so far</dt><dd>${money(sim.toDate.interest)}</dd><small>${sim.toDate.months} payments, from the schedule</small></div>
+          <div><dt>Interest in ${new Date().getFullYear()}</dt><dd>${money(sim.thisYearInterest)}</dd><small>estimate for your Form 1098</small></div>
+        </dl>
+      </section>
+      <section class="panel plan-card mtg-sim">
+        <header class="plan-card-head"><div><h3>Payoff simulator</h3><p>Extra money goes straight to principal. Combine options to see the effect.</p></div>
+          ${scenarioActive() ? '<button type="button" class="btn btn-secondary btn-sm" data-act="mtg-clear">Reset</button>' : ''}</header>
+        <div class="mtg-sim-grid">
+          <div class="mtg-controls">
+            <label class="plan-field mtg-slider">Extra every month <output id="mtg-extra-out">${money(s.extraMonthly)}</output>
+              <input id="mtg-extra" type="range" min="0" max="${maxExtra}" step="25" value="${esc(s.extraMonthly)}" aria-describedby="mtg-extra-out"></label>
+            <div class="mtg-quick">${[100, 250, 500].map(amount => `<button type="button" class="plan-pill${s.extraMonthly === amount ? ' is-active' : ''}" data-act="mtg-quick" data-amount="${amount}">+${money(amount)}/mo</button>`).join('')}</div>
+            <div class="mtg-pair"><label class="plan-field">Once a year<span class="plan-money-input"><span>$</span><input id="mtg-yearly" type="number" min="0" step="100" value="${s.extraYearly || ''}" placeholder="0"></span></label>
+              <label class="plan-field">in<select id="mtg-yearly-month">${MONTH_NAMES.map((name, index) => `<option value="${index + 1}"${s.extraYearlyMonth === index + 1 ? ' selected' : ''}>${name}</option>`).join('')}</select></label></div>
+            <div class="mtg-pair"><label class="plan-field">One-time lump sum<span class="plan-money-input"><span>$</span><input id="mtg-lump" type="number" min="0" step="500" value="${s.lumpSum || ''}" placeholder="0"></span></label>
+              <label class="plan-field">in<input id="mtg-lump-month" type="month" min="${currentMonthKey()}" value="${esc(s.lumpSumMonth || currentMonthKey())}"></label></div>
+            <div class="mtg-toggle-row">${toggle('mtg-biweekly', m.id, s.biweekly, 'Bi-weekly payments')}<div><strong>Bi-weekly payments</strong><small>Half a payment every two weeks adds one extra payment a year (${cents(sim.payment / 12)}/mo).</small></div></div>
+          </div>
+          <div class="mtg-outcome"><div id="mtg-sim-result">${mortgageResult(sim)}</div><div id="mtg-chart-root">${mortgageChart(sim)}</div></div>
+        </div>
+      </section>
+      ${amortizationTable(sim)}
+      <p class="plan-footnote">Schedules assume a fixed rate, monthly compounding and on-time payments. Your servicer's figures and Form 1098 are the official record. Planning guidance, not financial advice.</p>`;
+    const chartRoot = $('mtg-chart-root');
+    if (chartRoot?.clientWidth > 0) chartRoot.innerHTML = mortgageChart(sim);
+  }
+
+  async function loadMortgage() {
+    const root = $('plan-debt-root');
+    if (root && !state.mortgage.data) root.innerHTML = `${planTabs()}<div class="panel plan-loading"><span></span><span></span><span></span></div>`;
+    try {
+      state.mortgage.data = await api('/api/mortgage');
+      const m = selectedMortgage();
+      state.mortgage.selected = m?.id ?? null;
+      state.mortgage.sim = m?.simulation || null;
+      if (m && scenarioActive() && hasTerms(m)) await simulateMortgageNow();
+      renderMortgage();
+    } catch (error) {
+      if (['PRO_REQUIRED', 'PRO_PLUS_REQUIRED', 'SUBSCRIPTION_REQUIRED'].includes(error.code)) {
+        if (error.entitlement) window.FinancePro?.setEntitlement(error.entitlement);
+        if (root) root.innerHTML = `${planTabs()}${lockedTeaser('Your mortgage, fully mapped', 'Build an amortization schedule, see the interest you pay each year and simulate extra payments.', 'The mortgage planner is part of MyFinance Pro')}`;
+        return;
+      }
+      if (root) root.innerHTML = `${planTabs()}<div class="panel plan-empty"><h3>Could not load your mortgage</h3><p>${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-act="retry">Try again</button></div>`;
+    }
+  }
+
+  async function simulateMortgageNow() {
+    const m = selectedMortgage();
+    if (!hasTerms(m)) return;
+    state.mortgage.sim = await api('/api/mortgage/simulate', 'POST', mortgageInputs(m));
+  }
+  let mortgageTimer = null;
+  function scheduleMortgageSim() {
+    clearTimeout(mortgageTimer);
+    const snapshot = JSON.stringify(state.mortgage.scenario);
+    mortgageTimer = setTimeout(async () => {
+      try {
+        const m = selectedMortgage();
+        if (!hasTerms(m)) return;
+        const sim = await api('/api/mortgage/simulate', 'POST', mortgageInputs(m));
+        if (JSON.stringify(state.mortgage.scenario) !== snapshot) return;
+        state.mortgage.sim = sim;
+        paintMortgageSim();
+      } catch (error) { reportFailure(error); }
+    }, 250);
+  }
+
+  async function saveMortgage(form) {
+    const error = $('mtg-error');
+    const values = Object.fromEntries(new FormData(form));
+    const amount = Number(values.original_amount), apr = Number(values.apr), term = Number(values.term_months);
+    if (!values.name.trim()) { error.textContent = 'Give the mortgage a name.'; return; }
+    if (!(amount > 0)) { error.textContent = 'Enter the original loan amount.'; return; }
+    if (values.apr === '' || !(apr >= 0 && apr <= 40)) { error.textContent = 'Enter an interest rate between 0% and 40%.'; return; }
+    if (!/^\d{4}-\d{2}$/.test(values.first_payment_month)) { error.textContent = 'Choose the month of your first payment.'; return; }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      const balance = values.balance === '' ? null : Number(values.balance);
+      const escrow = values.escrow_payment === '' ? 0 : Number(values.escrow_payment);
+      const sim = await api('/api/mortgage/simulate', 'POST', { principal: amount, apr, termMonths: term, firstPaymentMonth: values.first_payment_month, currentBalance: balance, escrow });
+      const existing = selectedMortgage();
+      const body = {
+        name: values.name.trim(), debt_type: 'mortgage', apr, balance: balance ?? sim.toDate.scheduledBalance, min_payment: sim.payment,
+        original_amount: amount, term_months: term, first_payment_month: values.first_payment_month, escrow_payment: escrow,
+        payment_match: values.payment_match.trim() || null, included: form.elements.included.checked,
+        ...(existing && state.mortgage.editing !== 'new' ? {} : { payment_in_history: true })
+      };
+      const target = existing && state.mortgage.editing !== 'new' ? existing : null;
+      const saved = await api(target ? `/api/debts/${encodeURIComponent(target.id)}` : '/api/debts', target ? 'PUT' : 'POST', body);
+      if (!target) state.mortgage.selected = saved.id;
+      state.mortgage.editing = false;
+      state.plan = null;
+      await loadMortgage();
+      notifyUser('Mortgage saved. Your schedule is ready.');
+    } catch (failure) {
+      if (['PRO_REQUIRED', 'PRO_PLUS_REQUIRED', 'SUBSCRIPTION_REQUIRED'].includes(failure.code)) reportFailure(failure);
+      else error.textContent = failure.message;
+    } finally { button.disabled = false; }
+  }
+
+  async function handleMortgageAction(act, button) {
+    const scenario = state.mortgage.scenario;
+    switch (act) {
+      case 'mtg-edit': state.mortgage.editing = true; return renderMortgage();
+      case 'mtg-add': state.mortgage.editing = 'new'; return renderMortgage();
+      case 'mtg-cancel': state.mortgage.editing = false; return renderMortgage();
+      case 'mtg-clear':
+        state.mortgage.scenario = { extraMonthly: 0, extraYearly: 0, extraYearlyMonth: 12, lumpSum: 0, lumpSumMonth: '', biweekly: false };
+        await simulateMortgageNow();
+        return renderMortgage();
+      case 'mtg-quick':
+        scenario.extraMonthly = scenario.extraMonthly === Number(button.dataset.amount) ? 0 : Number(button.dataset.amount);
+        await simulateMortgageNow();
+        return renderMortgage();
+      case 'mtg-biweekly':
+        scenario.biweekly = !scenario.biweekly;
+        await simulateMortgageNow();
+        return renderMortgage();
+      case 'mtg-sync-balance': {
+        const m = selectedMortgage(), sim = state.mortgage.sim;
+        if (!m || !sim) return;
+        await api(`/api/debts/${encodeURIComponent(m.id)}`, 'PUT', { balance: sim.toDate.scheduledBalance });
+        state.plan = null;
+        await loadMortgage();
+        return notifyUser('Balance updated from your schedule.');
+      }
+    }
   }
 
   // ---------- savings goals ----------
@@ -504,7 +781,10 @@
       if (root) root.innerHTML = `<div class="panel plan-empty"><h3>Could not load your plan</h3><p>${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-act="retry">Try again</button></div>`;
     }
   }
-  window.loadPayoffPlan = () => load('plan-debt-root', renderDebt);
+  window.loadPayoffPlan = sub => {
+    if (sub !== undefined) state.tab = sub === 'mortgage' ? 'mortgage' : 'plan';
+    return state.tab === 'mortgage' ? loadMortgage() : load('plan-debt-root', renderDebt);
+  };
   window.loadGoals = () => load('plan-goals-root', renderGoals);
 
   const findDebt = id => state.plan?.debtPlan.debts.find(item => String(item.id) === String(id));
@@ -513,8 +793,11 @@
 
   async function handleAction(button) {
     const { act, id } = button.dataset;
+    if (act?.startsWith('mtg-')) {
+      try { return await handleMortgageAction(act, button); } catch (error) { return reportFailure(error); }
+    }
     switch (act) {
-      case 'retry': return renderAfter(refresh());
+      case 'retry': return state.tab === 'mortgage' ? loadMortgage() : renderAfter(refresh());
       case 'unlock': return unlock(button.dataset.reason || 'This is part of MyFinance Pro');
       case 'add-debt': return window.openDebtEditor?.();
       case 'edit-debt': return window.openDebtEditor?.(id);
@@ -629,6 +912,29 @@
       else if (target.id === 'plan-whatif-extra') { state.whatIf.extra = Number(target.value) || 0; $('plan-whatif-extra-out').textContent = money(state.whatIf.extra); scheduleWhatIf(); }
       else if (target.id === 'plan-whatif-lump') { state.whatIf.lumpSum = Math.max(0, Number(target.value) || 0); scheduleWhatIf(); }
       else if (target.dataset.goalWhatif) scheduleGoalWhatIf(target.dataset.goalWhatif, Number(target.value));
+      else if (target.id === 'mtg-extra') {
+        state.mortgage.scenario.extraMonthly = Number(target.value) || 0;
+        $('mtg-extra-out').textContent = money(state.mortgage.scenario.extraMonthly);
+        root.querySelectorAll('[data-act="mtg-quick"]').forEach(node => node.classList.toggle('is-active', Number(node.dataset.amount) === state.mortgage.scenario.extraMonthly));
+        scheduleMortgageSim();
+      } else if (target.id === 'mtg-yearly') { state.mortgage.scenario.extraYearly = Math.max(0, Number(target.value) || 0); scheduleMortgageSim(); }
+      else if (target.id === 'mtg-lump') { state.mortgage.scenario.lumpSum = Math.max(0, Number(target.value) || 0); scheduleMortgageSim(); }
+    });
+    root.addEventListener('submit', event => {
+      if (event.target.id !== 'mtg-form') return;
+      event.preventDefault();
+      saveMortgage(event.target);
+    });
+    root.addEventListener('change', event => {
+      const target = event.target;
+      if (target.id === 'mtg-yearly-month') { state.mortgage.scenario.extraYearlyMonth = Number(target.value) || 12; scheduleMortgageSim(); }
+      else if (target.id === 'mtg-lump-month') { state.mortgage.scenario.lumpSumMonth = target.value; scheduleMortgageSim(); }
+      else if (target.id === 'mtg-select') {
+        state.mortgage.selected = target.value;
+        state.mortgage.sim = selectedMortgage()?.simulation || null;
+        renderAll();
+        if (scenarioActive()) scheduleMortgageSim();
+      }
     });
     root.addEventListener('change', event => {
       const target = event.target;
@@ -733,6 +1039,7 @@
   window.addEventListener?.('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (state.tab === 'mortgage') { if (state.mortgage.sim && $('mtg-chart-root')) $('mtg-chart-root').innerHTML = mortgageChart(state.mortgage.sim); return; }
       const figure = $('plan-debt-root')?.querySelector('.plan-chart');
       if (figure && state.plan) figure.outerHTML = chart(state.plan.debtPlan);
     }, 200);

@@ -341,13 +341,14 @@
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
+    else if (view === 'payoff') sub = sub === 'mortgage' ? sub : '';
     else if (view === 'subscription') sub = ['basic', 'pro'].includes(sub) ? sub : '';
     else if (view === 'transactions') {
       if (sub && !validTransactionId(sub)) { notify('Invalid transaction link. Showing all transactions.'); sub = ''; }
       if (sub || transactionId) { clearTransactionFilters(); $('txn-filter-period').value = ''; }
       transactionId = sub;
     } else if (view !== 'tutorials') sub = '';
-    const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : titles[view];
+    const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : view === 'payoff' && sub === 'mortgage' ? 'Mortgage' : titles[view];
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
     if (['transaction-review', 'activity'].includes(view)) {
@@ -374,7 +375,7 @@
       accounts: () => window.FinanceAccounts?.loadPage(),
       analytics: () => window.loadAnalyticsPage?.(false, sub),
       etl: async () => { await loadEtlStaging(); await loadTransactionImportReviews(); },
-      payoff: loadPayoffPlan, goals: loadGoals, insights: generateInsights,
+      payoff: () => loadPayoffPlan(sub), goals: loadGoals, insights: generateInsights,
       tutorials: () => window.FinanceTutorials?.open(sub)
     };
     const finish = window.FinancePerformance?.begin('page', view === 'analytics' && sub === 'compass' ? 'compass' : view);
@@ -1408,15 +1409,21 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'debt-dialog'; dialog.className = 'editor';
   dialog.setAttribute('aria-label', 'Debt or loan details');
-  dialog.innerHTML = `<form id="debt-form"><h2>Debt or loan details</h2><label>Name<input name="name" required maxlength="100"></label><label>Type<select name="debt_type"><option value="credit_card">Credit card</option><option value="auto_loan">Auto loan</option><option value="student_loan">Student loan</option><option value="personal_loan">Personal loan</option><option value="mortgage">Mortgage</option><option value="other">Other</option></select></label><label>Current balance ($)<input name="balance" type="number" min="0" step=".01" required></label><label>APR (%)<input name="apr" type="number" min="0" max="1000" step=".001" required></label><label>Minimum monthly payment ($)<input name="min_payment" type="number" min="0" step=".01" required></label><label style="display:flex;align-items:center;gap:10px"><input name="payment_in_history" type="checkbox" checked>Monthly payment already included in imported spending</label><p class="muted">Leave checked for existing payments already in your statements. Uncheck for a new loan: its minimum payment is reserved in your savings plan without double-counting existing loans.</p><label style="display:flex;align-items:center;gap:10px"><input name="included" type="checkbox" checked>Include in my debt-free program</label><label>Credit limit ($, optional)<input name="credit_limit" type="number" min="0" step=".01"></label><label>Due day (optional)<input name="due_date" type="number" min="1" max="31" step="1"></label><p id="debt-error" role="alert"></p><div class="toolbar"><button class="btn btn-primary">Save debt</button><button class="btn btn-secondary" type="button" id="debt-cancel">Cancel</button></div></form>`;
+  dialog.innerHTML = `<form id="debt-form"><h2>Debt or loan details</h2><label>Name<input name="name" required maxlength="100"></label><label>Type<select name="debt_type"><option value="credit_card">Credit card</option><option value="auto_loan">Auto loan</option><option value="student_loan">Student loan</option><option value="personal_loan">Personal loan</option><option value="mortgage">Mortgage</option><option value="other">Other</option></select></label><label>Current balance ($)<input name="balance" type="number" min="0" step=".01" required></label><label>APR (%)<input name="apr" type="number" min="0" max="1000" step=".001" required></label><label>Minimum monthly payment ($)<input name="min_payment" type="number" min="0" step=".01" required></label><label style="display:flex;align-items:center;gap:10px"><input name="payment_in_history" type="checkbox" checked>Monthly payment already included in imported spending</label><p class="muted">Leave checked for existing payments already in your statements. Uncheck for a new loan: its minimum payment is reserved in your savings plan without double-counting existing loans.</p><label style="display:flex;align-items:center;gap:10px"><input name="included" type="checkbox" checked>Include in my debt-free program</label><label>Credit limit ($, optional)<input name="credit_limit" type="number" min="0" step=".01"></label><label>Due day (optional)<input name="due_date" type="number" min="1" max="31" step="1"></label><label data-loan-only>How payments appear on statements (optional)<input name="payment_match" maxlength="100" placeholder="e.g. TOYOTA FIN PMT"></label><p class="muted" data-loan-only>Matching text lets Analytics estimate how much of each payment went to interest.</p><p id="debt-error" role="alert"></p><div class="toolbar"><button class="btn btn-primary">Save debt</button><button class="btn btn-secondary" type="button" id="debt-cancel">Cancel</button></div></form>`;
   document.body.appendChild(dialog);
   let debtEditing = null;
   $('debt-cancel').onclick = () => dialog.close();
+  const syncLoanFields = () => {
+    const card = $('debt-form').elements?.debt_type?.value === 'credit_card';
+    dialog.querySelectorAll?.('[data-loan-only]').forEach(node => { node.hidden = card; });
+  };
+  $('debt-form').addEventListener?.('change', event => { if (event.target?.name === 'debt_type') syncLoanFields(); });
   window.openDebtEditor = function(id = null) {
     debtEditing = id; $('debt-form').reset(); $('debt-error').textContent = '';
     const item = (window.FinancePlan?.debtRows?.() || debts).find(d => String(d.id) === String(id));
-    if (item) for (const field of ['name','debt_type','balance','apr','min_payment','credit_limit','due_date']) $('debt-form').elements[field].value = item[field] ?? (field === 'name' ? item.card_name : '');
+    if (item) for (const field of ['name','debt_type','balance','apr','min_payment','credit_limit','due_date','payment_match']) $('debt-form').elements[field].value = item[field] ?? (field === 'name' ? item.card_name : '');
     $('debt-form').elements.payment_in_history.checked = item ? item.payment_in_history !== false : true; $('debt-form').elements.included.checked = item ? item.included !== false : true;
+    syncLoanFields();
     dialog.showModal();
   };
   $('debt-form').onsubmit = async event => {
@@ -1424,6 +1431,7 @@
     const data = Object.fromEntries(new FormData(form));
     for (const field of ['balance','apr','min_payment','credit_limit']) data[field] = data[field] === '' ? null : Number(data[field]);
     data.due_date = data.due_date || null;
+    if (data.debt_type === 'credit_card') delete data.payment_match;
     data.payment_in_history = form.elements.payment_in_history.checked; data.included = form.elements.included.checked;
     button.disabled = true;
     try {

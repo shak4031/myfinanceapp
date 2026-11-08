@@ -8,6 +8,7 @@ import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
 import { loadFixedPaymentOccurrences } from '../utils/paymentOccurrences.js';
 import { cashBalance } from '../utils/transfers.js';
 import { currentUserId } from '../utils/tenant.js';
+import { buildInterestSummary, INTEREST_KIND_KEYS } from '../utils/interest.js';
 import { performance } from 'node:perf_hooks';
 
 const router = Router();
@@ -99,6 +100,39 @@ router.put('/household', async (req, res, next) => {
       ON CONFLICT (user_id) DO UPDATE SET household_size=EXCLUDED.household_size, region=EXCLUDED.region, housing=EXCLUDED.housing, updated_at=NOW()`,
     [profile.size, profile.region, profile.housing]);
     res.json({ household: profile });
+  } catch (error) { next(error); }
+});
+
+router.get('/interest', async (req, res, next) => {
+  try {
+    const months = Math.min(24, Math.max(3, Number.parseInt(req.query.months, 10) || 12));
+    const now = new Date();
+    const { transactions, debts } = await timed(res, 'interest', () => db.transaction(async client => ({
+      transactions: (await client.query(`SELECT t.id, t.date, t.description, t.display_name, t.amount, t.direction, t.category,
+          t.plaid_category, t.interest_kind, t.interest_override, a.kind AS account_kind, pa.type AS plaid_type, pa.subtype AS plaid_subtype
+        FROM transactions t
+        LEFT JOIN accounts a ON a.id = t.account_id
+        LEFT JOIN LATERAL (SELECT type, subtype FROM plaid_accounts WHERE account_id = t.plaid_account_id ORDER BY id DESC LIMIT 1) pa ON TRUE
+        WHERE UPPER(t.direction) = 'DEBIT' ORDER BY t.date, t.id`)).rows,
+      debts: (await client.query('SELECT * FROM credit_cards ORDER BY id')).rows
+    })));
+    res.json(buildInterestSummary({ transactions, debts, now, months }));
+  } catch (error) { next(error); }
+});
+
+// kind: one of INTEREST_KIND_KEYS, null for "not interest", or "auto" to clear the override.
+router.put('/interest/transactions/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const kind = req.body?.kind;
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid transaction' });
+    if (kind !== null && kind !== 'auto' && !INTEREST_KIND_KEYS.includes(kind)) {
+      return res.status(400).json({ error: `kind must be one of ${INTEREST_KIND_KEYS.join('/')}, null, or auto` });
+    }
+    const result = await db.run('UPDATE transactions SET interest_kind=$1, interest_override=$2 WHERE id=$3 RETURNING id',
+      [kind === 'auto' ? null : kind, kind !== 'auto', id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Transaction not found' });
+    res.json({ success: true });
   } catch (error) { next(error); }
 });
 

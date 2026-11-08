@@ -27,7 +27,12 @@ export function normalizeDebt(row) {
     credit_limit: cents(number(row.credit_limit)), due_day: Number(row.due_date) || null,
     included: row.included !== false, focus: row.focus === true,
     custom_rank: row.custom_rank == null ? null : Number(row.custom_rank),
-    payment_in_history: row.payment_in_history !== false
+    payment_in_history: row.payment_in_history !== false,
+    original_amount: row.original_amount == null ? null : cents(number(row.original_amount)),
+    term_months: row.term_months == null ? null : Number(row.term_months),
+    first_payment_month: row.first_payment_month || null,
+    escrow_payment: row.escrow_payment == null ? null : cents(number(row.escrow_payment)),
+    payment_match: row.payment_match || null
   };
 }
 

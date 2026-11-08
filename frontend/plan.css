@@ -351,3 +351,128 @@ button.plan-goal-whatif:hover { border-color: var(--plan-violet); }
   .plan-section-head .btn { width: 100%; }
 }
 @media (max-width: 380px) { .plan-strategies, .plan-stats { grid-template-columns: 1fr; } }
+
+/* Debt tools tabs + mortgage planner */
+.plan-tabs { display: inline-flex; gap: 4px; justify-self: start; padding: 4px; border: 1px solid var(--plan-line); border-radius: 14px; background: #fff; box-shadow: 0 1px 2px #0f172a0a; }
+.plan-tab { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 10px; color: #4b5a52; font-size: 13.5px; font-weight: 700; text-decoration: none; transition: background .15s, color .15s; }
+.plan-tab:hover { background: var(--plan-soft); color: var(--plan-green); }
+.plan-tab.is-active { background: var(--plan-green); color: #fff; box-shadow: 0 4px 12px #22645233; }
+.plan-tab:focus-visible { outline: 3px solid #0f9f6e55; outline-offset: 2px; }
+.plan-pill.is-active { background: var(--plan-green); border-color: var(--plan-green); color: #fff; }
+
+.mtg-intro { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 30px 32px; border-radius: 20px; color: #fff;
+  background: radial-gradient(circle at 92% 12%, #ffffff2e 0 60px, transparent 61px), radial-gradient(circle at 78% 110%, #34d39955 0 140px, transparent 141px), linear-gradient(135deg, #123f34 0%, #1f6a55 55%, #2d8a6c 100%); }
+.mtg-intro .plan-eyebrow { color: #bfe8d6; }
+.mtg-intro h2 { font-size: clamp(24px, 3vw, 34px); line-height: 1.1; letter-spacing: -1px; }
+.mtg-intro p { margin-top: 10px !important; color: #d9efe5; font-size: 14.5px; line-height: 1.55; }
+.mtg-intro-points { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.mtg-intro-points li { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 12px; background: #ffffff17; border: 1px solid #ffffff26; font-size: 13.5px; font-weight: 650; }
+.mtg-intro-points svg { flex: none; padding: 3px; border-radius: 50%; background: #34d399; color: #0b3b2e; }
+
+.mtg-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 18px; }
+.mtg-form .mtg-wide { grid-column: 1 / -1; }
+.mtg-form .plan-field small { color: #8a958d; font-weight: 600; letter-spacing: 0; }
+.mtg-form .plan-field > input, .mtg-form .plan-field > select { width: 100%; min-width: 0; padding: 10px 12px; border: 1.5px solid #d6ddd6; border-radius: 12px; background: #fff; color: var(--plan-ink); font: inherit; font-size: 15px; font-weight: 650; }
+.mtg-form .plan-field > input:focus, .mtg-form .plan-field > select:focus { outline: 0; border-color: var(--plan-green); box-shadow: 0 0 0 3px #22645222; }
+.mtg-form .plan-money-input { display: flex; }
+.mtg-form .plan-money-input input { flex: 1; width: auto; min-width: 0; font-size: 16px; }
+.plan-money-input.is-suffix { padding: 0 12px 0 14px; }
+.mtg-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: #33433b; font-size: 13.5px; font-weight: 650; }
+.mtg-check input { width: 17px; height: 17px; accent-color: var(--plan-green); }
+.mtg-check small { flex-basis: 100%; padding-left: 27px; color: var(--plan-muted); font-size: 12px; font-weight: 500; }
+.mtg-error { color: var(--plan-rose); font-size: 13px; font-weight: 650; }
+.mtg-error:empty { display: none; }
+.mtg-form-actions { display: flex; justify-content: flex-end; }
+
+.mtg-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; padding: 26px 28px; background: linear-gradient(135deg, #fbfdfb 0%, #eef7f1 55%, #eaf2ff 100%); }
+body .panel.mtg-hero { overflow: hidden; }
+.mtg-hero::after { content: ""; position: absolute; right: -70px; top: -70px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, #0f9f6e1f, transparent 70%); pointer-events: none; }
+.mtg-hero-main { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.mtg-hero h2 { font-size: clamp(26px, 3.4vw, 40px); font-weight: 760; line-height: 1.05; letter-spacing: -1.4px; color: #33433b; }
+.mtg-hero h2 b { color: var(--plan-green); }
+.mtg-hero-main > p { color: var(--plan-muted); font-size: 14px; }
+.mtg-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--plan-muted); font-size: 12px; font-weight: 700; }
+.mtg-switch select { padding: 5px 10px; border: 1px solid var(--plan-line); border-radius: 9px; background: #fff; font: inherit; font-weight: 650; }
+.mtg-progress { height: 12px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #dfe8e1; }
+.mtg-progress span { display: block; height: 100%; min-width: 6px; border-radius: inherit; background: linear-gradient(90deg, #226452, #0f9f6e 70%, #34d399); transition: width .5s ease; }
+.mtg-progress-text { color: var(--plan-muted); font-size: 12.5px; } .mtg-progress-text b { color: var(--plan-green); }
+.mtg-drift { display: flex; align-items: flex-start; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #ffffffb3; border: 1px solid var(--plan-line); color: #33433b; font-size: 12.5px; line-height: 1.45; }
+.mtg-drift svg { flex: none; margin-top: 1px; color: var(--plan-blue); }
+.mtg-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 6px; }
+.mtg-hero-actions .link-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.mtg-stats { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; align-content: start; }
+.mtg-stats > div { display: grid; gap: 2px; min-width: 0; padding: 14px 16px; border: 1px solid var(--plan-line); border-radius: 14px; background: #ffffffd9; }
+.mtg-stats dt { color: var(--plan-muted); font-size: 11px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; }
+.mtg-stats dd { margin: 0; color: var(--plan-ink); font-size: 22px; font-weight: 760; font-variant-numeric: tabular-nums; letter-spacing: -.6px; }
+.mtg-stats small { color: #7b877f; font-size: 11.5px; line-height: 1.35; }
+
+.mtg-sim-grid { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.4fr); gap: 22px; align-items: start; }
+.mtg-controls { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--plan-line); border-radius: 16px; background: var(--plan-soft); }
+.mtg-slider { gap: 10px; }
+.mtg-slider output { float: right; color: var(--plan-green); font-size: 18px; font-weight: 780; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.mtg-slider input[type=range] { width: 100%; accent-color: var(--plan-green); cursor: pointer; }
+.mtg-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -6px; }
+.mtg-pair { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+.mtg-pair .plan-field, .mtg-pair .plan-money-input { min-width: 0; }
+.mtg-pair .plan-money-input { display: flex; }
+.mtg-pair .plan-money-input input { flex: 1; width: auto; min-width: 0; padding: 8px 2px; font-size: 15px; }
+.mtg-pair select, .mtg-pair input[type=month] { width: 100%; min-width: 0; padding: 9px 10px; border: 1.5px solid #d6ddd6; border-radius: 12px; background: #fff; font: inherit; font-size: 13.5px; font-weight: 650; }
+.mtg-toggle-row { display: flex; align-items: flex-start; gap: 12px; padding-top: 14px; border-top: 1px dashed #d6ddd6; }
+.mtg-toggle-row strong { display: block; font-size: 13.5px; } .mtg-toggle-row small { color: var(--plan-muted); font-size: 12px; line-height: 1.4; }
+.mtg-outcome { display: grid; gap: 14px; min-width: 0; }
+.mtg-chart .area.plan-baseline { fill: #0f9f6e14; }
+.mtg-chart .line.plan-baseline:not(.dashed) { stroke: #0f9f6e; stroke-width: 2.5; }
+.mtg-result { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mtg-result > div { display: grid; gap: 2px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--plan-line); background: #fff; animation: mtg-pop .3s ease; }
+.mtg-result > div.is-good { border-color: #bfe3cf; background: linear-gradient(180deg, #f1faf5, #fff); }
+.mtg-result span { color: var(--plan-muted); font-size: 11px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; }
+.mtg-result strong { font-size: 22px; font-weight: 780; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.mtg-result > div.is-good strong { color: var(--plan-green-2); }
+.mtg-result small { color: #7b877f; font-size: 12px; }
+.mtg-result.is-idle { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 14px 16px; border: 1px dashed #bfe3cf; border-radius: 14px; background: #f6fbf8; }
+.mtg-result.is-idle > div { padding: 0; border: 0; background: none; animation: none; }
+.mtg-result.is-idle strong { font-size: 15px; letter-spacing: 0; } .mtg-result.is-idle p { color: var(--plan-muted); font-size: 13px; }
+.mtg-result-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--plan-mint); color: var(--plan-green); }
+@keyframes mtg-pop { from { transform: translateY(4px); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .mtg-result > div { animation: none; } }
+
+.mtg-legend { display: inline-flex; gap: 14px; color: var(--plan-muted); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.mtg-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; }
+.mtg-legend .key-principal::before { background: #0f9f6e; } .mtg-legend .key-interest::before { background: #f4a261; }
+.mtg-years { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-height: 560px; overflow: auto; padding-right: 4px; }
+.mtg-year { min-width: 0; border: 1px solid transparent; border-radius: 12px; }
+.mtg-year[open] { border-color: var(--plan-line); background: #fbfdfb; }
+.mtg-year summary { display: grid; grid-template-columns: 92px minmax(80px, 1fr) repeat(3, minmax(88px, auto)); gap: 14px; align-items: center; padding: 9px 12px; border-radius: 12px; cursor: pointer; list-style: none; }
+.mtg-year summary::-webkit-details-marker { display: none; }
+.mtg-year summary:hover { background: var(--plan-soft); }
+.mtg-year.is-past summary { opacity: .62; }
+.mtg-year.is-current summary { background: var(--plan-mint); }
+.mtg-year-label { display: grid; font-weight: 750; font-variant-numeric: tabular-nums; }
+.mtg-year-label em { color: var(--plan-green-2); font-size: 10.5px; font-style: normal; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; }
+.mtg-year-bar { display: flex; height: 10px; overflow: hidden; border-radius: 999px; background: #f4a261; }
+.mtg-year-bar .is-principal { background: #0f9f6e; }
+.mtg-year-num { display: grid; justify-items: end; font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mtg-year-num small { color: #8a958d; font-size: 10.5px; font-weight: 650; }
+.mtg-months { padding: 0 12px 12px; overflow-x: auto; }
+.mtg-months table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mtg-months th, .mtg-months td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #eef1ec; white-space: nowrap; }
+.mtg-months th:first-child { text-align: left; }
+.mtg-months thead th { color: var(--plan-muted); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .4px; }
+.mtg-months tr.is-current { background: #e7f3ec; font-weight: 750; }
+
+@media (max-width: 1000px) {
+  .mtg-hero, .mtg-sim-grid, .mtg-intro { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .plan-tabs { justify-self: stretch; } .plan-tab { flex: 1; justify-content: center; padding: 8px 10px; }
+  .mtg-intro { padding: 22px 20px; }
+  .mtg-form { grid-template-columns: minmax(0, 1fr); }
+  .mtg-hero { padding: 20px; }
+  .mtg-stats dd { font-size: 18px; }
+  .mtg-result { grid-template-columns: 1fr 1fr; } .mtg-result > div:first-child { grid-column: 1 / -1; }
+  .mtg-result strong { font-size: 18px; }
+  .mtg-year summary { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 8px; }
+  .mtg-year summary .mtg-year-num:nth-of-type(3), .mtg-year summary .mtg-year-num:nth-of-type(4) { display: none; }
+  .mtg-year-bar { grid-column: 2; }
+  .plan-card-head .mtg-legend { display: none; }
+}

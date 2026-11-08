@@ -25,7 +25,8 @@ export function plaidTransaction(row) {
     plaidTransactionId: row.transaction_id,
     plaidAccountId: row.account_id,
     isPending: row.pending === true,
-    pendingTransactionId: row.pending_transaction_id || null
+    pendingTransactionId: row.pending_transaction_id || null,
+    ...(row.personal_finance_category?.detailed ? { plaidCategory: row.personal_finance_category.detailed } : {})
   });
 }
 

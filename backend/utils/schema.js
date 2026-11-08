@@ -383,6 +383,16 @@ export async function migratePrivateSchema(client) {
       matched_transaction_id INTEGER, resolved_at TIMESTAMPTZ
     );
     ALTER TABLE fixed_payment_occurrences ADD COLUMN IF NOT EXISTS estimated_amount NUMERIC(14,2);
+    -- Interest tracking: detection runs at read time; these store Plaid's category and the user's explicit choice.
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS plaid_category TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_kind TEXT;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_override BOOLEAN NOT NULL DEFAULT FALSE;
+    -- Installment loan terms (mortgage amortization and estimated interest on combined payments).
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS original_amount NUMERIC(14,2);
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS term_months INTEGER;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS first_payment_month TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS escrow_payment NUMERIC(14,2);
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS payment_match TEXT;
     CREATE TABLE IF NOT EXISTS fixed_payment_estimates (
       id SERIAL PRIMARY KEY, source_transaction_id INTEGER NOT NULL,
       template JSONB NOT NULL, monthly_amount NUMERIC(14,2) NOT NULL CHECK(monthly_amount > 0),

@@ -158,6 +158,11 @@ export async function releaseHeldPlaidReviews(client, connectionId, config) {
   return incoming.length;
 }
 
+export function plaidCategoryValue(value) {
+  const text = String(value ?? '').trim().toUpperCase();
+  return /^[A-Z0-9_]{1,100}$/.test(text) ? text : null;
+}
+
 async function insertTransaction(client, transaction, config, source, plaid = {}, manualCategory = null) {
   let suggestion = null;
   if (manualCategory !== null) {
@@ -168,14 +173,15 @@ async function insertTransaction(client, transaction, config, source, plaid = {}
   }
   const fixed = suggestion?.label?.is_fixed === true;
   const category = manualCategory ?? suggestion.category;
+  const plaidCategory = plaidCategoryValue(transaction.plaidCategory);
   const row = (await client.query(`INSERT INTO transactions
     (date,description,amount,direction,balance,source,category,label_id,is_fixed,
-      plaid_transaction_id,plaid_account_id,is_pending,category_corrected,display_name)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+      plaid_transaction_id,plaid_account_id,is_pending,category_corrected,display_name${plaidCategory ? ',plaid_category' : ''})
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14${plaidCategory ? ',$15' : ''}) RETURNING id`,
   [transaction.date, transaction.description, transaction.amount, transaction.direction, transaction.balance,
     source, category, suggestion?.label?.id ?? null, fixed,
     plaid.transactionId ?? null, plaid.accountId ?? null, plaid.isPending === true, manualCategory !== null,
-    transaction.displayName ?? null])).rows[0];
+    transaction.displayName ?? null, ...(plaidCategory ? [plaidCategory] : [])])).rows[0];
   return row.id;
 }
 

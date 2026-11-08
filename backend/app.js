@@ -14,6 +14,7 @@ import dashboard from './routes/dashboard.js';
 import financialFindings from './routes/financialFindings.js';
 import transactions from './routes/transactions.js';
 import debts from './routes/debts.js';
+import mortgage from './routes/mortgage.js';
 import goals from './routes/goals.js';
 import importCsv from './routes/import.js';
 import bulkImport from './routes/bulk-import.js';
@@ -146,6 +147,7 @@ app.use('/api/transactions', transactions);
 app.use('/api/staging', staging);
 app.use('/api/dashboard', transactions); // Alias for update-transaction support
 app.use('/api/debts', debts);
+app.use('/api/mortgage', mortgage);
 app.use('/api/goals', goals);
 app.use('/api/import', importCsv);
 app.use('/api/import-review', importReview);

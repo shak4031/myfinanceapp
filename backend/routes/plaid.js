@@ -3,7 +3,7 @@ import { administrativeTransaction } from '../db.js';
 import Database from '../db.js';
 import { withUser, currentUserId } from '../utils/tenant.js';
 import { classify, failure, loadCategorization } from '../utils/categorization.js';
-import { importTransactions, refreshImportReviewCandidates, releaseHeldPlaidReviews } from '../utils/transactionImport.js';
+import { importTransactions, plaidCategoryValue, refreshImportReviewCandidates, releaseHeldPlaidReviews } from '../utils/transactionImport.js';
 import {
   decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook,
   assertPlaidTokenEnvironment, plaidTokenEnvironment
@@ -85,15 +85,16 @@ async function updateSyncedTransaction(client, previous, row, config) {
   const directionChanged = previous.direction !== row.direction;
   const category = directionChanged && !previous.category_corrected
     ? classify(row, config.compiled, config.names).category : previous.category;
+  const plaidCategory = plaidCategoryValue(row.plaidCategory);
   await client.query(`UPDATE transactions SET plaid_transaction_id=$1,plaid_account_id=$2,
       date=$3,description=CASE WHEN source='plaid' THEN $4 ELSE description END,
-      amount=$5,direction=$6,is_pending=$7,category=$8,
+      amount=$5,direction=$6,is_pending=$7,category=$8,${plaidCategory ? '\n      plaid_category=$10,' : ''}
       income_role=CASE WHEN $6='DEBIT' THEN NULL ELSE income_role END,
       pay_mode=CASE WHEN $6='CREDIT' THEN NULL ELSE pay_mode END,
       transfer_checked=CASE WHEN direction IS DISTINCT FROM $6 THEN FALSE ELSE transfer_checked END
     WHERE id=$9 AND user_id=current_setting('app.user_id')::integer`,
   [row.plaidTransactionId, row.plaidAccountId, row.date, row.description, row.amount,
-    row.direction, row.isPending, category, previous.id]);
+    row.direction, row.isPending, category, previous.id, ...(plaidCategory ? [plaidCategory] : [])]);
 }
 
 async function reconcilePostedTransaction(client, posted, config) {

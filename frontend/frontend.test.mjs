@@ -4313,6 +4313,104 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.match(panel('flow'), /Last 3 completed months/);
 });
 
+test('mortgage tab sets up a loan, then shows the schedule, interest and a working payoff simulator', async () => {
+  const { simulateMortgage } = await import('../backend/utils/amortization.js');
+  const now = new Date();
+  const first = new Date(now.getFullYear() - 3, now.getMonth(), 1);
+  const loan = { id: 9, name: '<Home>', debt_type: 'mortgage', balance: 0, apr: 6, original_amount: 300000, term_months: 360, first_payment_month: `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}`, escrow_payment: 450, included: false };
+  const calls = [];
+  let mortgages = [];
+  const f = loadPlan(async (url, options = {}) => {
+    calls.push([url, options.method || 'GET', options.body && JSON.parse(options.body)]);
+    if (url === '/api/mortgage') return response(200, { mortgages });
+    if (url === '/api/mortgage/simulate') return response(200, JSON.parse(JSON.stringify(simulateMortgage(JSON.parse(options.body), now))));
+    return response(200, planPayload());
+  });
+  await f.context.loadPayoffPlan('mortgage');
+  let html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /class="plan-tab is-active" aria-current="page">[\s\S]*Mortgage/);
+  assert.match(html, /MORTGAGE PLANNER/);
+  assert.match(html, /<form id="mtg-form"/);
+  assert.match(html, /name="first_payment_month" type="month"/);
+
+  const sim = JSON.parse(JSON.stringify(simulateMortgage({ principal: 300000, apr: 6, termMonths: 360, firstPaymentMonth: loan.first_payment_month, escrow: 450 }, now)));
+  mortgages = [{ ...loan, balance: sim.toDate.scheduledBalance, simulation: sim }];
+  await f.context.loadPayoffPlan('mortgage');
+  html = f.node('plan-debt-root').innerHTML;
+  assert.match(html, /&lt;HOME&gt;/);
+  assert.doesNotMatch(html, /<Home>/);
+  assert.match(html, /\$1,798\.65 principal &amp; interest \+ \$450\.00 escrow/);
+  assert.match(html, /\$2,248\.65/);
+  assert.match(html, /Interest in \d{4}/);
+  assert.match(html, /Payoff simulator/);
+  assert.match(html, /Try an extra payment/);
+  assert.match(html, /Amortization schedule/);
+  assert.equal((html.match(/<details class="mtg-year/g) || []).length, sim.original.years.length);
+  assert.match(html, /<em>This year<\/em>/);
+  assert.doesNotMatch(html, /data-act="mtg-sync-balance"/, 'balance on schedule shows no drift');
+
+  const root = f.node('plan-debt-root');
+  root.contains = () => true;
+  const button = { dataset: { act: 'mtg-quick', amount: '250' } };
+  await root.listeners.click({ target: { closest: () => button } });
+  html = root.innerHTML;
+  const posted = calls.filter(([url]) => url === '/api/mortgage/simulate').at(-1)[2];
+  assert.equal(posted.extraMonthly, 250);
+  assert.equal(posted.principal, 300000);
+  assert.match(html, /New payoff/);
+  assert.match(html, /Interest saved<\/span><strong>\$[1-9]/);
+  assert.match(html, /data-act="mtg-quick" data-amount="250"/);
+  assert.match(html, /plan-pill is-active" data-act="mtg-quick" data-amount="250"/);
+  assert.match(html, /data-act="mtg-clear"/);
+});
+
+test('analytics interest panel shows totals by type, estimates, hints and saves type overrides', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const { buildInterestSummary } = await import('../backend/utils/interest.js');
+  const now = new Date();
+  const iso = offset => { const d = new Date(now.getFullYear(), now.getMonth() - offset, 3); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-03`; };
+  const summary = JSON.parse(JSON.stringify(buildInterestSummary({ now, months: 12, transactions: [
+    { id: 1, date: iso(0), description: 'INTEREST CHARGE ON PURCHASES', amount: 42.17, direction: 'DEBIT' },
+    { id: 2, date: iso(1), description: '<Card> interest charge', amount: 38.5, direction: 'DEBIT' },
+    { id: 3, date: iso(1), description: 'TOYOTA FIN PMT', amount: 412, direction: 'DEBIT' }
+  ], debts: [
+    { id: 11, name: 'Toyota', debt_type: 'auto_loan', balance: 12000, apr: 6, payment_match: 'toyota fin' },
+    { id: 12, name: 'Student', debt_type: 'student_loan', balance: 9000, apr: 4 }
+  ] })));
+  const calls = [];
+  const f = loadPro(async (url, options = {}) => {
+    calls.push([url, options.method || 'GET', options.body]);
+    if (url === '/api/license') return response(200, { tier: 'pro', active: true, plusActive: true, features: [] });
+    if (url.startsWith('/api/analytics/interest')) return response(200, url.includes('/transactions/') ? { ok: true } : summary);
+    return response(200, buildAnalytics({ transactions: [], today: now }));
+  });
+  await f.context.loadAnalyticsPage(true, '');
+  assert.match(f.node('analytics-content').innerHTML, /id="pro-interest"/);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const card = f.node('pro-interest').outerHTML;
+  assert.match(card, /Interest you paid/);
+  assert.match(card, /Last 12 months<\/span><strong>\$141/);
+  assert.match(card, /incl\. \$60 estimated/);
+  assert.match(card, /<svg class="pro-int-chart"/);
+  assert.match(card, /<span class="label">Credit cards<\/span><strong>\$81<\/strong>/);
+  assert.match(card, /<span class="label">Auto<\/span><strong>\$60<\/strong>/);
+  assert.match(card, /&lt;Card&gt; interest charge/);
+  assert.match(card, /<span class="pro-int-badge">Estimated<\/span>/);
+  assert.match(card, /Student/, 'unmatched loans get a setup hint');
+  assert.match(card, /data-interest-id="1"/);
+
+  f.listeners.get('document:change')({ target: { dataset: { interestId: '1' }, value: 'personal_loan', closest: () => ({}) } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const put = calls.find(([url, method]) => method === 'PUT');
+  assert.equal(put[0], '/api/analytics/interest/transactions/1');
+  assert.deepEqual(JSON.parse(put[2]), { kind: 'personal_loan' });
+
+  const click = target => f.listeners.get('document:click')({ target: { closest: selector => selector.includes('data-analytics-action') ? target : null, ...target } });
+  click({ dataset: { analyticsAction: 'interest-not', id: '2' } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(JSON.parse(calls.filter(([, method]) => method === 'PUT').at(-1)[2]), { kind: null });
+});
+
 test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');

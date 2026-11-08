@@ -690,6 +690,117 @@
     compass: ['MYFINANCE PRO &middot; SPENDING COMPASS', 'Spending Compass', 'How your everyday spending compares with similar households, which way each category is heading, and where you could realistically save.']
   };
 
+  // ---------- interest paid ----------
+  const INTEREST_COLORS = { credit_card: '#e11d48', auto_loan: '#f59e0b', student_loan: '#6366f1', personal_loan: '#0ea5e9', mortgage: '#0f9f6e', other: '#94a3b8' };
+  const interestState = { data: null, loading: false, error: '', showAll: false, run: 0 };
+  const monthShort = key => new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+
+  function interestChart(d) {
+    const { money, esc } = pro().format;
+    const months = d.months;
+    const max = Math.max(...months.map(m => m.total), 1);
+    const step = 10 ** Math.floor(Math.log10(max));
+    const top = Math.ceil(max / step * 2) / 2 * step;
+    const W = 640, H = 210, pad = { l: 48, r: 8, t: 12, b: 26 };
+    const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    const slot = iw / months.length, bw = Math.min(30, slot * 0.62);
+    const y = v => pad.t + ih - v / top * ih;
+    const grid = [0, 0.5, 1].map(f => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(top * f).toFixed(1)}" y2="${y(top * f).toFixed(1)}"/><text x="${pad.l - 8}" y="${(y(top * f) + 4).toFixed(1)}" text-anchor="end">${esc(money(top * f, true))}</text>`).join('');
+    const kinds = Object.keys(d.kinds);
+    const bars = months.map((m, i) => {
+      const x = pad.l + slot * i + (slot - bw) / 2;
+      let base = pad.t + ih;
+      const parts = kinds.filter(kind => m.byKind[kind] > 0).map(kind => {
+        const h = m.byKind[kind] / top * ih;
+        base -= h;
+        return `<rect x="${x.toFixed(1)}" y="${base.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}" fill="${INTEREST_COLORS[kind]}"/>`;
+      }).join('');
+      const tip = `${monthShort(m.month)} ${m.month.slice(0, 4)}: ${money(m.total)}${kinds.filter(kind => m.byKind[kind] > 0).map(kind => `\n${d.kinds[kind]} ${money(m.byKind[kind])}`).join('')}${m.estimated ? `\n(${money(m.estimated)} estimated)` : ''}`;
+      return `<g class="pro-int-bar${i === months.length - 1 ? ' is-current' : ''}"><title>${esc(tip)}</title><rect class="hit" x="${(pad.l + slot * i).toFixed(1)}" y="${pad.t}" width="${slot.toFixed(1)}" height="${ih}"/>${parts}
+        <text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(monthShort(m.month))}</text></g>`;
+    }).join('');
+    return `<svg class="pro-int-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Interest paid by month, ${months.map(m => `${monthShort(m.month)} ${money(m.total)}`).join(', ')}`)}"><g class="grid">${grid}</g>${bars}</svg>`;
+  }
+
+  function interestBody(d) {
+    const { money, esc } = pro().format;
+    const kinds = Object.keys(d.kinds).filter(kind => d.totals[kind] > 0).sort((a, b) => d.totals[b] - d.totals[a]);
+    const hints = d.hints.length ? `<ul class="pro-int-hints">${d.hints.map(hint => `<li><span class="dot" style="--c:${INTEREST_COLORS[hint.kind]}"></span><span>${esc(hint.message)}</span><a href="#payoff" class="btn btn-secondary btn-compact">Set up</a></li>`).join('')}</ul>` : '';
+    if (!d.total) {
+      return `<div class="pro-int-empty"><span class="pro-int-empty-icon">%</span><div><strong>No interest found in the last ${d.months.length} months</strong>
+        <p>We look for interest and finance charges on card statements and synced accounts, and estimate the interest inside loan and mortgage payments. Import a credit card statement or connect your bank to start tracking.</p></div></div>${hints}`;
+    }
+    const share = kind => d.total ? Math.round(d.totals[kind] / d.total * 100) : 0;
+    const charges = d.charges.slice(0, interestState.showAll ? 60 : 6);
+    const kindOptions = selected => Object.entries(d.kinds).map(([key, label]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
+    const row = charge => `<li class="pro-int-row is-${charge.source}">
+        <span class="dot" style="--c:${INTEREST_COLORS[charge.kind]}"></span>
+        <div><strong>${esc(charge.description)}</strong><small>${dateShort(charge.date)}${charge.source === 'estimated' ? ` · from a ${money(charge.paymentAmount, false)} payment` : charge.source === 'manual' ? ' · tagged by you' : ''}${charge.category ? ` · ${esc(charge.category)}` : ''}</small></div>
+        ${charge.source === 'estimated' ? '<span class="pro-int-badge">Estimated</span>'
+          : `<select class="pro-int-kind" data-interest-id="${esc(charge.id)}" aria-label="Interest type for ${esc(charge.description)}">${kindOptions(charge.kind)}</select>
+             <button type="button" class="pro-int-remove" data-analytics-action="${charge.source === 'manual' ? 'interest-auto' : 'interest-not'}" data-id="${esc(charge.id)}" title="${charge.source === 'manual' ? 'Undo your tag and use automatic detection' : 'This is not interest'}" aria-label="${charge.source === 'manual' ? 'Reset to automatic' : 'Not interest'}">${charge.source === 'manual' ? '↺' : '×'}</button>`}
+        <span class="num">${money(charge.amount, false)}</span></li>`;
+    return `<div class="pro-int-kpis">
+        <div class="is-lead"><span>Last ${d.months.length} months</span><strong>${money(d.total, true)}</strong><small>${d.estimated ? `incl. ${money(d.estimated, true)} estimated` : 'from your statements'}</small></div>
+        <div><span>This month</span><strong>${money(d.thisMonth, true)}</strong><small>${money(d.lastMonth, true)} last month</small></div>
+        <div><span>Monthly average</span><strong>${money(d.monthlyAverage, true)}</strong><small>≈ ${money(d.annualized, true)} a year</small></div>
+        <div><span>${new Date().getFullYear()} so far</span><strong>${money(d.yearToDate, true)}</strong><small>year to date</small></div>
+      </div>
+      <div class="pro-int-grid">
+        <figure class="pro-int-figure">${interestChart(d)}</figure>
+        <ul class="pro-int-breakdown">${kinds.map(kind => `<li><span class="dot" style="--c:${INTEREST_COLORS[kind]}"></span><span class="label">${esc(d.kinds[kind])}</span><strong>${money(d.totals[kind], true)}</strong><span class="bar"><i style="width:${share(kind)}%;background:${INTEREST_COLORS[kind]}"></i></span><small>${share(kind)}% · ${money(d.totals[kind] / d.months.length, true)}/mo</small></li>`).join('')}</ul>
+      </div>
+      ${hints}
+      <details class="pro-int-review"${interestState.showAll || interestState.reviewOpen ? ' open' : ''}><summary>Review interest charges <span>${d.charges.length}</span></summary>
+        <p class="pro-int-help">Charges are detected from their wording and your bank's category. Change the type, or mark anything that isn't interest. Estimated rows come from loan payments and your loan's rate.</p>
+        <ul class="pro-int-list">${charges.map(row).join('')}</ul>
+        ${d.charges.length > 6 ? `<button type="button" class="link-btn pro-int-more" data-analytics-action="interest-more">${interestState.showAll ? 'Show fewer' : `Show all ${d.charges.length}`}</button>` : ''}
+      </details>`;
+  }
+
+  function interestCard() {
+    const { esc } = pro().format;
+    const body = interestState.error ? `<p class="pro-empty">Could not load interest: ${esc(interestState.error)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="interest-retry">Try again</button></p>`
+      : interestState.data ? interestBody(interestState.data) : '<div class="pro-loading"><span></span><span></span><span></span></div>';
+    return `<article class="pro-card panel span-3 pro-interest" id="pro-interest"><header><div><h2>Interest you paid</h2><p>Credit card, auto, loan and mortgage interest, found on your statements or estimated from loan payments</p></div></header><div class="pro-card-body">${body}</div></article>`;
+  }
+
+  function paintInterest() {
+    const node = $('pro-interest');
+    if (!node) return;
+    const review = node.querySelector('.pro-int-review');
+    if (review) interestState.reviewOpen = review.open;
+    node.outerHTML = interestCard();
+  }
+
+  async function loadInterest(force = false) {
+    if (interestState.data && !force) return paintInterest();
+    const run = ++interestState.run;
+    interestState.error = '';
+    try {
+      const data = await pro().request('/api/analytics/interest');
+      if (run !== interestState.run) return;
+      if (!data || !Array.isArray(data.months) || !data.kinds || !Array.isArray(data.charges)) throw new Error('Unexpected response');
+      interestState.data = { hints: [], totals: {}, ...data };
+    } catch (error) {
+      if (run !== interestState.run) return;
+      interestState.error = error.message;
+    }
+    paintInterest();
+  }
+
+  async function setInterestKind(id, kind, control) {
+    if (control) control.disabled = true;
+    try {
+      await pro().request(`/api/analytics/interest/transactions/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ kind }) });
+      await loadInterest(true);
+      globalThis.notify?.(kind === null ? 'Marked as not interest.' : kind === 'auto' ? 'Back to automatic detection.' : 'Interest type updated.');
+    } catch (error) {
+      if (control) control.disabled = false;
+      globalThis.alert?.(`Could not update this charge: ${error.message}`);
+    }
+  }
+
   function renderHeader() {
     const [eyebrow, heading, intro] = HEADERS[tab];
     if ($('analytics-eyebrow')) $('analytics-eyebrow').innerHTML = eyebrow;
@@ -717,7 +828,8 @@
     stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
-    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${interestCard()}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    if (!interestState.data && !interestState.error) loadInterest();
     finish?.();
   }
 
@@ -734,6 +846,7 @@
     renderActions();
     if (!entitlement.plusActive) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
+      interestState.data = null; interestState.error = '';
       current = await pro().getAnalytics(force);
       if (force || [...compassRanges.values()].some(state => state.stale)) {
         await Promise.all([...compassRanges].map(async ([key, state]) => {
@@ -806,6 +919,10 @@
     if (action === 'upgrade') return pro().openUpgrade();
     if (action === 'budgets') return pro().openBudgets();
     if (action === 'mark-fixed') return markFixed(target);
+    if (action === 'interest-retry') { interestState.error = ''; interestState.data = null; paintInterest(); return loadInterest(true); }
+    if (action === 'interest-more') { interestState.showAll = !interestState.showAll; return paintInterest(); }
+    if (action === 'interest-not') return setInterestKind(target.dataset.id, null, target);
+    if (action === 'interest-auto') return setInterestKind(target.dataset.id, 'auto', target);
     if (action === 'household-edit' || action === 'household-cancel') {
       const form = $('pro-mf-household');
       if (form) form.hidden = action === 'household-cancel';
@@ -817,6 +934,9 @@
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';
   });
   document.addEventListener('change', event => {
+    if (event.target?.dataset?.interestId && event.target.closest?.('#analytics-view')) {
+      return setInterestKind(event.target.dataset.interestId, event.target.value, event.target);
+    }
     if (event.target?.dataset?.recurringFilter && current) {
       if (event.target.dataset.recurringFilter !== 'search') updateRecurringFilter(event.target);
       return;

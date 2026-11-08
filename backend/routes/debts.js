@@ -6,6 +6,30 @@ const router = Router();
 router.use(requireProPlus);
 const db = new Database();
 const numeric = ['balance', 'apr', 'credit_limit', 'min_payment'];
+const loanNumeric = ['original_amount', 'escrow_payment'];
+const optional = value => value === undefined || value === null || value === '';
+
+function loanField(key, body) {
+  const value = body[key];
+  if (optional(value)) return null;
+  if (loanNumeric.includes(key)) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0 || number > 1e10) throw Object.assign(new Error(`Invalid ${key.replace('_', ' ')}`), { status: 400 });
+    return Math.round(number * 100) / 100;
+  }
+  if (key === 'term_months') {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 1 || number > 600) throw Object.assign(new Error('Loan term must be between 1 and 600 months'), { status: 400 });
+    return number;
+  }
+  if (key === 'first_payment_month') {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(value))) throw Object.assign(new Error('First payment month must look like YYYY-MM'), { status: 400 });
+    return String(value);
+  }
+  const text = String(value).trim();
+  if (text.length > 100) throw Object.assign(new Error('Payment description match must be 100 characters or fewer'), { status: 400 });
+  return text || null;
+}
 
 function debtFields(body, partial = false) {
   const values = {};
@@ -33,6 +57,10 @@ function debtFields(body, partial = false) {
       values[key] = body[key] || null;
     }
   }
+  for (const key of [...loanNumeric, 'term_months', 'first_payment_month', 'payment_match']) {
+    if (body[key] === undefined) continue;
+    values[key] = loanField(key, body);
+  }
   return values;
 }
 
@@ -41,6 +69,7 @@ async function list(req, res, next) {
     const rows = await db.all('SELECT * FROM credit_cards ORDER BY apr DESC, id');
     res.json(rows.map(row => ({
       ...row, ...Object.fromEntries(numeric.map(key => [key, Number(row[key] || 0)])),
+      ...Object.fromEntries(loanNumeric.map(key => [key, row[key] == null ? null : Number(row[key])])),
       card_name: row.name, limit: Number(row.credit_limit || 0)
     })));
   } catch (error) { next(error); }
