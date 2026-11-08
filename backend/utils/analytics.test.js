@@ -254,9 +254,9 @@ test('Overview and Compass raw totals reconcile to independent ledger calculatio
     assert.equal(cents(compass.vendors.totalAmount), total(ledger, 'DEBIT'));
     assert.equal(compass.vendors.items.reduce((sum, m) => sum + cents(m.amount), 0), total(ledger, 'DEBIT'));
     assert.equal(compass.heatmap.rows.reduce((sum, row) => sum + cents(row.total), 0), total(ledger, 'DEBIT'));
-    assert.ok(Math.abs(cents(compass.flow.fixed.total + compass.flow.everyday.total) - Math.round(total(ledger, 'DEBIT') / months)) <= 1);
+    assert.ok(Math.abs(cents(compass.flow.fixed.total + compass.flow.discretionary.total + compass.flow.debt.total - compass.flow.debt.unrecorded) - Math.round(total(ledger, 'DEBIT') / months)) <= 1);
     assert.equal(cents(compass.flow.income), Math.round(total(ledger, 'CREDIT') / months));
-    assert.ok(Math.abs(compass.flow.income - compass.flow.fixed.total - compass.flow.everyday.total - compass.flow.debt - compass.flow.left) < 0.02);
+    assert.ok(Math.abs(compass.flow.income - compass.flow.fixed.total - compass.flow.discretionary.total - compass.flow.debt.total - compass.flow.left) < 0.02);
   }
 });
 

@@ -88,7 +88,7 @@ export function monthKeys(now, count) {
   return keys;
 }
 
-function paymentMatcher(debt, debts) {
+export function paymentMatcher(debt, debts) {
   const match = String(debt.payment_match || '').trim().toLowerCase();
   if (match) return row => String(row.description || '').toLowerCase().includes(match);
   if (debt.debt_type === 'mortgage' && debts.filter(item => item.debt_type === 'mortgage').length === 1) {

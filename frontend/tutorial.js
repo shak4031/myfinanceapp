@@ -569,7 +569,7 @@
                 <div class="tm-kv tut-in" ${at(4.2)}><span>🔒 No other MyFinance user's data is used</span></div>
               </div>
             </div>${cursor('save', 2.6)}${toast('Household saved. Your comparison is updated.', 3.6)}` },
-        { id: 'flow', title: 'Where your money flows', caption: 'Where your money flows follows each dollar of income into fixed bills, everyday spending and what is left over. A red ribbon is a category worth acting on. Beside it, the cards show what stood out, such as $1,435 a year on purchases under $20.',
+        { id: 'flow', title: 'Where your money flows', caption: 'Where your money flows follows each dollar of income into fixed expenses, discretionary spending, debt payments and what is left over. A red ribbon is a category worth acting on. Beside it, the cards show what stood out, such as $1,435 a year on purchases under $20.',
           render: () => {
             const rib = (x0, a0, a1, x1, b0, b1, cls, delay) => { const m = (x0 + x1) / 2; return `<path class="tm-rib ${cls} tut-in" ${at(delay)} d="M${x0} ${a0}C${m} ${a0} ${m} ${b0} ${x1} ${b0}L${x1} ${b1}C${m} ${b1} ${m} ${a1} ${x0} ${a1}Z"/>`; };
             return `${chip(3, 'Where your money flows')}
@@ -581,7 +581,7 @@
                   <rect x="110" y="0" width="8" height="81" rx="2" class="tm-node-fixed"/><rect x="110" y="87" width="8" height="42" rx="2" class="tm-node-day"/><rect x="110" y="135" width="8" height="35" rx="2" class="tm-node-left"/>
                   ${rib(118, 87, 99, 215, 88, 100, 'is-day', 2.2)}${rib(118, 99, 107, 215, 105, 113, 'is-act', 2.6)}${rib(118, 107, 129, 215, 118, 140, 'is-day', 2.4)}
                   <rect x="215" y="88" width="8" height="12" rx="2" class="tm-node-day"/><rect x="215" y="105" width="8" height="8" rx="2" class="tm-node-act"/><rect x="215" y="118" width="8" height="22" rx="2" class="tm-node-day"/>
-                  <text x="124" y="16">Fixed bills $4,294</text><text x="124" y="104" class="tm-halo">Everyday $2,252</text><text x="124" y="156" class="tm-good">Left over $1,858</text>
+                  <text x="124" y="16">Fixed &amp; debt $4,294</text><text x="124" y="104" class="tm-halo">Discretionary $2,252</text><text x="124" y="156" class="tm-good">Left over $1,858</text>
                   <text x="229" y="97">Groceries</text><text x="229" y="113" class="tm-bad">Dining $452</text><text x="229" y="133">Everything else</text>
                 </svg>
               </div>

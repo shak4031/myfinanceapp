@@ -31,18 +31,18 @@ test('Compass selected periods recompute monthly totals, chart widths and histor
     assert.equal(result.categories[0].series.length, months);
     assert.equal(result.categories[0].range.months, months);
     assert.equal(result.flow.income, 2000);
-    assert.equal(result.flow.everyday.total, result.categories[0].average3);
+    assert.equal(result.flow.discretionary.total, result.categories[0].average3);
   }
   const q2 = run(3, 5);
   assert.deepEqual(q2.heatmap.months, ['Apr 2026', 'May 2026', 'Jun 2026']);
   assert.equal(q2.categories[0].average3, 200);
-  assert.equal(q2.flow.everyday.total, 200);
+  assert.equal(q2.flow.discretionary.total, 200);
   assert.equal(q2.categories[0].range.latest, 200);
   const changedOutsideQuarter = [...transactions, { date: '2026-10-02', amount: 900, category: 'Dining', direction: 'DEBIT' }];
   assert.deepEqual(buildMoneyFlowSignals({ transactions: changedOutsideQuarter, range: { months: 3, endYear: 2026, endMonth: 5 } }).categories, q2.categories);
   const single = run(1);
   assert.equal(single.status, 'needs-history');
-  assert.equal(single.flow.everyday.total, 300);
+  assert.equal(single.flow.discretionary.total, 300);
   assert.equal(single.heatmap.months.length, 1);
 });
 
@@ -183,7 +183,7 @@ test('the purchases x size split says whether more visits or pricier visits drov
   assert.equal(yearAgo.basis, 'same-months-last-year');
 });
 
-test('the money flow splits income into fixed bills, everyday spending and left over, without transfers', () => {
+test('the money flow splits income into fixed, discretionary, debt payments and left over, without transfers', () => {
   const months = [3, 2, 1].map(back => { const d = new Date(2026, 9 - back, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
   const transactions = months.flatMap(m => [
     { date: `${m}-01`, description: 'PAYROLL', amount: 5000, direction: 'CREDIT', category: 'Income' },
@@ -197,13 +197,15 @@ test('the money flow splits income into fixed bills, everyday spending and left 
   const { flow, small } = result;
   assert.equal(flow.months, 3);
   assert.equal(flow.income, 5000);
-  assert.equal(flow.fixed.total, 2000);
-  assert.equal(flow.everyday.total, 760, 'the savings transfer is not spending');
-  assert.equal(flow.debt, 150, 'minimums the surplus counts but history does not show');
+  assert.equal(flow.fixed.total, 0, 'a mortgage is a debt payment, not a fixed bill');
+  assert.equal(flow.discretionary.total, 760, 'the savings transfer is not spending');
+  assert.equal(flow.debt.total, 2150);
+  assert.equal(flow.debt.unrecorded, 150, 'minimums the surplus counts but history does not show');
+  assert.deepEqual(flow.debt.items.map(i => i.label), ['Mortgage', 'Minimums not yet imported']);
   assert.equal(flow.left, 2090);
-  assert.equal(flow.income, flow.fixed.total + flow.everyday.total + flow.debt + flow.left);
-  assert.deepEqual(flow.everyday.items.map(i => i.label), ['Groceries', 'Dining', 'Everything else'], 'items under 3% of income are grouped');
-  assert.equal(flow.everyday.items.find(i => i.label === 'Dining').id, 'dining');
+  assert.equal(flow.income, flow.fixed.total + flow.discretionary.total + flow.debt.total + flow.left);
+  assert.deepEqual(flow.discretionary.items.map(i => i.label), ['Groceries', 'Dining', 'Everything else'], 'items under 3% of income are grouped');
+  assert.equal(flow.discretionary.items.find(i => i.label === 'Dining').id, 'dining');
   assert.deepEqual({ perMonth: small.perMonth, monthly: small.monthly, annual: small.annual, topMerchant: small.topMerchant }, { perMonth: 10, monthly: 60, annual: 720, topMerchant: 'STARBUCKS' });
   assert.ok(result.insights.length <= 4);
   assert.ok(result.insights.some(i => i.id === 'small'), 'small purchases over $300 a year are worth a card');
@@ -347,7 +349,7 @@ test('raw Compass panels retain the first partial month and reconcile every sele
   assert.equal(data.vendors.months, 3);
   assert.deepEqual(data.heatmap.rows[0].values, [123.45, 10.1, 1000]);
   assert.equal(data.heatmap.rows[0].total, 1133.55);
-  assert.ok(Math.abs((data.flow.fixed.total + data.flow.everyday.total) * 3 - 1133.55) < 0.02);
+  assert.ok(Math.abs((data.flow.fixed.total + data.flow.discretionary.total) * 3 - 1133.55) < 0.02);
 });
 
 test('merchant display limit never reduces ledger totals and blank or numeric descriptions still count', () => {

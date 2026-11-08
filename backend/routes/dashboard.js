@@ -14,6 +14,7 @@ import { buildInsights } from '../utils/insights.js';
 import { cashBalance, savedAmount } from '../utils/transfers.js';
 import { buildSpendingHistory } from '../utils/spendingHistory.js';
 import { recordAudit } from '../utils/audit.js';
+import { bucketOf, buildSpendingBuckets, debtMatchers } from '../utils/spendingBuckets.js';
 
 const router = Router();
 const db = new Database();
@@ -402,6 +403,25 @@ router.get('/insights', async (req, res) => {
   }
 });
 
+// Debts only refine which payments count as debt; a failure falls back to category rules.
+async function loadDebts(userId) {
+  try { return await db.all('SELECT * FROM credit_cards WHERE user_id = $1', [userId]); }
+  catch (error) { log('DASHBOARD', `Debts unavailable: ${error.message}`, 'warn'); return []; }
+}
+
+// Fixed expenses, discretionary spending and debt payments by month, plus a typical month.
+router.get('/buckets', async (req, res, next) => {
+  try {
+    const userId = currentUserId();
+    const [transactions, debts] = await Promise.all([
+      db.all(`SELECT id, date, description, display_name, amount, direction, category, is_fixed, transfer_kind, interest_kind, interest_override FROM transactions
+        WHERE user_id = $1`, [userId]),
+      loadDebts(userId)
+    ]);
+    res.json(buildSpendingBuckets({ transactions, debts, now: new Date() }));
+  } catch (error) { next(error); }
+});
+
 router.get('/spending-history', async (req, res, next) => {
   try {
     const entitlement = await getEntitlement(currentUserId());
@@ -645,16 +665,22 @@ router.get('/all-transactions', async (req, res) => {
     `, [currentUserId()]);
 
     log('DASHBOARD', `Returning ${result.length} total transactions (including is_fixed)`);
+    const matchers = debtMatchers(await loadDebts(currentUserId()));
 
     res.json({
       total: result.length,
-      transactions: result.map(row => ({
-        ...row,
-        id: row.id.toString(),
-        amount: parseFloat(row.amount),
-        is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true',
-        counts_as_income: row.transfer_kind == null && isIncomeTransaction(row)
-      }))
+      transactions: result.map(row => {
+        const spending = bucketOf(row, matchers);
+        return {
+          ...row,
+          id: row.id.toString(),
+          amount: parseFloat(row.amount),
+          is_fixed: row.is_fixed === true || row.is_fixed === 1 || row.is_fixed === 'true',
+          counts_as_income: row.transfer_kind == null && isIncomeTransaction(row),
+          spending_bucket: spending?.bucket || null,
+          debt_type: spending?.type || null
+        };
+      })
     });
   } catch (error) {
     log('DASHBOARD', `Error fetching all transactions: ${error.message}`);

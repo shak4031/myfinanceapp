@@ -499,6 +499,7 @@
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261108-mortgage">
   <link rel="stylesheet" href="welcome.css?v=20261030c">
+<link rel="stylesheet" href="buckets.css?v=20261109-buckets">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261107-review-counts">
@@ -677,6 +678,8 @@
         <div class="metrics-grid" id="dashboard-metrics"></div>
         <div id="balance-freshness-note" class="muted" style="font-size:12px;margin:-10px 0 12px;"></div>
 
+        <section id="bucket-section" class="panel section-panel bucket-panel" aria-label="Where your money goes"></section>
+
         <div id="upcoming-section" class="panel section-panel">
           <div class="section-head">
             <div>
@@ -741,6 +744,7 @@
           <div id="category-filter-months" class="month-picker" hidden></div>
         </div>
         <div id="category-overview-summary" class="category-overview-summary"></div>
+        <div id="category-bucket-summary" class="bucket-strip" role="region" aria-label="Spending by type"></div>
         <div id="category-cards" class="category-cards" aria-live="polite"></div>
       </section>
 
@@ -1603,6 +1607,7 @@
       if (existingMtd) existingMtd.remove();
 
       window.FinanceWelcome?.load();
+      window.FinanceBuckets?.load();
       if (document.getElementById('cashflow-history')?.open) loadCashflowChart();
 
       let data;
@@ -2682,6 +2687,7 @@
   <script src="analytics.js?v=20261108-interest"></script>
   <script src="plan.js?v=20261108-mortgage"></script>
   <script src="welcome.js?v=20261030c"></script>
+<script src="buckets.js?v=20261109-buckets"></script>
   <script src="income-review.js?v=20261020b"></script>
   <script src="transaction-duplicates.js?v=20261107-review-counts"></script>
   <script src="knowledge-base.js?v=20261103-topics"></script>

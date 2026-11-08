@@ -10,6 +10,7 @@ import { parseTxDate } from './normalize.js';
 import { merchantGroup, merchantLabel } from './analytics.js';
 import { isTransferRow } from './transfers.js';
 import { isFixedPayment } from './fixedPayments.js';
+import { DEBT_TYPE_LABELS, bucketOf, debtMatchers } from './spendingBuckets.js';
 
 export const BENCHMARK_SOURCES = Object.freeze({
   'bls-ce-2024': {
@@ -305,7 +306,7 @@ const WORKDAYS_PER_MONTH = 21.7;
 
 // Where money went over the last three full months: the same window and transfer rule as the "typical monthly surplus"
 // every other page shows, so the "left over" figure here matches the dashboard.
-const FLOW_ITEMS = 5, FLOW_MIN_SHARE = 0.03;
+const FLOW_ITEMS = 5, FLOW_MIN_SHARE = 0.03, UNRECORDED_DEBT = 'Minimums not yet imported';
 function flowGroup(totals, income, months, restLabel) {
   const items = [...totals.entries()].map(([label, amount]) => ({ label, amount: amount / months, id: benchmarkCategoryFor(label)?.id || null }))
     .sort((a, b) => b.amount - a.amount);
@@ -315,9 +316,11 @@ function flowGroup(totals, income, months, restLabel) {
   return { total: round(sum(items.map(item => item.amount))), items: shown.map(item => ({ ...item, amount: round(item.amount) })) };
 }
 
-function moneyFlow(transactions, today, typical, span = 3, available = null) {
+function moneyFlow(transactions, today, typical, span = 3, available = null, debts = []) {
   const currentIndex = today.getFullYear() * 12 + today.getMonth();
-  const months = new Set(), fixedTotals = new Map(), everydayTotals = new Map(), merchants = new Map();
+  const matchers = debtMatchers(debts);
+  const months = new Set(), merchants = new Map();
+  const totals = { fixed: new Map(), discretionary: new Map(), debt: new Map() };
   let income = 0, recorded = 0, smallCount = 0, smallTotal = 0;
   for (const tx of transactions) {
     const parsed = parseTxDate(tx.date);
@@ -330,10 +333,10 @@ function moneyFlow(transactions, today, typical, span = 3, available = null) {
     if (direction === 'CREDIT') { income += amount; continue; }
     if (direction !== 'DEBIT') continue;
     recorded += amount;
-    const label = tx.category || 'Uncategorized';
-    const totals = isFixed(tx) ? fixedTotals : everydayTotals;
-    totals.set(label, (totals.get(label) || 0) + amount);
-    if (!isFixed(tx) && amount < SMALL_PURCHASE) {
+    const { bucket, type } = bucketOf(tx, matchers);
+    const label = bucket === 'debt' ? DEBT_TYPE_LABELS[type] : tx.category || 'Uncategorized';
+    totals[bucket].set(label, (totals[bucket].get(label) || 0) + amount);
+    if (bucket === 'discretionary' && amount < SMALL_PURCHASE) {
       smallCount += 1; smallTotal += amount;
       const key = merchantGroup(tx);
       const merchant = merchants.get(key) || { name: String(tx.display_name || '').trim() || key || 'Other', count: 0 };
@@ -345,15 +348,18 @@ function moneyFlow(transactions, today, typical, span = 3, available = null) {
   if (!m) return { flow: null, small: null };
   const monthlyIncome = income / m;
   // Minimum payments for debts not yet visible in imported history are part of the shared surplus figure.
-  const debt = typical?.avgMonthlyExpenses != null ? Math.max(0, round(typical.avgMonthlyExpenses - recorded / m)) : 0;
+  const unrecorded = typical?.avgMonthlyExpenses != null ? Math.max(0, round(typical.avgMonthlyExpenses - recorded / m)) : 0;
+  const extra = unrecorded >= 1 ? unrecorded : 0;
+  if (extra) totals.debt.set(UNRECORDED_DEBT, extra * m);
+  const debt = flowGroup(totals.debt, monthlyIncome, m, 'Other debt');
   const topMerchant = [...merchants.values()].sort((a, b) => b.count - a.count)[0];
   return {
     flow: {
       months: m, income: round(monthlyIncome),
-      fixed: flowGroup(fixedTotals, monthlyIncome, m, 'Other bills'),
-      everyday: flowGroup(everydayTotals, monthlyIncome, m, 'Everything else'),
-      debt: debt >= 1 ? debt : 0,
-      left: round(monthlyIncome - recorded / m - (debt >= 1 ? debt : 0))
+      fixed: flowGroup(totals.fixed, monthlyIncome, m, 'Other bills'),
+      discretionary: flowGroup(totals.discretionary, monthlyIncome, m, 'Everything else'),
+      debt: { ...debt, unrecorded: extra },
+      left: round(monthlyIncome - recorded / m - extra)
     },
     small: smallCount ? { under: SMALL_PURCHASE, perMonth: round(smallCount / m, 1), monthly: round(smallTotal / m), annual: round(smallTotal / m * 12),
       topMerchant: topMerchant?.name || null, topMerchantPerMonth: topMerchant ? round(topMerchant.count / m, 1) : null } : null
@@ -500,14 +506,14 @@ function buildInsights({ categories, opportunities, flow, small }) {
   }
   return insights.slice(0, 4);
 }
-export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date(), typical = null, range = null } = {}) {
+export function buildMoneyFlowSignals({ transactions = [], profile = null, today = new Date(), typical = null, range = null, debts = [] } = {}) {
   if (range) today = new Date(range.endYear, range.endMonth + 1, 1);
   const normalized = normalizeProfile(profile);
   const profileSet = !!(normalized && (normalized.size || normalized.region || normalized.housing));
   const { byCategory, visitCounts, oneOffs, available, currentIndex } = monthlySeries(transactions, today, range?.months);
   const who = profileLabel(normalized);
   const base = { source: SOURCE, profile: normalized, profileSet, comparedWith: who, monthsAnalyzed: available, categories: [], opportunities: [] };
-  const { flow, small } = moneyFlow(transactions, today, typical, range?.months, range?.months ?? null);
+  const { flow, small } = moneyFlow(transactions, today, typical, range?.months, range?.months ?? null, debts);
   const panels = {
     flow, small, heatmap: categoryHeatmap(transactions, today, available, range?.months),
     vendors: vendorBubbles(transactions, today, range?.months)

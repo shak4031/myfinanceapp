@@ -59,7 +59,8 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     ['/api/plan/settings', 'PUT', { debt_strategy: 'snowball' }],
     ['/api/plan/flex', 'PUT', { key: 'debt-extra', amount: 0 }],
     ['/api/plan/debt-order', 'PUT', { ids: [1] }],
-    ['/api/plan/what-if', 'POST', { extra: 100 }]
+    ['/api/plan/what-if', 'POST', { extra: 100 }],
+    ['/api/plan/health'], ['/api/plan/health', 'PUT', { action: 'start' }]
   ];
   async function assertPlanningLocked(cookie) {
     for (const [path, method, body] of planningRequests) {
@@ -183,13 +184,13 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     const chosenCompass = await call(`/api/analytics/compass?from=${rangeMonths[0]}&to=${rangeMonths[2]}`, { cookie: customerCookie });
     assert.equal(chosenCompass.body.categories.find(row => row.id === 'dining').average3, 100);
     assert.equal(chosenCompass.body.flow.income, 1000);
-    assert.equal(chosenCompass.body.flow.everyday.total, 100);
+    assert.equal(chosenCompass.body.flow.discretionary.total, 100);
     assert.deepEqual(chosenCompass.body.range, { from: rangeMonths[0], to: rangeMonths[2], months: 3, endYear: Number(rangeMonths[2].slice(0, 4)), endMonth: Number(rangeMonths[2].slice(5)) - 1 });
     const oldMonth = new Date(day.getFullYear(), day.getMonth() - 8, 2);
     const oldDate = `${oldMonth.getFullYear()}-${String(oldMonth.getMonth() + 1).padStart(2, '0')}-02`;
     await database.query("INSERT INTO transactions (user_id,date,description,amount,direction,category,source) VALUES ($1,$2,'OLD LARGE DINING',90000,'DEBIT','Dining','compass-range-test')", [customerId, oldDate]);
     const defaultCompass = (await call('/api/analytics', { cookie: customerCookie })).body.moneyFlow;
-    assert.equal(defaultCompass.flow.everyday.total, 100);
+    assert.equal(defaultCompass.flow.discretionary.total, 100);
     assert.equal(defaultCompass.vendors.months, 3);
     assert.equal(defaultCompass.heatmap.months.length, 3);
     assert.equal(defaultCompass.categories.find(row => row.id === 'dining').average3, 100);
@@ -245,6 +246,25 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal(debt.status, 200);
     assert.equal((await call('/api/plan', { cookie: customerCookie })).body.pro, true);
     assert.equal((await call('/api/plan/what-if', { body: { extra: 100 }, cookie: customerCookie })).status, 200);
+    const lastMonth = new Date(day.getFullYear(), day.getMonth() - 1, 3);
+    const lastMonthDate = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}-03`;
+    await database.query(`INSERT INTO transactions (user_id,date,description,amount,direction,category,source) VALUES
+      ($1,$2,'HEALTH PAY',4000,'CREDIT','Salary','health-test'), ($1,$2,'HEALTH DINING',500,'DEBIT','Dining','health-test')`, [customerId, lastMonthDate]);
+    const health = await call('/api/plan/health', { cookie: customerCookie });
+    assert.equal(health.status, 200);
+    assert.equal(health.body.steps.length, 12);
+    assert.equal(health.body.startedAt, null);
+    assert.ok(health.body.typical.income > 0, 'the plan reads the customer\'s own history');
+    assert.equal(JSON.stringify(health.body).includes('OWNER'), false);
+    assert.equal((await call('/api/plan/health', { method: 'PUT', body: { step: 'bogus', done: true }, cookie: customerCookie })).status, 400);
+    const started = await call('/api/plan/health', { method: 'PUT', body: { action: 'start' }, cookie: customerCookie });
+    assert.equal(started.status, 200);
+    assert.equal(started.body.week, 1);
+    assert.equal(started.body.baseline.income, health.body.typical.income);
+    const ticked = await call('/api/plan/health', { method: 'PUT', body: { step: 'income', done: true }, cookie: customerCookie });
+    assert.equal(ticked.body.steps.find(step => step.id === 'income').status, 'done');
+    assert.equal((await call('/api/plan/health', { cookie: customerCookie })).body.steps.find(step => step.id === 'income').manual, true, 'ticks are saved');
+    assert.equal((await call('/api/plan', { cookie: customerCookie })).status, 200, 'the health column does not disturb the debt-free plan');
     const plusTimeline = (await call('/api/dashboard/upcoming-payments', { body: {}, cookie: customerCookie })).body;
     assert.ok(plusTimeline.some(item => item.planned), 'Pro Plus includes planning calendar items');
     assert.ok(plusTimeline.every(item => /^\d{4}-\d{2}-\d{2}$/.test(item.date)), 'income and plan entries use full dates too');

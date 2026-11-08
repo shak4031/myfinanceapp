@@ -1440,7 +1440,7 @@ test('phone analytics wraps metric labels and contains readable charts and table
 });
 
 test('all frontend scripts and inline application code parse', () => {
-  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','review-tools.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','tutorial.js','knowledge-base.js','income-review.js','marketing.js']) new vm.Script(source(file));
+  for (const file of ['session.js','client-errors.js','ui.js','refresh.js','review-tools.js','accounts.js','account.js','admin.js','pro-charts.js','pro-core.js','pro-dashboard.js','pro-categories.js','analytics.js','plan.js','welcome.js','buckets.js','tutorial.js','knowledge-base.js','income-review.js','marketing.js']) new vm.Script(source(file));
   for (const html of ['index.html','admin.html','transactions.html']) for (const match of source(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 test('only one navigation implementation switches to exactly one active view', () => {
@@ -4488,14 +4488,15 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.doesNotMatch(html, /undefined|NaN|Infinity/);
   // Polished Sankey: labelled blocks with their share of income, one gradient per ribbon, a colour key.
   assert.match(html, /<text[^>]*class="pro-sk-in">Income<\/text>/);
-  assert.match(html, /class="pro-sk-in">Fixed bills<\/text><text[^>]*class="pro-sk-in-sub">\$[\d,]+ · \d+%/);
+  assert.match(html, /class="pro-sk-in">Debt payments<\/text><text[^>]*class="pro-sk-in-sub">\$[\d,]+ · \d+%/);
+  assert.match(html, /class="pro-sk-in">Fixed expenses(?:<\/text>|<tspan)/);
   assert.equal((html.match(/<linearGradient id="pro-sk-g/g) || []).length, (html.match(/class="pro-sk-band"/g) || []).length);
   assert.match(html, /class="pro-sk-legend"/);
   await f.context.loadAnalyticsPage(true);
   assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
 
   // A month that spends more than came in shows the shortfall under income instead of a "left over" block.
-  payload.moneyFlow.flow = { ...mf.flow, left: -300, everyday: { ...mf.flow.everyday, total: mf.flow.everyday.total + 300 - mf.flow.left } };
+  payload.moneyFlow.flow = { ...mf.flow, left: -300, discretionary: { ...mf.flow.discretionary, total: mf.flow.discretionary.total + 300 - mf.flow.left } };
   await f.context.loadAnalyticsPage(true, 'compass');
   const over = f.node('analytics-content').innerHTML;
   assert.match(over, /Overspent \$300\/mo/);
@@ -4631,6 +4632,136 @@ test('a failed insights load shows a retry in the welcome hero', async () => {
   f.run('welcome.js');
   await f.context.FinanceWelcome.load();
   assert.match(f.node('welcome-hero').innerHTML, /Insights offline[\s\S]*data-welcome-retry/);
+});
+const bucketTransactions = () => {
+  const rows = [];
+  for (const month of ['2026-04', '2026-05', '2026-06', '2026-07']) {
+    rows.push({ date: `${month}-01`, description: 'PAYROLL', direction: 'CREDIT', amount: 5000, category: 'Income' });
+    rows.push({ date: `${month}-03`, description: 'HOME LOAN <PMT>', direction: 'DEBIT', amount: 1500, category: 'Mortgage', is_fixed: true });
+    rows.push({ date: `${month}-05`, description: 'POWER CO', direction: 'DEBIT', amount: 1000, category: 'Utilities', is_fixed: true });
+    rows.push({ date: `${month}-09`, description: 'BISTRO', direction: 'DEBIT', amount: 2000, category: 'Dining' });
+    rows.push({ date: `${month}-12`, description: 'TO SAVINGS', direction: 'DEBIT', amount: 400, category: 'Transfer', transfer_kind: 'internal' });
+  }
+  return rows;
+};
+test('the dashboard spending buckets panel splits income, flags overspending and escapes labels', async () => {
+  const { buildSpendingBuckets } = await import('../backend/utils/spendingBuckets.js');
+  const data = buildSpendingBuckets({ transactions: bucketTransactions(), now: new Date(2026, 6, 20) });
+  const urls = [];
+  const f = fixture(async url => { urls.push(url); return response(200, data); });
+  browserBits(f);
+  f.run('buckets.js');
+  await f.context.FinanceBuckets.load();
+  assert.deepEqual(urls, ['/api/dashboard/buckets']);
+  const html = f.node('bucket-section').innerHTML;
+  assert.match(html, /Where your money goes/);
+  assert.match(html, /Of every <b>\$100<\/b>[\s\S]*<b>\$20<\/b> fixed expenses[\s\S]*<b>\$40<\/b> discretionary[\s\S]*<b>\$30<\/b> debt[\s\S]*<b>\$10<\/b> left over/);
+  assert.match(html, /bucket-card is-fixed[\s\S]*\$1,000[\s\S]*20% of income/);
+  assert.match(html, /bucket-card is-discretionary[\s\S]*class="is-over">40% of income[\s\S]*\$500 above/);
+  assert.match(html, /bucket-card is-debt[\s\S]*\$1,500[\s\S]*30% of income/, 'the mortgage is a debt payment');
+  assert.match(html, /HOME LOAN &lt;PMT&gt;|Mortgage/);
+  assert.doesNotMatch(html, /<PMT>/);
+  assert.match(html, /Left over[\s\S]*\$500[\s\S]*\$250 short/);
+  assert.doesNotMatch(html, /TO SAVINGS/, 'transfers stay out of every bucket');
+  assert.match(html, /data-bucket-mode="typical" aria-pressed="true"/);
+  assert.equal((html.match(/<div class="bucket-col[ "]/g) || []).length, 4, 'three complete months plus this month');
+  assert.match(html, /See the financial health plan <span class="pro-tag">PRO<\/span>/);
+  f.context.FinanceBuckets.setMode('current');
+  const now = f.node('bucket-section').innerHTML;
+  assert.match(now, /data-bucket-mode="current" aria-pressed="true"/);
+  assert.match(now, /Day 20 of 31\.<\/b> \$5,000 in so far and \$4,500 out/);
+  assert.doesNotMatch(now, /Guide: about/, 'month-to-date figures are not judged against the guide');
+});
+test('the buckets panel shows an import prompt with no data and a retry on failure', async () => {
+  const empty = fixture(async () => response(200, { months: [], current: { income: 0, fixed: 0, discretionary: 0, debt: 0 }, typical: null }));
+  browserBits(empty);
+  empty.run('buckets.js');
+  await empty.context.FinanceBuckets.load();
+  assert.match(empty.node('bucket-section').innerHTML, /Import a few months of statements[\s\S]*Import statements/);
+  const failed = fixture(async () => response(500, { error: 'Buckets <offline>' }));
+  browserBits(failed);
+  failed.run('buckets.js');
+  await failed.context.FinanceBuckets.load();
+  assert.match(failed.node('bucket-section').innerHTML, /Buckets &lt;offline&gt;[\s\S]*data-bucket-retry/);
+  const wrongShape = fixture(async () => response(200, { insights: [] }));
+  browserBits(wrongShape);
+  wrongShape.run('buckets.js');
+  await wrongShape.context.FinanceBuckets.load();
+  assert.match(wrongShape.node('bucket-section').innerHTML, /unavailable right now/);
+});
+test('the categories strip totals the visible rows by spending bucket', () => {
+  const f = fixture();
+  browserBits(f);
+  f.run('buckets.js');
+  const { strip } = f.context.FinanceBuckets;
+  assert.equal(strip([]), '');
+  assert.equal(strip([{ amount: 50, spending_bucket: null }]), '');
+  const html = strip([
+    { amount: 600, spending_bucket: 'fixed' }, { amount: -300, spending_bucket: 'discretionary' },
+    { amount: 100, spending_bucket: 'discretionary' }, { amount: 1000, spending_bucket: 'debt' }, { amount: 999, spending_bucket: 'bogus' }
+  ], { label: 'July <2026>' });
+  assert.match(html, /Spending by type<\/h2><span>July &lt;2026&gt;<\/span>/);
+  assert.match(html, /Fixed expenses<\/small><strong>\$600<\/strong><em>30% of spending/);
+  assert.match(html, /Discretionary<\/small><strong>\$400<\/strong><em>20% of spending/);
+  assert.match(html, /Debt payments<\/small><strong>\$1,000<\/strong><em>50% of spending/);
+  const refresh = source('refresh.js');
+  assert.match(refresh, /FinanceBuckets\?\.strip\(filtered, \{ label: period\.label \}\)/);
+  assert.match(refresh, /\$\('category-bucket-summary'\)\.textContent = ''/);
+  const html2 = source('index.html');
+  assert.match(html2, /id="category-overview-summary"[^]*?id="category-bucket-summary"[^]*?id="category-cards"/);
+  assert.match(html2, /id="bucket-section"[^]*?id="upcoming-section"/);
+  assert.match(html2, /FinanceBuckets\?\.load\(\)/);
+  assert.match(html2, /<script src="buckets\.js\?v=[^"]+"><\/script>/);
+  assert.match(html2, /<link rel="stylesheet" href="buckets\.css\?v=[^"]+">/);
+});
+test('the checkup health plan scores the split, walks twelve weeks and saves ticks', async () => {
+  const { buildSpendingBuckets } = await import('../backend/utils/spendingBuckets.js');
+  const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
+  const now = new Date(2026, 6, 20);
+  const buckets = buildSpendingBuckets({ transactions: bucketTransactions(), now });
+  const fresh = buildHealthPlan({ buckets, now });
+  const started = buildHealthPlan({ buckets, now, state: { startedAt: '2026-07-06', done: { cut: true } } });
+  const requests = [];
+  const f = fixture(async (url, options = {}) => { requests.push([url, options.method, options.body]); return response(200, started); });
+  browserBits(f);
+  f.run('buckets.js');
+  const { renderHealth, changeHealth } = f.context.FinanceBuckets;
+  assert.equal(renderHealth(null), '');
+  assert.equal(renderHealth({ steps: [] }), '');
+  const html = renderHealth(fresh);
+  assert.match(html, /YOUR FINANCIAL HEALTH PLAN/);
+  assert.match(html, new RegExp(`health-ring is-\\w+" role="img" aria-label="Health score ${fresh.score} out of 100`));
+  assert.match(html, /Fixed expenses<\/span><b>20%<\/b><em>guide ≤ 30%<\/em><i class="health-chip is-good">On target/);
+  assert.match(html, /Discretionary<\/span><b>40%<\/b>[\s\S]*?\$500\/mo over/);
+  assert.match(html, /Where to start/);
+  assert.match(html, /data-health-action="start">Start my 90 days/);
+  assert.equal((html.match(/<details class="health-step/g) || []).length, 12);
+  assert.equal((html.match(/<details class="health-step[^"]*" open/g) || []).length, 1, 'only the next step starts open');
+  assert.match(html, /Month 1<\/span>Know your numbers[\s\S]*Month 2<\/span>Build the foundation[\s\S]*Month 3<\/span>Lock it in/);
+  const startedHtml = renderHealth(started);
+  assert.match(startedHtml, /WEEK 3 OF 12/);
+  assert.match(startedHtml, /data-health-action="reset"/);
+  assert.match(startedHtml, /data-health-step="cut" data-health-done="false" aria-pressed="true">[\s\S]*?Marked done/);
+  f.node('health-plan-root').innerHTML = html;
+  const button = { disabled: false };
+  await changeHealth({ step: 'cut', done: true }, button);
+  assert.deepEqual(requests, [['/api/plan/health', 'PUT', JSON.stringify({ step: 'cut', done: true })]]);
+  assert.match(f.node('health-plan-root').innerHTML, /WEEK 3 OF 12/);
+  const failing = fixture(async () => response(400, { error: 'Unknown step' }));
+  browserBits(failing);
+  const messages = [];
+  failing.context.notify = message => messages.push(message);
+  failing.run('buckets.js');
+  const tick = { disabled: false };
+  await failing.context.FinanceBuckets.changeHealth({ step: 'nope', done: true }, tick);
+  assert.deepEqual(messages, ['Unknown step']);
+  assert.equal(tick.disabled, false);
+  const refresh = source('refresh.js');
+  assert.match(refresh, /json\('\/api\/plan\/health'\)\.catch\(\(\) => null\)/);
+  assert.match(refresh, /<div id="health-plan-root">\$\{healthPlan\}<\/div>/);
+  const css = source('buckets.css');
+  assert.match(css, /\.health-ring\.is-bad \.health-ring-fill/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 test('tutorial deep links open the right walkthrough and chapter', () => {
   const f = fixture();
@@ -4815,7 +4946,7 @@ test('spending compass tutorial walks through the plan, money flow, overlapping 
   assert.match(f.node('tut-caption').textContent, /above similar homes[\s\S]*trending up[\s\S]*unusual last month[\s\S]*9 in 10/i);
   assert.match(f.node('tut-canvas').innerHTML, /tm-venn[\s\S]*tm-range-band/);
   tours.open('compass/flow');
-  assert.match(f.node('tut-caption').textContent, /fixed bills, everyday spending and what is left over/);
+  assert.match(f.node('tut-caption').textContent, /fixed expenses, discretionary spending, debt payments and what is left over/);
   assert.match(f.node('tut-canvas').innerHTML, /tm-sankey[\s\S]*tm-insight/);
   tours.open('compass/household');
   assert.match(f.node('tut-caption').textContent, /No other MyFinance user's data/);

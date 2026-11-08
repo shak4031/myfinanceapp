@@ -347,6 +347,7 @@ export async function migratePrivateSchema(client) {
       goal_strategy TEXT NOT NULL DEFAULT 'priority', goal_budget NUMERIC(14,2),
       flex JSONB NOT NULL DEFAULT '{}'::jsonb, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE money_plans ADD COLUMN IF NOT EXISTS health_plan JSONB NOT NULL DEFAULT '{}'::jsonb;
     -- One row per user: household details used only to pick public spending benchmarks (never shared).
     CREATE TABLE IF NOT EXISTS household_profiles (
       id SERIAL PRIMARY KEY, household_size INTEGER CHECK (household_size BETWEEN 1 AND 12),

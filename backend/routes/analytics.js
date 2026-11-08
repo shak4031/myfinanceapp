@@ -33,9 +33,10 @@ async function loadInputs() {
     const accounts = (await client.query('SELECT id, kind, statement FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
     const household = (await client.query('SELECT household_size AS size, region, housing FROM household_profiles LIMIT 1')).rows[0] || null;
     const hasFixedEstimates = (await client.query('SELECT 1 FROM fixed_payment_estimates LIMIT 1')).rows.length > 0;
+    const debts = (await client.query('SELECT * FROM credit_cards')).rows;
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { transactions, budgets, household, hasFixedEstimates, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
+    return { transactions, budgets, household, hasFixedEstimates, debts, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
   });
 }
 
@@ -55,7 +56,7 @@ router.get('/', async (req, res, next) => {
     const start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
     const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     const range = { from: key(start), to: key(end), months: 3, endYear: end.getFullYear(), endMonth: end.getMonth() };
-    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range }));
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range, debts: inputs.debts }));
     moneyFlow.range = range;
     res.json({
       ...analytics, moneyFlow
@@ -81,7 +82,7 @@ router.get('/compass', async (req, res, next) => {
     const latestCompleted = now.getFullYear() * 12 + now.getMonth() - 1;
     const typical = range.months === 3 && to === latestCompleted
       ? typicalSurplus(await timed(res, 'plan', () => loadPlanInputs(db, now)), now) : null;
-    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range }));
+    const moneyFlow = await timed(res, 'compass', () => buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, typical, range, debts: inputs.debts }));
     res.json({ ...moneyFlow, range });
   } catch (error) { next(error); }
 });

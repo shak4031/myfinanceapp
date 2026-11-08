@@ -287,7 +287,7 @@
       <strong>${esc(i.figure)}</strong><h3>${esc(i.title)}</h3><p>${esc(i.detail)}</p></article>`).join('')}</section>`;
   }
 
-  // Sankey diagram: income on the left, fixed bills / everyday spending / left over in the middle, categories on the right.
+  // Sankey diagram: income on the left, fixed / discretionary / debt payments / left over in the middle, categories on the right.
   function flowSankey(mf) {
     const { money, esc } = pro().format;
     const f = mf.flow;
@@ -298,9 +298,9 @@
     const GAP = 16, MIN_BLOCK = 30, SLOT = 22, CHILD_GAP = 6, GROUP_GAP = 16, INCOME = '#059669';
     const shortfall = Math.max(0, -f.left);
     const middle = [
-      { key: 'fixed', label: 'Fixed bills', value: f.fixed.total, color: '#475569', children: f.fixed.items },
-      { key: 'everyday', label: 'Everyday spending', value: f.everyday.total, color: '#7c3aed', children: f.everyday.items },
-      { key: 'debt', label: 'Debt minimums', title: 'Debt minimums not yet imported', value: f.debt, color: '#334155', children: [] },
+      { key: 'fixed', label: 'Fixed expenses', value: f.fixed.total, color: '#3a6ea5', children: f.fixed.items },
+      { key: 'discretionary', label: 'Discretionary', value: f.discretionary.total, color: '#7c3aed', children: f.discretionary.items },
+      { key: 'debt', label: 'Debt payments', value: f.debt.total, color: '#c05621', children: f.debt.items },
       { key: 'left', label: 'Left over', value: Math.max(0, f.left), color: '#10b981', children: [] }
     ].filter(node => node.value > 0);
     const total = Math.max(f.income + shortfall, middle.reduce((s, n) => s + n.value, 0));
@@ -354,11 +354,11 @@
       .map(([x, text]) => `<text x="${x}" y="12" class="pro-sk-head">${text}</text>`).join('');
     const svg = `${heads}<g transform="translate(0 ${TOP})">${bands}${nodes}${labels}</g>`;
     const per100 = value => money(Math.round(value / f.income * 100), true);
-    const split = [['fixed bills', f.fixed.total], ['everyday spending', f.everyday.total], ['debt not yet imported', f.debt]]
+    const split = [['fixed', f.fixed.total], ['discretionary', f.discretionary.total], ['debt payments', f.debt.total]]
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
-    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed bills ${money(f.fixed.total, true)}, everyday spending ${money(f.everyday.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
-    return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Fixed bills are payments marked as fixed; everything else is everyday spending. Red and amber ribbons are categories the Compass flags.`)}`,
+    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
+    return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Debt payments are mortgage, auto, card, student and other loan payments plus interest charges (a mortgage counts here even though it is also a fixed bill)${f.debt.unrecorded ? ', including minimums for debts you added but have not imported yet' : ''}. Fixed expenses are other payments marked as fixed; everything else is discretionary. Red and amber ribbons are categories the Compass flags.`)}`,
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }
 

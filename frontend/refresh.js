@@ -513,6 +513,9 @@
         .sort((a, b) => a.name.localeCompare(b.name));
       const inactive = visibleCategories.filter(category => !counts.has(category.name)).sort((a, b) => a.name.localeCompare(b.name));
       $('category-overview-summary').innerHTML = `<div><span><small>Total spending</small><strong>${money(totalSpend)}</strong><small>Transfers excluded${narrowed ? ' · matching categories' : ''}</small></span></div><div><span><small>Active categories</small><strong>${active.length}<em> / ${visibleCategories.length}</em></strong><small>In this period</small></span></div><div><span><small>Transactions</small><strong>${transactionCount.toLocaleString()}</strong><small>${narrowed ? 'Matching categories' : 'Across your categories'}</small></span></div>`;
+      const bucketSummary = window.FinanceBuckets?.strip(filtered, { label: period.label }) || '';
+      $('category-bucket-summary').innerHTML = bucketSummary;
+      $('category-bucket-summary').hidden = !bucketSummary;
       const renderCard = category => {
         const [icon, art] = categoryArtwork(category.name);
         const count = counts.get(category.name) || 0;
@@ -543,6 +546,7 @@
       $('category-filter-status').textContent = `Could not load categories: ${error.message}`;
       $('category-cards').textContent = '';
       $('category-overview-summary').textContent = '';
+      $('category-bucket-summary').textContent = '';
       reportError(error);
     }
   };
@@ -1231,11 +1235,12 @@
     root.setAttribute('aria-busy', 'true');
     root.innerHTML = '<div class="checkup-loading-card" role="status"><span class="checkup-loading-spinner" aria-hidden="true"></span><div><strong>Putting the pieces together…</strong><p>Taking a careful look at your recorded months and the goals you’ve set.</p></div></div>';
     try {
-      const [plan, moneyPlan, analytics, findings] = await Promise.all([
+      const [plan, moneyPlan, analytics, findings, health] = await Promise.all([
         json('/api/goals/funding-analysis'),
         json('/api/plan'),
         json('/api/analytics'),
-        json('/api/dashboard/findings')
+        json('/api/dashboard/findings'),
+        json('/api/plan/health').catch(() => null)
       ]);
       const debtPlan = moneyPlan.debtPlan || {};
       const goalPlan = moneyPlan.goalPlan || {};
@@ -1334,7 +1339,8 @@
         : '<p class="checkup-panel-intro">No active balances are included in your debt plan right now. If you have debts, add or review them so goals and payoff choices can be considered together.</p>';
       const categories = `<li class="checkup-debt-summary">${debtSnapshot}</li><li class="checkup-analytics-summary">${analyticsCallouts}</li>`;
       const artwork = '<svg class="checkup-illustration" viewBox="0 0 300 220" aria-hidden="true" focusable="false"><ellipse cx="153" cy="199" rx="119" ry="12" fill="#204b3b" opacity=".11"/><circle cx="223" cy="53" r="31" fill="#e2ecb8"/><path d="M66 180c12-30 13-65 3-99" fill="none" stroke="#36795e" stroke-width="8" stroke-linecap="round"/><path d="M70 121c-30 2-38-16-37-35 22 0 39 9 40 31M67 98c3-29 21-40 42-38 0 21-13 39-41 45M67 147c-23 4-36-8-40-26 19-4 34 3 42 21" fill="#83b28a"/><rect x="126" y="106" width="100" height="76" rx="19" fill="#fffdf7" stroke="#2d684f" stroke-width="4"/><path d="M145 105v-10h62v10" fill="#d9e8c1" stroke="#2d684f" stroke-width="4" stroke-linejoin="round"/><path d="M140 145h72" stroke="#e4edda" stroke-width="3" stroke-dasharray="4 7"/><path d="M153 165v-12m0 0c-8-1-11-6-10-12 8 0 12 4 12 11m0 1c1-8 6-11 13-10 0 7-5 11-13 11" fill="none" stroke="#368163" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="m248 103 4 10 10 4-10 4-4 10-4-10-10-4 10-4zM117 50l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#d3a950"/><path d="M222 151h17a10 10 0 0 1 0 20h-17" fill="none" stroke="#2d684f" stroke-width="4"/></svg>';
-      root.innerHTML = `${renderFinancialFindings(findings)}
+      const healthPlan = window.FinanceBuckets?.renderHealth(health) || '';
+      root.innerHTML = `${renderFinancialFindings(findings)}${healthPlan ? `<div id="health-plan-root">${healthPlan}</div>` : ''}
         <section class="checkup-hero is-result"><div class="checkup-hero-copy"><p class="checkup-kicker">HOW DEBTS AND GOALS FIT <span>${escape(monthCaption)}</span></p><h2>Hey${greeting}. ${headline}</h2><p>${summary}</p><button type="button" class="checkup-refresh" onclick="generateInsights()" aria-label="Refresh your checkup">↻ <span>Refresh</span></button></div>${artwork}</section>
         <div class="checkup-tabs" role="tablist" aria-label="Your financial checkup"><button id="checkup-tab-snapshot" type="button" role="tab" data-checkup-tab="snapshot" aria-controls="checkup-panel-snapshot" aria-selected="true">Your snapshot</button><button id="checkup-tab-goals" type="button" role="tab" data-checkup-tab="goals" aria-controls="checkup-panel-goals" aria-selected="false" tabindex="-1">Goals in real life</button><button id="checkup-tab-next" type="button" role="tab" data-checkup-tab="next" aria-controls="checkup-panel-next" aria-selected="false" tabindex="-1">Your next steps</button></div>
         <section id="checkup-panel-snapshot" class="checkup-panel" role="tabpanel" data-checkup-panel="snapshot" aria-labelledby="checkup-tab-snapshot"><div class="checkup-section-head"><div><p class="checkup-kicker">THE MONTHLY PICTURE</p><h3>What comes in, what goes out</h3></div><span class="checkup-note-badge">A guide, not a grade</span></div><div class="checkup-flow"><div class="checkup-flow-row"><span><i class="flow-dot is-income"></i>Average recorded income</span><strong>${value(plan.avgMonthlyIncome)}</strong></div><div class="checkup-flow-track" aria-hidden="true"><span class="is-income" style="width:${incomeWidth}"></span></div><div class="checkup-flow-row"><span><i class="flow-dot is-outflow"></i>Modeled monthly outflows</span><strong>${value(plan.avgMonthlyExpenses)}</strong></div><div class="checkup-flow-track" aria-hidden="true"><span class="is-outflow" style="width:${outflowWidth}"></span></div><div class="checkup-balance-pair"><div><span>Left before goals</span><strong class="${noRoom ? 'is-negative' : ''}">${value(plan.monthlySurplus)}</strong></div><div><span>After dated goals</span><strong class="${goalsOverBudget ? 'is-negative' : ''}">${value(plan.availableAfterGoals)}</strong></div></div><div class="checkup-takeaway ${noRoom || goalsOverBudget ? 'is-watch' : 'is-hopeful'}"><span aria-hidden="true">${noRoom || goalsOverBudget ? '↗' : '✦'}</span><p><strong>${noRoom ? 'Let’s protect your breathing room.' : goalsOverBudget ? 'A plan can change when life does.' : 'Small steps are still progress.'}</strong><br>${goalsOverBudget ? `There’s ${money(Math.abs(afterGoals))} between today’s goal pace and this estimate. You can move a deadline, adjust a target, or revisit after more complete months.` : noRoom ? 'Before taking on a new payment, review essentials and recurring costs. If bills feel hard to manage, contact providers about available support.' : hasHistory ? 'This is only an estimate from recorded months. Keep a cushion for irregular costs and anything missing from your statements.' : 'Import complete statements to see a meaningful comparison. We won’t treat missing months as zero.'}</p></div></div><div class="checkup-snapshot-foot"><span>Using ${escape(monthCaption)} of imported history</span><button type="button" onclick="selectCheckupTab('goals')" class="checkup-text-link">See how goals fit <span aria-hidden="true"> &rarr;</span></button></div>${plan.additionalDebtPayments > 0 ? `<p class="coach-note">We reserved ${money(plan.additionalDebtPayments)} a month for minimum debt payments you marked as not yet included in your spending history.</p>` : ''}</section>
