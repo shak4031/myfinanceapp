@@ -5,6 +5,7 @@ import { buildAnalytics, toCsv } from '../utils/analytics.js';
 import { buildMoneyFlowSignals, normalizeProfile, REGIONS, HOUSING, MAX_HOUSEHOLD } from '../utils/benchmarks.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
+import { loadFixedPaymentOccurrences } from '../utils/paymentOccurrences.js';
 import { cashBalance } from '../utils/transfers.js';
 import { currentUserId } from '../utils/tenant.js';
 import { performance } from 'node:perf_hooks';
@@ -30,9 +31,10 @@ async function loadInputs() {
     const balances = (await client.query('SELECT id, date, balance, account_id FROM transactions WHERE balance IS NOT NULL')).rows;
     const accounts = (await client.query('SELECT id, kind, statement FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
     const household = (await client.query('SELECT household_size AS size, region, housing FROM household_profiles LIMIT 1')).rows[0] || null;
+    const hasFixedEstimates = (await client.query('SELECT 1 FROM fixed_payment_estimates LIMIT 1')).rows.length > 0;
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { transactions, budgets, household, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
+    return { transactions, budgets, household, hasFixedEstimates, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
   });
 }
 
@@ -42,8 +44,12 @@ router.get('/', async (req, res, next) => {
     const [inputs, planInputs] = await Promise.all([
       timed(res, 'inputs', loadInputs), timed(res, 'plan', () => loadPlanInputs(db, now))
     ]);
+    const upcomingPayments = inputs.hasFixedEstimates
+      ? await timed(res, 'bills', () => db.transaction(client => loadFixedPaymentOccurrences(client, now,
+        new Date(now.getFullYear(), now.getMonth() + 1, 0))))
+      : null;
     const typical = typicalSurplus(planInputs, now);
-    const analytics = await timed(res, 'analytics', () => buildAnalytics({ ...inputs, typical }));
+    const analytics = await timed(res, 'analytics', () => buildAnalytics({ ...inputs, typical, upcomingPayments }));
     const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
     const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;

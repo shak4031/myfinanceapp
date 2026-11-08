@@ -182,6 +182,17 @@ test('a fixed bill already paid this month is not projected again', () => {
   assert.equal(mortgage.signal, 'inline');
 });
 
+test('spending forecast uses reconciled monthly estimates when configured', () => {
+  const analytics = buildAnalytics({ transactions: sampleTransactions(), today, hasFixedEstimates: true,
+    upcomingPayments: [
+      { isFixed: true, status: 'projected', dueDate: '2026-06-20', amount: 300, estimatedAmount: 600 },
+      { isFixed: true, status: 'projected', dueDate: '2026-07-01', amount: 600, estimatedAmount: 600 },
+      { isFixed: true, status: 'processed', dueDate: '2026-06-20', amount: 300, estimatedAmount: 600 }
+    ] });
+  assert.equal(analytics.forecast.remainingFixed, 300);
+  assert.equal(buildAnalytics({ transactions: sampleTransactions(), today, hasFixedEstimates: true, upcomingPayments: [] }).forecast.remainingFixed, 0);
+});
+
 test('merchant identities distinguish first-word and processor collisions and obey explicit rename selections', () => {
   const key = description => merchantGroup({ description });
   assert.notEqual(key('HOME DEPOT #123'), key('HOME GOODS #123'));

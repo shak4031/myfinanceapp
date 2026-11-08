@@ -852,9 +852,10 @@
             <div class="kb-section-heading"><p class="eyebrow">BILLS &amp; PAYDAYS</p><h2 id="kb-bills-title">Know what is expected—and what still needs attention</h2><p>The calendar is a planning forecast, not a biller's payment record.</p></div>
             <div class="kb-grid">
               <article class="kb-card"><h3>Set up fixed bills and real income</h3><p>Mark recurring bills as Fixed and actual paychecks as Income. Transfers, refunds, and repayments are not paychecks. Choose Auto or Manual for bills when known; manual items are called out for attention. Correct categories separately to describe what the transaction was for.</p><a class="kb-card-link" href="#tutorials/fixed">Watch: bills and income</a></article>
+              <article class="kb-card"><h3>Set a monthly bill estimate</h3><p>Choose <strong>Set estimate</strong> on a bill in Upcoming Payments and enter its normal monthly total. Matching posted payments count toward that total; the unpaid difference remains in the forecast. At 90% or more of the estimate, the bill is approximately complete and the difference is shown but excluded from the cash forecast. This is not confirmation from the biller. Estimates apply from the current month onward and do not automatically change after an unusual payment. The existing estimated date does not schedule multiple installments or follow paychecks.</p></article>
               <article class="kb-card"><h3>Why last month's unpaid estimate remains</h3><p>A missed estimated payment from the immediately previous month stays visible as unpaid. Older months are not carried forward. The estimate clears when a matching payment from that same calendar month is recorded, or when you resolve that occurrence yourself.</p><a class="kb-card-link" href="#tutorials/bill-follow-up">Watch: resolve an unpaid bill</a></article>
               <article class="kb-card"><h3>Mark paid or ignore one occurrence</h3><p>“Mark paid” records your confirmation for that bill instance; it does not create a transaction, change a balance, or mark other months paid. “Ignore this payment” dismisses only that month's estimate. A later matching transaction can still be recorded normally.</p></article>
-              <article class="kb-card"><h3>A bank payment is visible, but the bill still shows due</h3><p>Check for <strong>Pending bank transaction</strong> on Transactions. A pending payment can appear in history and totals before the bank posts it; it does not automatically settle a fixed-payment forecast. Sync again after your bank posts it. A uniquely matched posted payment settles its own calendar month's bill even when its amount or payment day changes. Account identity, payee and competing matches are checked; different accounts and ambiguous payments are not guessed. Use Mark paid only if you independently confirm payment, not just because a pending entry exists.</p></article>
+              <article class="kb-card"><h3>A bank payment is visible, but the bill still shows due</h3><p>Check for <strong>Pending bank transaction</strong> on Transactions. A pending payment can appear in history and totals before the bank posts it; it does not automatically settle a fixed-payment forecast. Sync again after your bank posts it. A uniquely matched posted payment counts toward its own calendar month's bill. Bills without a user-set estimate are settled by one matching payment regardless of its amount. Account identity, payee and competing matches are checked; different accounts and ambiguous payments are not guessed. Use Mark paid only if you independently confirm payment, not just because a pending entry exists.</p></article>
               <article class="kb-card"><h3>Stop future projections</h3><p>Unmarking a recurring bill stops future projections, but does not erase a still-unpaid estimate from last month. Update the source transaction if a bill ended; resolve a carried item separately if it was paid or should not be tracked.</p></article>
             </div>
             <p class="kb-caveat">A forecast cannot confirm a creditor's records. Verify actual payment status with the biller or your bank; estimates can be wrong when transaction descriptions, dates, or account history are incomplete.</p>
@@ -1437,6 +1438,21 @@
     </div>
   </dialog>
 
+  <dialog id="fixed-estimate-dialog" class="floating-dialog" aria-labelledby="fixed-estimate-title">
+    <div class="floating-dialog-body">
+      <form id="fixed-estimate-form">
+        <h2 id="fixed-estimate-title">Set monthly estimate</h2>
+        <p id="fixed-estimate-name"></p>
+        <p>Enter the normal total for the month, not the amount of an individual payment. Posted matching payments count toward it. A total within 10% is approximately complete, not proof the bill is paid.</p>
+        <label for="fixed-estimate-amount">Expected monthly amount ($)</label>
+        <input id="fixed-estimate-amount" type="number" min="0.01" max="9999999999.99" step="0.01" required>
+        <p class="muted">The estimate stays the same after an unusually large or small payment. It applies from this month onward; the existing forecast date remains an estimate.</p>
+        <p id="fixed-estimate-error" role="alert"></p>
+        <div class="toolbar"><button type="button" class="btn btn-secondary" id="fixed-estimate-cancel">Cancel</button><button type="submit" class="btn btn-primary">Save estimate</button></div>
+      </form>
+    </div>
+  </dialog>
+
   <script>
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -1714,7 +1730,7 @@
         if (!byDay.has(date)) byDay.set(date, []);
         byDay.get(date).push(entry);
       });
-      const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : item.confirmedPaid ? 'Confirmed paid' : 'Paid';
+      const doneLabel = item => item.isIncome ? 'Received' : item.planned ? 'Planned' : item.confirmedPaid ? 'Confirmed paid' : item.approximatelyComplete ? 'Approximately complete' : 'Paid';
       const flexAttrs = item => item.status === 'processed' ? '' : item.flexible ? ` data-flex-key="${escapeHtml(item.key)}" role="button" tabindex="0" aria-label="Adjust ${escapeHtml(item.description)} for this month"`
         : item.isIncome && item.incomeKey ? ` data-income-key="${escapeHtml(item.incomeKey)}" role="button" tabindex="0" aria-label="Review income from ${escapeHtml(item.description)}"` : '';
       const statusOf = entry => entry.item.isIncome ? (entry.isPaid ? ['is-paid', 'Received'] : ['is-upcoming', 'Expected']) : entry.isPaid ? ['is-paid', doneLabel(entry.item)] : entry.isDeficit ? ['is-deficit', entry.isOverdue ? 'Overdue · at risk' : 'At risk'] : entry.isOverdue ? ['is-overdue', 'Overdue'] : ['is-upcoming', 'Upcoming'];
@@ -1722,8 +1738,10 @@
       const shortMoney = value => '$' + (Math.abs(value) >= 1000 ? (Math.abs(value) / 1000).toFixed(Math.abs(value) >= 10000 ? 0 : 1) + 'k' : Math.round(Math.abs(value)).toLocaleString('en-US'));
       const stopButton = (entry, cls) => entry.item.sourceTransactionId && !entry.isPaid
         ? `<button type="button" class="${cls}" data-id="${escapeHtml(entry.item.sourceTransactionId)}" onclick="removeFixedTemplate(this.dataset.id)" aria-label="Stop future projections for ${escapeHtml(entry.item.description)}" title="Stop future projections; overdue payments remain">&times;</button>` : '';
-      const paymentActions = entry => entry.item.paymentKey && !entry.isPaid
-        ? `<span class="pay-resolution"><button type="button" data-payment-key="${escapeHtml(entry.item.paymentKey)}" data-payment-status="paid">Mark paid</button><button type="button" data-payment-key="${escapeHtml(entry.item.paymentKey)}" data-payment-status="ignored">Ignore this payment</button></span>` : '';
+      const paymentActions = entry => entry.item.paymentKey || entry.item.estimateTransactionId
+        ? `<span class="pay-resolution"><button type="button" data-estimate-key="${escapeHtml(entry.item.paymentKey || '')}" data-estimate-transaction="${escapeHtml(entry.item.estimateTransactionId || '')}" data-estimate-name="${escapeHtml(entry.item.description)}" data-estimate-amount="${escapeHtml(entry.item.estimatedAmount ?? entry.item.amount)}">Set estimate</button>${entry.item.paymentKey && !entry.isPaid ? `<button type="button" data-payment-key="${escapeHtml(entry.item.paymentKey)}" data-payment-status="paid">Mark paid</button><button type="button" data-payment-key="${escapeHtml(entry.item.paymentKey)}" data-payment-status="ignored">Ignore this payment</button>` : ''}</span>` : '';
+      const paymentProgress = item => item.estimatedAmount != null
+        ? `<small>${fmtMoney(item.paidAmount)} paid of ${fmtMoney(item.estimatedAmount)} estimate &middot; ${fmtMoney(item.remainingAmount)} difference${item.approximatelyComplete ? ' &middot; approximately complete; verify with biller' : ''}</small>` : '';
       const modeChip = (entry, long) => {
         const { item } = entry;
         if (item.isIncome) return long && item.cadenceLabel ? `<span class="pay-card-mode is-income" title="Detected pay schedule">${escapeHtml(item.cadenceLabel)}</span>` : '';
@@ -1756,6 +1774,7 @@
               <span class="pay-card-amount"><span class="pay-amt-full">${sign}${fmtMoney(item.amount)}</span><span class="pay-amt-short">${shortMoney(item.amount)}</span></span>
               <span class="pay-card-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? doneLabel(item) : `<small>Bal</small> ${balance}`}</span>
               ${modeChip(entry, false)}
+              ${paymentProgress(item)}
               ${paymentActions(entry)}
             </article>`;
           }).join('')}</div>
@@ -1774,7 +1793,7 @@
         const date = new Date(`${item.date}T00:00:00`);
         return `<li class="pay-row ${cls}${item.isIncome ? ' is-income' : ''}${item.flexible ? ' is-flex' : ''}"${flexAttrs(item)}>
           <span class="pay-row-date"><small>${date.toLocaleDateString('en-US', { month: 'short' })}</small><strong>${date.getDate()}</strong><small>${weekdays[date.getDay()]}</small></span>
-          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.description)}</span>${paymentActions(entry)}</span>
+          <span class="pay-row-main"><span class="pay-card-cat">${escapeHtml(item.category || 'Uncategorized')}</span><span class="pay-row-name">${entry.isPaid && item.id != null ? window.transactionLink(item.id, item.description) : escapeHtml(item.description)}</span>${paymentProgress(item)}${paymentActions(entry)}</span>
           <span class="pay-row-tags"><span class="pay-row-status">${label}</span>${modeChip(entry, true)}</span>
           <span class="pay-row-amount">${item.isIncome ? '+' : '&minus;'}${fmtMoney(item.amount)}</span>
           <span class="pay-row-bal${!entry.isPaid && hasBalance && entry.balanceAfter < 0 ? ' is-negative' : ''}">${entry.isPaid ? `<small>Status</small>${doneLabel(item)}` : `<small>Balance after</small>${hasBalance ? fmtMoney(entry.balanceAfter) : '&mdash;'}`}</span>
@@ -1789,6 +1808,7 @@
         ${futureEntries.map(listRow).join('') || '<li class="pay-list-heading">No payments expected in the next 30 days.</li>'}`;
       const monthName = calToday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       const rangeLabel = `${calToday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${horizonEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      const approximate = history.filter(entry => entry.item.approximatelyComplete);
       const timelineHtml = timeline.length ? `
         <div class="pay-cal-summary">
           <div><span>Next 30 days</span><strong>${rangeLabel}</strong><small>Earlier unpaid bills included below</small></div>
@@ -1797,6 +1817,7 @@
           <div class="is-upcoming"><span>Still due</span><strong>${fmtMoney(dueTotal)}</strong><small>${dueCount} bill${dueCount === 1 ? '' : 's'}${overdueCount ? ` &middot; ${overdueCount} overdue` : ''}${manualDueCount ? ` &middot; ${manualDueCount} manual` : ''}</small></div>
           <div class="${hasBalance && runningBalance < 0 ? 'is-deficit' : 'is-balance'}"><span>Projected balance in 30 days</span><strong>${hasBalance ? fmtMoney(runningBalance) : '&mdash;'}</strong><small>${riskCount ? `${riskCount} bill${riskCount === 1 ? '' : 's'} at risk` : 'After unpaid bills and expected income'}</small></div>
         </div>
+        ${approximate.length ? `<section class="pay-carried" aria-label="Approximately complete estimates"><h3>Approximately complete</h3><p>These differences are excluded from the cash forecast. Verify actual payment requirements with the biller.</p><ol class="pay-list">${approximate.map(listRow).join('')}</ol></section>` : ''}
         <details class="pay-history"><summary>Paid fixed bills this month &middot; ${monthName} &middot; ${paidCount} paid bill${paidCount === 1 ? '' : 's'} &middot; ${fmtMoney(paidTotal)}</summary>
           <p class="pay-window-note">Recorded payments and your paid confirmations are not deducted again. “Confirmed paid” does not create a bank transaction or change your recorded balance. View all other transactions on the <a href="#transactions">Transactions page</a>.</p>
           <ol class="pay-list" aria-label="Fixed payment history for ${monthName}">${history.map(listRow).join('') || '<li class="pay-list-heading">No recorded fixed payments yet this month.</li>'}</ol>
@@ -1808,6 +1829,39 @@
         <ol class="pay-list" aria-label="Next 30 days and earlier unpaid bills, in date order">${listHtml}</ol>` : '<p class="pay-cal-empty">No fixed bills to project yet. Mark recurring debits as Fixed on the Transactions page and they will appear here on their due day.</p>';
       paymentsContainer.innerHTML = timelineHtml;
       paymentsContainer.onclick = async event => {
+        const estimateButton = event.target.closest('[data-estimate-key]');
+        if (estimateButton) {
+          const dialog = document.getElementById('fixed-estimate-dialog');
+          const input = document.getElementById('fixed-estimate-amount');
+          const error = document.getElementById('fixed-estimate-error');
+          document.getElementById('fixed-estimate-name').textContent = estimateButton.dataset.estimateName;
+          input.value = estimateButton.dataset.estimateAmount;
+          error.textContent = '';
+          document.getElementById('fixed-estimate-cancel').onclick = () => dialog.close();
+          document.getElementById('fixed-estimate-form').onsubmit = async submitEvent => {
+            submitEvent.preventDefault();
+            const submit = submitEvent.submitter;
+            if (submit) submit.disabled = true;
+            try {
+              const target = estimateButton.dataset.estimateKey
+                ? encodeURIComponent(estimateButton.dataset.estimateKey)
+                : `transaction/${encodeURIComponent(estimateButton.dataset.estimateTransaction)}`;
+              const response = await fetch(`/api/dashboard/fixed-payments/${target}/estimate`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: input.value })
+              });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error || 'Could not save this estimate.');
+              dialog.close();
+              await loadDashboard();
+            } catch (failure) {
+              error.textContent = failure.message;
+            } finally {
+              if (submit) submit.disabled = false;
+            }
+          };
+          dialog.showModal();
+          return;
+        }
         const button = event.target.closest('[data-payment-key]');
         if (!button) return;
         const status = button.dataset.paymentStatus;

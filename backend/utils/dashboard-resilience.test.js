@@ -102,6 +102,11 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     assert.equal(rollingInsights.body.pulse.horizonDays, 30);
     const unpaid = rolling.body.find(item => item.paymentKey && item.status === 'projected');
     assert.ok(unpaid);
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/estimate`, { cookie, body: { amount: '0' } })).status, 400);
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/estimate`, { cookie, body: { amount: '45.00' } })).status, 200);
+    const estimated = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    assert.equal(estimated.body.find(item => item.paymentKey === unpaid.paymentKey).estimatedAmount, 45);
+    assert.equal((await call('/api/analytics/', { cookie })).status, 200);
     assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'invalid' } })).status, 400);
     assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'paid' } })).status, 200);
     assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie, body: { status: 'ignored' } })).status, 409);
@@ -115,6 +120,17 @@ test('dashboard survives an upgraded legacy database with old-format and unreada
     const freeCookie = second.headers.get('set-cookie').split(';')[0];
     const freeId = (await database.query("SELECT id FROM users WHERE email='history-free@example.test'")).rows[0].id;
     await grantFixtureAccess(database, freeId, 'basic');
+    assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/estimate`, { cookie: freeCookie, body: { amount: '100' } })).status, 404);
+    const sourceId = (await database.query("SELECT id FROM transactions WHERE description='ROLLING BILL'")).rows[0].id;
+    assert.equal((await call(`/api/dashboard/fixed-payments/transaction/${sourceId}/estimate`, { cookie: freeCookie, body: { amount: '100' } })).status, 404);
+    assert.equal((await call(`/api/dashboard/fixed-payments/transaction/${sourceId}/estimate`, { cookie, body: { amount: '46' } })).status, 200);
+    const newBill = (await database.query(`INSERT INTO transactions(date,description,amount,direction,category,is_fixed,user_id)
+      VALUES ($1,'NEW COMMITTEE',300,'DEBIT','Other',true,1) RETURNING id`, [iso(now)])).rows[0];
+    assert.equal((await call(`/api/dashboard/fixed-payments/transaction/${newBill.id}/estimate`, { cookie, body: { amount: '600' } })).status, 200);
+    const firstMonth = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    const committee = firstMonth.body.find(item => item.description.includes('COMMITTEE') && item.status === 'projected');
+    assert.equal(committee.amount, 300);
+    assert.equal(committee.paidAmount, 300);
     assert.equal((await call(`/api/dashboard/fixed-payments/${unpaid.paymentKey}/resolve`, { cookie: freeCookie, body: { status: 'ignored' } })).status, 409, 'other households cannot resolve an occurrence');
     await database.query(`INSERT INTO transactions(date,description,amount,direction,category,user_id) VALUES ($1,'FREE HISTORY',25,'DEBIT','Free dining',$2)`, [priorDate, freeId]);
     await database.query(`INSERT INTO category_budgets(user_id,category,monthly_amount) VALUES ($1,'Free dining',10)`, [freeId]);

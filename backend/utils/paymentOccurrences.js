@@ -14,7 +14,7 @@ function accountCompatible(a, b) {
   return !mask(a) || !mask(b) || mask(a) === mask(b);
 }
 
-function samePayment(a, b) {
+export function samePayment(a, b) {
   if (!accountCompatible(a, b)) return false;
   if (a.id != null && String(a.id) === String(b.id)) return true;
   const crossSource = (a.account_id != null && a.plaid_account_id == null && b.plaid_account_id != null && b.account_id == null)
@@ -35,7 +35,7 @@ function descriptionVariant(a, b) {
     && ([...left].every(word => right.has(word)) || [...right].every(word => left.has(word)));
 }
 
-export function reconcilePaymentOccurrences(transactions, stored, today, through) {
+export function reconcilePaymentOccurrences(transactions, stored, today, through, estimates = []) {
   const todayKey = iso(today);
   const month = todayKey.slice(0, 7);
   const previousMonthStart = iso(new Date(today.getFullYear(), today.getMonth() - 1, 1));
@@ -64,6 +64,8 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     }
   }
   const cancelled = new Set();
+  const estimatedRows = new Set();
+  const estimatedItems = [];
   const groups = [];
   for (const tx of [...debits.filter(isFixedPayment), ...occurrences.map(row => row.template)]) {
     let group = groups.find(group => group.templates.some(template => samePayment(template, tx)));
@@ -90,7 +92,16 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     const matches = exact.length ? exact : groups.filter(group => group.templates.some(template => descriptionVariant(template, tx)));
     if (matches.length === 1) matches[0].payments.push(tx);
   }
+  const estimateGroups = new Map();
+  for (const estimate of estimates) {
+    const matches = groups.filter(group => group.templates.some(template => samePayment(template, estimate.template)));
+    if (matches.length > 1 || (matches.length && estimateGroups.has(matches[0]))) {
+      throw new Error('A fixed payment estimate matches more than one bill. Review its transactions.');
+    }
+    if (matches.length) estimateGroups.set(matches[0], estimate);
+  }
   for (const group of groups) {
+    const estimate = estimateGroups.get(group);
     group.occurrences = occurrences.filter(row => group.templates.some(template => samePayment(template, row.template)));
     const fixed = group.payments.filter(isFixedPayment);
     const active = fixed.some(tx => tx.date >= recentStart);
@@ -110,14 +121,16 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     // Start after the first observed payment, never invent debt before the bill was observed.
     if (active) {
       const first = parseTxDate(fixed[0].date);
-      const start = new Date(first.year, first.month + 1, 1);
+      const firstMonth = fixed[0].date.slice(0, 7);
+      const start = new Date(first.year, first.month + (estimate && estimate.effective_month <= firstMonth ? 0 : 1), 1);
       const lowerBound = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       for (let target = start < lowerBound ? lowerBound : start; target <= through; target.setMonth(target.getMonth() + 1)) {
         const prefix = iso(target).slice(0, 7);
         const existing = group.occurrences.find(row => row.due_date.startsWith(prefix));
-        const fixedTemplate = fixed.filter(tx => tx.date.slice(0, 7) < prefix).at(-1);
+        const fixedTemplate = fixed.filter(tx => tx.date.slice(0, 7) < prefix).at(-1)
+          || (estimate && prefix >= estimate.effective_month ? fixed.find(tx => tx.date.startsWith(prefix)) : null);
         if (!fixedTemplate) continue;
-        const template = group.payments.filter(tx => tx.date.slice(0, 7) < prefix).at(-1);
+        const template = group.payments.filter(tx => tx.date.slice(0, 7) < prefix).at(-1) || fixedTemplate;
         const targetPreviousMonth = iso(new Date(target.getFullYear(), target.getMonth() - 1, 1)).slice(0, 7);
         if (prefix < month && fixedTemplate.date.slice(0, 7) !== targetPreviousMonth) continue;
         const day = Math.min(parseTxDate(template.date).day, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate());
@@ -147,11 +160,50 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       else if (!monthly.has(prefix)) monthly.set(prefix, row);
     }
     group.occurrences = group.occurrences.filter(row => !cancelled.has(row.payment_key));
+    for (const row of group.occurrences) {
+      const prefix = row.due_date.slice(0, 7);
+      if (estimate && prefix >= estimate.effective_month) row.estimated_amount = Number(estimate.monthly_amount);
+      if (row.estimated_amount == null) continue;
+      estimatedRows.add(row);
+      const expectedCents = Math.round(Number(row.estimated_amount) * 100);
+      if (!Number.isSafeInteger(expectedCents) || expectedCents <= 0) throw new Error('Invalid fixed payment estimate');
+      const payments = group.payments.filter(tx => tx.date.startsWith(prefix));
+      const paidCents = payments.reduce((sum, tx) => sum + Math.round(tx.amount * 100), 0);
+      const remainingCents = Math.max(0, expectedCents - paidCents);
+      const approximatelyComplete = remainingCents > 0 && paidCents * 10 >= expectedCents * 9;
+      if (!row.resolved_at) row.status = remainingCents === 0 || approximatelyComplete ? 'paid' : 'projected';
+      row.matched_transaction_id = null;
+      row.amount = expectedCents / 100;
+      const common = {
+        paymentKey: row.payment_key, dueDate: row.due_date,
+        description: row.template.display_name || getCanonicalMerchant(row.template.description),
+        category: row.template.category || 'Other', isFixed: true, isIncome: false,
+        payMode: row.template.pay_mode || null, estimatedAmount: expectedCents / 100,
+        paidAmount: paidCents / 100, remainingAmount: remainingCents / 100
+      };
+      if (prefix === month) {
+        for (const tx of payments) {
+          estimatedItems.push({ ...common, id: tx.id, date: tx.date, dayOfMonth: Number(tx.date.slice(8, 10)),
+            amount: tx.amount, status: 'processed',
+            approximatelyComplete: approximatelyComplete && tx === payments.at(-1) && !row.resolved_at });
+        }
+      }
+      if (row.status === 'projected' && row.due_date <= iso(through)) {
+        estimatedItems.push({ ...common, date: row.due_date, dayOfMonth: Number(row.due_date.slice(8, 10)),
+          amount: remainingCents / 100, status: 'projected',
+          ...(debits.some(tx => String(tx.id) === String(row.template.id) && isFixedPayment(tx))
+            ? { sourceTransactionId: row.template.id } : {}) });
+      } else if (row.status === 'paid' && row.resolved_at && confirmationDate(row)?.slice(0, 7) === month) {
+        const date = confirmationDate(row);
+        estimatedItems.push({ ...common, date, dayOfMonth: Number(date.slice(8, 10)),
+          amount: remainingCents / 100, status: 'processed', confirmedPaid: true });
+      }
+    }
     const assigned = new Set(group.occurrences.map(row => row.matched_transaction_id).filter(id => id != null).map(String));
     for (const tx of group.payments) {
       if (assigned.has(String(tx.id))) continue;
       const candidate = group.occurrences.find(row => row.due_date.slice(0, 7) === tx.date.slice(0, 7)
-        && row.status !== 'ignored' && row.matched_transaction_id == null);
+        && !estimatedRows.has(row) && row.status !== 'ignored' && row.matched_transaction_id == null);
       if (!candidate) continue;
       candidate.status = 'paid';
       candidate.matched_transaction_id = tx.id;
@@ -160,9 +212,9 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     }
   }
   const retained = occurrences.filter(row => !cancelled.has(row.payment_key));
-  const items = retained.filter(row => (row.status === 'projected' && row.due_date <= iso(through)) || (row.status === 'paid'
+  const items = retained.filter(row => !estimatedRows.has(row) && ((row.status === 'projected' && row.due_date <= iso(through)) || (row.status === 'paid'
     && (row.matched_transaction_id ? debits.find(tx => String(tx.id) === String(row.matched_transaction_id))?.date?.slice(0, 7) === month
-      : confirmationDate(row)?.slice(0, 7) === month)))
+      : confirmationDate(row)?.slice(0, 7) === month))))
     .map(row => {
       const paid = row.status === 'paid';
       const transaction = paid ? debits.find(tx => String(tx.id) === String(row.matched_transaction_id)) : null;
@@ -181,11 +233,13 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     });
   const matched = new Set(occurrences.map(row => row.matched_transaction_id).filter(id => id != null).map(String));
   for (const tx of debits.filter(tx => tx.date.startsWith(month) && !matched.has(String(tx.id))
+    && !estimatedItems.some(item => item.id != null && String(item.id) === String(tx.id))
     && groups.some(group => group.payments.includes(tx)))) {
     items.push({ id: tx.id, date: tx.date, dayOfMonth: Number(tx.date.slice(8, 10)), description: tx.display_name || tx.description,
-      category: tx.category || 'Other', amount: tx.amount, isFixed: true, isIncome: false, status: 'processed', payMode: tx.pay_mode || null });
+      category: tx.category || 'Other', amount: tx.amount, isFixed: true, isIncome: false, status: 'processed', payMode: tx.pay_mode || null,
+      ...(isFixedPayment(tx) ? { estimateTransactionId: tx.id } : {}) });
   }
-  return { occurrences: retained, items: items.sort((a, b) => a.date.localeCompare(b.date)) };
+  return { occurrences: retained, items: [...items, ...estimatedItems].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 export async function loadFixedPaymentOccurrences(client, today, through) {
@@ -196,7 +250,8 @@ export async function loadFixedPaymentOccurrences(client, today, through) {
     FROM transactions t ${TRANSACTION_ACCOUNT_JOINS}
     WHERE t.user_id=$1 AND t.date IS NOT NULL AND t.date::date <= $2::date`, [userId, iso(today)])).rows;
   const stored = (await client.query('SELECT * FROM fixed_payment_occurrences WHERE user_id=$1', [userId])).rows;
-  const result = reconcilePaymentOccurrences(transactions, stored, today, through);
+  const estimates = (await client.query('SELECT * FROM fixed_payment_estimates WHERE user_id=$1', [userId])).rows;
+  const result = reconcilePaymentOccurrences(transactions, stored, today, through, estimates);
   if (!currentReadOnly()) {
     await client.query(`DELETE FROM fixed_payment_occurrences WHERE user_id=$1 AND status='projected'
       AND NOT(payment_key=ANY($2::text[]))`,
@@ -204,13 +259,13 @@ export async function loadFixedPaymentOccurrences(client, today, through) {
   }
   if (!currentReadOnly() && result.occurrences.length) {
     await client.query(`INSERT INTO fixed_payment_occurrences
-      (payment_key,due_date,template,amount,status,matched_transaction_id,resolved_at,user_id)
-      SELECT payment_key,due_date,template,amount,status,matched_transaction_id,resolved_at,$2
+      (payment_key,due_date,template,amount,status,matched_transaction_id,resolved_at,estimated_amount,user_id)
+      SELECT payment_key,due_date,template,amount,status,matched_transaction_id,resolved_at,estimated_amount,$2
       FROM jsonb_to_recordset($1::jsonb) AS x(payment_key text,due_date text,template jsonb,amount numeric,
-        status text,matched_transaction_id integer,resolved_at timestamptz)
+        status text,matched_transaction_id integer,resolved_at timestamptz,estimated_amount numeric)
       ON CONFLICT(user_id,payment_key) DO UPDATE SET status=EXCLUDED.status,
         matched_transaction_id=EXCLUDED.matched_transaction_id,amount=EXCLUDED.amount,
-        template=EXCLUDED.template,due_date=EXCLUDED.due_date`, [JSON.stringify(result.occurrences), userId]);
+        template=EXCLUDED.template,due_date=EXCLUDED.due_date,estimated_amount=EXCLUDED.estimated_amount`, [JSON.stringify(result.occurrences), userId]);
   }
   return result.items;
 }

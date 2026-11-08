@@ -3,7 +3,8 @@ import { TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from '../utils/
 import Database from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseTxDate } from '../utils/normalize.js';
-import { loadFixedPaymentOccurrences } from '../utils/paymentOccurrences.js';
+import { loadFixedPaymentOccurrences, samePayment } from '../utils/paymentOccurrences.js';
+import { isFixedPayment } from '../utils/fixedPayments.js';
 import { isIncomeTransaction, projectIncome } from '../utils/income.js';
 import { currentUserId } from '../utils/tenant.js';
 import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
@@ -251,6 +252,55 @@ router.post('/fixed-payments/:key/resolve', async (req, res) => {
   }
 });
 
+async function saveFixedEstimate(req, res) {
+  const amount = String(req.body?.amount ?? '').trim();
+  const validSource = req.params.id
+    ? /^[1-9]\d{0,9}$/.test(req.params.id) && Number(req.params.id) <= 2147483647
+    : /^[a-f0-9]{64}$/.test(req.params.key);
+  if (!validSource || !/^\d{1,10}(?:\.\d{1,2})?$/.test(amount)
+    || Number(amount) <= 0) {
+    return res.status(400).json({ error: 'Enter a positive monthly estimate with at most two decimal places.' });
+  }
+  try {
+    const updated = await db.transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock($1,193647)', [currentUserId()]);
+      let template;
+      if (req.params.id) {
+        template = (await client.query(`SELECT t.id,t.date,t.description,t.display_name,t.category,t.amount,t.direction,
+          t.account_id,t.plaid_account_id,t.is_fixed,t.pay_mode,t.is_pending,${TRANSACTION_ACCOUNT_FIELDS}
+          FROM transactions t ${TRANSACTION_ACCOUNT_JOINS} WHERE t.user_id=$1 AND t.id=$2`,
+        [currentUserId(), req.params.id])).rows[0];
+        if (!template || !isFixedPayment(template) || template.is_pending) return false;
+      } else {
+        template = (await client.query('SELECT template FROM fixed_payment_occurrences WHERE user_id=$1 AND payment_key=$2',
+          [currentUserId(), req.params.key])).rows[0]?.template;
+      }
+      if (!template?.id) return false;
+      const estimates = (await client.query('SELECT id, template FROM fixed_payment_estimates WHERE user_id=$1', [currentUserId()])).rows
+        .filter(row => samePayment(row.template, template));
+      if (estimates.length > 1) throw new Error('Multiple estimates match this bill. Review its transactions.');
+      const now = new Date();
+      const effectiveMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      if (estimates.length) {
+        await client.query('UPDATE fixed_payment_estimates SET monthly_amount=$1,effective_month=$2 WHERE user_id=$3 AND id=$4',
+          [amount, effectiveMonth, currentUserId(), estimates[0].id]);
+      } else {
+        await client.query(`INSERT INTO fixed_payment_estimates(user_id,source_transaction_id,template,monthly_amount,effective_month)
+          VALUES($1,$2,$3,$4,$5)`, [currentUserId(), template.id, JSON.stringify(template), amount, effectiveMonth]);
+      }
+      return true;
+    });
+    if (!updated) return res.status(404).json({ error: 'This bill is no longer available. Refresh the dashboard and try again.' });
+    recordAudit(req, 'fixed_payment.estimate_updated', 'success');
+    res.json({ success: true });
+  } catch (error) {
+    log('DASHBOARD', `Could not update fixed payment estimate: ${error.message}`, 'error');
+    res.status(error.code === '25006' ? 403 : 500).json({ error: error.code === '25006' ? 'This support session is read-only.' : error.message });
+  }
+}
+router.post('/fixed-payments/:key/estimate', saveFixedEstimate);
+router.post('/fixed-payments/transaction/:id/estimate', saveFixedEstimate);
+
 // Spendable cash plus the account-tracker facts the dashboard highlights. Degrades to the newest balance on failure.
 async function loadCash(userId) {
   const today = new Date();
@@ -335,7 +385,8 @@ router.get('/insights', async (req, res) => {
           const transactions = (await client.query('SELECT id, date, description, amount, direction, category, is_fixed, label_id, transfer_kind, display_name FROM transactions ORDER BY date, id')).rows;
           const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
             .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
-          return buildAnalytics({ transactions, budgets, latestBalance: balance, today });
+          const hasFixedEstimates = (await client.query('SELECT 1 FROM fixed_payment_estimates LIMIT 1')).rows.length > 0;
+          return buildAnalytics({ transactions, budgets, latestBalance: balance, today, upcomingPayments: items, hasFixedEstimates });
         });
       } catch (error) {
         log('DASHBOARD', `Insight analytics unavailable: ${error.message}`);

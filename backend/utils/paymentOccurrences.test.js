@@ -67,6 +67,83 @@ test('new recorded bill amounts and dates update future estimates, never the unp
   assert.equal(future.template.id, 2);
 });
 
+test('a monthly estimate tracks multiple posted payments without changing the next estimate', () => {
+  const original = tx(1, '2026-10-05', { amount: 700 });
+  const estimate = [{ template: original, monthly_amount: 600, effective_month: '2026-11' }];
+  const run = (rows, stored = []) => reconcilePaymentOccurrences(rows, stored, new Date(2026, 10, 20), new Date(2026, 11, 20), estimate);
+  const initial = run([original]);
+  assert.equal(initial.items.find(item => item.dueDate === '2026-11-05').amount, 600);
+  const partial = run([original, tx(2, '2026-11-06', { amount: 300, is_fixed: false })], initial.occurrences);
+  const due = partial.items.find(item => item.dueDate === '2026-11-05' && item.status === 'projected');
+  assert.equal(due.amount, 300);
+  assert.equal(due.paidAmount, 300);
+  assert.equal(due.estimatedAmount, 600);
+  assert.equal(partial.items.find(item => item.dueDate?.startsWith('2026-12')).amount, 600);
+  const complete = run([original, tx(2, '2026-11-06', { amount: 300, is_fixed: false }),
+    tx(3, '2026-11-19', { amount: 300, is_fixed: false })], partial.occurrences);
+  assert.equal(complete.items.filter(item => item.dueDate === '2026-11-05' && item.status === 'projected').length, 0);
+  assert.deepEqual(complete.items.filter(item => item.id === 2 || item.id === 3).map(item => item.amount), [300, 300]);
+  assert.equal(complete.items.find(item => item.dueDate?.startsWith('2026-12')).amount, 600);
+  assert.deepEqual(run([original, tx(2, '2026-11-06', { amount: 300, is_fixed: false }),
+    tx(3, '2026-11-19', { amount: 300, is_fixed: false })], complete.occurrences).items, complete.items);
+});
+
+test('a normal loan estimate stays 385 after a 700 payment and the following 385 payment', () => {
+  const original = tx(1, '2026-10-05', { amount: 700 });
+  const estimate = [{ template: original, monthly_amount: 385, effective_month: '2026-11' }];
+  const run = rows => reconcilePaymentOccurrences(rows, [], new Date(2026, 10, 10), new Date(2026, 11, 10), estimate);
+  assert.equal(run([original]).items.find(item => item.dueDate === '2026-11-05').amount, 385);
+  const paid = run([original, tx(2, '2026-11-05', { amount: 385, is_fixed: false })]);
+  assert.equal(paid.items.find(item => item.id === 2).amount, 385);
+  assert.equal(paid.items.find(item => item.dueDate?.startsWith('2026-12')).amount, 385);
+});
+
+test('an estimate can be set on the first observed fixed payment in the current month', () => {
+  const first = tx(1, '2026-11-01', { amount: 300 });
+  const today = new Date(2026, 10, 2), through = new Date(2026, 11, 2);
+  const withoutEstimate = reconcilePaymentOccurrences([first], [], today, through);
+  assert.equal(withoutEstimate.items.find(item => item.id === 1).estimateTransactionId, 1);
+  const withEstimate = reconcilePaymentOccurrences([first], withoutEstimate.occurrences, today, through,
+    [{ template: first, monthly_amount: 600, effective_month: '2026-11' }]);
+  const pending = withEstimate.items.find(item => item.dueDate === '2026-11-01' && item.status === 'projected');
+  assert.equal(pending.amount, 300);
+  assert.equal(pending.paidAmount, 300);
+  assert.equal(withEstimate.items.filter(item => item.id === 1).length, 1);
+});
+
+test('the 10 percent threshold is explicit, excludes pending transactions, and keeps the difference visible', () => {
+  const original = tx(1, '2026-10-05', { amount: 700 });
+  const estimate = [{ template: original, monthly_amount: 700, effective_month: '2026-11' }];
+  const run = amount => reconcilePaymentOccurrences([original, tx(2, '2026-11-01', { amount, is_fixed: false }),
+    tx(3, '2026-11-02', { amount: 50, is_pending: true })], [], new Date(2026, 10, 2), new Date(2026, 11, 2), estimate);
+  const short = run(629.99).items.find(item => item.dueDate === '2026-11-05' && item.status === 'projected');
+  assert.equal(short.amount, 70.01);
+  const result = run(630);
+  assert.equal(result.items.some(item => item.dueDate === '2026-11-05' && item.status === 'projected'), false);
+  assert.equal(result.items.find(item => item.id === 2).approximatelyComplete, true);
+  assert.equal(result.items.find(item => item.id === 2).remainingAmount, 70);
+  assert.equal(run(690).items.find(item => item.id === 2).remainingAmount, 10);
+  assert.equal(run(710).items.find(item => item.id === 2).approximatelyComplete, false);
+});
+
+test('manual resolution affects only the remaining estimate and preserves actual payments', () => {
+  const original = tx(1, '2026-10-05', { amount: 600 });
+  const estimate = [{ template: original, monthly_amount: 600, effective_month: '2026-11' }];
+  const rows = [original, tx(2, '2026-11-01', { amount: 300, is_fixed: false })];
+  const run = stored => reconcilePaymentOccurrences(rows, stored, new Date(2026, 10, 2), new Date(2026, 11, 2), estimate);
+  const initial = run([]);
+  const occurrence = initial.occurrences.find(row => row.due_date.startsWith('2026-11'));
+  occurrence.status = 'paid';
+  occurrence.resolved_at = '2026-11-02T12:00:00.000Z';
+  const confirmed = run(initial.occurrences);
+  assert.equal(confirmed.items.find(item => item.confirmedPaid).amount, 300);
+  assert.equal(confirmed.items.find(item => item.id === 2).amount, 300);
+  occurrence.status = 'ignored';
+  const ignored = run(initial.occurrences);
+  assert.equal(ignored.items.some(item => item.dueDate === occurrence.due_date && item.status === 'projected'), false);
+  assert.ok(ignored.items.some(item => item.id === 2));
+});
+
 test('database tracking persists through restarts and is household isolated, including read-only support', async () => {
   const db = new PGlite();
   const adapter = database => ({ async query(sql, params = []) {
@@ -115,6 +192,16 @@ test('database tracking persists through restarts and is household isolated, inc
     assert.ok(read.every(item => item.description !== 'UTILITY'));
     assert.equal((await run(2, client => client.query('SELECT * FROM fixed_payment_occurrences'))).rows.length, 0, 'read-only support never persists previews');
     await assert.rejects(run(1, client => client.query("UPDATE fixed_payment_occurrences SET status='paid'"), true), /read-only/);
+    const saved = (await run(1, client => client.query('SELECT template FROM fixed_payment_occurrences WHERE status=$1', ['projected']))).rows[0].template;
+    await run(1, client => client.query(`INSERT INTO fixed_payment_estimates
+      (source_transaction_id,template,monthly_amount,effective_month) VALUES($1,$2,385,'2026-11')`,
+    [saved.id, JSON.stringify(saved)]));
+    const estimated = await run(1, client => loadFixedPaymentOccurrences(client, today, through));
+    assert.equal(estimated.find(item => item.dueDate.startsWith('2026-11')).amount, 385);
+    assert.equal((await run(2, client => client.query('SELECT * FROM fixed_payment_estimates'))).rows.length, 0);
+    await migrate();
+    const reloaded = await run(1, client => loadFixedPaymentOccurrences(client, today, through));
+    assert.equal(reloaded.find(item => item.dueDate.startsWith('2026-11')).estimatedAmount, 385);
   } finally { await db.close(); }
 });
 

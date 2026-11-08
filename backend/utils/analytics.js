@@ -285,7 +285,7 @@ function buildMerchants(rows, context) {
   })).sort((a, b) => b.total - a.total).slice(0, 10);
 }
 
-export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date(), typical = null } = {}) {
+export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date(), typical = null, upcomingPayments = null, hasFixedEstimates = false } = {}) {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const rows = normalize(transactions, end);
   const currentIndex = end.getFullYear() * 12 + end.getMonth();
@@ -309,7 +309,10 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
   const movers = categories.filter(category => !category.transfer && (category.mtd || category.lastMonthToDate));
   const biggestMover = movers.sort((a, b) => Math.abs(b.deltaMtd) - Math.abs(a.deltaMtd))[0] || null;
 
-  const upcoming = buildUpcomingPayments(rows.filter(tx => !tx.transfer).map(tx => ({ ...tx.raw, amount: tx.amount })), end);
+  const monthPrefix = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
+  const upcoming = hasFixedEstimates && upcomingPayments
+    ? upcomingPayments.filter(item => item.isFixed && item.dueDate?.startsWith(monthPrefix))
+    : buildUpcomingPayments(rows.filter(tx => !tx.transfer).map(tx => ({ ...tx.raw, amount: tx.amount })), end);
   const remainingFixed = sum(upcoming.filter(item => item.status === 'projected').map(item => item.amount));
   const variableMtd = variable[HISTORY_MONTHS - 1];
   const remainingVariable = avgVariable != null ? avgVariable * (1 - context.elapsed) : (variableMtd / day) * (daysInMonth - day);

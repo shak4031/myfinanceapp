@@ -9,7 +9,7 @@ export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
   'credit_cards', 'savings_goals', 'plaid_connections', 'plaid_accounts', 'transaction_import_reviews',
   'accounts', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews',
-  'fixed_payment_occurrences', 'transaction_duplicate_decisions'
+  'fixed_payment_occurrences', 'fixed_payment_estimates', 'transaction_duplicate_decisions'
 ];
 
 export const DEFAULT_CATEGORIES = [
@@ -382,6 +382,12 @@ export async function migratePrivateSchema(client) {
       status TEXT NOT NULL DEFAULT 'projected' CHECK(status IN ('projected','paid','ignored')),
       matched_transaction_id INTEGER, resolved_at TIMESTAMPTZ
     );
+    ALTER TABLE fixed_payment_occurrences ADD COLUMN IF NOT EXISTS estimated_amount NUMERIC(14,2);
+    CREATE TABLE IF NOT EXISTS fixed_payment_estimates (
+      id SERIAL PRIMARY KEY, source_transaction_id INTEGER NOT NULL,
+      template JSONB NOT NULL, monthly_amount NUMERIC(14,2) NOT NULL CHECK(monthly_amount > 0),
+      effective_month TEXT NOT NULL
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -398,6 +404,8 @@ export async function migratePrivateSchema(client) {
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS fixed_payment_occurrences_user_payment_key
       ON fixed_payment_occurrences(user_id,payment_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS fixed_payment_estimates_user_source_key
+      ON fixed_payment_estimates(user_id,source_transaction_id);
     CREATE INDEX IF NOT EXISTS fixed_payment_occurrences_user_match_idx
       ON fixed_payment_occurrences(user_id,matched_transaction_id);
     CREATE UNIQUE INDEX IF NOT EXISTS category_budgets_user_category_key ON category_budgets (user_id, category);

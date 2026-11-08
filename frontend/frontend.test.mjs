@@ -3026,7 +3026,7 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   assert.match(source('refresh.css'), /\.pay-history \{ margin: 20px 0 24px/);
   assert.match(source('refresh.css'), /#upcoming-section \.pay-carried ol\.pay-list \{ display: block/);
   const button = { dataset: { paymentKey: key, paymentStatus: 'ignored' }, disabled: false };
-  const event = { target: { closest: () => button } };
+  const event = { target: { closest: selector => selector === '[data-payment-key]' ? button : null } };
   await f.node('dashboard-payments').onclick(event);
   assert.equal(calls.filter(call => call.url.includes('/resolve')).length, 0, 'cancel does not mutate');
   assert.match(confirmations[0].message, /only this monthly occurrence/);
@@ -3041,6 +3041,42 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   await f.node('dashboard-payments').onclick(event);
   assert.equal(button.disabled, false);
   assert.deepEqual(notices.at(-1), ['This payment is no longer unpaid.', 'error']);
+});
+test('bill estimate editor saves the monthly amount and displays partial progress', async () => {
+  const calls = [];
+  const key = 'a'.repeat(64);
+  const timeline = [{ date: '2026-11-05', dueDate: '2026-11-05', amount: 300, description: 'Committee',
+    status: 'projected', isFixed: true, paymentKey: key, estimatedAmount: 600, paidAmount: 300, remainingAmount: 300 },
+  { date: '2026-11-02', dueDate: '2026-11-02', id: 8, amount: 690, description: 'Loan',
+    status: 'processed', isFixed: true, paymentKey: 'b'.repeat(64), estimatedAmount: 700,
+    paidAmount: 690, remainingAmount: 10, approximatelyComplete: true }];
+  const f = fixture(async (url, options) => {
+    calls.push({ url, options });
+    return response(200, url.endsWith('/summary') ? { balance: 1000, income: 0, expenses: 0, netCashflow: 0 }
+      : url.endsWith('/upcoming-payments') ? timeline : url.endsWith('/estimate') ? { success: true } : []);
+  });
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 10, 2, 12])); } };
+  f.context.escapeHtml = value => String(value);
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.context.transactionLink = (id, name) => name;
+  f.context.FinanceUI = { howCalc: () => '' };
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  assert.match(f.node('dashboard-payments').innerHTML, /\$300\.00 paid of \$600\.00 estimate/);
+  assert.match(f.node('dashboard-payments').innerHTML, /Approximately complete/);
+  assert.match(f.node('dashboard-payments').innerHTML, /\$10\.00 difference/);
+  assert.match(f.node('dashboard-payments').innerHTML, /Projected balance in 30 days<\/span><strong>\$700\.00/);
+  const button = { dataset: { estimateKey: key, estimateName: 'Committee', estimateAmount: '600' } };
+  await f.node('dashboard-payments').onclick({ target: { closest: selector => selector === '[data-estimate-key]' ? button : null } });
+  assert.equal(f.node('fixed-estimate-dialog').open, true);
+  assert.equal(f.node('fixed-estimate-amount').value, '600');
+  f.node('fixed-estimate-amount').value = '650';
+  await f.node('fixed-estimate-form').onsubmit({ preventDefault() {}, submitter: { disabled: false } });
+  assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/estimate')).options.body).amount, '650');
+  assert.equal(f.node('fixed-estimate-dialog').open, false);
 });
 test('a closed category dialog discards a late transaction response', async () => {
   let finish;
