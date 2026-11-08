@@ -1,9 +1,9 @@
 // Opt-in, bounded diagnostics. No financial content or telemetry is sent to a server.
 (() => {
   const limit = 600, records = [], observers = [];
-  const pages = new Set(['dashboard', 'categories', 'category-admin', 'transactions', 'accounts', 'analytics', 'compass', 'etl', 'payoff', 'goals', 'insights', 'tutorials', 'settings']);
+  const pages = new Set(['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'accounts', 'analytics', 'compass', 'etl', 'payoff', 'goals', 'insights', 'tutorials', 'settings']);
   const endpoints = new Set([
-    '/api/auth/me', '/api/license', '/api/analytics', '/api/analytics/compass', '/api/plan',
+    '/api/auth/me', '/api/license', '/api/analytics', '/api/analytics/compass', '/api/plan', '/api/plan/health',
     '/api/categories', '/api/accounts', '/api/debts', '/api/goals', '/api/budgets', '/api/support-access',
     ...['summary', 'upcoming-payments', 'category-spending', 'all-transactions', 'monthly-cashflow', 'insights', 'spending-history'].map(name => `/api/dashboard/${name}`),
     ...['categorization-rules', 'categorization-apply', 'name-rules', 'rename', 'update-fixed', 'update-pay-mode', 'update-income-role'].map(name => `/api/transactions/${name}`)

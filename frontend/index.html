@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance. Start a 15-day Pro trial without payment details.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261107-membership"></script>
+  <script src="session.js?v=20261108-health"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -499,7 +499,7 @@
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261108-mortgage">
   <link rel="stylesheet" href="welcome.css?v=20261030c">
-<link rel="stylesheet" href="buckets.css?v=20261109-buckets">
+<link rel="stylesheet" href="buckets.css?v=20261108-health">
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261107-review-counts">
@@ -599,7 +599,7 @@
     <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
       <p class="marketing-kicker">ONE PLAN. YOUR WHOLE HOUSEHOLD.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Start with 15 days of Pro, no card required. Choose a paid plan when you are ready; your first payment is charged immediately.</p>
       <div class="marketing-plan-grid">
-        <article class="marketing-plan"><p class="marketing-tier">BASIC</p><h3>Your everyday finances.</h3><p class="marketing-price">$9.99<span>USD / month per household</span></p><ul><li>Supported CSV, OFX/QFX &amp; text-based PDF imports</li><li>Accounts &amp; transactions</li><li>Category review</li><li>Your everyday dashboard</li><li>Shared household editing</li></ul><p class="marketing-plan-limit">Analytics, budgets, debt planning and goals require Pro.</p><button class="btn btn-secondary" type="button" data-choose-plan="basic" aria-pressed="false">Choose Basic</button></article>
+        <article class="marketing-plan"><p class="marketing-tier">BASIC</p><h3>Your everyday finances.</h3><p class="marketing-price">$9.99<span>USD / month per household</span></p><ul><li>Supported CSV, OFX/QFX &amp; text-based PDF imports</li><li>Accounts &amp; transactions</li><li>Category review</li><li>Your everyday dashboard</li><li>90-day Financial Health program</li><li>Shared household editing</li></ul><p class="marketing-plan-limit">Analytics, budgets, debt planning and goals require Pro.</p><button class="btn btn-secondary" type="button" data-choose-plan="basic" aria-pressed="false">Choose Basic</button></article>
         <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$14.99<span>USD / month per household</span></p><ul><li>Everything in Basic</li><li>All analytics, budgets &amp; forecasts</li><li>Recurring &amp; unusual charge alerts</li><li>Debt payoff strategies &amp; what-if planning</li><li>Savings goals &amp; monthly targets</li></ul><p class="marketing-plan-limit">All Pro features are included during your 15-day trial.</p><button class="btn btn-primary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
       </div>
               <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Create an account and start your trial</li><li><b>2</b> Verify your email</li><li><b>3</b> Choose a paid plan when ready</li></ol>
@@ -627,6 +627,7 @@
       <nav aria-label="Main navigation">
       <ul class="nav-list">
         <li><a class="nav-btn active" data-view="dashboard" href="#dashboard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a></li>
+        <li><a class="nav-btn" data-view="financial-health" href="#financial-health"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/><path d="M5 12h4l2-4 2 8 2-4h4"/></svg>Financial Health</a></li>
         <li><a class="nav-btn" data-view="categories" href="#categories"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1"/></svg>Categories</a></li>
         <li><a class="nav-btn" data-view="transactions" href="#transactions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a></li>
         <li><a class="nav-btn" data-view="accounts" href="#accounts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M2 21h20M12 3l9 5H3z"/></svg>Accounts<span class="acct-nav-badge" id="accounts-nav-badge" hidden></span></a></li>
@@ -670,6 +671,10 @@
       <section id="dashboard-view" class="view active">
         <h1 class="visually-hidden">Dashboard</h1>
         <section id="welcome-hero" class="welcome-hero" aria-label="Welcome and insights"></section>
+        <section class="health-entry" aria-labelledby="dashboard-health-title">
+          <div><p class="eyebrow">YOUR FOUNDATION &middot; INCLUDED IN BASIC AND PRO</p><h2 id="dashboard-health-title">Build healthier money habits, one week at a time.</h2><p>Your Financial Health Plan turns your numbers into a 90-day program. Find your next step, track progress and build habits that support your debt and savings priorities.</p></div>
+          <a class="btn btn-primary" href="#financial-health" data-view="financial-health">Open my health plan &rarr;</a>
+        </section>
         <div class="header-actions" style="margin: 12px 0;">
           <button class="btn btn-primary" onclick="openImportModal('plaid')">Connect a bank</button>
           <button class="btn btn-secondary" onclick="openImportModal('csv')">Import statements</button>
@@ -892,6 +897,7 @@
             </div>
           </section>
           <section class="kb-section" id="knowledge-base-overview" data-kb-topic="analytics" aria-labelledby="kb-overview-title">
+            <article class="kb-card"><h3>Start with your Financial Health foundation</h3><p>Open Financial Health directly below Dashboard. Basic and Pro both include the 90-day program: twelve weekly steps, a spending-split guide and saved household progress. Start to record a baseline, return each week for your next step, and mark actions done when you complete them. Advanced analytics, debt and savings planning tools remain Pro-only; you can follow the program and record your own actions with Basic.</p><a class="kb-card-link" href="#financial-health" data-view="financial-health">Open my Financial Health Plan</a></article>
             <div class="kb-section-heading"><p class="eyebrow">ANALYTICS · OVERVIEW</p><h2 id="kb-overview-title">Your history, signals and near-term picture</h2><p>Use this view to notice a change, identify where it came from, then decide what to inspect or adjust.</p></div>
             <article class="kb-feature panel"><h3>At-a-glance measures</h3><p class="kb-purpose">Six quick checks summarize the current month and recent household finances.</p>
               <div class="kb-metric-list">
@@ -956,6 +962,15 @@
       </section>
 
       <!-- FINANCIAL CHECKUP -->
+      <section id="financial-health-view" class="view" aria-labelledby="financial-health-title">
+        <header class="header">
+          <div><p class="eyebrow">YOUR FOUNDATION &middot; INCLUDED IN BASIC AND PRO</p><h1 id="financial-health-title">Financial Health</h1><p class="muted">A 90-day program to understand your money, build a stronger foundation and make small changes that last. Start here, then use your dashboard and planning tools to put each step into practice.</p></div>
+          <button type="button" class="btn btn-secondary" id="refresh-health-btn">Refresh my plan</button>
+        </header>
+        <div id="health-plan-root" aria-live="polite"></div>
+        <p class="health-muted">Your progress is saved in your household workspace. Educational planning support, not financial advice or a guarantee of results. Advanced analytics, debt-free and savings planning tools require Pro; the health program is included in Basic and Pro.</p>
+      </section>
+
       <section id="insights-view" class="view">
         <header class="header">
           <div><p class="eyebrow">THE BIGGER PICTURE</p><h1>Financial Checkup</h1><p class="muted">Your income estimate, spending drivers and potentially discretionary purchases, followed by how debts and savings goals fit.</p></div>
@@ -2675,7 +2690,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261108-mortgage"></script>
+  <script src="refresh.js?v=20261108-health"></script>
   <script src="accounts.js?v=20261105-plaid-freshness"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261107-support-layout"></script>
@@ -2687,13 +2702,13 @@
   <script src="analytics.js?v=20261108-interest"></script>
   <script src="plan.js?v=20261108-mortgage"></script>
   <script src="welcome.js?v=20261030c"></script>
-<script src="buckets.js?v=20261109-buckets"></script>
+<script src="buckets.js?v=20261108-health"></script>
   <script src="income-review.js?v=20261020b"></script>
   <script src="transaction-duplicates.js?v=20261107-review-counts"></script>
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261107-highlights"></script>
-  <script src="household.js?v=20261107-complimentary"></script>
+  <script src="household.js?v=20261108-health"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

@@ -11,9 +11,27 @@ import { parseTxDate } from '../utils/normalize.js';
 import { currentUserId } from '../utils/tenant.js';
 
 const router = Router();
-router.use(requireProPlus);
 const db = new Database();
 const badRequest = message => Object.assign(new Error(message), { status: 400 });
+
+router.get('/health', async (req, res, next) => {
+  try {
+    const now = new Date();
+    res.json(healthResponse(await loadHealthInputs(now), now));
+  } catch (error) { next(error); }
+});
+
+router.put('/health', async (req, res, next) => {
+  try {
+    const now = new Date();
+    const inputs = await loadHealthInputs(now);
+    const updated = applyHealthChange(inputs.settings?.health_plan || null, req.body || {}, { typical: inputs.buckets.typical, now });
+    await saveSettings({ health_plan: updated });
+    res.json(healthResponse({ ...inputs, settings: { ...(inputs.settings || {}), health_plan: updated } }, now));
+  } catch (error) { next(error); }
+});
+
+router.use(requireProPlus);
 
 async function currentPlan(req, options = {}) {
   const now = new Date();
@@ -165,23 +183,6 @@ function healthResponse(inputs, now) {
   const { settings, ...rest } = inputs;
   return buildHealthPlan({ ...rest, settings: normalizeSettings(settings), state: settings?.health_plan || null, now });
 }
-
-router.get('/health', async (req, res, next) => {
-  try {
-    const now = new Date();
-    res.json(healthResponse(await loadHealthInputs(now), now));
-  } catch (error) { next(error); }
-});
-
-router.put('/health', async (req, res, next) => {
-  try {
-    const now = new Date();
-    const inputs = await loadHealthInputs(now);
-    const updated = applyHealthChange(inputs.settings?.health_plan || null, req.body || {}, { typical: inputs.buckets.typical, now });
-    await saveSettings({ health_plan: updated });
-    res.json(healthResponse({ ...inputs, settings: { ...(inputs.settings || {}), health_plan: updated } }, now));
-  } catch (error) { next(error); }
-});
 
 router.put('/debt-order', async (req, res, next) => {
   try {

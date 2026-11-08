@@ -189,6 +189,22 @@ serializes database connections, so printed timings are local regression
 observations, **not production PostgreSQL capacity or a real Stripe payment test**.
 Use the staging checklist in [DEPLOYMENT.md](./DEPLOYMENT.md) for those checks.
 
+## Financial Health foundation
+
+**Financial Health** is a first-class workspace page at `#financial-health`,
+directly below Dashboard in the sidebar, with a prominent dashboard entry.
+Basic and Pro households can use the same 90-day program: a guided 12-week
+journey, spending-split guide, next steps and saved household progress.
+Starting records a baseline; marking steps and restarting use the existing
+tenant-scoped `/api/plan/health` GET/PUT endpoints. Expired subscriptions remain
+gated. Advanced Analytics, Debt-free plan and Goals tools still require Pro;
+their links are labeled accordingly for Basic users.
+
+Financial Checkup links to the program rather than embedding a second copy.
+The dedicated page loads independently of Pro analytics and goal endpoints,
+with visible loading, error and retry states. Scores and targets are educational
+guides, not financial advice or guarantees of improved outcomes.
+
 ## Demo account
 
 The server creates a showcase account on start-up: `demo@myfinance.app` /

@@ -1,5 +1,5 @@
 // Spending buckets: fixed expenses, discretionary spending and debt payments. Renders the dashboard panel,
-// the Categories summary strip and the financial health plan on the Checkup page.
+// the Categories summary strip and the dedicated Financial Health program.
 (function () {
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -118,13 +118,12 @@
       `<button type="button" data-bucket-mode="${key}" aria-pressed="${mode === key}"${key === 'typical' && !data.typical ? ' disabled' : ''}>${label}</button>`).join('')}</div>`;
     const f = figures(data, mode);
     const basis = mode === 'typical' ? `Average of the last ${data.monthsUsed} complete month${data.monthsUsed === 1 ? '' : 's'}` : 'This month to date';
-    const pro = !!window.FinancePro?.isPlusActive?.();
     root.innerHTML = `${head(toggle)}
       ${headline(f, data)}
       ${splitBar(f)}
       <div class="bucket-grid">${BUCKETS.map(b => bucketCard(b, f)).join('')}${leftCard(f)}</div>
       ${trend(data)}
-      <div class="bucket-foot"><span>${esc(basis)}. Transfers between your own accounts are left out. A mortgage counts as a debt payment, not a fixed expense.</span><a href="#insights" data-view="insights" class="bucket-plan-link">${pro ? 'Open your financial health plan' : 'See the financial health plan'}${pro ? '' : ' <span class="pro-tag">PRO</span>'} ${icon('arrow', 14)}</a></div>`;
+      <div class="bucket-foot"><span>${esc(basis)}. Transfers between your own accounts are left out. A mortgage counts as a debt payment, not a fixed expense.</span><a href="#financial-health" data-view="financial-health" class="bucket-plan-link">Open your financial health plan ${icon('arrow', 14)}</a></div>`;
   }
 
   async function load() {
@@ -169,7 +168,49 @@
     return `<div class="bucket-strip-head"><h2>Spending by type</h2>${label ? `<span>${esc(label)}</span>` : ''}</div><div class="bucket-strip-bar" role="img" aria-label="${esc(BUCKETS.map(b => `${b.label} ${money(totals[b.key])}`).join(', '))}">${segs}</div><div class="bucket-strip-items">${chips}</div>`;
   }
 
-  // ---------- Financial health plan (Checkup) ----------
+  // ---------- Financial health plan ----------
+  let healthRequest = 0;
+  let healthSaving = false;
+  const validHealth = plan => plan && Array.isArray(plan.steps) && plan.steps.length === 12;
+  async function readHealth(options) {
+    const response = await fetch('/api/plan/health', options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load your financial health plan.');
+    if (!validHealth(data)) throw new Error('The financial health plan response is incomplete. Please try again.');
+    return data;
+  }
+
+  async function loadHealth() {
+    const root = $('health-plan-root');
+    if (!root || healthSaving) return;
+    const run = ++healthRequest;
+    root.setAttribute('aria-busy', 'true');
+    root.innerHTML = '<div class="panel" role="status">Loading your financial health plan...</div>';
+    try {
+      const plan = await readHealth();
+      if (run !== healthRequest) return;
+      root.innerHTML = renderHealth(plan);
+    } catch (error) {
+      if (run !== healthRequest) return;
+      root.innerHTML = `<div class="panel" role="alert"><p>Could not load your financial health plan: ${esc(error.message)}</p><button type="button" class="btn btn-secondary" data-health-action="retry">Try again</button></div>`;
+    } finally {
+      if (run === healthRequest) root.setAttribute('aria-busy', 'false');
+    }
+  }
+
+  function reset() {
+    healthRequest++;
+    healthSaving = false;
+    state.request++;
+    state.data = null;
+    state.error = '';
+    state.mode = 'typical';
+    const root = $('health-plan-root');
+    if (root) { root.innerHTML = ''; root.setAttribute('aria-busy', 'false'); }
+    const refresh = $('refresh-health-btn');
+    if (refresh) refresh.disabled = false;
+  }
+
   const STATUS = { done: ['Done', 'is-done'], progress: ['In progress', 'is-progress'], todo: ['To do', 'is-todo'] };
   const BAND = { good: 'On target', close: 'Close', over: 'Needs work' };
 
@@ -196,10 +237,11 @@
   function stepCard(step, plan, openId) {
     const [label, cls] = STATUS[step.status] || STATUS.todo;
     const current = plan.week === step.week && !plan.finished;
+    const advanced = ['analytics', 'payoff', 'goals'].includes(step.route) && !window.FinancePro?.isPlusActive?.();
     return `<li><details class="health-step ${cls}${current ? ' is-current' : ''}"${step.id === openId ? ' open' : ''}>
       <summary><span class="health-step-week">W${step.week}</span><span class="health-step-title">${esc(step.title)}${current ? '<em>This week</em>' : ''}</span><span class="health-chip ${cls}">${step.status === 'done' ? icon('check', 12) : ''}${label}</span></summary>
       <div class="health-step-body"><p>${esc(step.summary)}</p><p class="health-step-detail">${esc(step.detail)}</p>
-        <div class="health-step-actions"><a href="#${esc(step.route)}" data-view="${esc(step.route)}">${esc(ROUTE_LABELS[step.route] || 'Open')} ${icon('arrow', 13)}</a>
+        <div class="health-step-actions"><a href="#${esc(step.route)}" data-view="${esc(step.route)}">${esc(ROUTE_LABELS[step.route] || 'Open')}${advanced ? ' (Pro tool)' : ''} ${icon('arrow', 13)}</a>
         <button type="button" class="health-tick${step.manual ? ' is-on' : ''}" data-health-step="${esc(step.id)}" data-health-done="${step.manual ? 'false' : 'true'}" aria-pressed="${step.manual}">${icon('check', 14)}${step.manual ? 'Marked done' : step.autoStatus === 'done' ? 'Done automatically' : 'Mark done'}</button></div></div>
     </details></li>`;
   }
@@ -228,22 +270,38 @@
 
   async function changeHealth(body, button) {
     const root = $('health-plan-root');
-    if (!root) return;
+    if (!root || healthSaving) return;
+    healthSaving = true;
+    root.setAttribute('aria-busy', 'true');
+    const refresh = $('refresh-health-btn');
+    if (refresh) refresh.disabled = true;
+    root.querySelectorAll('button').forEach(control => { control.disabled = true; });
     if (button) button.disabled = true;
+    const run = ++healthRequest;
     try {
-      const response = await fetch('/api/plan/health', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not update your plan.');
+      const data = await readHealth({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (run !== healthRequest) return;
       root.innerHTML = renderHealth(data);
+      root.querySelector('.health-step[open] summary')?.focus();
     } catch (error) {
-      if (button) button.disabled = false;
+      if (run !== healthRequest) return;
       window.notify?.(error.message || 'Could not update your plan.');
+    } finally {
+      if (button) button.disabled = false;
+      if (run === healthRequest) {
+        healthSaving = false;
+        root.setAttribute('aria-busy', 'false');
+        root.querySelectorAll('button').forEach(control => { control.disabled = false; });
+        if (refresh) refresh.disabled = false;
+      }
     }
   }
 
-  $('insights-container')?.addEventListener('click', event => {
+  $('refresh-health-btn')?.addEventListener('click', loadHealth);
+  $('health-plan-root')?.addEventListener('click', event => {
     const action = event.target.closest?.('[data-health-action]');
     if (action) {
+      if (action.dataset.healthAction === 'retry') { loadHealth(); return; }
       if (action.dataset.healthAction === 'reset' && typeof window.confirm === 'function' && !window.confirm('Start the 90-day plan over? Your ticks and baseline will be cleared.')) return;
       changeHealth({ action: action.dataset.healthAction }, action);
       return;
@@ -252,5 +310,5 @@
     if (tick) changeHealth({ step: tick.dataset.healthStep, done: tick.dataset.healthDone === 'true' }, tick);
   });
 
-  window.FinanceBuckets = { load, render, strip, renderHealth, changeHealth, setMode: mode => { state.mode = mode; render(); }, state };
+  window.FinanceBuckets = { load, render, strip, loadHealth, renderHealth, changeHealth, reset, setMode: mode => { state.mode = mode; render(); }, state };
 })();

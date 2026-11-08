@@ -25,8 +25,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
-  const nav = ['dashboard', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+  const views = ['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'financial-health', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
     return item;
@@ -4665,7 +4665,7 @@ test('the dashboard spending buckets panel splits income, flags overspending and
   assert.doesNotMatch(html, /TO SAVINGS/, 'transfers stay out of every bucket');
   assert.match(html, /data-bucket-mode="typical" aria-pressed="true"/);
   assert.equal((html.match(/<div class="bucket-col[ "]/g) || []).length, 4, 'three complete months plus this month');
-  assert.match(html, /See the financial health plan <span class="pro-tag">PRO<\/span>/);
+  assert.match(html, /href="#financial-health" data-view="financial-health" class="bucket-plan-link">Open your financial health plan/);
   f.context.FinanceBuckets.setMode('current');
   const now = f.node('bucket-section').innerHTML;
   assert.match(now, /data-bucket-mode="current" aria-pressed="true"/);
@@ -4714,7 +4714,7 @@ test('the categories strip totals the visible rows by spending bucket', () => {
   assert.match(html2, /<script src="buckets\.js\?v=[^"]+"><\/script>/);
   assert.match(html2, /<link rel="stylesheet" href="buckets\.css\?v=[^"]+">/);
 });
-test('the checkup health plan scores the split, walks twelve weeks and saves ticks', async () => {
+test('the dedicated health plan scores the split, walks twelve weeks and saves ticks', async () => {
   const { buildSpendingBuckets } = await import('../backend/utils/spendingBuckets.js');
   const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
   const now = new Date(2026, 6, 20);
@@ -4757,11 +4757,79 @@ test('the checkup health plan scores the split, walks twelve weeks and saves tic
   assert.deepEqual(messages, ['Unknown step']);
   assert.equal(tick.disabled, false);
   const refresh = source('refresh.js');
-  assert.match(refresh, /json\('\/api\/plan\/health'\)\.catch\(\(\) => null\)/);
-  assert.match(refresh, /<div id="health-plan-root">\$\{healthPlan\}<\/div>/);
+  assert.doesNotMatch(refresh, /json\('\/api\/plan\/health'\)|id="health-plan-root"/);
+  assert.match(refresh, /href="#financial-health" data-view="financial-health"/);
   const css = source('buckets.css');
   assert.match(css, /\.health-ring\.is-bad \.health-ring-fill/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+test('Financial Health is first-class navigation and available to Basic without Pro requests', async () => {
+  const html = source('index.html');
+  assert.equal((html.match(/id="health-plan-root"/g) || []).length, 1);
+  assert.ok(html.indexOf('data-view="financial-health"') < html.indexOf('data-view="categories"'));
+  assert.match(html, /id="dashboard-health-title"/);
+  assert.match(html, /id="financial-health-view"[^]*?id="health-plan-root"/);
+  const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
+  const plan = buildHealthPlan({ buckets: { monthsUsed: 0, typical: null, months: [] } });
+  const calls = [];
+  const f = householdFixture({ entitlement: { active: true, plusActive: false, tier: 'basic' } }, url => {
+    if (url === '/api/plan/health') { calls.push(url); return response(200, plan); }
+  });
+  browserBits(f);
+  f.run('buckets.js');
+  f.context.showView = route => {
+    f.context.lastView = route;
+    if (route === 'financial-health') return f.context.FinanceBuckets.loadHealth();
+  };
+  f.run('household.js');
+  await f.context.showView('financial-health');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.context.lastView, 'financial-health');
+  assert.deepEqual(calls, ['/api/plan/health']);
+  const markup = f.node('health-plan-root').innerHTML;
+  assert.equal((markup.match(/<details class="health-step/g) || []).length, 12);
+  assert.match(markup, /No score yet|No score/);
+  assert.match(markup, /\(Pro tool\)/);
+  assert.doesNotMatch(markup, /Could not load/);
+  assert.match(source('refresh.js'), /'financial-health': \(\) => window\.FinanceBuckets\.loadHealth\(\)/);
+  assert.match(source('session.js'), /'financial-health'/);
+});
+
+test('health page errors are visible, retryable and stale loads cannot restore cleared data', async () => {
+  const f = fixture(async () => response(503, { error: 'Service <offline>' }));
+  browserBits(f);
+  f.run('buckets.js');
+  await f.context.FinanceBuckets.loadHealth();
+  assert.match(f.node('health-plan-root').innerHTML, /Service &lt;offline&gt;/);
+  assert.match(f.node('health-plan-root').innerHTML, /data-health-action="retry"/);
+  f.context.fetch = async () => response(200, { steps: [] });
+  await f.context.FinanceBuckets.loadHealth();
+  assert.match(f.node('health-plan-root').innerHTML, /response is incomplete/);
+  let resolve;
+  f.context.fetch = () => new Promise(done => { resolve = done; });
+  const loading = f.context.FinanceBuckets.loadHealth();
+  f.context.FinanceBuckets.reset();
+  const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
+  resolve(response(200, buildHealthPlan({ buckets: { monthsUsed: 0, typical: null, months: [] } })));
+  await loading;
+  assert.equal(f.node('health-plan-root').innerHTML, '');
+  assert.match(source('session.js'), /FinanceBuckets\?\.reset\(\)/);
+});
+
+test('health program serializes saves and does not refresh over an in-flight change', async () => {
+  let resolve, calls = 0;
+  const f = fixture(() => { calls++; return new Promise(done => { resolve = done; }); });
+  browserBits(f);
+  f.run('buckets.js');
+  const first = f.context.FinanceBuckets.changeHealth({ action: 'start' });
+  assert.equal(f.node('refresh-health-btn').disabled, true);
+  await f.context.FinanceBuckets.changeHealth({ step: 'income', done: true });
+  await f.context.FinanceBuckets.loadHealth();
+  assert.equal(calls, 1);
+  const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
+  resolve(response(200, buildHealthPlan({ buckets: { monthsUsed: 0, typical: null, months: [] } })));
+  await first;
+  assert.equal(f.node('refresh-health-btn').disabled, false);
 });
 test('tutorial deep links open the right walkthrough and chapter', () => {
   const f = fixture();

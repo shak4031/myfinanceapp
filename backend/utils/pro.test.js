@@ -59,8 +59,7 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     ['/api/plan/settings', 'PUT', { debt_strategy: 'snowball' }],
     ['/api/plan/flex', 'PUT', { key: 'debt-extra', amount: 0 }],
     ['/api/plan/debt-order', 'PUT', { ids: [1] }],
-    ['/api/plan/what-if', 'POST', { extra: 100 }],
-    ['/api/plan/health'], ['/api/plan/health', 'PUT', { action: 'start' }]
+    ['/api/plan/what-if', 'POST', { extra: 100 }]
   ];
   async function assertPlanningLocked(cookie) {
     for (const [path, method, body] of planningRequests) {
@@ -105,6 +104,8 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     assert.equal((await call('/api/analytics/export.csv', { cookie: customerCookie })).status, 402);
     assert.equal((await call('/api/analytics/compass?from=2020-01&to=2020-03', { cookie: customerCookie })).status, 402);
     await assertPlanningLocked(customerCookie);
+    assert.equal((await call('/api/plan/health', { cookie: customerCookie })).status, 402, 'expired households cannot read health plans');
+    assert.equal((await call('/api/plan/health', { method: 'PUT', body: { action: 'start' }, cookie: customerCookie })).status, 402, 'expired households cannot change health plans');
 
     // Trials cannot be restarted via the legacy route.
     const trial = await call('/api/license/trial', { body: {}, cookie: customerCookie });
@@ -126,6 +127,16 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     await assertPlanningLocked(customerCookie);
     assert.equal((await call('/api/dashboard/summary', { body: {}, cookie: customerCookie })).status, 200);
     assert.equal((await call('/api/analytics', { cookie: customerCookie })).status, 402, 'Basic does not include analytics');
+    const basicHealth = await call('/api/plan/health', { cookie: customerCookie });
+    assert.equal(basicHealth.status, 200, 'Basic includes the financial health program');
+    assert.equal(basicHealth.body.steps.length, 12);
+    const basicStarted = await call('/api/plan/health', { method: 'PUT', body: { action: 'start' }, cookie: customerCookie });
+    assert.equal(basicStarted.status, 200);
+    const basicTicked = await call('/api/plan/health', { method: 'PUT', body: { step: 'income', done: true }, cookie: customerCookie });
+    assert.equal(basicTicked.status, 200);
+    assert.equal((await call('/api/plan/health', { cookie: customerCookie })).body.steps.find(step => step.id === 'income').manual, true);
+    assert.equal((await call('/api/plan/health', { cookie: ownerCookie })).body.startedAt, null, 'Basic progress remains tenant scoped');
+    assert.equal((await call('/api/plan/health', { method: 'PUT', body: { action: 'reset' }, cookie: customerCookie })).status, 200);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: ownerCookie })).status, 200);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'invalid' }, cookie: ownerCookie })).status, 400);
     assert.equal((await call(`/api/admin/users/${customerId}/license`, { body: { action: 'grant', plan: 'pro' }, cookie: customerCookie })).status, 403);

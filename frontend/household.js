@@ -16,7 +16,7 @@
   function planCard(plan, name, checked, disabled = false) {
     const basic = plan === 'basic';
     return `<label class="household-plan-option${basic ? '' : ' household-plan-pro'}"><input type="radio" name="${name}" value="${plan}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}>
-      <span class="household-plan-heading"><strong>${basic ? 'Basic' : 'Pro'}</strong><span class="household-plan-check" aria-hidden="true">&#10003;</span></span><span class="household-plan-price">${basic ? '$9.99' : '$14.99'} <small>/ month</small></span><span>${basic ? 'Everyday finances and imports.' : 'Basic plus analytics and planning.'}</span></label>`;
+      <span class="household-plan-heading"><strong>${basic ? 'Basic' : 'Pro'}</strong><span class="household-plan-check" aria-hidden="true">&#10003;</span></span><span class="household-plan-price">${basic ? '$9.99' : '$14.99'} <small>/ month</small></span><span>${basic ? 'Everyday finances, imports and your Financial Health program.' : 'Basic plus analytics and advanced planning.'}</span></label>`;
   }
   function billingMarkup(data, reason = '', selected = 'pro') {
     const entitlement = data.entitlement || {};
