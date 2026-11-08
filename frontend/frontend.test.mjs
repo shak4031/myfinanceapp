@@ -3021,7 +3021,7 @@ test('previous-month unpaid bills remain visible in both layouts and resolution 
   const markup = f.node('dashboard-payments').innerHTML;
   assert.match(markup, /Last month &middot; still unpaid/);
   assert.match(markup, /Earlier &lt;utility&gt;/);
-  assert.match(markup, /<details class="pay-actions"><summary aria-label="Actions for Earlier &lt;utility&gt;">/);
+  assert.match(markup, /<details class="pay-actions"><summary aria-label="Actions for Earlier &lt;utility&gt;" title="Bill actions">/);
   assert.match(markup, /data-payment-status="paid">Mark paid/);
   assert.match(markup, /data-payment-status="ignored">Ignore this payment/);
   assert.doesNotMatch(markup, /class="pay-resolution"/);
@@ -3069,11 +3069,15 @@ test('bill estimate editor saves the monthly amount and displays partial progres
   const html = source('index.html');
   vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
   await f.context.loadDashboard();
-  assert.match(f.node('dashboard-payments').innerHTML, /\$300\.00 paid of \$600\.00 estimate/);
-  assert.match(f.node('dashboard-payments').innerHTML, /data-estimate-amount="600">Edit estimate/);
-  assert.match(f.node('dashboard-payments').innerHTML, /Approximately complete/);
-  assert.match(f.node('dashboard-payments').innerHTML, /\$10\.00 difference/);
-  assert.match(f.node('dashboard-payments').innerHTML, /Projected balance in 30 days<\/span><strong>\$700\.00/);
+  const progressMarkup = f.node('dashboard-payments').innerHTML;
+  assert.match(progressMarkup, /class="pay-progress is-partial" role="img" aria-label="\$300\.00 paid of \$600\.00 estimate, \$300\.00 left"/);
+  assert.match(progressMarkup, /class="pay-progress-fill" style="width:50%"/);
+  assert.match(progressMarkup, /data-estimate-amount="600">Edit estimate/);
+  assert.match(progressMarkup, /Approximately complete/);
+  assert.match(progressMarkup, /class="pay-progress is-approx"[^>]*\$10\.00 difference; approximately complete/);
+  assert.match(progressMarkup, /&asymp; done &middot; \$10\.00 short/);
+  assert.match(progressMarkup, /<div class="pay-row-action"><details class="pay-actions">/);
+  assert.match(progressMarkup, /Projected balance in 30 days<\/span><strong>\$700\.00/);
   const button = { dataset: { estimateKey: key, estimateName: 'Committee', estimateAmount: '600' } };
   await f.node('dashboard-payments').onclick({ target: { closest: selector => selector === '[data-estimate-key]' ? button : null } });
   assert.equal(f.node('fixed-estimate-dialog').open, true);
@@ -3924,6 +3928,23 @@ test('feature spotlight rotates through Basic and Pro features', () => {
   f.node('auth-screen').listeners.click({ button: 0, preventDefault: () => { prevented = true; }, target: { closest: () => ({ dataset: { marketingJump: 'marketing-pricing' }, hasAttribute: () => false }) } });
   assert.equal(prevented, true);
   assert.equal(scrolled, 'pricing');
+});
+test('Highlights scrolls on the landing page and opens it from sign-in or sign-up', () => {
+  for (const accessPage of [false, true]) {
+    const f = fixture();
+    browserBits(f, { reduced: false });
+    f.node('auth-screen').classList.toggle('access-page', accessPage);
+    f.context.location.pathname = accessPage ? '/signup' : '/';
+    let scrolled = false, prevented = false;
+    f.node('marketing-benefits').scrollIntoView = () => { scrolled = true; };
+    f.run('marketing.js');
+    f.node('auth-screen').listeners.click({ button: 0, preventDefault: () => { prevented = true; },
+      target: { closest: () => ({ dataset: { marketingJump: 'marketing-benefits' }, hasAttribute: () => false }) } });
+    assert.equal(prevented, true);
+    assert.equal(scrolled, !accessPage);
+    if (accessPage) assert.equal(f.context.location.href, '/#marketing-benefits');
+  }
+  assert.match(source('index.html'), /href="\/#marketing-benefits" data-marketing-jump="marketing-benefits"/);
 });
 test('signup route opens registration only when registration is enabled', async () => {
   for (const registrationEnabled of [true, false]) {
