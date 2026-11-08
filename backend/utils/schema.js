@@ -394,6 +394,17 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS first_payment_month TEXT;
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS escrow_payment NUMERIC(14,2);
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS payment_match TEXT;
+    ALTER TABLE plaid_accounts ADD COLUMN IF NOT EXISTS linked_account_id INTEGER;
+    ALTER TABLE plaid_accounts ADD COLUMN IF NOT EXISTS mortgage_details JSONB;
+    ALTER TABLE plaid_accounts ADD COLUMN IF NOT EXISTS account_link_error TEXT;
+    ALTER TABLE plaid_connections ADD COLUMN IF NOT EXISTS liabilities_error_code TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS account_id INTEGER;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS origination_date TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS maturity_date TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS mortgage_source TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS mortgage_data_as_of TEXT;
+    ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS mortgage_before JSONB;
+    ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS mortgage_after JSONB;
     CREATE TABLE IF NOT EXISTS fixed_payment_estimates (
       id SERIAL PRIMARY KEY, source_transaction_id INTEGER NOT NULL,
       template JSONB NOT NULL, monthly_amount NUMERIC(14,2) NOT NULL CHECK(monthly_amount > 0),
@@ -456,6 +467,14 @@ export async function migratePrivateSchema(client) {
       ON transaction_import_reviews (user_id, plaid_transaction_id)
       WHERE plaid_transaction_id IS NOT NULL AND status = 'pending';
     DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plaid_accounts_local_account_fk') THEN
+        ALTER TABLE plaid_accounts ADD CONSTRAINT plaid_accounts_local_account_fk
+          FOREIGN KEY (linked_account_id, user_id) REFERENCES accounts (id, user_id);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mortgage_local_account_fk') THEN
+        ALTER TABLE credit_cards ADD CONSTRAINT mortgage_local_account_fk
+          FOREIGN KEY (account_id, user_id) REFERENCES accounts (id, user_id);
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'plaid_accounts_tenant_connection_fk') THEN
         ALTER TABLE plaid_accounts ADD CONSTRAINT plaid_accounts_tenant_connection_fk
           FOREIGN KEY (connection_id, user_id) REFERENCES plaid_connections (id, user_id) ON DELETE CASCADE;

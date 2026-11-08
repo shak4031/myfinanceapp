@@ -50,7 +50,7 @@ function labeledMoney(lines, pattern, name) {
 function accountIdentity(lines, card) {
   const endings = new Set();
   const endingLabel = /\b(?:(?:account|card)(?:\s+(?:number|no\.?|#))?\s+ending(?:\s+in)?|ending in)\s*:?\s*[Xx*•. \t-]*(\d{4})(?!\d)/gi;
-  const accountLabel = /\b(?:account|card)\s*(?:number|no\.?|#)(?!\s+ending)\s*:?\s*((?:[Xx*•.\d][ \t-]*){4,24})/gi;
+  const accountLabel = /\b(?:account|card|loan)\s*(?:number|no\.?|#)(?!\s+ending)\s*:?\s*((?:[Xx*•.\d][ \t-]*){4,24})/gi;
   for (const line of lines) {
     for (const match of line.matchAll(endingLabel)) endings.add(match[1]);
     for (const match of line.matchAll(accountLabel)) {
@@ -62,6 +62,7 @@ function accountIdentity(lines, card) {
   const header = lines.slice(0, 40).filter(line => !ROW.test(line));
   const issuerLabel = header.map(line => line.match(/^(?:bank name|financial institution|issuer)\s*:\s*(.{2,80})$/i)?.[1]).find(Boolean);
   const brands = [
+    ['PennyMac', /\bpenny\s*mac\b|pennymac\.com/i],
     ['Credit One', /\bcredit\s*one(?:\s+bank)?\b|creditonebank\.com/i],
     ['Capital One', /\bcapital\s*one\b|capitalone\.com/i],
     ['Bank of America', /\bbank of america\b|bankofamerica\.com/i],
@@ -85,6 +86,51 @@ function accountIdentity(lines, card) {
     accountKind: card ? 'credit_card' : checking !== savings ? checking ? 'checking' : 'savings' : null,
     identityAmbiguous: endings.size > 1 || issuers.length > 1
   };
+}
+function mortgageStatement(lines) {
+  const text = lines.join('\n');
+  const readDate = (label, name) => {
+    const values = lines.map(line => {
+      const match = line.match(label);
+      return match ? dateValue(match[1]) : null;
+    }).filter(Boolean);
+    if (new Set(values).size > 1) throw fail(`Conflicting ${name} values were found.`);
+    return values[0] || null;
+  };
+  const closingDate = readDate(/^(?:statement date|statement closing date|as of)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'statement date');
+  const balance = labeledMoney(lines, /^(?:outstanding principal(?: balance)?|unpaid principal(?: balance)?|principal balance)\s*:?\s*/i, 'principal balance');
+  if (!closingDate || balance == null || balance < 0) throw fail('A mortgage statement date and outstanding principal balance are required. Nothing was imported.');
+  const rates = [...text.matchAll(/(?:current )?interest rate\s*:?\s*(\d{1,2}(?:\.\d+)?)\s*%/gi)].map(match => Number(match[1]));
+  if (new Set(rates).size > 1) throw fail('Conflicting mortgage interest rates were found.');
+  const origination = readDate(/^(?:origination date|loan origination date)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'origination date');
+  const maturity = readDate(/^(?:maturity date|loan maturity date)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'maturity date');
+  const first = readDate(/^first payment date\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'first payment date');
+  const terms = [...text.matchAll(/(?:original )?loan term\s*:?\s*(\d+)\s*(years?|months?)\b/gi)]
+    .map(match => Number(match[1]) * (/year/i.test(match[2]) ? 12 : 1));
+  if (new Set(terms).size > 1 || terms.some(term => term < 1 || term > 600)) throw fail('The mortgage term is conflicting or invalid.');
+  const term = terms[0] || null;
+  const escrow = labeledMoney(lines, /^(?:monthly escrow(?: payment)?|escrow(?: payment)?(?: \(taxes and insurance\))?)\s*:?\s*/i, 'monthly escrow payment');
+  const pi = labeledMoney(lines, /^principal (?:and|&) interest\s*:?\s*/i, 'principal and interest payment');
+  const identity = accountIdentity(lines, false);
+  const mortgage = {
+    balance: cash(balance), apr: rates[0] ?? null,
+    original_amount: moneyValue(labeledMoney(lines, /^(?:original loan amount|original principal(?: amount)?)\s*:?\s*/i, 'original loan amount')),
+    term_months: term, origination_date: origination, maturity_date: maturity,
+    first_payment_month: first?.slice(0, 7) || (maturity && term ? mortgageMonth(maturity, term) : null),
+    first_payment_estimated: !first,
+    escrow_payment: moneyValue(escrow), min_payment: moneyValue(pi)
+  };
+  const warnings = ['Mortgage details only were imported. No payment transactions were inferred from the statement summary.'];
+  if (!mortgage.original_amount || !term || !mortgage.first_payment_month || mortgage.apr == null) warnings.push('Some original loan terms were not present. Complete the missing details in Mortgage to build a schedule.');
+  return { transactions: [], statement: { type: 'mortgage', ...identity, accountKind: 'loan', closingDate,
+    balance: cash(balance), mortgage, warnings }, reconciliation: { status: 'metadata-only' },
+  warnings, errors: [], fileDuplicates: 0, format: 'pdf-mortgage' };
+}
+const moneyValue = value => value == null ? null : cash(value);
+function mortgageMonth(maturity, term) {
+  const [year, month] = maturity.split('-').map(Number);
+  const index = year * 12 + month - term;
+  return `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
 }
 function metadata(lines) {
   const text = lines.join('\n');
@@ -171,6 +217,8 @@ function reconcile(transactions, statement) {
 
 export function parseStatementText(text) {
   const lines = String(text).replace(/\u00a0/g, ' ').replace(/[−–]/g, '-').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (/\b(?:mortgage statement|mortgage account statement)\b/i.test(text)
+    || (/\b(?:outstanding|unpaid) principal\b/i.test(text) && /\binterest rate\b/i.test(text))) return mortgageStatement(lines);
   if (lines.join('').length < 80) throw fail('This PDF has no readable statement text (it may be a scanned image). Download the original text-based statement or import CSV/OFX instead.');
   const statement = metadata(lines);
   const transactions = [];

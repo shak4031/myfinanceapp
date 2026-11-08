@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { requireProPlus } from '../utils/license.js';
+import { parseTxDate } from '../utils/normalize.js';
 
 const router = Router();
 router.use(requireProPlus);
@@ -25,6 +26,10 @@ function loanField(key, body) {
   if (key === 'first_payment_month') {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(value))) throw Object.assign(new Error('First payment month must look like YYYY-MM'), { status: 400 });
     return String(value);
+  }
+  if (key === 'origination_date' || key === 'maturity_date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value)) || parseTxDate(value)?.iso !== value) throw Object.assign(new Error('Loan dates must be valid dates in YYYY-MM-DD format'), { status: 400 });
+    return value;
   }
   const text = String(value).trim();
   if (text.length > 100) throw Object.assign(new Error('Payment description match must be 100 characters or fewer'), { status: 400 });
@@ -57,7 +62,7 @@ function debtFields(body, partial = false) {
       values[key] = body[key] || null;
     }
   }
-  for (const key of [...loanNumeric, 'term_months', 'first_payment_month', 'payment_match']) {
+  for (const key of [...loanNumeric, 'term_months', 'first_payment_month', 'payment_match', 'origination_date', 'maturity_date']) {
     if (body[key] === undefined) continue;
     values[key] = loanField(key, body);
   }

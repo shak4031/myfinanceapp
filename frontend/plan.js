@@ -399,10 +399,10 @@
     const list = state.mortgage.data?.mortgages || [];
     return list.find(item => String(item.id) === String(state.mortgage.selected)) || list[0] || null;
   };
-  const hasTerms = m => m && m.original_amount > 0 && m.term_months > 0 && /^\d{4}-\d{2}$/.test(m.first_payment_month || '');
+  const hasTerms = m => m && m.apr != null && m.original_amount > 0 && m.term_months > 0 && /^\d{4}-\d{2}$/.test(m.first_payment_month || '');
   const mortgageInputs = m => ({
     principal: m.original_amount, apr: m.apr, termMonths: m.term_months, firstPaymentMonth: m.first_payment_month,
-    currentBalance: m.balance > 0 ? m.balance : null, escrow: m.escrow_payment || 0, ...state.mortgage.scenario
+    currentBalance: m.balance ?? null, escrow: m.escrow_payment || 0, ...state.mortgage.scenario
   });
   const scenarioActive = () => {
     const s = state.mortgage.scenario;
@@ -421,13 +421,16 @@
         <p>Enter the numbers from your closing disclosure or monthly statement. We build the full amortization schedule and show what extra payments would save.</p></div>
         ${state.mortgage.editing && hasTerms(selectedMortgage()) ? '<button type="button" class="btn btn-secondary btn-sm" data-act="mtg-cancel">Cancel</button>' : ''}</header>
       <form id="mtg-form" class="mtg-form" novalidate>
+        ${m?.mortgage_source ? `<p class="mtg-wide">Latest details from ${m.mortgage_source === 'plaid' ? 'Plaid' : 'your statement'} (${esc(m.mortgage_data_as_of)}). Loan originated: ${esc(m.origination_date || 'Not provided')}. Contract maturity: ${esc(m.maturity_date || 'Not provided')}. Verify the first payment month; when absent it is estimated from maturity and term.</p>` : ''}
         <label class="plan-field mtg-wide">Name<input name="name" maxlength="100" required value="${esc(value('name', 'Home mortgage'))}"></label>
         <label class="plan-field">Original loan amount<span class="plan-money-input"><span>$</span><input name="original_amount" type="number" min="1" step="1000" required value="${esc(value('original_amount'))}" placeholder="350000"></span></label>
         <label class="plan-field">Interest rate<span class="plan-money-input is-suffix"><input name="apr" type="number" min="0" max="40" step=".001" required value="${esc(value('apr'))}" placeholder="6.25"><span>%</span></span></label>
         <label class="plan-field">Term<select name="term_months">${terms.sort((a, b) => b - a).map(months => `<option value="${months}"${months === term ? ' selected' : ''}>${months % 12 ? `${months} months` : `${months / 12} years`}</option>`).join('')}</select></label>
         <label class="plan-field">First payment month<input name="first_payment_month" type="month" required value="${esc(value('first_payment_month'))}"></label>
+        <label class="plan-field">Loan originated <small>optional</small><input name="origination_date" type="date" value="${esc(value('origination_date'))}"></label>
+        <label class="plan-field">Contract maturity <small>optional</small><input name="maturity_date" type="date" value="${esc(value('maturity_date'))}"></label>
         <label class="plan-field">Escrow per month <small>taxes &amp; insurance</small><span class="plan-money-input"><span>$</span><input name="escrow_payment" type="number" min="0" step="1" value="${esc(value('escrow_payment'))}" placeholder="0"></span></label>
-        <label class="plan-field">Current balance <small>optional</small><span class="plan-money-input"><span>$</span><input name="balance" type="number" min="0" step=".01" value="${esc(m?.balance > 0 ? m.balance : '')}" placeholder="From schedule"></span></label>
+        <label class="plan-field">Current balance <small>optional</small><span class="plan-money-input"><span>$</span><input name="balance" type="number" min="0" step=".01" value="${esc(m?.balance ?? '')}" placeholder="From schedule"></span></label>
         <label class="plan-field mtg-wide">How payments appear on statements <small>optional</small><input name="payment_match" maxlength="100" value="${esc(value('payment_match'))}" placeholder="e.g. ROCKET MORTGAGE"></label>
         <label class="mtg-check mtg-wide"><input name="included" type="checkbox"${m?.included ? ' checked' : ''}> Include in my debt-free program <small>Most people keep the mortgage separate and pay off other debts first.</small></label>
         <p id="mtg-error" class="mtg-error mtg-wide" role="alert"></p>
@@ -477,17 +480,31 @@
   function amortizationTable(sim) {
     const year = String(new Date().getFullYear());
     const years = sim.original.years;
+    const focusYear = years.find(row => row.year >= year)?.year || years.at(-1)?.year;
     const maxPaid = Math.max(...years.map(row => row.paid), 1);
     return `<section class="panel plan-card mtg-schedule">
       <header class="plan-card-head"><div><h3>Amortization schedule</h3><p>Your original ${duration(sim.input.termMonths)} schedule at ${esc(sim.input.apr)}%. Open a year to see each payment.</p></div>
         <span class="mtg-legend"><span class="key-principal">Principal</span><span class="key-interest">Interest</span></span></header>
-      <div class="mtg-years" role="list">${years.map(row => `<details class="mtg-year${row.year === year ? ' is-current' : ''}${row.year < year ? ' is-past' : ''}" role="listitem">
+      <div class="mtg-years" role="list">${years.map(row => `<details class="mtg-year${row.year === year ? ' is-current' : ''}${row.year < year ? ' is-past' : ''}" role="listitem"${row.year === focusYear ? ' data-scroll-target' : ''}>
         <summary><span class="mtg-year-label">${esc(row.year)}${row.year === year ? '<em>This year</em>' : ''}</span>
           <span class="mtg-year-bar" aria-hidden="true" style="width:${Math.max(8, Math.round(row.paid / maxPaid * 100))}%"><i class="is-principal" style="width:${row.paid ? Math.round(row.principal / row.paid * 100) : 0}%"></i><i class="is-interest"></i></span>
           <span class="mtg-year-num"><small>Principal</small>${money(row.principal)}</span><span class="mtg-year-num"><small>Interest</small>${money(row.interest)}</span><span class="mtg-year-num"><small>Balance</small>${money(row.endBalance)}</span></summary>
         <div class="mtg-months"><table><thead><tr><th scope="col">Month</th><th scope="col">Payment</th><th scope="col">Principal</th><th scope="col">Interest</th><th scope="col">Balance</th></tr></thead>
           <tbody>${row.months.map(item => `<tr${item.month === currentMonthKey() ? ' class="is-current"' : ''}><th scope="row">${MONTH_NAMES[Number(item.month.slice(5)) - 1]}</th><td>${cents(item.payment)}</td><td>${cents(item.principal)}</td><td>${cents(item.interest)}</td><td>${cents(item.balance)}</td></tr>`).join('')}</tbody></table></div>
       </details>`).join('')}</div></section>`;
+  }
+
+  function mortgageSources() {
+    const sources = state.mortgage.data?.sources || [];
+    const unlinked = (state.mortgage.data?.mortgages || []).filter(m => !m.account_id);
+    return sources.filter(source => !source.linked || source.errorCode).map(source => `<section class="panel plan-card">
+      <h3>${esc(source.name)}${source.last4 ? ` &middot; ending ${esc(source.last4)}` : ''}</h3>
+      ${source.errorCode ? `<p role="alert">Mortgage data could not be refreshed (${esc(source.errorCode)}). Open Connect bank to sync or reconnect with mortgage access, or import a mortgage statement.</p>` : ''}
+      ${!source.linked && source.details ? `<p>Confirm which mortgage this account belongs to. Your manual details will be kept where the source has no value.</p>
+        <label class="plan-field">Mortgage<select id="mtg-link-${source.accountId}"><option value="">Choose a mortgage</option>
+          ${unlinked.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}<option value="new">Create a separate mortgage</option></select></label>
+        <button type="button" class="btn btn-primary" data-act="mtg-link" data-account="${source.accountId}">Link mortgage details</button>` : !source.linked ? '<p>No mortgage terms have arrived yet. Sync or import a mortgage statement; the connected account alone does not provide a rate or loan dates.</p>' : ''}
+    </section>`).join('');
   }
 
   function renderMortgage() {
@@ -497,7 +514,7 @@
     const list = state.mortgage.data?.mortgages || [];
     if (!m || state.mortgage.editing || !hasTerms(m)) {
       const formTarget = state.mortgage.editing === 'new' ? null : m;
-      root.innerHTML = `${planTabs()}${!m ? `<div class="mtg-intro">
+      root.innerHTML = `${planTabs()}${mortgageSources()}${!m ? `<div class="mtg-intro">
           <div><p class="plan-eyebrow">${icon('home', 12)} MORTGAGE PLANNER</p><h2>See every dollar of your mortgage, and how to shrink it</h2>
           <p>Build your amortization schedule, track the interest you pay each year, and test extra payments, a yearly bonus, a lump sum, or bi-weekly payments.</p></div>
           <ul class="mtg-intro-points"><li>${icon('check', 15)} Full payment-by-payment schedule</li><li>${icon('check', 15)} Payoff simulator with interest saved</li><li>${icon('check', 15)} Interest feeds your Analytics interest panel</li></ul>
@@ -513,13 +530,15 @@
     const paidPct = sim.input.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - sim.balance / sim.input.principal) * 100))) : 0;
     const drift = sim.toDate.months > 0 && Math.abs(sim.balance - sim.toDate.scheduledBalance) >= 1;
     const maxExtra = Math.max(2000, Math.ceil(sim.payment / 500) * 500);
-    root.innerHTML = `${planTabs()}
+    root.innerHTML = `${planTabs()}${mortgageSources()}
       <section class="panel mtg-hero">
         <div class="mtg-hero-main">
           <p class="plan-eyebrow">${icon('home', 12)} ${esc(String(m.name).toUpperCase())}</p>
           ${list.length > 1 ? `<label class="mtg-switch">Mortgage<select id="mtg-select">${list.map(item => `<option value="${esc(item.id)}"${item.id === m.id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label>` : ''}
           <h2>Paid off <b>${monthLabel(sim.baseline.payoffMonth, 'long')}</b></h2>
           <p>${duration(sim.baseline.months)} to go · ${money(sim.balance)} remaining of ${money(sim.input.principal)}</p>
+          ${m.mortgage_source ? `<p>Details from ${m.mortgage_source === 'plaid' ? 'Plaid' : 'your statement'} &middot; as of ${esc(m.mortgage_data_as_of)}. Missing source fields retain your manual entries.</p>` : ''}
+          <p>Loan originated: ${esc(m.origination_date || 'Not provided')} &middot; Contract maturity: ${esc(m.maturity_date || 'Not provided')}</p>
           <div class="mtg-progress" role="img" aria-label="${paidPct}% of the original loan repaid"><span style="width:${paidPct}%"></span></div>
           <p class="mtg-progress-text"><b>${paidPct}%</b> of principal repaid</p>
           ${drift ? `<p class="mtg-drift">${icon('info', 14)}<span>Your balance is ${money(Math.abs(sim.balance - sim.toDate.scheduledBalance))} ${sim.balance < sim.toDate.scheduledBalance ? 'ahead of' : 'behind'} the original schedule${sim.balance < sim.toDate.scheduledBalance ? '. Nice work.' : '.'}</span></p>` : ''}
@@ -553,6 +572,9 @@
       <p class="plan-footnote">Schedules assume a fixed rate, monthly compounding and on-time payments. Your servicer's figures and Form 1098 are the official record. Planning guidance, not financial advice.</p>`;
     const chartRoot = $('mtg-chart-root');
     if (chartRoot?.clientWidth > 0) chartRoot.innerHTML = mortgageChart(sim);
+    const years = root.querySelector('.mtg-years');
+    const current = years?.querySelector('.mtg-year[data-scroll-target]');
+    if (years && current) years.scrollTop += current.getBoundingClientRect().top - years.getBoundingClientRect().top;
   }
 
   async function loadMortgage() {
@@ -615,6 +637,7 @@
       const body = {
         name: values.name.trim(), debt_type: 'mortgage', apr, balance: balance ?? sim.toDate.scheduledBalance, min_payment: sim.payment,
         original_amount: amount, term_months: term, first_payment_month: values.first_payment_month, escrow_payment: escrow,
+        origination_date: values.origination_date || null, maturity_date: values.maturity_date || null,
         payment_match: values.payment_match.trim() || null, included: form.elements.included.checked,
         ...(existing && state.mortgage.editing !== 'new' ? {} : { payment_in_history: true })
       };
@@ -634,6 +657,14 @@
   async function handleMortgageAction(act, button) {
     const scenario = state.mortgage.scenario;
     switch (act) {
+      case 'mtg-link': {
+        const debtId = $(`mtg-link-${button.dataset.account}`)?.value;
+        if (!debtId) throw new Error('Choose the mortgage to link first.');
+        await api('/api/mortgage/link', 'POST', { accountId: Number(button.dataset.account), debtId });
+        state.plan = null;
+        window.FinancePro?.invalidateAnalytics?.();
+        return loadMortgage();
+      }
       case 'mtg-edit': state.mortgage.editing = true; return renderMortgage();
       case 'mtg-add': state.mortgage.editing = 'new'; return renderMortgage();
       case 'mtg-cancel': state.mortgage.editing = false; return renderMortgage();
@@ -1207,6 +1238,6 @@
       id: goal.id, name: goal.name, target_amount: goal.target, current_amount: goal.current, target_date: goal.targetDate, priority: goal.priority,
       icon: goalIcon(goal.icon), notes: goal.notes, included: goal.included, monthly_contribution: goal.manual, contribution_day: goal.contributionDay
     })),
-    invalidate: () => { state.plan = null; resetScenarios(); }
+    invalidate: () => { state.plan = null; state.mortgage.data = null; state.mortgage.sim = null; resetScenarios(); }
   };
 })();

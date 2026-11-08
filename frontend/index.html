@@ -2245,6 +2245,7 @@
               status.textContent = result.syncWarning || 'Bank connected. Transactions will sync when Plaid reports updates.';
               await loadPlaidConnections();
               await loadDashboard();
+              await window.FinanceAccounts?.afterImport(result);
             } catch (error) {
               status.textContent = error.message;
             }
@@ -2285,6 +2286,7 @@
                   ${connection.lastSyncAt ? `Last successful check ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
                   ${connection.lastAttemptAt ? ` · Last attempt ${escapeHtml(new Date(connection.lastAttemptAt).toLocaleString())}` : ''}
                   ${connection.lastErrorCode ? ` · ${escapeHtml(connection.lastErrorCode)}` : ''}
+                  ${connection.mortgageErrorCode ? ` · Mortgage data unavailable: ${escapeHtml(connection.mortgageErrorCode)}. Reconnect with mortgage access or import a statement.` : ''}
                 </div>
                 ${connection.lastErrorCode === 'PLAID_ENVIRONMENT_MISMATCH' ? '<p class="muted">This saved connection belongs to another Plaid environment. Disconnect it, then use Connect bank to create a new connection. Saved transactions are kept; the old remote item must be managed separately.</p>' : ''}
                 ${connection.lastErrorCode === 'INVALID_ACCESS_TOKEN' ? '<p class="muted">The saved access token is no longer usable. If the app changed from sandbox to production, disconnect this old connection and use Connect bank again; Reconnect cannot convert a sandbox connection.</p>' : ''}
@@ -2292,6 +2294,7 @@
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 ${connection.status === 'relink_required' && connection.lastErrorCode !== 'PLAID_ENVIRONMENT_MISMATCH' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
                 ${connection.status === 'connected' ? `<button class="btn btn-secondary" onclick="syncPlaidConnection(${connection.id})">Sync now</button>` : ''}
+                ${connection.status === 'connected' && connection.mortgageErrorCode ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Authorize mortgage access</button>` : ''}
                 <button class="btn btn-secondary" onclick="disconnectPlaidConnection(${connection.id})">Disconnect</button>
               </div>
             </div>
@@ -2321,10 +2324,11 @@
         status.textContent = 'Syncing transactions and checking account balances...';
         const result = await plaidRequest(`/api/plaid/connections/${id}/sync`, 'POST', {});
         status.textContent = `Sync complete: ${result.imported ?? result.added} new records saved, ${result.autoMatched || 0} exact matches linked automatically, ${result.released || 0} older held records processed. Plaid reported ${result.modified} changes and ${result.removed} removals.${result.flaggedReviews > 0 ? ` ${result.flaggedReviews} possible duplicates are included in totals; review them under Transactions > Review possible duplicates.` : ''}${result.pendingReviews > 0 ? ` ${result.pendingReviews} older records remain held in other connections or imports.` : ''} A successful check does not mean the bank has supplied today's activity.`;
+        if (result.syncWarning) status.textContent = result.syncWarning;
         await loadPlaidConnections();
         await loadTransactionImportReviews();
         await loadDashboard();
-        if (window.FinanceAccounts) await FinanceAccounts.loadPage();
+        await window.FinanceAccounts?.afterImport(result);
       } catch (error) {
         status.textContent = error.message;
       }
@@ -2626,7 +2630,7 @@
             <div style="font-size: 13px; margin-top: 8px; color: var(--text-primary);">
               ${data.imported} imported &nbsp;|&nbsp; ${data.duplicates} already processed &nbsp;|&nbsp; ${data.needsReview || 0} held for review &nbsp;|&nbsp; ${data.totalInFile} found in PDF
             </div>
-            ${data.statement ? `<div style="font-size:13px;margin-top:10px">Detected ${data.statement.type === 'credit-card' ? 'credit card' : 'bank'} statement · closing ${escapeHtml(data.statement.closingDate)}<br>Statement balance: ${usd(data.statement.balance)}${data.statement.purchaseApr == null ? '' : ` · Purchase APR: ${escapeHtml(data.statement.purchaseApr)}%`}<br>Transactions reconcile to the closing balance. ${data.totalInFile === 0 ? 'This is a verified no-activity statement; its balance was saved without creating transactions.' : ''}</div>` : ''}
+            ${data.statement ? `<div style="font-size:13px;margin-top:10px">Detected ${data.statement.type === 'mortgage' ? 'mortgage' : data.statement.type === 'credit-card' ? 'credit card' : 'bank'} statement · closing ${escapeHtml(data.statement.closingDate)}<br>Statement balance: ${usd(data.statement.balance)}${data.statement.purchaseApr == null ? '' : ` · Purchase APR: ${escapeHtml(data.statement.purchaseApr)}%`}<br>${data.statement.type === 'mortgage' ? `Mortgage details saved. <a href="#payoff/mortgage">Open Mortgage${data.mortgage?.needsLink ? ' to link your existing loan' : ''}</a>. No payment transactions were inferred.` : `Transactions reconcile to the closing balance. ${data.totalInFile === 0 ? 'This is a verified no-activity statement; its balance was saved without creating transactions.' : ''}`}</div>` : ''}
             ${(data.warnings || []).length ? `<ul role="status">${data.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : ''}
             ${FinanceAccounts.resultNote(data)}
             ${data.needsReview ? "<button class=\"btn btn-secondary\" onclick=\"closeImportModal();showView('etl')\">Review possible matches</button>" : ''}
@@ -2720,7 +2724,7 @@
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
   <script src="refresh.js?v=20261108-health"></script>
-  <script src="accounts.js?v=20261105-plaid-freshness"></script>
+  <script src="accounts.js?v=20261108-mortgage-sync"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261107-support-layout"></script>
   <script src="pro-charts.js?v=20261031c"></script>
@@ -2729,7 +2733,7 @@
   <script src="spending-history.js?v=20261107-persistent"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
   <script src="analytics.js?v=20261108-interest"></script>
-  <script src="plan.js?v=20261108-mortgage"></script>
+  <script src="plan.js?v=20261108-mortgage-sync"></script>
   <script src="welcome.js?v=20261030c"></script>
 <script src="buckets.js?v=20261108-health"></script>
   <script src="income-review.js?v=20261020b"></script>

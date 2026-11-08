@@ -5,6 +5,7 @@ import { currentUserId } from '../utils/tenant.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { ACCOUNT_KINDS, ACCOUNT_KIND_LABELS, accountBalances, reconcileTransfers, savedAmount } from '../utils/transfers.js';
 import { recordAudit } from '../utils/audit.js';
+import { ensurePlaidAccounts, plaidAccountKind } from '../utils/mortgageSync.js';
 
 const router = Router();
 const db = new Database();
@@ -80,7 +81,7 @@ export async function resolveStatementAccount(client, body, statement) {
   const matches = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id=$1 AND last4=$2 ORDER BY id FOR UPDATE`, [userId, statement.last4])).rows;
   const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/bank$/, '');
   const compatible = matches.filter(account => account.kind === 'unknown' || (statement.type === 'credit-card'
-    ? account.kind === 'credit_card' : ['checking', 'savings'].includes(account.kind)));
+    ? account.kind === 'credit_card' : statement.type === 'mortgage' ? account.kind === 'loan' : ['checking', 'savings'].includes(account.kind)));
   const kindMatches = statement.accountKind ? compatible.filter(account => account.kind === statement.accountKind || account.kind === 'unknown') : compatible;
   const issuerMatches = statement.institution ? kindMatches.filter(account => !account.institution || normalize(account.institution) === normalize(statement.institution)) : kindMatches;
   if (issuerMatches.length > 1) throw review('Several saved accounts share this statement account ending.');
@@ -160,6 +161,7 @@ export async function resolveCsvAccounts(client, body, groups) {
 }
 
 router.get('/import-options', route(async (req, res) => {
+  await db.transaction(ensurePlaidAccounts);
   const accounts = (await db.all(`SELECT id,name,kind,institution,last4,status FROM accounts
     WHERE user_id=$1 ORDER BY name,id`, [currentUserId()]));
   res.json({ accounts, kinds: ACCOUNT_KINDS.map(value => ({ value, label: ACCOUNT_KIND_LABELS[value] })) });
@@ -168,10 +170,11 @@ router.get('/import-options', route(async (req, res) => {
 router.get('/', route(async (req, res) => {
   const userId = currentUserId();
   const result = await db.transaction(async client => {
+    await ensurePlaidAccounts(client);
     const accounts = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id = $1 ORDER BY (status = 'needs_review') DESC, kind, name, id`, [userId])).rows;
     const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, plaid_account_id, source, transfer_kind, transfer_account_id, created_at
       FROM transactions WHERE user_id = $1`, [userId])).rows;
-    const linked = (await client.query(`SELECT a.account_id,a.mask,a.type,a.subtype,c.institution_name,
+    const linked = (await client.query(`SELECT a.account_id,a.linked_account_id,a.account_link_error,a.mask,a.type,a.subtype,a.current_balance,c.institution_name,
       c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,a.balance_checked_at
       FROM plaid_accounts a JOIN plaid_connections c ON c.id=a.connection_id AND c.user_id=a.user_id
       WHERE a.user_id=$1`, [userId])).rows;
@@ -180,9 +183,9 @@ router.get('/', route(async (req, res) => {
   const { accounts, rows, linked } = result;
   const institutionKey = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/bank$/, '');
   const matches = bank => accounts.filter(account => account.status === 'active'
-    && account.last4 && account.last4 === bank.mask
+    && (account.id === bank.linked_account_id || (account.last4 && account.last4 === bank.mask
     && institutionKey(account.institution) && institutionKey(account.institution) === institutionKey(bank.institution_name)
-    && account.kind === (bank.type === 'credit' ? 'credit_card' : bank.subtype));
+    && account.kind === plaidAccountKind(bank))));
   const associations = linked.map(bank => ({ bank, matches: matches(bank) }));
   const plaidByAccount = new Map();
   const accountByPlaid = new Map();
@@ -238,6 +241,7 @@ router.get('/', route(async (req, res) => {
     }
   }
   res.json({
+    warnings: linked.filter(bank => bank.account_link_error).map(bank => `Connected account ${bank.institution_name || ''} ending ${bank.mask || '(unavailable)'} has an ambiguous match. Review duplicate accounts or connections before syncing.`),
     accounts: accounts.map(account => {
       const entry = stats.get(account.id);
       const balance = balances.get(account.id) || null;
@@ -245,8 +249,10 @@ router.get('/', route(async (req, res) => {
       const dataAsOf = [entry.lastDate, statementDate].filter(Boolean).sort().at(-1) || null;
       const bank = plaidByAccount.get(account.id);
       return { ...account, kindLabel: ACCOUNT_KIND_LABELS[account.kind], ...entry, unknownTotal: cents(entry.unknownTotal),
+        isMortgage: bank?.subtype === 'mortgage' || account.statement?.type === 'mortgage',
         plaid: bank ? { status: bank.status, lastSyncAt: bank.last_sync_at, lastAttemptAt: bank.last_sync_attempt_at,
-          lastErrorCode: bank.last_error_code, balanceCheckedAt: bank.balance_checked_at } : null,
+          lastErrorCode: bank.last_error_code, balanceCheckedAt: bank.balance_checked_at,
+          reportedBalance: bank.current_balance == null ? null : Number(bank.current_balance) } : null,
         dataAsOf, balance: balance?.balance ?? null, balanceAsOf: balance?.asOf ?? null };
     }),
     unassigned: [...unassigned.values()].sort((a, b) => b.transactions - a.transactions),
@@ -306,6 +312,9 @@ router.delete('/:id', route(async (req, res) => {
   const userId = currentUserId();
   const result = await db.transaction(async client => {
     const account = (await client.query('SELECT name FROM accounts WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
+    const linked = (await client.query(`SELECT 1 FROM plaid_accounts WHERE linked_account_id=$1 AND user_id=$2
+      UNION ALL SELECT 1 FROM credit_cards WHERE account_id=$1 AND user_id=$2 LIMIT 1`, [id, userId])).rows[0];
+    if (linked) throw failure(409, 'This account is linked to Plaid or a mortgage. Disconnect Plaid and remove the linked debt before deleting the account.');
     const used = Number((await client.query('SELECT COUNT(*)::int AS n FROM transactions WHERE account_id = $1 AND user_id = $2', [id, userId])).rows[0].n);
     if (used) throw failure(409, `This account has ${used} imported transaction${used === 1 ? '' : 's'}. Delete or move them first.`);
     await client.query('UPDATE transactions SET transfer_account_id = NULL, transfer_checked = FALSE WHERE transfer_account_id = $1 AND user_id = $2', [id, userId]);

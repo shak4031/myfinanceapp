@@ -13,6 +13,7 @@ import { inspectCsvAccounts, resolveCsvAccounts, resolveStatementAccount } from 
 import { recordAudit, structuredLog } from '../utils/audit.js';
 import { beginImport, finishImport, lockImports, importHistory, reviewImports, commitImports } from '../utils/importHistory.js';
 import { findOverlaps, saveOverlapReview, applyOverlapReview } from '../utils/importOverlap.js';
+import { applyMortgageEvidence } from '../utils/mortgageSync.js';
 
 const router = express.Router();
 const db = new Database();
@@ -140,10 +141,21 @@ async function importInto(client, body, parsed, config, fallbackSource, req, fil
   stage(req, 'saving');
   const source = body.source || fallbackSource || 'import';
   const batchId = await beginImport(client, source, account);
+  if (parsed.statement.type === 'mortgage') {
+    const before = (await client.query('SELECT * FROM credit_cards WHERE account_id=$1 AND user_id=$2 ORDER BY id', [account.id, currentUserId()])).rows;
+    await client.query('UPDATE import_batches SET mortgage_before=$1::jsonb WHERE id=$2', [JSON.stringify(before), batchId]);
+  }
   await saveStatement(client, account, parsed.statement);
+  let mortgage = null;
+  if (parsed.statement.type === 'mortgage') {
+    const saved = (await client.query('SELECT statement FROM accounts WHERE id=$1 AND user_id=$2', [account.id, currentUserId()])).rows[0].statement;
+    mortgage = await applyMortgageEvidence(client, account, saved.mortgage, 'statement', saved.closingDate, undefined, true);
+    const after = (await client.query('SELECT * FROM credit_cards WHERE account_id=$1 AND user_id=$2 ORDER BY id', [account.id, currentUserId()])).rows;
+    await client.query('UPDATE import_batches SET mortgage_after=$1::jsonb WHERE id=$2', [JSON.stringify(after), batchId]);
+  }
   const result = await importTransactions(client, parsed.transactions, config, source, account.id, { preserveOccurrences: !!parsed.statement, batchId });
   await finishImport(client, batchId, result);
-  return { ...result, batchId, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
+  return { ...result, batchId, mortgage, account: { id: account.id, name: account.name, kind: account.kind, last4: account.last4 } };
 }
 async function importCsvInto(client, body, parsed, config, fallbackSource, req, file) {
   const accounts = await resolveCsvAccounts(client, body, parsed.format.accounts);
@@ -175,8 +187,9 @@ async function importCsvInto(client, body, parsed, config, fallbackSource, req, 
 async function saveStatement(client, account, statement) {
   if (!statement) return;
   const card = statement.type === 'credit-card';
-  if ((card && account.kind !== 'credit_card') || (!card && !['checking', 'savings'].includes(account.kind))) {
-    throw failure(422, `This PDF was detected as a ${card ? 'credit card' : 'bank'} statement. Choose ${card ? 'a credit card' : 'a checking or savings'} account and retry. Nothing was imported.`);
+  const mortgage = statement.type === 'mortgage';
+  if ((card && account.kind !== 'credit_card') || (mortgage && account.kind !== 'loan') || (!card && !mortgage && !['checking', 'savings'].includes(account.kind))) {
+    throw failure(422, `This PDF was detected as a ${mortgage ? 'mortgage' : card ? 'credit card' : 'bank'} statement. Choose ${mortgage ? 'a loan' : card ? 'a credit card' : 'a checking or savings'} account and retry. Nothing was imported.`);
   }
   if (statement.last4 && account.last4 && statement.last4 !== account.last4) throw failure(422, 'The statement account ending does not match the selected account. Choose the correct account. Nothing was imported.');
   const saved = await client.query(`UPDATE accounts SET statement=$1::jsonb, last4=COALESCE(last4,$2), updated_at=NOW()

@@ -2,13 +2,14 @@ import { currentUserId } from './tenant.js';
 import { failure } from './categorization.js';
 import { reconcileTransfers } from './transfers.js';
 import { createHash, randomBytes } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 const json = value => value == null ? null : JSON.stringify(value);
 const hashToken = token => createHash('sha256').update(token).digest('hex');
 
 async function recoveryState(client) {
   const state = {};
-  for (const table of ['import_batches', 'accounts', 'transactions', 'transaction_labels', 'categories']) {
+  for (const table of ['import_batches', 'accounts', 'credit_cards', 'transactions', 'transaction_labels', 'categories']) {
     state[table] = (await client.query(`SELECT * FROM ${table} ORDER BY id FOR UPDATE`)).rows;
   }
   return createHash('sha256').update(JSON.stringify(state)).digest('hex');
@@ -104,6 +105,17 @@ export async function changeImports(client, ids, action) {
       if (!account) throw failure(409, 'The account statement has changed. Undo newer imports first, or restore older imports first.');
       await client.query('UPDATE accounts SET statement=$1::jsonb,updated_at=NOW() WHERE id=$2',
         [json(replacement), batch.account_id]);
+    }
+    if (batch.mortgage_before != null) {
+      const expected = action === 'undo' ? batch.mortgage_after : batch.mortgage_before;
+      const replacement = action === 'undo' ? batch.mortgage_before : batch.mortgage_after;
+      const current = (await client.query('SELECT * FROM credit_cards WHERE account_id=$1 ORDER BY id FOR UPDATE', [batch.account_id])).rows;
+      if (!isDeepStrictEqual(JSON.parse(JSON.stringify(current)), expected)) throw failure(409, 'Mortgage details changed after this import. Resolve those changes before undoing or restoring it.');
+      await client.query('DELETE FROM credit_cards WHERE account_id=$1', [batch.account_id]);
+      for (const row of replacement) {
+        const keys = Object.keys(row);
+        await client.query(`INSERT INTO credit_cards(${keys.join(',')}) VALUES(${keys.map((_, i) => `$${i + 1}`).join(',')})`, Object.values(row));
+      }
     }
     if (action === 'undo') {
       const rows = (await client.query(`SELECT * FROM transactions WHERE import_batch_id=$1 ORDER BY id FOR UPDATE`, [batch.id])).rows;

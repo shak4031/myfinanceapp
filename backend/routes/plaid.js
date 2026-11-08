@@ -1,6 +1,8 @@
 import express from 'express';
 import { administrativeTransaction } from '../db.js';
 import Database from '../db.js';
+import { ensurePlaidAccounts, refreshMortgageAccounts, plaidMortgageDetails } from '../utils/mortgageSync.js';
+import { reconcileTransfers } from '../utils/transfers.js';
 import { withUser, currentUserId } from '../utils/tenant.js';
 import { classify, failure, loadCategorization } from '../utils/categorization.js';
 import { importTransactions, plaidCategoryValue, refreshImportReviewCandidates, releaseHeldPlaidReviews } from '../utils/transactionImport.js';
@@ -79,6 +81,29 @@ async function fetchAllChanges(plaidClient, accessToken, savedCursor) {
 async function refreshPlaidAccountBalances(client, connectionId, accessToken, plaidClient) {
   const accounts = (await plaidClient.accountsGet({ access_token: accessToken })).data.accounts;
   await saveAccounts(client, connectionId, accounts);
+  await ensurePlaidAccounts(client);
+  let warning = null;
+  if (accounts.some(account => account.subtype === 'mortgage')) {
+    try {
+      const response = await plaidClient.liabilitiesGet({ access_token: accessToken });
+      for (const mortgage of response.data.liabilities?.mortgage || []) {
+        const account = accounts.find(item => item.account_id === mortgage.account_id);
+        if (!account) throw new Error('Plaid returned mortgage details for an unknown account');
+        await client.query(`UPDATE plaid_accounts SET mortgage_details=$1::jsonb
+          WHERE account_id=$2 AND connection_id=$3 AND user_id=$4`,
+        [JSON.stringify(plaidMortgageDetails(mortgage, account)), account.account_id, connectionId, currentUserId()]);
+      }
+      if (!response.data.liabilities?.mortgage?.length) warning = 'MORTGAGE_DATA_UNAVAILABLE';
+    } catch (error) {
+      const code = plaidErrorCode(error);
+      if (!code) throw error;
+      warning = code;
+    }
+    await client.query('UPDATE plaid_connections SET liabilities_error_code=$2 WHERE id=$1 AND user_id=$3',
+      [connectionId, warning, currentUserId()]);
+  }
+  await refreshMortgageAccounts(client, !warning, connectionId);
+  return warning;
 }
 
 async function updateSyncedTransaction(client, previous, row, config) {
@@ -134,12 +159,23 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
   const plaidClient = getPlaidClient();
   const accessToken = decryptPlaidToken(connection.access_token_ciphertext);
   assertPlaidTokenEnvironment(accessToken);
-  const changes = await fetchAllChanges(plaidClient, accessToken, connection.cursor);
+  const mortgageWarning = await refreshPlaidAccountBalances(client, connection.id, accessToken, plaidClient);
+  let changes;
+  try {
+    changes = await fetchAllChanges(plaidClient, accessToken, connection.cursor);
+  } catch (error) {
+    const code = plaidErrorCode(error);
+    if (!code) throw error;
+    await client.query(`UPDATE plaid_connections SET last_error_code=$2,last_sync_attempt_at=NOW(),
+      status=CASE WHEN $2 IN ('ITEM_LOGIN_REQUIRED','INVALID_ACCESS_TOKEN','ITEM_NOT_FOUND') THEN 'relink_required' ELSE status END
+      WHERE id=$1 AND user_id=$3`, [connection.id, code, currentUserId()]);
+    return { added: 0, modified: 0, removed: 0, imported: 0, mortgageWarning, transactionErrorCode: code,
+      syncWarning: `Accounts were checked, but transactions could not sync (${code}). Mortgage details ${mortgageWarning ? `are unavailable (${mortgageWarning}); import a statement or reconnect with mortgage access` : 'were checked separately'}.` };
+  }
   const config = await loadCategorization(client);
   const added = changes.added.map(plaidTransaction);
   const modified = changes.modified.map(plaidTransaction);
   const postedPendingIds = new Set([...added, ...modified].map(row => row.pendingTransactionId).filter(Boolean));
-  await refreshPlaidAccountBalances(client, connection.id, accessToken, plaidClient);
   const incoming = [];
 
   for (const row of [...added, ...modified]) {
@@ -215,9 +251,15 @@ export async function syncConnection(client, connectionId, onlyIfDue = false) {
     COUNT(*) FILTER(WHERE resolution_transaction_id IS NULL)::integer AS held,
     COUNT(*) FILTER(WHERE resolution_transaction_id IS NOT NULL)::integer AS flagged
     FROM transaction_import_reviews WHERE user_id=current_setting('app.user_id')::integer AND status='pending'`)).rows[0];
+  await client.query(`UPDATE transactions t SET account_id=a.linked_account_id
+    FROM plaid_accounts a WHERE t.plaid_account_id=a.account_id AND t.user_id=a.user_id
+      AND a.connection_id=$1 AND a.user_id=$2 AND t.account_id IS NULL AND a.linked_account_id IS NOT NULL`,
+  [connection.id, currentUserId()]);
+  await reconcileTransfers(client, currentUserId());
   return { added: added.length, modified: modified.length, removed: changes.removed.length,
     imported: imported.imported, autoMatched: imported.autoMatched || 0, released,
-    pendingReviews: reviewCounts.held, flaggedReviews: reviewCounts.flagged };
+    pendingReviews: reviewCounts.held, flaggedReviews: reviewCounts.flagged, mortgageWarning,
+    ...(mortgageWarning ? { syncWarning: `Transactions synced, but mortgage details are unavailable (${mortgageWarning}). Import a mortgage statement or reconnect with mortgage access.` } : {}) };
 }
 
 async function syncAndRecordFailure(connectionId, onlyIfDue = false) {
@@ -242,7 +284,11 @@ export async function syncDuePlaidConnections(structuredLog) {
     ORDER BY last_sync_at NULLS FIRST LIMIT 100`)).rows);
   for (const connection of connections) {
     try {
-      await withUser(connection.user_id, () => syncAndRecordFailure(connection.id, true));
+      const result = await withUser(connection.user_id, () => syncAndRecordFailure(connection.id, true));
+      if (result?.transactionErrorCode || result?.mortgageWarning) structuredLog('warn', {
+        event: 'plaid.scheduled_sync_failed', connectionId: connection.id, userId: connection.user_id,
+        errorCode: result.transactionErrorCode || result.mortgageWarning
+      });
     } catch (error) {
       structuredLog('warn', {
         event: 'plaid.scheduled_sync_failed',
@@ -272,8 +318,10 @@ plaidRouter.post('/link-token', async (req, res, next) => {
       if (!row) throw failure(404, 'Connected bank account not found');
       request.access_token = decryptPlaidToken(row.access_token_ciphertext);
       assertPlaidTokenEnvironment(request.access_token);
+      request.additional_consented_products = ['liabilities'];
     } else {
       request.products = ['transactions'];
+      request.optional_products = ['liabilities'];
       request.transactions = { days_requested: 365 };
     }
     const response = await plaidClient.linkTokenCreate(request);
@@ -308,6 +356,7 @@ plaidRouter.post('/exchange', async (req, res, next) => {
     let syncWarning = null;
     try {
       sync = await syncAndRecordFailure(connection.id);
+      syncWarning = sync?.syncWarning || null;
     } catch {
       syncWarning = 'Your bank is connected, but its first transaction sync is still pending. It will retry when Plaid reports updates.';
     }
@@ -317,7 +366,7 @@ plaidRouter.post('/exchange', async (req, res, next) => {
 
 plaidRouter.get('/connections', async (req, res, next) => {
   try {
-    const rows = await db.all(`SELECT c.id,c.institution_name,c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,
+    const rows = await db.all(`SELECT c.id,c.institution_name,c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,c.liabilities_error_code,
         (SELECT MAX(t.date) FROM transactions t WHERE t.user_id=c.user_id AND t.plaid_account_id=a.account_id
           AND t.plaid_transaction_id IS NOT NULL) AS latest_transaction_date,
         a.id AS account_record_id,a.name,a.official_name,a.mask,a.type,a.subtype,a.current_balance,
@@ -331,7 +380,8 @@ plaidRouter.get('/connections', async (req, res, next) => {
       if (!connection) {
         connection = {
           id: row.id, institutionName: row.institution_name, status: row.status,
-          lastSyncAt: row.last_sync_at, lastAttemptAt: row.last_sync_attempt_at, lastErrorCode: row.last_error_code, accounts: []
+          lastSyncAt: row.last_sync_at, lastAttemptAt: row.last_sync_attempt_at, lastErrorCode: row.last_error_code,
+          mortgageErrorCode: row.liabilities_error_code, accounts: []
         };
         connections.push(connection);
       }
@@ -371,6 +421,7 @@ plaidRouter.post('/connections/:id/update-link', async (req, res, next) => {
       client_name: 'MyFinanceApp',
       language: 'en',
       country_codes: ['US'],
+      additional_consented_products: ['liabilities'],
       access_token: accessToken
     });
     res.json({ link_token: response.data.link_token, expiration: response.data.expiration });
@@ -420,8 +471,9 @@ webhookRouter.post('/', async (req, res, next) => {
         WHERE item_id=$1 AND status='connected' LIMIT 1`, [itemId])).rows[0]);
     if (!connection) return res.json({ received: true });
     await withUser(connection.user_id, async () => {
-      if (req.body.webhook_type === 'TRANSACTIONS'
-        && ['SYNC_UPDATES_AVAILABLE', 'INITIAL_UPDATE', 'HISTORICAL_UPDATE'].includes(req.body.webhook_code)) {
+      if ((req.body.webhook_type === 'TRANSACTIONS'
+        && ['SYNC_UPDATES_AVAILABLE', 'INITIAL_UPDATE', 'HISTORICAL_UPDATE'].includes(req.body.webhook_code))
+        || (req.body.webhook_type === 'LIABILITIES' && req.body.webhook_code === 'DEFAULT_UPDATE')) {
         await syncAndRecordFailure(connection.id);
       } else if (req.body.webhook_type === 'ITEM' && req.body.webhook_code === 'ERROR') {
         const code = String(req.body.error?.error_code || 'ITEM_ERROR').slice(0, 100);

@@ -35,6 +35,7 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
     [encryptPlaidToken('access-sandbox-private'), encryptPlaidToken('access-production-private')]);
     t.mock.method(postgres.Pool.prototype, 'connect', async () => ({ ...client, release() {} }));
     let remoteCalls = 0;
+    t.mock.method(PlaidApi.prototype, 'accountsGet', async () => ({ data: { accounts: [] } }));
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => {
       remoteCalls++;
       throw { response: { data: { error_code: 'PRODUCT_NOT_READY' } } };

@@ -18,6 +18,23 @@ checking balances can be selected for the upcoming-payment projection. Bank
 reported balances may be delayed, so the projection displays the source and
 last app-check time and advises users to verify their bank balance.
 
+Connected Plaid accounts also appear in Accounts and the import picker, including
+loans with no delivered transactions. Mortgage connections request the optional
+Liabilities product and sync loan details independently of Transactions. Enable
+Liabilities for the Plaid deployment; existing Items may need **Authorize mortgage
+access** in Connect bank. Unavailable data is shown explicitly, not inferred.
+Text-based mortgage PDFs can import labeled principal balance, rate, original
+amount, term, origination/maturity dates, and monthly escrow. Summary-only imports
+save loan facts without inventing payment transactions; scanned or ambiguous
+statements require review. If a manual mortgage already exists, open Mortgage and
+confirm which loan to link. Missing source fields retain manual entries; historical
+statements do not overwrite newer evidence. Import recovery includes loan details
+and rejects undo/restore if those details changed afterward.
+The amortization list positions the current year without expanding it, changing
+the existing styling, or scrolling the whole page. First payment months derived from maturity and term are estimates;
+verify them against the servicer's record. Schedules assume a fixed rate and are
+estimates, not official payoff quotes.
+
 See [Account data privacy and isolation](ACCOUNT_DATA_PRIVACY.md) for the
 implemented guard rails, support/operator access boundaries, encryption and
 retention limitations, and the import-focused advanced diagnostics workflow.

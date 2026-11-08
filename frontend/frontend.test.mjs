@@ -2359,7 +2359,7 @@ test('Plaid sync reports included flags without claiming the bank delivered curr
   f.context.loadTransactionImportReviews = async () => {};
   f.context.loadDashboard = async () => {};
   let accountRefreshes = 0;
-  f.context.FinanceAccounts = { loadPage: async () => { accountRefreshes++; } };
+  f.context.FinanceAccounts = { afterImport: async () => { accountRefreshes++; } };
   const html = source('index.html');
   const start = html.indexOf('    async function syncPlaidConnection(');
   const end = html.indexOf('    async function setPlaidCashflowAccount(', start);
@@ -4379,6 +4379,10 @@ test('mortgage tab sets up a loan, then shows the schedule, interest and a worki
   assert.match(html, /name="first_payment_month" type="month"/);
 
   const sim = JSON.parse(JSON.stringify(simulateMortgage({ principal: 300000, apr: 6, termMonths: 360, firstPaymentMonth: loan.first_payment_month, escrow: 450 }, now)));
+  const years = { scrollTop: 0, getBoundingClientRect: () => ({ top: 100 }),
+    querySelector: () => ({ getBoundingClientRect: () => ({ top: 350 }) }) };
+  const originalQuery = f.node('plan-debt-root').querySelector;
+  f.node('plan-debt-root').querySelector = selector => selector === '.mtg-years' ? years : originalQuery(selector);
   mortgages = [{ ...loan, balance: sim.toDate.scheduledBalance, simulation: sim }];
   await f.context.loadPayoffPlan('mortgage');
   html = f.node('plan-debt-root').innerHTML;
@@ -4392,6 +4396,9 @@ test('mortgage tab sets up a loan, then shows the schedule, interest and a worki
   assert.match(html, /Amortization schedule/);
   assert.equal((html.match(/<details class="mtg-year/g) || []).length, sim.original.years.length);
   assert.match(html, /<em>This year<\/em>/);
+  assert.match(html, /<details class="mtg-year is-current" role="listitem" data-scroll-target>/);
+  assert.doesNotMatch(html, /<details[^>]*\sopen[ >]/, 'years retain the existing collapsed appearance');
+  assert.equal(years.scrollTop, 250, 'current year is placed at the top of the scroll container');
   assert.doesNotMatch(html, /data-act="mtg-sync-balance"/, 'balance on schedule shows no drift');
 
   const root = f.node('plan-debt-root');
@@ -4407,6 +4414,28 @@ test('mortgage tab sets up a loan, then shows the schedule, interest and a worki
   assert.match(html, /data-act="mtg-quick" data-amount="250"/);
   assert.match(html, /plan-pill is-active" data-act="mtg-quick" data-amount="250"/);
   assert.match(html, /data-act="mtg-clear"/);
+});
+
+test('mortgage source linking is explicit and invalidates cached imported details', async () => {
+  const calls = [];
+  const f = loadPlan(async (url, options = {}) => {
+    calls.push([url, options.body && JSON.parse(options.body)]);
+    if (url === '/api/mortgage') return response(200, { mortgages: [{ id: 9, name: 'Manual home', apr: 6 }],
+      sources: [{ accountId: 3, name: '<Connected mortgage>', details: { apr: 5 }, linked: false }] });
+    return response(200, {});
+  });
+  await f.context.loadPayoffPlan('mortgage');
+  const root = f.node('plan-debt-root');
+  assert.match(root.innerHTML, /&lt;Connected mortgage&gt;/);
+  assert.match(root.innerHTML, /option value="9">Manual home/);
+  assert.match(root.innerHTML, /data-act="mtg-link" data-account="3"/);
+  f.node('mtg-link-3').value = '9';
+  root.contains = () => true;
+  await root.listeners.click({ target: { closest: () => ({ dataset: { act: 'mtg-link', account: '3' } }) } });
+  assert.deepEqual(calls.find(([url]) => url === '/api/mortgage/link')[1], { accountId: 3, debtId: '9' });
+  f.context.FinancePlan.invalidate();
+  assert.equal(f.context.FinancePlan.state.mortgage.data, null);
+  assert.equal(f.context.FinancePlan.state.mortgage.sim, null);
 });
 
 test('analytics interest panel shows totals by type, estimates, hints and saves type overrides', async () => {

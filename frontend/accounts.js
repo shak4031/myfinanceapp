@@ -126,11 +126,14 @@
   }
   async function afterImport(data) {
     window.FinanceReviewTools?.invalidateImports();
+    window.FinancePlan?.invalidate?.();
+    window.FinancePro?.invalidateAnalytics?.();
     await load();
     fillPicker(data?.account?.id);
     ['import-new-name', 'import-new-last4', 'import-new-institution'].forEach(id => { if ($(id)) $(id).value = ''; });
     if (document.querySelector('#accounts-view.active')) render();
     await window.FinanceImportHistory?.load();
+    if (document.querySelector('#payoff-view.active')) await window.loadPayoffPlan?.(window.FinancePlan?.state.tab);
   }
 
   async function loadImportOptions() {
@@ -296,6 +299,7 @@
       ${bank.lastAttemptAt ? `<p class="muted">Last Plaid attempt: ${stamp(bank.lastAttemptAt)}</p>` : ''}
       ${bank.status !== 'connected' || bank.lastErrorCode ? `<p class="acct-badge warn">Connection needs attention${bank.lastErrorCode ? `: ${escape(bank.lastErrorCode)}` : ''}. Open Connect bank to review it.</p>` : ''}
       <p class="muted">A successful check may return no new transactions. Activity dates and recorded balances below are separate.</p>
+      ${bank.reportedBalance != null ? `<p>Bank-reported balance: <strong>${money(bank.reportedBalance)}</strong>${bank.balanceCheckedAt ? ` (checked ${stamp(bank.balanceCheckedAt)})` : ''}</p>` : ''}
     </div>` : '<p class="muted acct-freshness">No uniquely verified Plaid connection for this saved account. Its activity dates reflect saved transactions and statements, not syncs from other accounts.</p>';
     const date = account.dataAsOf;
     if (!date) return { stale: false, markup: `${sync}<p class="acct-freshness"><span class="acct-badge">No account data</span> Latest saved activity / statement date: unavailable. Import a recent statement or check your bank connection.</p>` };
@@ -324,6 +328,7 @@
         ${account.balance != null ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">${account.kind === 'credit_card' ? 'Statement balance' : 'Recorded balance'} · ${escape(account.balanceAsOf || '')}</span></div>` : ''}
       </div>
       ${update.markup}
+      ${account.isMortgage ? '<p><a href="#payoff/mortgage">Open Mortgage to review or link this loan</a></p>' : ''}
       ${account.statement?.type === 'credit-card' ? `<div class="acct-statement"><strong>Latest statement · ${escape(account.statement.closingDate)}</strong><p>Purchase APR: ${account.statement.purchaseApr == null ? 'Not available (check statement)' : `${escape(account.statement.purchaseApr)}%`}${account.statement.minimumPayment == null ? '' : ` · Minimum payment: ${money(account.statement.minimumPayment)}`}${account.statement.paymentDueDate ? ` · Due: ${escape(account.statement.paymentDueDate)}` : ''}${account.statement.creditLimit == null ? '' : ` · Credit limit: ${money(account.statement.creditLimit)}`}</p><p class="muted">Statement facts only. Review any separately entered debt-plan balance or APR before using a payoff forecast.</p></div>` : ''}
       ${review ? `<div class="acct-found"><strong>Is this one of your accounts?</strong><p>This reference appeared in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}. These transfers are excluded from spending and income until you review it.</p>${account.discovered_from ? `<blockquote>${escape(account.discovered_from)}</blockquote>` : ''}<p>If it is yours, choose its type and confirm below.${account.suggested_kind ? ` Suggested type: <strong>${escape(kindLabel(account.suggested_kind))}</strong> (please check).` : ''}</p></div>` : ''}
       <p class="muted acct-stats">${account.transactions} transaction${account.transactions === 1 ? '' : 's'} · ${escape(range)}${account.transfersTo && !review ? ` · ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'} in from other accounts` : ''}</p>
@@ -337,7 +342,7 @@
       <div class="acct-actions">
         <button class="btn btn-primary" data-act="save">${review ? 'Yes, confirm my account' : 'Save changes'}</button>
         ${review ? '<button class="btn btn-secondary" data-act="external">No, it is not mine</button>' : ''}
-        ${account.transactions ? '' : '<button class="btn btn-ghost" data-act="delete">Delete</button>'}
+        ${account.transactions || account.plaid || account.isMortgage ? '' : '<button class="btn btn-ghost" data-act="delete">Delete</button>'}
       </div>
       ${review ? '<p class="acct-choice-note">Not yours? Use this for a recipient such as a friend or family member. Money sent will count as spending; money received will count as other income, not regular pay. This saves a recipient reference, not a bank connection. You can change the type later.</p>' : ''}
     </article>`;
@@ -350,6 +355,7 @@
     const assignable = state.accounts.filter(account => IMPORTABLE.includes(account.kind));
     const unknown = state.unknownTransfers || { count: 0, total: 0, recent: [] };
     root.innerHTML = `
+      ${(state.warnings || []).map(warning => `<p class="acct-badge warn" role="alert">${escape(warning)}</p>`).join('')}
       <div class="acct-summary">
         <div class="panel"><p class="eyebrow">SAVED THIS MONTH</p><strong>${money(state.savedThisMonth?.amount)}</strong><p class="muted">Moved to savings or investments. Not counted as spending.</p></div>
         <div class="panel"><p class="eyebrow">TRANSFERS AWAITING REVIEW</p><strong>${unknown.count}</strong><p class="muted">${unknown.count ? `${money(unknown.total)} excluded from spending and income until reviewed.` : 'No transfers awaiting review.'}</p>${unknown.count ? '<a href="#accounts-review" class="acct-review-link">Review transfer accounts &rarr;</a>' : ''}</div>
