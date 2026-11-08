@@ -7,7 +7,7 @@ import { TRUSTED_BROWSER_SCHEMA } from './trustedBrowsers.js';
 
 export const PRIVATE_TABLES = [
   'categories', 'transaction_labels', 'transactions', 'staging_transactions',
-  'credit_cards', 'savings_goals', 'plaid_connections', 'plaid_accounts', 'transaction_import_reviews',
+  'credit_cards', 'savings_goals', 'goal_purchases', 'plaid_connections', 'plaid_accounts', 'transaction_import_reviews',
   'accounts', 'category_budgets', 'money_plans', 'household_profiles', 'name_rules', 'import_batches', 'import_reviews',
   'fixed_payment_occurrences', 'fixed_payment_estimates', 'transaction_duplicate_decisions'
 ];
@@ -399,6 +399,17 @@ export async function migratePrivateSchema(client) {
       template JSONB NOT NULL, monthly_amount NUMERIC(14,2) NOT NULL CHECK(monthly_amount > 0),
       effective_month TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS goal_purchases (
+      id SERIAL PRIMARY KEY, goal_id INTEGER NOT NULL,
+      merchant TEXT NOT NULL CHECK (length(merchant) BETWEEN 1 AND 150),
+      amount NUMERIC(14,2) NOT NULL CHECK (amount > 0 AND amount <= 1000000000),
+      purchase_date DATE NOT NULL, payment_date DATE NOT NULL,
+      payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','credit')),
+      status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','recorded','cancelled')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (payment_date >= purchase_date),
+      CHECK (payment_method <> 'cash' OR payment_date = purchase_date)
+    );
   `);
   for (const table of PRIVATE_TABLES) {
     await client.query(`
@@ -412,6 +423,12 @@ export async function migratePrivateSchema(client) {
     `);
   }
   await client.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='goal_purchases_tenant_goal_fk') THEN
+        ALTER TABLE goal_purchases ADD CONSTRAINT goal_purchases_tenant_goal_fk
+          FOREIGN KEY (goal_id,user_id) REFERENCES savings_goals (id,user_id) ON DELETE CASCADE;
+      END IF;
+    END $$;
     CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS fixed_payment_occurrences_user_payment_key
       ON fixed_payment_occurrences(user_id,payment_key);

@@ -1356,7 +1356,7 @@
   };
 
   const kindLabel = document.createElement('label');
-  kindLabel.innerHTML = `Plan type<select id="goal-kind"><option value="general">General savings</option><option value="car">Car · six-month plan</option><option value="college">College</option><option value="emergency">Emergency fund</option></select>`;
+  kindLabel.innerHTML = `Plan type (goal preset)<select id="goal-kind"><option value="general">General savings</option><option value="car">Car · six-month plan</option><option value="college">College</option><option value="emergency">Emergency fund</option></select><small>Describes the goal, not a payment schedule. General savings fits renovations. Car fills a six-month date only if blank; Emergency fund adds specific guidance.</small>`;
   $('goal-name').parentElement.before(kindLabel);
   const notesLabel = document.createElement('label');
   notesLabel.innerHTML = 'Notes<textarea id="goal-notes" rows="2" maxlength="2000" placeholder="What matters about this goal?"></textarea>';

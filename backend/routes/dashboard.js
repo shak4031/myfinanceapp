@@ -15,6 +15,7 @@ import { cashBalance, savedAmount } from '../utils/transfers.js';
 import { buildSpendingHistory } from '../utils/spendingHistory.js';
 import { recordAudit } from '../utils/audit.js';
 import { bucketOf, buildSpendingBuckets, debtMatchers } from '../utils/spendingBuckets.js';
+import { buildGoalPurchasePayments } from '../utils/goalPurchases.js';
 
 const router = Router();
 const db = new Database();
@@ -207,6 +208,7 @@ async function loadUpcoming(req, today = new Date()) {
     streams = computed.income?.streams || [];
     extras = projectIncome(inputs.recent, today, { through }).items;
     if (plan) {
+      extras.push(...buildGoalPurchasePayments(plan.purchases, today, through));
       for (let offset = 0; new Date(today.getFullYear(), today.getMonth() + offset, 1) <= through; offset++) {
         const target = offset === 0 ? today : new Date(today.getFullYear(), today.getMonth() + offset, 1);
         extras.push(...buildPlanPayments(plan, target).map(item => ({

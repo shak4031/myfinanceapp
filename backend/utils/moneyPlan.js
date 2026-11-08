@@ -1,6 +1,7 @@
 import { buildFinancialPlan } from './financialPlan.js';
 import { buildDebtPlan, monthKey } from './payoff.js';
 import { buildGoalPlan } from './goalPlan.js';
+import { normalizeGoalPurchase } from './goalPurchases.js';
 import { projectIncome } from './income.js';
 import { buildDebtCoaching } from './debtCoaching.js';
 
@@ -26,6 +27,9 @@ export async function loadPlanInputs(db, now = new Date()) {
   return db.transaction(async client => {
     const debts = (await client.query('SELECT * FROM credit_cards ORDER BY apr DESC NULLS LAST, id')).rows;
     const goals = (await client.query('SELECT * FROM savings_goals ORDER BY priority, id')).rows;
+    const purchases = (await client.query(`SELECT p.*, p.purchase_date::text AS purchase_date, p.payment_date::text AS payment_date,
+      g.name AS goal_name FROM goal_purchases p
+      JOIN savings_goals g ON g.id=p.goal_id AND g.user_id=p.user_id ORDER BY p.payment_date,p.id`)).rows.map(normalizeGoalPurchase);
     const settings = (await client.query('SELECT * FROM money_plans LIMIT 1')).rows[0];
     const history = (await client.query(`
       SELECT id, date, description, category, direction, amount, transfer_kind, is_fixed FROM transactions
@@ -34,7 +38,7 @@ export async function loadPlanInputs(db, now = new Date()) {
     const recent = (await client.query(`
       SELECT id, date, description, category, direction, amount, is_fixed, pay_mode, income_role FROM transactions
       WHERE direction = 'CREDIT' AND transfer_kind IS NULL AND date::date >= $1::date AND date::date <= $2::date`, [dateString(recentStart), dateString(now)])).rows;
-    return { debts, goals, settings: normalizeSettings(settings), history, recent };
+    return { debts, goals, purchases, settings: normalizeSettings(settings), history, recent };
   });
 }
 
@@ -50,10 +54,12 @@ export function typicalSurplus({ debts = [], history = [] }, now = new Date()) {
   };
 }
 
-export function computePlan({ debts, goals, settings, history, recent }, { pro = false, now = new Date(), whatIf = null } = {}) {
+export function computePlan({ debts, goals, purchases = [], settings, history, recent }, { pro = false, now = new Date(), whatIf = null } = {}) {
   const active = debts.filter(debt => Number(debt.balance) > 0);
   const financial = buildFinancialPlan(history, goals, now, active);
   const surplus = financial.monthlySurplus;
+  const income = projectIncome(recent, now);
+  const defaultContributionDay = income.items.map(item => item.dayOfMonth).sort((a, b) => a - b)[0] || 1;
   const hasEmergencyGoal = goals.some(goal => /emergency|rainy/i.test(goal.name || '') || /^\[plan:emergency\]/.test(goal.notes || ''));
   const debtPlan = buildDebtPlan({ debts, settings, pro, now, whatIf, hasEmergencyGoal });
   // The surplus already includes recorded minimums, so only the extra debt payment competes with goals.
@@ -61,12 +67,11 @@ export function computePlan({ debts, goals, settings, history, recent }, { pro =
   const priciest = debtPlan.debts.filter(debt => debt.included && debt.balance > 0 && debt.apr >= 15).sort((a, b) => b.apr - a.apr)[0];
   const goalPlan = buildGoalPlan({
     goals, settings, available, monthlyExpenses: financial.avgMonthlyExpenses, pro, now,
-    highAprDebt: priciest ? { name: priciest.name, apr: priciest.apr } : null
+    highAprDebt: priciest ? { name: priciest.name, apr: priciest.apr } : null, defaultContributionDay
   });
   const coaching = buildDebtCoaching({ history, financial, debtPlan, goalPlan, now, flex: settings.flex?.[monthKey(now)] || {} });
   debtPlan.coaching = coaching;
   debtPlan.suggestion = coaching.suggested?.debtFree ? coaching.suggested : null;
-  const income = projectIncome(recent, now);
   return {
     month: monthKey(now, 0),
     summary: {
@@ -77,7 +82,7 @@ export function computePlan({ debts, goals, settings, history, recent }, { pro =
     },
     income: { streams: income.streams },
     incomeItems: income.items,
-    debtPlan, goalPlan, settings
+    debtPlan, goalPlan, purchases, settings, defaultContributionDay
   };
 }
 
@@ -115,13 +120,14 @@ export function buildPlanPayments(plan, today = new Date()) {
   const payday = plan.incomeItems.map(item => item.dayOfMonth).sort((a, b) => a - b)[0] || 1;
   for (const goal of plan.goalPlan.goals.filter(item => item.included && item.remaining > 0)) {
     const key = `goal:${goal.id}`;
-    if (!(goal.allocated > 0) && flex[key] == null) continue;
-    const amount = flex[key] != null ? Number(flex[key]) : goal.allocated;
+    const allocation = month > plan.month ? (goal.monthlyAllocation ?? goal.allocated) : goal.allocated;
+    if (!(allocation > 0) && flex[key] == null) continue;
+    const amount = flex[key] != null ? Number(flex[key]) : allocation;
     const dayOfMonth = day(goal.contributionDay || payday);
     items.push({
       key, planKey: key, planKind: 'goal', planned: true, flexible: true, goalId: goal.id,
       description: `${goal.name} savings`, category: 'Savings goal', label: goal.name, amount: cents(amount),
-      defaultAmount: goal.allocated, adjusted: flex[key] != null, dayOfMonth, isIncome: false, status: status(dayOfMonth), payMode: null
+      defaultAmount: allocation, adjusted: flex[key] != null, dayOfMonth, isIncome: false, status: status(dayOfMonth), payMode: null
     });
   }
   return items.sort((a, b) => a.dayOfMonth - b.dayOfMonth);

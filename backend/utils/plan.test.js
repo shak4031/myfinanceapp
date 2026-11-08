@@ -181,3 +181,42 @@ test('the monthly plan feeds flexible debt and goal entries into the payment cal
   assert.deepEqual([goal.amount, goal.adjusted, goal.dayOfMonth], [120, true, 1], 'override wins; contributions default to the first payday');
   assert.equal(plan.income.streams[0].label, 'Every other Thursday');
 });
+
+test('goal readiness distinguishes deadline pace, request, allocation and the reason for missing funding', () => {
+  const now = new Date(2026, 10, 8);
+  const goal = { id: 1, name: 'Shed', target_amount: 5500, current_amount: 0, target_date: '2026-11-20',
+    monthly_contribution: 3500, contribution_day: 9 };
+  const blocked = buildGoalPlan({ goals: [goal], available: -3726.89, now });
+  const row = blocked.goals[0];
+  assert.deepEqual([row.requestedMonthly, row.deadlineMonthly, row.allocated, row.deadlineGap, row.fundingReason],
+    [3500, 5500, 0, 5500, 'no-surplus']);
+  assert.equal(blocked.cashflowShortfall, 3726.89);
+  assert.equal(blocked.deadlineTotal, 5500);
+  const custom = buildGoalPlan({ goals: [goal], settings: { goal_budget: 3500 }, available: -3726.89, now });
+  assert.equal(custom.goals[0].allocated, 3500);
+  assert.equal(custom.unsupportedBudget, 3500);
+  assert.equal(custom.goals[0].status, 'behind');
+  assert.equal(custom.goals[0].finishDay, '2026-12-09');
+  const partial = buildGoalPlan({ goals: [goal], available: 2000, now }).goals[0];
+  assert.deepEqual([partial.allocated, partial.fundingGap, partial.fundingReason], [2000, 1500, 'partial-budget']);
+  const zero = buildGoalPlan({ goals: [{ ...goal, monthly_contribution: 0 }], available: 3500, now }).goals[0];
+  assert.equal(zero.fundingReason, 'zero-request');
+});
+
+test('goal deposits respect exact deadlines, passed days and month-end clamping', () => {
+  const now = new Date(2026, 10, 8);
+  const goal = { id: 1, name: 'Shed', target_amount: 5500, current_amount: 0, target_date: '2026-12-15',
+    monthly_contribution: 3500, contribution_day: 9 };
+  const ready = buildGoalPlan({ goals: [goal], available: 3500, now }).goals[0];
+  assert.deepEqual([ready.fundingSlots, ready.deadlineMonthly, ready.status, ready.finishDay], [2, 2750, 'on-track', '2026-12-09']);
+  const missed = buildGoalPlan({ goals: [goal], available: 3500, now: new Date(2026, 10, 10) }).goals[0];
+  assert.deepEqual([missed.fundingSlots, missed.allocated, missed.monthlyAllocation, missed.fundingReason, missed.status],
+    [1, 0, 3500, 'day-passed', 'behind']);
+  const tooLate = buildGoalPlan({ goals: [{ ...goal, target_date: '2026-11-08' }], available: 5500, now }).goals[0];
+  assert.equal(tooLate.fundingSlots, 0);
+  assert.equal(tooLate.status, 'behind');
+  const clamped = buildGoalPlan({ goals: [{ ...goal, target_amount: 100, monthly_contribution: 100, contribution_day: 31,
+    target_date: '2026-11-30' }], available: 100, now }).goals[0];
+  assert.equal(clamped.finishDay, '2026-11-30');
+  assert.equal(clamped.status, 'on-track');
+});

@@ -3,6 +3,7 @@ import Database from '../db.js';
 import { requireProPlus } from '../utils/license.js';
 import { buildFinancialPlan } from '../utils/financialPlan.js';
 import { parseTxDate } from '../utils/normalize.js';
+import { validateGoalPurchase } from '../utils/goalPurchases.js';
 
 const router = Router();
 router.use(requireProPlus);
@@ -92,6 +93,37 @@ router.put('/:id', async (req, res, next) => {
     if (!keys.length) return res.status(400).json({ error: 'No fields to update' });
     const result = await db.run(`UPDATE savings_goals SET ${keys.map((key, i) => `${key}=$${i + 1}`).join(',')} WHERE id=$${keys.length + 1} RETURNING id`, [...Object.values(goal), req.params.id]);
     if (!result.rowCount) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
+
+router.post('/:id/purchases', async (req, res, next) => {
+  try {
+    const purchase = validateGoalPurchase(req.body || {});
+    const keys = Object.keys(purchase);
+    const result = await db.run(`INSERT INTO goal_purchases (goal_id,${keys.join(',')})
+      SELECT id,${keys.map((_, i) => `$${i + 2}`).join(',')} FROM savings_goals WHERE id=$1 RETURNING id`,
+    [req.params.id, ...Object.values(purchase)]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Goal not found' });
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) { next(error); }
+});
+
+router.put('/:id/purchases/:purchaseId', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    let fields;
+    if (Object.keys(body).length === 1 && body.status !== undefined) {
+      if (!['planned', 'recorded', 'cancelled'].includes(body.status)) return res.status(400).json({ error: 'Choose a valid purchase status' });
+      fields = { status: body.status };
+    } else {
+      fields = validateGoalPurchase(body);
+    }
+    const keys = Object.keys(fields);
+    const result = await db.run(`UPDATE goal_purchases SET ${keys.map((key, i) => `${key}=$${i + 1}`).join(',')}
+      WHERE goal_id=$${keys.length + 1} AND id=$${keys.length + 2} RETURNING id`,
+    [...Object.values(fields), req.params.id, req.params.purchaseId]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Goal purchase not found' });
     res.json({ success: true });
   } catch (error) { next(error); }
 });

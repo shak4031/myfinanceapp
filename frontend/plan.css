@@ -9,6 +9,30 @@
 }
 .plan-root h2, .plan-root h3 { margin: 0; letter-spacing: -.4px; }
 .plan-root p { margin: 0; }
+.goal-readiness.is-warning { border-left: 4px solid var(--plan-rose); }
+.goal-warning { padding: 10px 12px; background: var(--plan-amber-soft); color: #78350f; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.goal-funding-detail { display: grid; gap: 12px; padding: 14px; background: var(--plan-soft); border-radius: 12px; font-size: 13px; line-height: 1.6; }
+.goal-funding-ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.goal-funding-ledger dt { color: var(--plan-muted); font-size: 12px; }
+.goal-funding-ledger dd { margin: 2px 0 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.goal-actions { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; }
+.goal-purchases { display: grid; gap: 12px; border-top: 1px solid var(--plan-line); padding-top: 16px; }
+.goal-purchases header { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.goal-purchases h4 { margin: 0; font-size: 14px; }
+.goal-purchases ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.goal-purchases li { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--plan-line); border-radius: 10px; font-size: 13px; }
+.goal-purchases li p { margin-top: 4px; line-height: 1.6; }
+.plan-goal-whatif output { display: block; flex-basis: 100%; font-size: 12px; line-height: 1.6; }
+.goal-purchase-dialog { max-width: 580px; width: calc(100% - 32px); }
+.goal-purchase-dialog p { font-size: 13px; line-height: 1.6; }
+.goal-purchase-dialog label { display: grid; gap: 6px; }
+.goal-purchase-dialog label[hidden] { display: none; }
+.goal-purchase-dialog form { display: grid; gap: 14px; }
+.goal-timeline-unfunded { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--plan-muted); font-size: 11px; }
+@media (max-width: 600px) {
+  .goal-readiness .plan-cash-ledger, .goal-funding-ledger { grid-template-columns: 1fr; }
+  .goal-actions .btn { white-space: normal; }
+}
 .plan-eyebrow { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px !important; color: #75816d; font-size: 10.5px; font-weight: 750; letter-spacing: 1.5px; }
 .plan-quiet { color: var(--plan-muted); font-size: 13px; }
 .plan-footnote { color: #8a958d; font-size: 12px; line-height: 1.6; text-align: center; }

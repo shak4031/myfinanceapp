@@ -15,7 +15,7 @@ export function buildDebtCoaching({ history, financial, debtPlan, goalPlan, now,
   const surplus = financial.monthlySurplus;
   const currentExtra = Math.max(debtPlan.extra, Number(flex['debt-extra'] ?? debtPlan.extra));
   const goals = cents(goalPlan.goals.filter(goal => goal.included && goal.remaining > 0)
-    .reduce((sum, goal) => sum + Math.max(goal.allocated, Number(flex[`goal:${goal.id}`] ?? goal.allocated)), 0));
+    .reduce((sum, goal) => sum + Math.max(goal.monthlyAllocation ?? goal.allocated, Number(flex[`goal:${goal.id}`] ?? goal.allocated)), 0));
   const weakest = months.length ? Math.min(...months.map(row => row.surplus)) : null;
   const buffer = surplus == null ? null : cents(Math.max(100, financial.avgMonthlyExpenses * 0.1));
   const remaining = surplus == null ? null : cents(surplus - goals - currentExtra);

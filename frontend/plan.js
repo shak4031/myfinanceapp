@@ -10,6 +10,10 @@
   const cents = value => money(value, 2);
   const monthDate = key => { const [year, month] = String(key || '').split('-').map(Number); return year && month ? new Date(year, month - 1, 1) : null; };
   const monthLabel = (key, style = 'short') => monthDate(key)?.toLocaleDateString('en-US', { month: style, year: 'numeric' }) || '—';
+  const dayLabel = key => {
+    const [year, month, day] = String(key || '').split('-').map(Number);
+    return year && month && day ? new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No deadline';
+  };
   const duration = months => {
     if (months == null) return '—';
     if (months < 12) return `${months} month${months === 1 ? '' : 's'}`;
@@ -657,39 +661,161 @@
   }
 
   // ---------- savings goals ----------
-  function moneyFlow(p) {
+  function goalReadiness(p) {
     const s = p.summary, g = p.goalPlan;
-    const streams = p.income?.streams || [];
-    const surplus = s.monthlySurplus;
-    const debtExtra = s.debtExtra || 0, goals = g.allocatedTotal || 0;
-    const free = surplus == null ? 0 : Math.max(0, surplus - debtExtra - goals);
-    const over = surplus != null && debtExtra + goals > surplus + 1;
-    const total = Math.max(surplus || 0, debtExtra + goals + free, 1);
-    const segment = (cls, value, label) => value > 0 ? `<span class="${cls}" style="width:${(value / total * 100).toFixed(2)}%" title="${esc(label)}: ${money(value)}"></span>` : '';
-    return `<section class="panel plan-hero plan-flow">
-      <div class="plan-hero-top">
-        <div class="plan-hero-main">
-          <p class="plan-eyebrow">${icon('piggy', 12)} WHERE YOUR SURPLUS GOES</p>
-          <h2>${surplus == null ? 'Import a few months' : `${money(surplus)}<small>/mo</small>`}</h2>
-          <p class="plan-hero-sub">${surplus == null ? 'We need at least one complete month of history to size your plan.' : `Typical income ${money(s.avgMonthlyIncome)} minus spending ${money(s.avgMonthlyExpenses)}, from the last ${s.monthsUsed} month${s.monthsUsed === 1 ? '' : 's'}.`}</p>
-          ${streams.length ? `<div class="plan-income-streams">${streams.map(item => `<span class="plan-pill income">${esc(item.name)} · ${esc(item.label)} · ${money(item.amount)}</span>`).join('')}<button type="button" class="plan-pill plan-pill-link" data-income-review>Not right? Review income</button></div>` : `<div class="plan-income-streams"><button type="button" class="plan-pill plan-pill-link" data-income-review>Choose which deposits are your pay</button></div>`}
-        </div>
-        <div class="plan-stats">
-          <div class="plan-stat"><span>Debt-free extra</span><strong>${money(debtExtra)}</strong><small>Above minimums</small></div>
-          <div class="plan-stat"><span>Goals this month</span><strong>${money(goals)}</strong><small>Budget ${money(g.budget)}</small></div>
-          <div class="plan-stat"><span>Unassigned</span><strong class="${over ? 'is-bad' : ''}">${over ? money(surplus - debtExtra - goals) : money(free)}</strong><small>${over ? 'Plan exceeds your surplus' : 'Your buffer'}</small></div>
-        </div>
-      </div>
-      <div class="plan-flowbar${over ? ' is-over' : ''}" role="img" aria-label="Surplus split: debt extra ${money(debtExtra)}, goals ${money(goals)}, unassigned ${money(free)}">${segment('is-debt', debtExtra, 'Debt-free extra')}${segment('is-goals', goals, 'Goals')}${segment('is-free', free, 'Unassigned')}</div>
-      <div class="plan-split-legend"><span class="is-debt">Debt-free program</span><span class="is-goals">Savings goals</span><span class="is-free">Unassigned buffer</span></div>
+    const available = s.available;
+    const shortfall = available == null ? null : Math.max(0, -available);
+    const unsupported = available == null ? null : Math.max(0, g.budget - Math.max(0, available));
+    const title = available == null ? 'Affordability is unknown'
+      : shortfall > 0 ? 'Your recorded cash flow does not support new monthly savings'
+      : unsupported > 0 ? 'Your custom budget exceeds modeled spare cash'
+      : 'Build goals from your modeled spare cash';
+    return `<section class="panel plan-card goal-readiness${shortfall > 0 || unsupported > 0 ? ' is-warning' : ''}" aria-labelledby="goal-readiness-title">
+      <header class="plan-card-head"><div><h3 id="goal-readiness-title">${title}</h3>
+      <p>${available == null ? 'Import completed months before treating an allocation as affordable. A custom budget is only a planning assumption.'
+        : shortfall > 0 ? `Income minus modeled expenses and debt extras leaves a ${cents(shortfall)}/mo shortfall before saving for goals. The automatic goals budget is $0. This does not prove you lack existing savings; it means this history cannot fund new savings from monthly income.`
+        : `After modeled expenses and debt extras, ${cents(Math.max(0, available))}/mo remains before goals. Verify irregular costs and emergency reserves before committing it.`}</p></div></header>
+      <dl class="plan-cash-ledger">${[
+        ['Recorded income / month', s.avgMonthlyIncome], ['Modeled expenses / month', s.avgMonthlyExpenses],
+        ['Extra debt payments / month', s.debtExtra], ['Available before goals / month', available],
+        ['Shared goals budget / month', g.budget], ['Allocated savings / month', g.allocatedTotal]
+      ].map(([label, amount]) => `<div><dt>${label}</dt><dd>${amount == null ? 'Unknown' : cents(amount)}</dd></div>`).join('')}</dl>
+      ${unsupported > 0 ? `<p class="goal-warning"><strong>${cents(unsupported)}/mo of this custom budget is not supported by modeled spare cash.</strong> It can still appear on the calendar as your plan, but requires existing funds or a real change in income/spending. Raising the budget does not create money.</p>` : ''}
+      <p class="plan-quiet">Based on ${s.monthsUsed} recorded completed month(s), not a bank affordability check. Correct missing income, transfers, debt minimums, or one-off expenses before interpreting the average.</p>
+      ${(p.income?.streams || []).length ? `<div class="plan-income-streams">${p.income.streams.map(item => `<span class="plan-pill income">${esc(item.name)} · ${esc(item.label)} · ${money(item.amount)}</span>`).join('')}</div>` : ''}
+      <div class="goal-actions"><button type="button" class="btn btn-secondary btn-sm" data-income-review>Review income</button>
+      <a class="btn btn-secondary btn-sm" href="#categories" data-view="categories">Review spending</a>
+      <a class="btn btn-secondary btn-sm" href="#dashboard" data-view="dashboard">Check cash runway</a></div>
     </section>`;
+  }
+
+  function goalExplanation(goal) {
+    const requested = goal.requestedMonthly ?? goal.manual ?? goal.required;
+    const deadline = goal.deadlineMonthly ?? (goal.targetMonth >= 0 ? goal.required : null);
+    const monthlyAllocation = goal.monthlyAllocation ?? goal.allocated;
+    const gap = Math.max(0, (requested || 0) - monthlyAllocation);
+    const reason = goal.fundingReason;
+    const explanation = !goal.included ? 'Paused: this goal is saved but receives no monthly allocation.'
+      : goal.remaining === 0 ? 'Savings target reached. Planned purchases are tracked separately.'
+      : reason === 'no-surplus' ? 'No monthly surplus: the automatic goals budget is $0, so none of your savings request reaches the calendar.'
+      : reason === 'no-budget' ? 'The shared goals budget is $0. Choose automatic funding or an explicitly reviewed custom budget.'
+      : reason === 'zero-request' ? 'Monthly savings is set to $0. Edit the goal to choose an amount or automatic funding.'
+      : reason === 'day-passed' ? 'This month’s set-aside day has passed. Future funding starts next month; change the day to reserve upcoming cash this month.'
+      : reason === 'budget-used' ? 'Other goals use the shared budget before this goal receives funding. Review priorities or the budget.'
+      : gap > 0 ? `The shared budget funds only part of your request: ${cents(gap)}/mo remains unallocated.`
+      : 'Your savings request is allocated. This is a reservation, not a bank transfer.';
+    return `<div class="goal-funding-detail"><p><strong>${esc(explanation)}</strong></p>
+      <dl class="goal-funding-ledger">
+        <div><dt>Still to save</dt><dd>${cents(goal.remaining)}</dd></div>
+        <div><dt>Monthly savings request</dt><dd>${requested == null ? 'Automatic / undated' : cents(requested)}</dd></div>
+        <div><dt>Allocated this month</dt><dd>${cents(goal.allocated)}</dd></div>
+        <div><dt>Next scheduled deposit</dt><dd>${cents(monthlyAllocation)}</dd></div>
+        <div><dt>Per scheduled deposit needed by deadline</dt><dd>${deadline == null ? 'Choose a future date' : cents(deadline)}</dd></div>
+      </dl>
+      ${goal.fundingSlots != null ? `<p class="plan-quiet">${goal.fundingSlots} upcoming monthly deposit${goal.fundingSlots === 1 ? '' : 's'} before the deadline.${goal.fundingSlots === 0 && goal.remaining > 0 ? ' No scheduled deposit falls before this date. Move the deposit day or deadline.' : ''}</p>` : ''}
+      ${goal.included && deadline != null && monthlyAllocation < deadline ? `<p class="goal-warning">Needs ${cents(deadline)}/mo; the deadline pace is short by ${cents(deadline - monthlyAllocation)}/mo. ${goal.manual != null && goal.manual < deadline ? 'Even your full monthly request would not meet this deadline.' : ''}</p>` : ''}
+      <p class="plan-quiet">Calendar: ${monthlyAllocation > 0 && goal.included ? `${goal.nextFundingDay ? `next deposit ${dayLabel(goal.nextFundingDay)}` : goal.contributionDay ? `set aside on the ${ordinal(goal.contributionDay)}` : 'set aside on projected payday (or day 1)'}. A date already passed does not reduce future runway.` : 'no upcoming savings reservation at a $0 allocation.'} A deadline is not a purchase date.</p>
+      <div class="goal-actions"><button type="button" class="link-btn" data-act="edit-goal" data-id="${esc(goal.id)}">Change amount or deadline</button>
+      <a class="link-btn" href="#dashboard" data-view="dashboard">Check the calendar</a></div></div>`;
+  }
+
+  function goalScenarioResult(result) {
+    if (!result) return 'Scenario only — no settings changed.';
+    return `${result.finishDate ? `${result.finishDay ? dayLabel(result.finishDay) : monthLabel(result.finishDate)} — ${result.onTime ? 'on time' : 'after the deadline'}` : 'Not reached'}.
+      ${result.available == null ? 'Affordability unknown: import history.' : result.unsupported > 0 ? `${cents(result.unsupported)}/mo is above modeled spare cash.` : 'Within modeled spare cash before other goals.'}
+      ${result.otherGoalsReserved > 0 ? `Other goals currently reserve ${cents(result.otherGoalsReserved)}/mo.` : ''}
+      This assumes the trial amount is available every month for this goal alone; it is not an affordability approval or a bank transfer.`;
+  }
+
+  function goalPurchases(goal) {
+    const purchases = (state.plan.purchases || []).filter(item => item.goal_id === goal.id);
+    const active = purchases.filter(item => item.status === 'planned');
+    const total = active.reduce((sum, item) => sum + item.amount, 0);
+    return `<section class="goal-purchases" aria-label="Purchases for ${esc(goal.name)}">
+      <header><h4>One-time planned purchases</h4><button type="button" class="btn btn-secondary btn-sm" data-act="add-goal-purchase" data-id="${esc(goal.id)}">${icon('plus', 13)} Plan purchase</button></header>
+      <p class="plan-quiet">${active.length ? `${cents(total)} planned; ${cents(Math.max(0, total - goal.current))} above savings recorded for this goal.` : 'No active purchases. Plan a dated expense here, not in Monthly savings.'} Purchases affect cash runway independently of the monthly savings budget and remain active if savings funding is paused.</p>
+      ${purchases.length ? `<ul>${purchases.map(item => `<li><div><strong>${esc(item.merchant)} · ${cents(item.amount)}</strong>
+        <p>${dayLabel(item.purchase_date)} purchase · ${item.payment_method === 'credit' ? `credit card, cash out ${dayLabel(item.payment_date)}` : 'cash/debit that day'} · <b>${esc(item.status)}</b></p></div>
+        <div class="goal-actions"><button type="button" class="link-btn" data-act="edit-goal-purchase" data-id="${esc(goal.id)}" data-purchase-id="${item.id}">Edit</button>
+        ${item.status === 'planned' ? `<button type="button" class="link-btn" data-act="record-goal-purchase" data-id="${esc(goal.id)}" data-purchase-id="${item.id}">Mark recorded</button>
+        <button type="button" class="link-btn" data-act="cancel-goal-purchase" data-id="${esc(goal.id)}" data-purchase-id="${item.id}">Cancel</button>`
+        : `<button type="button" class="link-btn" data-act="reopen-goal-purchase" data-id="${esc(goal.id)}" data-purchase-id="${item.id}">Return to planned</button>`}</div></li>`).join('')}</ul>` : ''}
+      <p class="plan-quiet">No automatic transaction matching. Mark recorded only when the cash outflow is reflected in your balance/imports, or already covered by a card-payment forecast. Avoid counting it twice. Purchase status never changes savings progress.</p>
+    </section>`;
+  }
+
+  let purchaseDialog, purchaseGoalId, purchaseEditingId;
+  function openGoalPurchase(goalId, purchaseId = null) {
+    const goal = state.plan?.goalPlan.goals.find(item => String(item.id) === String(goalId));
+    if (!goal) return notifyUser('This goal is no longer available. Refresh the goals page.');
+    const purchase = purchaseId == null ? null : (state.plan.purchases || []).find(item => String(item.id) === String(purchaseId) && String(item.goal_id) === String(goalId));
+    if (purchaseId != null && !purchase) return notifyUser('This purchase is no longer available. Refresh the goals page.');
+    if (!purchaseDialog) {
+      purchaseDialog = document.createElement('dialog');
+      purchaseDialog.className = 'editor goal-purchase-dialog';
+      purchaseDialog.setAttribute('aria-labelledby', 'goal-purchase-title');
+      purchaseDialog.innerHTML = `<form id="goal-purchase-form"><h2 id="goal-purchase-title">Plan a one-time goal purchase</h2>
+        <p id="goal-purchase-context"></p>
+        <label>Merchant or description<input name="merchant" required maxlength="150"></label>
+        <label>Purchase amount ($)<input name="amount" type="number" required min=".01" max="1000000000" step=".01"></label>
+        <label>Purchase date<input name="purchase_date" type="date" required></label>
+        <label>Pay using<select name="payment_method"><option value="cash">Cash / debit — cash out on purchase date</option><option value="credit">Credit card — cash out on card-payment date</option></select></label>
+        <label id="goal-purchase-payment-label" hidden>Card-payment date<input name="payment_date" type="date"></label>
+        <p>One-time cash outflow, independent of your monthly savings budget. It is not a bank payment or a recorded transaction. For credit cards, enter only the extra cash payment not already included in another card-payment estimate.</p>
+        <p>Already saved for this purchase? Review the goal's monthly savings reservation on the Dashboard so you do not reserve the same cash twice. This purchase will not automatically change recorded savings.</p>
+        <p id="goal-purchase-error" role="alert"></p><div class="toolbar"><button type="submit" class="btn btn-primary">Save purchase plan</button><button type="button" class="btn btn-secondary" data-purchase-close>Cancel</button></div></form>`;
+      document.body.appendChild(purchaseDialog);
+      purchaseDialog.querySelector('[data-purchase-close]').addEventListener('click', () => purchaseDialog.close());
+      const form = $('goal-purchase-form');
+      const sync = () => {
+        const credit = form.elements.payment_method.value === 'credit';
+        $('goal-purchase-payment-label').hidden = !credit;
+        form.elements.payment_date.required = credit;
+        form.elements.payment_date.min = form.elements.purchase_date.value;
+      };
+      form.addEventListener('change', sync);
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(form));
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        $('goal-purchase-error').textContent = '';
+        try {
+          const saved = await api(`/api/goals/${encodeURIComponent(purchaseGoalId)}/purchases${purchaseEditingId == null ? '' : `/${encodeURIComponent(purchaseEditingId)}`}`,
+            purchaseEditingId == null ? 'POST' : 'PUT', { ...values, amount: Number(values.amount) });
+          if (purchaseEditingId == null) purchaseEditingId = saved.id;
+          state.plan = await api('/api/plan');
+          resetScenarios();
+          renderAll();
+          purchaseDialog.close();
+          notifyUser('One-time purchase plan saved. Check the Dashboard cash runway.');
+        } catch (error) { $('goal-purchase-error').textContent = error.message; }
+        finally { button.disabled = false; }
+      });
+    }
+    purchaseGoalId = goalId;
+    purchaseEditingId = purchaseId;
+    const form = $('goal-purchase-form');
+    form.reset();
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    for (const name of ['merchant', 'amount', 'purchase_date', 'payment_method', 'payment_date']) {
+      form.elements[name].value = purchase?.[name] ?? (name === 'purchase_date' ? todayKey : name === 'payment_method' ? 'cash' : '');
+    }
+    $('goal-purchase-context').textContent = `${goal.name} — ${cents(goal.current)} savings recorded; purchases do not change this progress.`;
+    $('goal-purchase-error').textContent = '';
+    $('goal-purchase-payment-label').hidden = form.elements.payment_method.value !== 'credit';
+    form.elements.payment_date.required = form.elements.payment_method.value === 'credit';
+    form.elements.payment_date.min = form.elements.purchase_date.value;
+    purchaseDialog.showModal();
+    form.elements.merchant.focus();
   }
 
   function goalCard(goal, pro) {
     const [tone, label] = GOAL_STATUS[goal.status] || ['neutral', goal.status];
     const whatIf = state.goalWhatIf[goal.id];
-    const target = goal.targetDate ? monthLabel(goal.targetDate.slice(0, 7)) : 'No date';
-    const finish = goal.status === 'funded' ? 'Done' : goal.finishDate ? monthLabel(goal.finishDate) : 'Not funded';
+    const target = dayLabel(goal.targetDate);
+    const finish = goal.status === 'funded' ? 'Done' : goal.finishDay ? dayLabel(goal.finishDay) : goal.finishDate ? monthLabel(goal.finishDate) : 'No modeled finish';
     const ring = 2 * Math.PI * 26, filled = ring * Math.min(100, goal.progress) / 100;
     return `<article class="plan-goal tone-${tone}${goal.included ? '' : ' is-excluded'}">
       <header>
@@ -700,13 +826,13 @@
       <div class="plan-goal-amounts"><strong>${money(goal.current)}</strong><span>of ${money(goal.target)}</span><span class="plan-status tone-${tone}">${label}</span></div>
       <div class="plan-progress"><span style="width:${Math.min(100, goal.progress)}%"></span></div>
       <dl class="plan-debt-facts">
-        <div><dt>This month</dt><dd>${goal.included ? cents(goal.allocated) : '—'}${goal.manual != null ? ' <em>fixed</em>' : ''}</dd></div>
-        <div><dt>Target</dt><dd>${target}</dd></div>
+        <div><dt>This month</dt><dd>${goal.included ? cents(goal.allocated) : '—'}${goal.manual != null ? ' <em>fixed request</em>' : ''}</dd></div>
+        <div><dt>Savings deadline</dt><dd>${target}</dd></div>
         <div><dt>On pace for</dt><dd class="${goal.status === 'behind' || goal.status === 'unfunded' ? 'is-bad' : ''}">${goal.included ? finish : '—'}</dd></div>
       </dl>
-      ${goal.gap > 0 ? `<p class="plan-goal-gap">${icon('alert', 13)} Needs ${cents(goal.required)}/mo to land on time, ${cents(goal.gap)} more than it gets.</p>` : ''}
+      ${goalExplanation(goal)}
       ${goal.included && goal.remaining > 0 ? (pro ? `<label class="plan-goal-whatif">${icon('spark', 13)} Try <span class="plan-money-input sm"><span>$</span><input type="number" min="1" step="25" data-goal-whatif="${esc(goal.id)}" value="${whatIf?.monthly || ''}" placeholder="${Math.round(goal.required || goal.allocated || 100)}" aria-label="Try a monthly amount for ${esc(goal.name)}"></span>/mo
-        <output>${whatIf?.result ? (whatIf.result.finishDate ? `→ ${monthLabel(whatIf.result.finishDate)} ${whatIf.result.onTime ? '<b class="is-good">on time</b>' : '<b class="is-bad">late</b>'}` : '→ not reached') : ''}</output></label>`
+        <output aria-live="polite">${esc(goalScenarioResult(whatIf?.result))}</output></label>`
         : '<button type="button" class="plan-goal-whatif is-locked" data-act="unlock" data-reason="Goal what-if simulations are part of MyFinance Pro">' + icon('lock', 12) + ' Try a different monthly amount</button>') : ''}
       <footer>
         ${goal.remaining > 0 ? `<button type="button" class="btn btn-secondary btn-sm" data-act="contribute-goal" data-id="${esc(goal.id)}">Record savings</button>` : '<span class="plan-pill good">' + icon('check', 13) + 'Fully funded</span>'}
@@ -715,6 +841,7 @@
           <button type="button" class="plan-icon-btn is-danger" data-act="delete-goal" data-id="${esc(goal.id)}" aria-label="Delete ${esc(goal.name)}">${icon('trash')}</button>
         </span>
       </footer>
+      ${goalPurchases(goal)}
     </article>`;
   }
 
@@ -727,11 +854,12 @@
     return `<section class="panel plan-card plan-timeline">
       <header class="plan-card-head"><div><h3>Timeline</h3><p>Bars end when each goal is funded. The marker is your target date.</p></div></header>
       <div class="plan-gantt">${open.map(goal => {
-        const width = goal.finishMonth == null ? 100 : Math.max(2, Math.min(100, goal.finishMonth / horizon * 100));
+        const width = goal.finishMonth == null ? 0 : Math.max(2, Math.min(100, goal.finishMonth / horizon * 100));
         const [tone] = GOAL_STATUS[goal.status] || ['neutral'];
         return `<div class="plan-gantt-row"><span class="plan-gantt-name">${esc(goalIcon(goal.icon))} ${esc(goal.name)}</span>
           <span class="plan-gantt-track"><span class="plan-gantt-bar tone-${tone}${goal.finishMonth == null ? ' is-open' : ''}" style="width:${width}%"></span>
-          ${goal.targetMonth != null && goal.targetMonth >= 0 && goal.targetMonth <= horizon ? `<span class="plan-gantt-target" style="left:${Math.max(0, goal.targetMonth) / horizon * 100}%" title="Target ${esc(monthLabel(goal.targetDate?.slice(0, 7)))}"></span>` : ''}</span></div>`;
+          ${goal.finishMonth == null ? '<span class="goal-timeline-unfunded">No modeled finish at this budget</span>' : ''}
+          ${goal.targetMonth != null && goal.targetMonth >= 0 && goal.targetMonth <= horizon ? `<span class="plan-gantt-target" style="left:${Math.max(0, goal.targetMonth) / horizon * 100}%" title="Deadline ${esc(dayLabel(goal.targetDate))}"></span>` : ''}</span></div>`;
       }).join('')}<div class="plan-gantt-axis">${ticks}</div></div>
     </section>`;
   }
@@ -742,16 +870,17 @@
     if (!root || !p) return;
     const g = p.goalPlan, pro = isPro();
     const strategies = g.strategies.map(item => ({ ...item }));
-    root.innerHTML = `${moneyFlow(p)}
+    root.innerHTML = `${goalReadiness(p)}
       ${g.strategyLocked ? `<p class="plan-banner">${icon('lock', 14)} Balanced funding needs MyFinance Pro, so goals use Priority order. <button type="button" class="link-btn" data-act="unlock" data-reason="Balanced goal funding is part of MyFinance Pro">Renew Pro</button></p>` : ''}
       <section class="panel plan-card">
-        <header class="plan-card-head"><div><h3>How goals share the budget</h3><p>Goals with a fixed monthly amount always get it first.</p></div></header>
+        <header class="plan-card-head"><div><h3>Choose how to fund your savings</h3><p>Fixed monthly requests receive funding first, but only within the shared budget. Purchase plans are separate.</p></div></header>
         ${strategyCards(strategies, g.strategy, 'goal')}
         <div class="plan-budget-row plan-goal-budget">
-          <label class="plan-field">Monthly goals budget<span class="plan-money-input"><span>$</span><input id="plan-goal-budget" type="number" min="0" step="25" value="${Math.round(g.budget * 100) / 100}"></span></label>
+          <label class="plan-field">Shared monthly savings budget<span class="plan-money-input"><span>$</span><input id="plan-goal-budget" type="number" min="0" step="25" value="${Math.round(g.budget * 100) / 100}" aria-describedby="goal-budget-help"></span></label>
           <p>${g.budgetIsSet ? `Default is everything left after bills and the debt-free program (${money(g.defaultBudget)}). <button type="button" class="link-btn" data-act="reset-goal-budget">Use default</button>` : 'Using everything left after bills and the debt-free program. Type an amount to cap it.'}
-            Dated goals need ${money(g.requiredTotal)}/mo to stay on schedule.</p>
+            Monthly requests total ${cents(g.requiredTotal)}; deadline pace totals ${cents(g.deadlineTotal ?? g.requiredTotal)}.</p>
         </div>
+        <p id="goal-budget-help" class="plan-quiet">Automatic mode uses modeled spare cash. Entering a custom budget is a planning commitment, not proof of affordability; unsupported amounts are flagged above. A $0 allocation does not create a savings calendar entry.</p>
       </section>
       <div class="plan-columns">
         <div class="plan-col-main">
@@ -763,7 +892,7 @@
           ${timeline(g.goals)}
         </aside>
       </div>
-      <p class="plan-footnote">Recording savings updates progress only. MyFinance never moves money or connects to your bank.</p>`;
+      <p class="plan-footnote">Recording savings updates progress only. One-time purchases forecast cash outflow until recorded or cancelled. MyFinance never moves money.</p>`;
   }
 
   // ---------- loaders ----------
@@ -831,6 +960,17 @@
       case 'apply-budget': return mutate(api('/api/plan/settings', 'PUT', { debt_budget: Number(button.dataset.amount) }));
       case 'reset-budget': return mutate(api('/api/plan/settings', 'PUT', { debt_budget: null }));
       case 'reset-goal-budget': return mutate(api('/api/plan/settings', 'PUT', { goal_budget: null }));
+      case 'add-goal-purchase': return openGoalPurchase(id);
+      case 'edit-goal-purchase': return openGoalPurchase(id, button.dataset.purchaseId);
+      case 'record-goal-purchase':
+      case 'cancel-goal-purchase':
+      case 'reopen-goal-purchase': {
+        const status = act === 'record-goal-purchase' ? 'recorded' : act === 'cancel-goal-purchase' ? 'cancelled' : 'planned';
+        const message = status === 'recorded' ? 'Has the cash payment been imported/reflected in your balance, or covered by an existing card-payment forecast? Marking recorded removes this separate forecast; it does not create a transaction or change savings.'
+          : status === 'cancelled' ? 'Cancel this planned purchase? It will no longer reduce forecast cash.' : 'Return this purchase to the cash forecast? Make sure it is not already included in recorded balances or another payment estimate.';
+        if (!await confirmAction(message, 'Update planned purchase')) return;
+        return mutateThenReload(api(`/api/goals/${encodeURIComponent(id)}/purchases/${encodeURIComponent(button.dataset.purchaseId)}`, 'PUT', { status }));
+      }
       case 'toggle-debt': { const debt = findDebt(id); return debt && mutateThenReload(api(`/api/debts/${encodeURIComponent(id)}`, 'PUT', { included: !debt.included })); }
       case 'toggle-focus': { const debt = findDebt(id); return debt && mutateThenReload(api(`/api/debts/${encodeURIComponent(id)}`, 'PUT', { focus: !debt.focus })); }
       case 'toggle-goal': { const goal = findGoal(id); return goal && mutateThenReload(api(`/api/goals/${encodeURIComponent(id)}`, 'PUT', { included: !goal.included })); }
@@ -849,7 +989,7 @@
       }
       case 'delete-goal': {
         const goal = findGoal(id);
-        if (!goal || !await confirmAction(`Delete "${goal.name}"?`, 'Delete goal')) return;
+        if (!goal || !await confirmAction(`Delete "${goal.name}" and its purchase plans?`, 'Delete goal')) return;
         return mutateThenReload(api(`/api/goals/${encodeURIComponent(id)}`, 'DELETE'));
       }
       case 'contribute-goal': {
@@ -886,13 +1026,22 @@
   const goalTimers = {};
   function scheduleGoalWhatIf(id, monthly) {
     clearTimeout(goalTimers[id]);
+    state.goalWhatIf[id] = { monthly, result: null };
+    const pendingOutput = document.querySelector(`[data-goal-whatif="${CSS.escape(String(id))}"]`)?.closest('label')?.querySelector('output');
+    if (pendingOutput) pendingOutput.textContent = 'Calculating scenario — no settings changed.';
     goalTimers[id] = setTimeout(async () => {
-      if (!(monthly > 0)) { delete state.goalWhatIf[id]; return; }
+      if (!(monthly > 0)) {
+        delete state.goalWhatIf[id];
+        const output = document.querySelector(`[data-goal-whatif="${CSS.escape(String(id))}"]`)?.closest('label')?.querySelector('output');
+        if (output) output.textContent = 'Enter a positive monthly amount. Scenario only — no settings changed.';
+        return;
+      }
       try {
         const data = await api('/api/plan/what-if', 'POST', { goalId: id, goalMonthly: monthly });
+        if (state.goalWhatIf[id]?.monthly !== monthly) return;
         state.goalWhatIf[id] = { monthly, result: data.goal };
         const output = document.querySelector(`[data-goal-whatif="${CSS.escape(String(id))}"]`)?.closest('label')?.querySelector('output');
-        if (output) output.innerHTML = data.goal.finishDate ? `→ ${monthLabel(data.goal.finishDate)} ${data.goal.onTime ? '<b class="is-good">on time</b>' : '<b class="is-bad">late</b>'}` : '→ not reached';
+        if (output) output.textContent = goalScenarioResult(data.goal);
       } catch (error) { reportFailure(error); }
     }, 350);
   }
@@ -1019,11 +1168,16 @@
     finally { button.disabled = false; }
   }
   document.addEventListener('click', event => {
+    const purchase = event.target.closest?.('[data-goal-purchase-link]');
+    if (purchase) { window.showView('goals'); return; }
     const card = event.target.closest?.('[data-flex-key]');
     if (!card || event.target.closest('button:not([data-flex-key])')) return;
     openFlex(card.dataset.flexKey);
   });
   document.addEventListener('keydown', event => {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches?.('[data-goal-purchase-link]')) {
+      event.preventDefault(); window.showView('goals'); return;
+    }
     if ((event.key === 'Enter' || event.key === ' ') && event.target.matches?.('[data-flex-key]')) { event.preventDefault(); openFlex(event.target.dataset.flexKey); }
   });
   // A trial or upgrade changes which strategies the server unlocks.

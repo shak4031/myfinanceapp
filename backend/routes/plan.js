@@ -2,7 +2,7 @@ import { Router } from 'express';
 import Database from '../db.js';
 import { getEntitlement, requireProPlus } from '../utils/license.js';
 import { strategyIds, DEBT_STRATEGIES, monthKey } from '../utils/payoff.js';
-import { goalStrategyIds, GOAL_STRATEGIES, normalizeGoal, simulateGoals } from '../utils/goalPlan.js';
+import { goalStrategyIds, GOAL_STRATEGIES, normalizeGoal, simulateGoals, goalFinishDay } from '../utils/goalPlan.js';
 import { FLEX_KEY, buildPlanPayments, computePlan, loadPlanInputs, normalizeSettings } from '../utils/moneyPlan.js';
 import { buildSpendingBuckets } from '../utils/spendingBuckets.js';
 import { applyHealthChange, buildHealthPlan } from '../utils/healthPlan.js';
@@ -128,11 +128,16 @@ router.post('/what-if', async (req, res, next) => {
       if (!row) return res.status(404).json({ error: 'Goal not found' });
       const monthly = amountOrNull(body.goalMonthly, 'monthly amount');
       if (monthly == null) throw badRequest('Enter a monthly amount');
-      const normalized = { ...normalizeGoal(row, now), manual: monthly, included: true };
+      const normalized = { ...normalizeGoal(row, now, plan.defaultContributionDay), manual: monthly, included: true };
       const result = simulateGoals([normalized], { budget: monthly, start: now }).get(normalized.id);
       const finishMonth = normalized.remaining === 0 ? 0 : result?.finishMonth ?? null;
-      goal = { id: row.id, monthly, finishMonth, finishDate: finishMonth == null ? null : monthKey(now, Math.max(0, finishMonth - 1)),
-        onTime: normalized.targetMonth == null || (finishMonth != null && finishMonth <= Math.max(1, normalized.targetMonth)) };
+      const finishDate = finishMonth == null ? null : monthKey(now, Math.max(0, finishMonth - 1));
+      const finishDay = goalFinishDay(now, finishMonth, normalized.fundingDay);
+      goal = { id: row.id, monthly, finishMonth, finishDate, finishDay,
+        onTime: normalized.targetMonth == null || (finishDay != null && normalized.targetMonth >= 0 && finishDay <= normalized.targetDate),
+        available: plan.summary.available,
+        unsupported: plan.summary.available == null ? null : Math.max(0, monthly - Math.max(0, plan.summary.available)),
+        otherGoalsReserved: plan.goalPlan.allocatedTotal - (plan.goalPlan.goals.find(item => item.id === row.id)?.allocated || 0) };
     }
     res.json({ debt: plan.debtPlan.scenario, goal });
   } catch (error) { next(error); }

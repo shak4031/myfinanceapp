@@ -3548,7 +3548,7 @@ test('a final debt clearing this month shows no false months-saved or next-debt 
   assert.match(html, /this last included debt cleared/);
   assert.doesNotMatch(html, /minimum rolls to any remaining debt/);
 });
-test('goals page shows the surplus split, status and pay cadence', async () => {
+test('goals page shows the funding ledger, status and pay cadence', async () => {
   const f = loadPlan(async () => response(200, planPayload()));
   await f.context.loadGoals();
   const html = f.node('plan-goals-root').innerHTML;
@@ -3556,11 +3556,56 @@ test('goals page shows the surplus split, status and pay cadence', async () => {
   assert.match(html, /Emergency &lt;fund&gt;/);
   assert.match(html, /Behind/);
   assert.match(html, /Needs \$833\.33\/mo/);
-  assert.match(html, /plan-flowbar/);
+  assert.match(html, /goal-readiness/);
   assert.match(html, /plan-gantt-row/);
   const row = f.context.FinancePlan.goalRows()[0];
   assert.equal(row.target_amount, 10000);
   assert.equal(row.target_date, '2027-06-01');
+});
+test('goals explain deficit funding, exact deadlines, budget overrides and independent purchases', async () => {
+  const payload = planPayload({ pro: true });
+  payload.summary = { ...payload.summary, avgMonthlyIncome: 15074.03, avgMonthlyExpenses: 18551.07,
+    monthlySurplus: -3477.04, available: -3726.89, debtExtra: 249.85 };
+  payload.goalPlan = { ...payload.goalPlan, budget: 0, defaultBudget: 0, allocatedTotal: 0, deadlineTotal: 5500, requiredTotal: 3500,
+    goals: [{ id: 7, name: 'Shed <Renovation>', included: true, target: 5500, current: 0, remaining: 5500, progress: 0,
+      priority: 1, targetDate: '2026-11-20', targetMonth: 0, manual: 3500, requestedMonthly: 3500, deadlineMonthly: 5500,
+      allocated: 0, monthlyAllocation: 0, contributionDay: 9, fundingSlots: 1, fundingReason: 'no-surplus', status: 'unfunded',
+      finishMonth: null, finishDate: null, gap: 5500 }] };
+  payload.purchases = [{ id: 8, goal_id: 7, merchant: '<Supplies>', amount: 3500, purchase_date: '2026-11-09',
+    payment_date: '2026-12-05', payment_method: 'credit', status: 'planned' }];
+  const f = loadPlan(async () => response(200, payload));
+  await f.context.loadGoals();
+  const html = f.node('plan-goals-root').innerHTML;
+  assert.match(html, /recorded cash flow does not support new monthly savings/);
+  assert.match(html, /\$3,726\.89\/mo shortfall/);
+  assert.match(html, /No monthly surplus/);
+  assert.match(html, /Nov 20, 2026/);
+  assert.match(html, /Monthly savings request[\s\S]*?\$3,500\.00/);
+  assert.match(html, /Needs \$5,500\.00\/mo/);
+  assert.match(html, /no upcoming savings reservation/);
+  assert.match(html, /Plan purchase/);
+  assert.match(html, /&lt;Supplies&gt;/);
+  assert.match(html, /credit card, cash out Dec 5, 2026/);
+  assert.match(html, /data-act="record-goal-purchase"/);
+  assert.match(html, /Purchase status never changes savings progress/);
+  payload.goalPlan.budget = 3500;
+  payload.goalPlan.budgetIsSet = true;
+  await f.context.loadGoals();
+  assert.match(f.node('plan-goals-root').innerHTML, /\$3,500\.00\/mo of this custom budget is not supported/);
+});
+test('goal purchase editor and calendar expose a one-time cash or credit workflow', () => {
+  const plan = source('plan.js'), html = source('index.html');
+  assert.match(plan, /name="payment_method"[\s\S]*?value="cash"[\s\S]*?value="credit"/);
+  assert.match(plan, /name="purchase_date" type="date" required/);
+  assert.match(plan, /name="payment_date" type="date"/);
+  assert.match(plan, /goal-purchase-error/);
+  assert.match(plan, /purchaseDialog\.showModal/);
+  assert.match(plan, /\/purchases/);
+  assert.match(plan, /status === 'recorded'[\s\S]*?does not create a transaction or change savings/);
+  assert.match(html, /item\.planKind === 'goal-purchase' \|\| item\.date >= monthStartKey/);
+  assert.match(html, /data-goal-purchase-link=/);
+  assert.match(html, /One-time planned cash outflow/);
+  assert.match(source('plan.css'), /goal-readiness[\s\S]*?grid-template-columns: 1fr/);
 });
 test('a failed plan load shows a retry instead of stale numbers', async () => {
   const f = loadPlan(async () => response(500, { error: 'Plan offline' }));
@@ -4989,6 +5034,95 @@ test('MFA knowledge-base guides are searchable, topic-filtered and reachable fro
   assert.equal(other.hidden, false);
   assert.ok(articles.every(article => !article.hidden));
 });
+
+test('Knowledge Base documents savings semantics and all Financial Health steps', () => {
+  const html = source('index.html');
+  const planning = html.match(/<section class="kb-section" id="knowledge-base-planning"[\s\S]*?<\/section>/)?.[0];
+  const health = html.match(/<section class="kb-section" id="knowledge-base-health"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(planning);
+  assert.ok(health);
+  for (const text of ['Target amount', 'Current savings', 'Target date', 'Priority', 'Monthly amount',
+    'Set aside on day', 'This month', 'shared budget', 'goal preset', 'Home Depot',
+    'Plan a one-time goal purchase', 'Record savings',
+    'Debt coaching', 'Mortgage planner']) {
+    assert.ok(planning.includes(text), `Savings guide should explain ${text}`);
+  }
+  assert.match(planning, /not guaranteed/);
+  assert.match(planning, /does not reduce future runway/);
+  assert.match(planning, /does not track a goal's purchase ledger/);
+  const steps = [...source('../backend/utils/healthPlan.js').matchAll(/week: (\d+), title: '([^']+)'/g)];
+  assert.equal(steps.length, 12);
+  for (const [, week, title] of steps) {
+    assert.ok(health.includes(`Week ${week} — ${title}`), `Health guide should cover week ${week}: ${title}`);
+  }
+  for (const text of ['Basic and Pro', 'Start my 90 days', 'Refresh my plan', 'Mark done', 'Start over',
+    'baseline', '30%', '25%', '15%', '0–100', 'Financial Checkup', 'Spending Compass',
+    'not independent verification', 'does not verify that a bank automation exists']) {
+    assert.ok(health.includes(text), `Health guide should explain ${text}`);
+  }
+  assert.match(html, /data-kb-filter="health"/);
+  for (const id of ['knowledge-base-health', 'knowledge-base-planning']) {
+    assert.ok(html.includes(`data-kb-anchor="${id}"`));
+  }
+  const hint = html.match(/<p class="goal-plan-hint">[\s\S]*?<\/p>/)?.[0];
+  assert.match(hint, /not a one-time purchase/);
+  assert.match(hint, /may be lower than requested/);
+  assert.match(hint, /href="#knowledge-base" data-view="knowledge-base"/);
+  assert.match(source('refresh.js'), /Plan type \(goal preset\)/);
+});
+
+for (const [topic, id, query] of [
+  ['health', 'knowledge-base-health', 'automate saving'],
+  ['planning', 'knowledge-base-planning', 'Home Depot']
+]) {
+  test(`${topic} Knowledge Base guides support filtering, search and popular-question navigation`, () => {
+    const f = fixture();
+    const root = f.node('knowledge-base-view'), search = f.node('kb-search');
+    const section = f.node(id), other = f.node('knowledge-base-transactions');
+    section.dataset.kbTopic = topic;
+    other.dataset.kbTopic = 'transactions';
+    const guide = source('index.html').match(new RegExp(`<section class="kb-section" id="${id}"[\\s\\S]*?<\\/section>`))[0];
+    const articles = [...guide.matchAll(/<article class="kb-card">([\s\S]*?)<\/article>/g)].map((match, index) => {
+      const article = f.node(`${topic}-guide-${index}`);
+      article.textContent = match[1].replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&');
+      return article;
+    });
+    section.querySelectorAll = () => articles;
+    other.querySelectorAll = () => [f.node('other-guide')];
+    let scrolled = false;
+    section.scrollIntoView = () => { scrolled = true; };
+    const filters = ['all', topic].map(value => {
+      const filter = f.node(`kb-filter-${value}`);
+      filter.dataset.kbFilter = value;
+      return filter;
+    });
+    root.querySelectorAll = selector => selector === '[data-kb-filter]' ? filters : [section, other];
+    root.querySelector = selector => selector === '#kb-search' ? search
+      : selector === '#kb-results' ? f.node('kb-results')
+      : selector === '.kb-discovery' ? f.node('kb-discovery')
+      : selector.includes(topic) && !section.hidden ? section : null;
+    f.run('knowledge-base.js');
+    filters[1].listeners.click();
+    assert.equal(section.hidden, false);
+    assert.equal(other.hidden, true);
+    assert.equal(scrolled, true);
+    assert.equal(f.node('kb-results').textContent, `${articles.length} guides found.`);
+    search.value = query;
+    search.listeners.input();
+    assert.equal(articles.filter(article => !article.hidden).length, 1);
+    assert.equal(section.hidden, false);
+    search.value = 'nonexistent help phrase';
+    search.listeners.input();
+    assert.equal(section.hidden, true);
+    const jump = f.node('kb-popular-jump');
+    jump.dataset.kbAnchor = id;
+    root.listeners.click({ target: { closest: () => jump } });
+    assert.equal(search.value, '');
+    assert.equal(section.hidden, false);
+    assert.equal(other.hidden, false);
+    assert.ok(articles.every(article => !article.hidden));
+  });
+}
 
 test('spending compass tutorial walks through the plan, money flow, overlapping signals and fairness', () => {
   const f = fixture();
