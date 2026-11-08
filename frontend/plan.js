@@ -70,6 +70,21 @@
     notifyUser(error.message || 'Something went wrong');
   }
 
+  function mortgagePayment(m, sim) {
+    const reported = m.reported_payment;
+    const hasReported = reported != null && Number.isFinite(Number(reported));
+    const source = m.reported_payment_source || m.mortgage_source;
+    const asOf = m.reported_payment_as_of || m.mortgage_data_as_of;
+    const estimated = `${cents(sim.payment)} principal &amp; interest${sim.input.escrow ? ` + ${cents(sim.input.escrow)} escrow` : ''}`;
+    return `<div><dt>${hasReported ? 'Next reported payment' : 'Monthly payment'}</dt><dd>${cents(hasReported ? reported : sim.totalPayment)}</dd>
+      <small>${hasReported ? `From ${source === 'plaid' ? 'Plaid' : 'your statement'} &middot; ${esc(asOf)}<br>Calculated monthly: ${cents(sim.totalPayment)} (${estimated})` : estimated}</small>
+      ${m.escrow_payment == null || (hasReported && !sim.input.escrow && Number(reported) > sim.payment + 1)
+        ? '<small>Monthly escrow is not provided. Plaid reports the escrow reserve, not the monthly charge. Import a statement or enter taxes &amp; insurance in Edit details.</small>' : ''}
+      ${hasReported && Math.abs(Number(reported) - sim.totalPayment) >= 1
+        ? '<small>The reported payment differs from the calculation; it may include insurance, escrow adjustments or fees. Verify the breakdown with your servicer.</small>' : ''}
+      </div>`;
+  }
+
   async function refresh() {
     state.pending ||= api('/api/plan').finally(() => { state.pending = null; });
     state.plan = await state.pending;
@@ -421,6 +436,7 @@
         <p>Enter the numbers from your closing disclosure or monthly statement. We build the full amortization schedule and show what extra payments would save.</p></div>
         ${state.mortgage.editing && hasTerms(selectedMortgage()) ? '<button type="button" class="btn btn-secondary btn-sm" data-act="mtg-cancel">Cancel</button>' : ''}</header>
       <form id="mtg-form" class="mtg-form" novalidate>
+        ${m?.reported_payment != null ? `<p class="mtg-wide">Next reported payment: <strong>${cents(m.reported_payment)}</strong>. This is separate from the calculated principal &amp; interest and your monthly escrow entry. Plaid's escrow reserve is not a monthly charge.</p>` : ''}
         ${m?.mortgage_source ? `<p class="mtg-wide">Latest details from ${m.mortgage_source === 'plaid' ? 'Plaid' : 'your statement'} (${esc(m.mortgage_data_as_of)}). Loan originated: ${esc(m.origination_date || 'Not provided')}. Contract maturity: ${esc(m.maturity_date || 'Not provided')}. Verify the first payment month; when absent it is estimated from maturity and term.</p>` : ''}
         <label class="plan-field mtg-wide">Name<input name="name" maxlength="100" required value="${esc(value('name', 'Home mortgage'))}"></label>
         <label class="plan-field">Original loan amount<span class="plan-money-input"><span>$</span><input name="original_amount" type="number" min="1" step="1000" required value="${esc(value('original_amount'))}" placeholder="350000"></span></label>
@@ -545,7 +561,7 @@
           <div class="mtg-hero-actions"><button type="button" class="btn btn-secondary btn-sm" data-act="mtg-edit">${icon('edit', 14)} Edit details</button>${drift ? '<button type="button" class="link-btn" data-act="mtg-sync-balance">Use scheduled balance</button>' : ''}<button type="button" class="link-btn" data-act="mtg-add">${icon('plus', 13)} Add another mortgage</button></div>
         </div>
         <dl class="mtg-stats">
-          <div><dt>Monthly payment</dt><dd>${cents(sim.totalPayment)}</dd><small>${cents(sim.payment)} principal &amp; interest${sim.input.escrow ? ` + ${cents(sim.input.escrow)} escrow` : ''}</small></div>
+          ${mortgagePayment(m, sim)}
           <div><dt>Interest left</dt><dd>${money(sim.baseline.totalInterest)}</dd><small>if you pay as scheduled</small></div>
           <div><dt>Interest paid so far</dt><dd>${money(sim.toDate.interest)}</dd><small>${sim.toDate.months} payments, from the schedule</small></div>
           <div><dt>Interest in ${new Date().getFullYear()}</dt><dd>${money(sim.thisYearInterest)}</dd><small>estimate for your Form 1098</small></div>

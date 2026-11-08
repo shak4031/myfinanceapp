@@ -34,6 +34,14 @@ The amortization list positions the current year without expanding it, changing
 the existing styling, or scrolling the whole page. First payment months derived from maturity and term are estimates;
 verify them against the servicer's record. Schedules assume a fixed rate and are
 estimates, not official payoff quotes.
+Plaid's next-payment amount is displayed as **Next reported payment**, separately
+from the calculated monthly principal-and-interest plus entered escrow. It may
+include insurance, fees or escrow adjustments; it is never treated as principal
+paid toward the loan. Plaid's escrow balance is a reserve, not a monthly charge,
+so the escrow breakdown must come from a labeled statement field or manual entry.
+The demo includes a seasoned mortgage with a current balance, full loan terms and
+monthly escrow; its total matches the demo's mortgage autopay transactions. It is
+excluded from the demo debt-free program by default, keeping the existing plan.
 
 See [Account data privacy and isolation](ACCOUNT_DATA_PRIVACY.md) for the
 implemented guard rails, support/operator access boundaries, encryption and

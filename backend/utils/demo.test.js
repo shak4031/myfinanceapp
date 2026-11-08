@@ -6,6 +6,7 @@ import { migratePrivateSchema } from './schema.js';
 import { buildDemoData, resetDemoAccount, msUntilNextReset, DEMO_EMAIL, DEMO_PASSWORD } from './demo.js';
 import { entitlementFromRow } from './license.js';
 import application from '../app.js';
+import { simulateMortgage } from './amortization.js';
 
 test('demo data covers about 16 months with a consistent running balance and realistic patterns', () => {
   const now = new Date('2026-10-17T15:00:00Z');
@@ -27,7 +28,15 @@ test('demo data covers about 16 months with a consistent running balance and rea
   }
   assert.deepEqual({ checking: balances.checking, savings: balances.savings }, { checking: 9500, savings: 16600 }, 'balances end at the anchored values');
   assert.ok(data.transactions.filter(row => row.account === 'checking').every(row => row.balance > 0), 'checking is never overdrawn');
-  assert.deepEqual(data.accounts.map(account => account.kind), ['checking', 'savings', 'credit_card']);
+  assert.deepEqual(data.accounts.map(account => account.kind), ['checking', 'savings', 'credit_card', 'loan']);
+  const mortgage = simulateMortgage(data.mortgage, now);
+  assert.equal(mortgage.totalPayment, 2184.37);
+  assert.ok(mortgage.input.escrow > 0);
+  assert.equal(mortgage.balance, mortgage.toDate.scheduledBalance);
+  assert.ok(mortgage.original.years.some(row => row.year === '2026'));
+  assert.equal(data.mortgage.included, false);
+  assert.ok(data.transactions.filter(row => row.description === 'ROCKET MORTGAGE AUTOPAY')
+    .every(row => row.amount === mortgage.totalPayment));
   const toSavings = data.transactions.filter(row => row.description.includes('TRANSFER TO SAV'));
   const fromChecking = data.transactions.filter(row => row.description.includes('TRANSFER FROM CHK'));
   assert.ok(toSavings.length >= 12 && toSavings.length === fromChecking.length, 'both sides of each savings transfer are present');
@@ -138,7 +147,16 @@ test('demo account resets cleanly, signs in with the published password and unlo
       assert.equal(response.status, 200, path);
     }
     assert.equal((await call('/api/goals', { cookie })).body.length, 3);
-    assert.equal((await call('/api/debts', { cookie })).body.length, 3);
+    assert.equal((await call('/api/debts', { cookie })).body.length, 4);
+    const mortgage = await call('/api/mortgage', { cookie });
+    assert.equal(mortgage.status, 200);
+    assert.equal(mortgage.body.mortgages.length, 1, 'demo reset is idempotent and seeds one mortgage');
+    const home = mortgage.body.mortgages[0];
+    assert.ok(home.escrow_payment > 0);
+    assert.equal(home.simulation.totalPayment, 2184.37);
+    assert.equal(home.simulation.balance, home.simulation.toDate.scheduledBalance);
+    assert.ok(home.origination_date && home.maturity_date);
+    assert.equal(home.included, false);
   } finally {
     server.close();
     if (saved.origin === undefined) delete process.env.APP_ORIGIN; else process.env.APP_ORIGIN = saved.origin;

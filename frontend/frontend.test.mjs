@@ -4424,6 +4424,7 @@ test('mortgage source linking is explicit and invalidates cached imported detail
       sources: [{ accountId: 3, name: '<Connected mortgage>', details: { apr: 5 }, linked: false }] });
     return response(200, {});
   });
+
   await f.context.loadPayoffPlan('mortgage');
   const root = f.node('plan-debt-root');
   assert.match(root.innerHTML, /&lt;Connected mortgage&gt;/);
@@ -4436,6 +4437,31 @@ test('mortgage source linking is explicit and invalidates cached imported detail
   f.context.FinancePlan.invalidate();
   assert.equal(f.context.FinancePlan.state.mortgage.data, null);
   assert.equal(f.context.FinancePlan.state.mortgage.sim, null);
+});
+
+test('mortgage shows the full reported payment without adding escrow twice or using it as principal', async () => {
+  const { simulateMortgage } = await import('../backend/utils/amortization.js');
+  const loan = { id: 1, name: 'Synced mortgage', balance: 200000, original_amount: 250000, apr: 4.25,
+    term_months: 360, first_payment_month: '2018-03', escrow_payment: 450,
+    reported_payment: 1900, mortgage_source: 'plaid', mortgage_data_as_of: '2026-11-08' };
+  const sim = JSON.parse(JSON.stringify(simulateMortgage(loan)));
+  const f = loadPlan(async () => response(200, { mortgages: [{ ...loan, simulation: sim }] }));
+  const root = f.node('plan-debt-root');
+  const query = root.querySelector;
+  root.querySelector = selector => selector === '.mtg-years' ? null : query(selector);
+  await f.context.loadPayoffPlan('mortgage');
+  assert.match(root.innerHTML, /Next reported payment<\/dt><dd>\$1,900\.00/);
+  assert.match(root.innerHTML, /Calculated monthly:/);
+  assert.match(root.innerHTML, /\+ \$450\.00 escrow/);
+  assert.doesNotMatch(root.innerHTML, /<dd>\$2,350\.00/);
+  assert.match(root.innerHTML, /may include insurance, escrow adjustments or fees/);
+  const mortgageInput = f.context.FinancePlan.state.mortgage.data.mortgages[0];
+  mortgageInput.escrow_payment = null;
+  mortgageInput.simulation = { ...sim, input: { ...sim.input, escrow: 0 }, totalPayment: sim.payment };
+  f.context.FinancePlan.state.mortgage.sim = mortgageInput.simulation;
+  f.context.FinancePlan.renderAll();
+  assert.match(root.innerHTML, /Monthly escrow is not provided/);
+  assert.match(root.innerHTML, /reserve, not the monthly charge/);
 });
 
 test('analytics interest panel shows totals by type, estimates, hints and saves type overrides', async () => {

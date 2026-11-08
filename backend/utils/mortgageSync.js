@@ -68,7 +68,7 @@ export async function ensurePlaidAccounts(client) {
 export async function applyMortgageEvidence(client, account, details, source, asOf, selectedDebtId, force = false) {
   const userId = currentUserId();
   if (!date(asOf) || !details || Object.entries(details).some(([key, value]) =>
-    ['balance', 'apr', 'original_amount', 'escrow_payment', 'min_payment'].includes(key) &&
+    ['balance', 'apr', 'original_amount', 'escrow_payment', 'min_payment', 'reported_payment'].includes(key) &&
       value != null && (!Number.isFinite(value) || value < 0 || value > (key === 'apr' ? 40 : 100000000)))) {
     throw failure(422, 'Mortgage data contains invalid values. Review the source before importing.');
   }
@@ -95,8 +95,12 @@ export async function applyMortgageEvidence(client, account, details, source, as
   if (!selectedDebtId && asOf === debt.mortgage_data_as_of &&
     ((!force && source === debt.mortgage_source) || (source === 'plaid' && debt.mortgage_source === 'statement'))) return { id: debt.id };
   const fields = ['balance', 'apr', 'original_amount', 'term_months', 'escrow_payment', 'min_payment',
-    'origination_date', 'maturity_date', 'first_payment_month'];
+    'origination_date', 'maturity_date', 'first_payment_month', 'reported_payment'];
   const updates = Object.fromEntries(fields.filter(key => details[key] != null).map(key => [key, details[key]]));
+  if (details.reported_payment != null) {
+    updates.reported_payment_source = source;
+    updates.reported_payment_as_of = asOf;
+  }
   // A first payment derived from maturity is only a starting estimate; keep an explicit manual month.
   if (details.first_payment_estimated && debt.first_payment_month) delete updates.first_payment_month;
   const keys = Object.keys(updates);

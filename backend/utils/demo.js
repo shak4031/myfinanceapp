@@ -2,6 +2,7 @@ import { hashPassword } from './passwords.js';
 import { seedUserCategories } from './schema.js';
 import { OWNER_USER_ID } from './license.js';
 import { reconcileTransfers } from './transfers.js';
+import { paymentFor, simulateMortgage } from './amortization.js';
 
 // Public showcase account. The password is intentionally published; all data is rebuilt on every reset.
 export const DEMO_EMAIL = 'demo@myfinance.app';
@@ -129,12 +130,24 @@ export function buildDemoData(now = new Date()) {
   });
 
   const ahead = months => iso(Date.UTC(new Date(end).getUTCFullYear(), new Date(end).getUTCMonth() + months, 1));
+  const mortgageYear = now.getUTCFullYear() - 8;
+  const mortgagePayment = paymentFor(325000, 4.25, 360);
+  const mortgage = {
+    name: 'Rocket Mortgage home loan', original_amount: 325000, apr: 4.25, term_months: 360,
+    first_payment_month: `${mortgageYear}-03`, origination_date: `${mortgageYear}-01-15`,
+    maturity_date: `${mortgageYear + 30}-02-01`, escrow_payment: cents(2184.37 - mortgagePayment),
+    min_payment: mortgagePayment, due_date: '1', debt_type: 'mortgage', included: false,
+    payment_in_history: true, payment_match: 'ROCKET MORTGAGE'
+  };
+  mortgage.balance = simulateMortgage(mortgage, now).toDate.scheduledBalance;
   return {
     transactions,
+    mortgage,
     accounts: [
       { key: 'checking', name: 'Everyday checking', kind: 'checking', institution: 'Demo Bank', last4: '1180' },
       { key: 'savings', name: 'High-yield savings', kind: 'savings', institution: 'Demo Bank', last4: '4821' },
-      { key: 'card', name: 'Chase Sapphire', kind: 'credit_card', institution: 'Chase', last4: '3391' }
+      { key: 'card', name: 'Chase Sapphire', kind: 'credit_card', institution: 'Chase', last4: '3391' },
+      { key: 'mortgage', name: 'Rocket Mortgage home loan', kind: 'loan', institution: 'Rocket Mortgage', last4: '6042' }
     ],
     household: { size: 2, region: 'northeast', housing: 'own' },
     budgets: [['Groceries', 750], ['Dining', 400], ['Shopping', 450], ['Gas', 220], ['Entertainment', 150], ['Subscriptions', 60], ['Transportation', 120]],
@@ -172,7 +185,7 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transactions', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'credit_cards', 'transaction_labels', 'categories']) {
+  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transactions', 'credit_cards', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
@@ -202,6 +215,10 @@ export async function resetDemoAccount(client, now = new Date()) {
     await client.query(`INSERT INTO credit_cards (name,balance,apr,credit_limit,min_payment,due_date,debt_type,payment_in_history)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [debt.name, debt.balance, debt.apr, debt.credit_limit, debt.min_payment, debt.due_date, debt.debt_type, debt.payment_in_history]);
   }
+  const mortgageKeys = Object.keys(data.mortgage);
+  await client.query(`INSERT INTO credit_cards (${mortgageKeys.join(',')},account_id)
+    VALUES (${mortgageKeys.map((_, i) => `$${i + 1}`).join(',')},$${mortgageKeys.length + 1})`,
+  [...Object.values(data.mortgage), accountIds.mortgage]);
   // Minimums ($717.66) plus $400 extra a month, so the debt-free program and its calendar card have something to show.
   await client.query("INSERT INTO money_plans (debt_strategy,debt_budget,goal_strategy) VALUES ('avalanche',$1,'priority')", [data.debtBudget]);
   await client.query('INSERT INTO household_profiles (household_size,region,housing) VALUES ($1,$2,$3)',

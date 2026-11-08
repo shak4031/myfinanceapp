@@ -118,7 +118,8 @@ function mortgageStatement(lines) {
     term_months: term, origination_date: origination, maturity_date: maturity,
     first_payment_month: first?.slice(0, 7) || (maturity && term ? mortgageMonth(maturity, term) : null),
     first_payment_estimated: !first,
-    escrow_payment: moneyValue(escrow), min_payment: moneyValue(pi)
+    escrow_payment: moneyValue(escrow), min_payment: moneyValue(pi),
+    reported_payment: moneyValue(labeledMoney(lines, /^(?:total monthly payment|regular monthly payment|monthly payment amount)\s*:?\s*/i, 'monthly payment'))
   };
   const warnings = ['Mortgage details only were imported. No payment transactions were inferred from the statement summary.'];
   if (!mortgage.original_amount || !term || !mortgage.first_payment_month || mortgage.apr == null) warnings.push('Some original loan terms were not present. Complete the missing details in Mortgage to build a schedule.');

@@ -403,6 +403,9 @@ export async function migratePrivateSchema(client) {
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS maturity_date TEXT;
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS mortgage_source TEXT;
     ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS mortgage_data_as_of TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS reported_payment NUMERIC(14,2);
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS reported_payment_source TEXT;
+    ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS reported_payment_as_of TEXT;
     ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS mortgage_before JSONB;
     ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS mortgage_after JSONB;
     CREATE TABLE IF NOT EXISTS fixed_payment_estimates (

@@ -39,10 +39,14 @@ test('mortgage statements read verified loan facts without fabricating payment t
   assert.deepEqual(result.statement.mortgage, {
     balance: 185000, apr: 4.25, original_amount: 250000, term_months: 360,
     origination_date: '2018-01-15', maturity_date: '2048-02-01',
-    first_payment_month: '2018-03', first_payment_estimated: false, escrow_payment: 450, min_payment: 1229.85
+    first_payment_month: '2018-03', first_payment_estimated: false, escrow_payment: 450, min_payment: 1229.85,
+    reported_payment: null
   });
   assert.equal(result.reconciliation.status, 'metadata-only');
   assert.deepEqual(result.transactions, []);
+  const withPayment = parseStatementText(lines.concat('Regular Monthly Payment: $1679.85').join('\n'));
+  assert.equal(withPayment.statement.mortgage.reported_payment, 1679.85);
+  assert.throws(() => parseStatementText(lines.concat('Regular Monthly Payment: $1679.85', 'Total Monthly Payment: $1779.85').join('\n')), /Conflicting monthly payment/);
   assert.throws(() => parseStatementText(lines.concat('Interest Rate: 5.25%').join('\n')), /Conflicting mortgage interest/);
   assert.throws(() => parseStatementText(lines.filter(line => !line.includes('Outstanding Principal')).join('\n')), /principal balance are required/);
   assert.throws(() => parseStatementText(lines.map(line => line.replace('11/01/2026', '02/30/2026')).join('\n')), /statement date/);
@@ -59,6 +63,7 @@ test('Plaid mortgage mapping never treats the escrow reserve as a monthly paymen
   assert.equal(details.escrow_payment, undefined);
   assert.equal(details.min_payment, undefined);
   assert.equal(details.escrow_balance, 5200);
+  assert.equal(details.reported_payment, 1700);
 });
 
 test('read-only support views never run account or mortgage backfill writes', async () => {
@@ -97,7 +102,7 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
       return { data: { liabilities: { mortgage: [{
         account_id: 'mortgage-account', loan_term: '30 years', maturity_date: '2048-02-01',
         origination_date: '2018-01-15', origination_principal_amount: 250000,
-        interest_rate: { percentage: 4.125, type: 'fixed' }, escrow_balance: 5200
+        interest_rate: { percentage: 4.125, type: 'fixed' }, escrow_balance: 5200, next_monthly_payment: 1925.50
       }] } } };
     });
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => {
@@ -143,6 +148,9 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
     assert.equal(linked.apr, 4.125);
     assert.equal(linked.balance, 186000);
     assert.equal(linked.escrow_payment, 400);
+    assert.equal(linked.reported_payment, 1925.50);
+    assert.equal(linked.reported_payment_source, 'plaid');
+    assert.notEqual(linked.simulation.payment, linked.reported_payment, 'reported total never becomes the amortizing payment');
     assert.equal(linked.first_payment_month, '2018-03');
     assert.equal(linked.origination_date, '2018-01-15');
     assert.equal(linked.maturity_date, '2048-02-01');
@@ -164,6 +172,8 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
     assert.equal(imported.imported, 0);
     assert.equal(imported.mortgage.id, 1);
     assert.equal((await call('/mortgage')).mortgages[0].apr, 4.25);
+    assert.equal((await call('/mortgage')).mortgages[0].reported_payment_source, 'plaid',
+      'a statement without a total payment does not relabel an older Plaid payment as statement evidence');
     assert.equal((await call('/accounts')).accounts[0].balance, 185000);
     const recover = (batchId, action) => withUser(1, () => pg.transaction(async tx => {
       const tenant = adapter(tx);

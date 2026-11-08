@@ -17,6 +17,8 @@ function mortgageRow(row) {
     min_payment: number(row.min_payment), due_date: row.due_date,
     original_amount: number(row.original_amount), term_months: number(row.term_months),
     first_payment_month: row.first_payment_month, escrow_payment: number(row.escrow_payment),
+    reported_payment: number(row.reported_payment),
+    reported_payment_source: row.reported_payment_source, reported_payment_as_of: row.reported_payment_as_of,
     payment_match: row.payment_match, included: row.included !== false,
     account_id: row.account_id, origination_date: row.origination_date, maturity_date: row.maturity_date,
     mortgage_source: row.mortgage_source, mortgage_data_as_of: row.mortgage_data_as_of
