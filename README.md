@@ -263,6 +263,9 @@ Seasonal trend comparisons require 15 months. Warning thresholds are unchanged.
 
 **Hot and cold months** uses a spending landscape instead of a numeric heatmap:
 warm peaks rise above each category's usual month and cool valleys fall below it.
+An inline coral/teal/dashed-line legend explains the comparison, with scaling and
+coverage caveats under **How to interpret this view**. Fixed rows say **Fixed
+payments** directly rather than using an asterisk.
 Each lane has its own vertical scale. Select a month button or plotted point for
 all exact category amounts, baselines and dollar/percentage changes. Headline
 totals cover displayed categories only. Usual means the median of selected months,

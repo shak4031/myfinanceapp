@@ -57,6 +57,16 @@
 .money-reading-status { font-size: 11px; font-weight: 700; color: #526576; }
 .money-terrain-wrap { overflow: auto; max-height: 680px; border-radius: 16px; background: radial-gradient(ellipse at 60% 15%, #204657, #0b202e); }
 .money-terrain { display: block; width: 100%; }
+.money-terrain-guide { padding: 16px 18px; margin-bottom: 14px; border: 1px solid #d5e0e6; border-radius: 12px; background: #f7fafc; color: #334155; font-size: 14px; line-height: 1.6; }
+.money-terrain-guide > strong { color: #183c4d; font-size: 15px; }
+.money-terrain-guide ul { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 0; margin: 12px 0; list-style: none; }
+.money-terrain-guide li { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.money-terrain-guide p { margin: 8px 0; }
+.money-terrain-guide summary { cursor: pointer; font-weight: 600; }
+.money-terrain-key { display: inline-block; width: 18px; height: 12px; border-radius: 3px; margin-right: 4px; }
+.money-terrain-key.is-higher { background: #fb998c; }
+.money-terrain-key.is-lower { background: #66d3d0; }
+.money-terrain-key.is-baseline { height: 0; border-top: 2px dashed #526576; border-radius: 0; }
 .money-terrain g[role="button"]:focus { outline: none; }
 .money-terrain g[role="button"]:focus circle:last-child, .money-terrain g[aria-pressed="true"] circle:last-child { stroke: #fff; stroke-width: 2px; }
 .money-season-headline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }

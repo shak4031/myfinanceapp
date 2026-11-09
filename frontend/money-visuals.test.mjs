@@ -97,6 +97,12 @@ test('monthly terrain retains every row and month with baselines, deltas and sel
   assert.match(html, /Aug 2026: \$100\.00; usual \$200\.00; difference -\$100\.00 \(-50\.0%\)/);
   assert.match(html, /own vertical scale/);
   assert.match(html, /missing imports/);
+  assert.match(html, /Compare each category with its usual monthly spending/);
+  assert.match(html, /Coral areas:<\/b> more spending than usual/);
+  assert.match(html, /Teal areas:<\/b> less spending than usual/);
+  assert.match(html, /class="money-node-value">Fixed payments<\/text>/);
+  assert.match(html, /Select any dot or month below/);
+  assert.doesNotMatch(html, /Utilities \*|Warm peaks =|\* Fixed payments/);
   assert.doesNotMatch(html, /<table|NaN|Infinity|undefined/);
 });
 

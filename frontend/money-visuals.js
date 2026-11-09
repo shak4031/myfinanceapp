@@ -184,8 +184,9 @@
         return `<g role="button" tabindex="0" data-money-choice="${index}" aria-label="${esc(label)}" aria-pressed="${index === hot}"><title>${esc(label)}</title><circle cx="${x}" cy="${py}" r="12" fill="transparent"/><circle cx="${x}" cy="${py}" r="${rowIndex ? 4 : 6}" fill="${normal ? '#b7cbd4' : delta > 0 ? '#fb998c' : '#66d3d0'}"/></g>`;
       }).join('');
       return `<g class="money-terrain-lane"><title>${esc(title)}</title><defs><clipPath id="money-terrain-hot-${rowIndex}"><rect x="${left - 12}" y="${y - 35}" width="${width}" height="35"/></clipPath><clipPath id="money-terrain-cool-${rowIndex}"><rect x="${left - 12}" y="${y}" width="${width}" height="35"/></clipPath></defs>
-        <text x="12" y="${y - 10}" class="money-node-label">${esc(row.label.length > 27 ? `${row.label.slice(0, 24)}...` : row.label)}${row.fixed ? ' *' : ''}</text>
+        <text x="12" y="${y - 10}" class="money-node-label">${esc(row.label.length > 27 ? `${row.label.slice(0, 24)}...` : row.label)}</text>
         <text x="12" y="${y + 12}" class="money-node-value">Usual ${esc(money(base))}${median(row.values) === 0 ? ' (mean)' : ''}</text>
+        ${row.fixed ? `<text x="12" y="${y + 31}" class="money-node-value">Fixed payments</text>` : ''}
         <line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#b7cbd4" stroke-dasharray="4 5" opacity=".35"/>
         <path d="${area}" fill="#fb998c" opacity=".45" clip-path="url(#money-terrain-hot-${rowIndex})"/><path d="${area}" fill="#66d3d0" opacity=".4" clip-path="url(#money-terrain-cool-${rowIndex})"/>
         <path d="${line}" fill="none" stroke="#bfd3df" stroke-width="${rowIndex ? 1.5 : 2.5}"/>${dots}</g>`;
@@ -198,7 +199,10 @@
         <ul class="money-month-drivers">${ranked.map(row => `<li><div><b>${esc(row.label)}</b><small>Usual ${esc(money(row.base))}${row.fixed ? ' &#183; fixed payments' : ''}</small></div><strong>${esc(money(row.values[index]))}<small>${esc(difference(row.values[index], row.base))}</small></strong></li>`).join('')}</ul></section>`;
     }).join('');
     return `<div data-money-explorer="months"><div class="money-season-headline"><div><span>Highest-spend month</span><b>${esc(history.months[hot])}</b><strong>${esc(money(totals[hot]))}</strong><small>${esc(difference(totals[hot], totalBase))} vs usual</small></div><div><span>Lowest-spend month</span><b>${esc(history.months[cool])}</b><strong>${esc(money(totals[cool]))}</strong><small>${esc(difference(totals[cool], totalBase))} vs usual</small></div></div>
-      <p class="pro-footnote">Warm peaks = above usual; cool valleys = below. Dashed line = usual month. Each lane uses its own vertical scale, so compare shape, not peak height across categories. * Fixed payments. Low or zero months can reflect missing imports, not savings.</p>
+      <div class="money-terrain-guide"><strong>Compare each category with its usual monthly spending</strong>
+        <ul><li><span class="money-terrain-key is-higher" aria-hidden="true"></span><b>Coral areas:</b> more spending than usual.</li><li><span class="money-terrain-key is-lower" aria-hidden="true"></span><b>Teal areas:</b> less spending than usual.</li><li><span class="money-terrain-key is-baseline" aria-hidden="true"></span><b>Dashed line:</b> the usual amount printed beside each category.</li></ul>
+        <p>Select any dot or month below to see exact amounts and differences.</p>
+        <details><summary>How to interpret this view</summary><p>Each category uses its own vertical scale. Compare changes within a row, not peak heights between rows. Low or zero spending may reflect missing imports, not savings. Rows labeled Fixed payments contain payments marked as fixed bills.</p></details></div>
       <div class="money-terrain-wrap" role="region" aria-label="Monthly spending landscape; scroll horizontally for all months" tabindex="0"><svg class="money-terrain" viewBox="0 0 ${width} ${height}" style="min-width:${width}px" role="group" aria-label="Monthly category spending above and below each category's usual month. Points show exact amounts and comparisons.">${grid}${terrain}</svg></div>
       <div class="money-choice-list" role="group" aria-label="Inspect a spending month">${history.months.map((month, index) => `<button type="button" data-money-choice="${index}" aria-pressed="${index === hot}">${esc(month)}</button>`).join('')}</div>
       <div class="money-reading" aria-live="polite">${details}</div>
