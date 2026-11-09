@@ -8,7 +8,7 @@ import { migratePrivateSchema } from './schema.js';
 import { withUser } from './tenant.js';
 import { encryptPlaidToken } from './plaid.js';
 import { plaidMortgageDetails, applyMortgageEvidence, ensurePlaidAccounts, refreshMortgageAccounts } from './mortgageSync.js';
-import { parseStatementText } from './pdfParser.js';
+import PDFParser, { parseStatementText } from './pdfParser.js';
 import { statementPDF } from './test-fixtures/statements.js';
 import mortgageRouter from '../routes/mortgage.js';
 import plaidRouter from '../routes/plaid.js';
@@ -23,6 +23,18 @@ const lines = [
   'Origination Date: 01/15/2018', 'Maturity Date: 02/01/2048',
   'First Payment Date: 03/01/2018', 'Monthly Escrow Payment: $450.00',
   'Principal and Interest: $1229.85'
+];
+const activityLines = [
+  'PennyMac', 'Mortgage Activity Statement', 'Loan Number: XXXX1234',
+  'Statement Date: November 1, 2026', 'Payment Due Date: December 1, 2026',
+  'Past Payments Breakdown As of Last Stmt Paid Year to Date',
+  'Principal: $1500.00 $7500.00', 'Interest: $1000.00 $5000.00',
+  'Escrow (Taxes & Insurance): $900.00 $4500.00',
+  'Unpaid Principal Balance: $185000.00', 'Escrow Balance: $3200.00',
+  'Interest Rate: 4.25%', 'Contractual Amount Due',
+  'Principal: $729.85', 'Interest: $500.00',
+  'Escrow (Taxes and Insurance): $450.00', 'Regular Monthly Payment: $1679.85',
+  'Fees & Charges (total outstanding): $0.00', 'Total Amount Due: $1679.85'
 ];
 const adapter = pg => ({
   async query(sql, params = []) {
@@ -64,6 +76,34 @@ test('Plaid mortgage mapping never treats the escrow reserve as a monthly paymen
   assert.equal(details.min_payment, undefined);
   assert.equal(details.escrow_balance, 5200);
   assert.equal(details.reported_payment, 1700);
+});
+
+test('mortgage activity PDFs accept named dates and isolate current escrow from reserves and historical totals', async () => {
+  const parsed = await new PDFParser().parseDocument(statementPDF(activityLines));
+  assert.equal(parsed.statement.type, 'mortgage');
+  assert.equal(parsed.statement.closingDate, '2026-11-01');
+  assert.equal(parsed.statement.last4, '1234');
+  assert.equal(parsed.statement.mortgage.balance, 185000);
+  assert.equal(parsed.statement.mortgage.escrow_payment, 450);
+  assert.equal(parsed.statement.mortgage.min_payment, 1229.85);
+  assert.equal(parsed.statement.mortgage.reported_payment, 1679.85);
+  assert.equal(parsed.statement.mortgage.original_amount, null);
+  assert.deepEqual(parsed.transactions, []);
+  const noCurrent = activityLines.filter(line => !line.startsWith('Escrow (Taxes and Insurance)'));
+  assert.equal(parseStatementText(noCurrent.join('\n')).statement.mortgage.escrow_payment, null,
+    'escrow reserves and historical payment tables cannot substitute for a missing monthly charge');
+  const onlyReserve = activityLines.slice(0, activityLines.indexOf('Contractual Amount Due'));
+  assert.equal(parseStatementText(onlyReserve.join('\n')).statement.mortgage.escrow_payment, null);
+  assert.equal(parseStatementText(activityLines.join('\n').replace('Statement Date: November 1, 2026',
+    'Statement Date:\nNovember 1, 2026')).statement.closingDate, '2026-11-01');
+  assert.throws(() => parseStatementText(activityLines.join('\n').replace('November 1, 2026', 'February 30, 2026')), /valid date/);
+  assert.throws(() => parseStatementText(activityLines.concat('Statement Date: November 2, 2026').join('\n')), /Conflicting statement date/);
+  const namedTerms = lines.join('\n').replace('01/15/2018', 'January 15, 2018')
+    .replace('02/01/2048', 'February 1, 2048').replace('03/01/2018', 'March 1, 2018');
+  const terms = parseStatementText(namedTerms).statement.mortgage;
+  assert.equal(terms.origination_date, '2018-01-15');
+  assert.equal(terms.maturity_date, '2048-02-01');
+  assert.equal(terms.first_payment_month, '2018-03');
 });
 
 test('read-only support views never run account or mortgage backfill writes', async () => {
@@ -167,13 +207,19 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
     assert.equal((await call('/mortgage')).mortgages[0].apr, 4.125);
 
     // A future-dated fixture keeps this test independent of the machine's current date.
-    const pdfBody = { pdfBase64: statementPDF(lines.map(line => line.replace('11/01/2026', '11/01/2090'))).toString('base64'), accountId };
+    const pdfBody = { pdfBase64: statementPDF(activityLines.map(line => line.replace('November 1, 2026', 'November 1, 2090'))).toString('base64'), accountId };
     const imported = await call('/import/import-pdf', pdfBody);
     assert.equal(imported.imported, 0);
     assert.equal(imported.mortgage.id, 1);
     assert.equal((await call('/mortgage')).mortgages[0].apr, 4.25);
-    assert.equal((await call('/mortgage')).mortgages[0].reported_payment_source, 'plaid',
-      'a statement without a total payment does not relabel an older Plaid payment as statement evidence');
+    const statementMortgage = (await call('/mortgage')).mortgages[0];
+    assert.equal(statementMortgage.reported_payment_source, 'statement');
+    assert.equal(statementMortgage.reported_payment, 1679.85);
+    assert.equal(statementMortgage.escrow_payment, 450);
+    assert.equal(statementMortgage.original_amount, 250000, 'missing original terms retain the linked mortgage details');
+    assert.equal(statementMortgage.term_months, 360);
+    assert.equal(statementMortgage.first_payment_month, '2018-03');
+    assert.ok(statementMortgage.simulation);
     assert.equal((await call('/accounts')).accounts[0].balance, 185000);
     const recover = (batchId, action) => withUser(1, () => pg.transaction(async tx => {
       const tenant = adapter(tx);

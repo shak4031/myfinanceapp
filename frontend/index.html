@@ -1328,7 +1328,7 @@
         <div id="import-pdf-panel" style="display: none;">
           <div class="import-detected-account"><span>Account detected from your statement</span><button type="button" onclick="choosePdfAccount()">Choose account instead</button></div>
           <p class="import-description">
-            Upload an original bank or credit card PDF. Balances and transactions are checked before saving.
+            Upload an original bank, credit card or mortgage PDF. Statement details are checked before saving; mortgage summaries update loan details without creating payment transactions.
           </p>
           <input type="file" id="pdf-input" accept=".pdf" style="display: none;" onchange="onPdfSelected(event)">
           <button type="button" id="pdf-dropzone" class="import-dropzone" onclick="document.getElementById('pdf-input').click()"
@@ -1339,7 +1339,7 @@
             <strong>Choose a PDF statement</strong>
             <span>or drag it here · Up to 12 MB / 100 pages</span>
           </button>
-          <p class="import-hint">Text-based, unlocked PDFs only. For scans or protected files, use a CSV/OFX export instead. Purchase APR is captured when readable.</p>
+          <p class="import-hint">Text-based, unlocked PDFs only. For scans or protected files, use a CSV/OFX export instead. Purchase APR or mortgage interest rate and monthly escrow are captured when readable.</p>
           <div id="pdf-file-list" class="import-file-list" aria-live="polite"></div>
           <div class="import-actions">
             <button type="button" class="btn btn-primary" onclick="importPDF()" disabled id="pdf-import-btn">Import statement</button>

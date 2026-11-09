@@ -90,27 +90,48 @@ function accountIdentity(lines, card) {
 function mortgageStatement(lines) {
   const text = lines.join('\n');
   const readDate = (label, name) => {
-    const values = lines.map(line => {
+    const values = lines.map((line, index) => {
       const match = line.match(label);
-      return match ? dateValue(match[1]) : null;
+      if (!match) return null;
+      const value = line.slice(match[0].length).trim() || lines[index + 1] || '';
+      const parsed = dateValue(value);
+      if (!parsed) throw fail(`The mortgage ${name} could not be read as a valid date. Nothing was imported.`);
+      return parsed;
     }).filter(Boolean);
     if (new Set(values).size > 1) throw fail(`Conflicting ${name} values were found.`);
     return values[0] || null;
   };
-  const closingDate = readDate(/^(?:statement date|statement closing date|as of)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'statement date');
+  const closingDate = readDate(/^(?:statement date|statement closing date|as of)\s*:?\s*/i, 'statement date');
   const balance = labeledMoney(lines, /^(?:outstanding principal(?: balance)?|unpaid principal(?: balance)?|principal balance)\s*:?\s*/i, 'principal balance');
   if (!closingDate || balance == null || balance < 0) throw fail('A mortgage statement date and outstanding principal balance are required. Nothing was imported.');
   const rates = [...text.matchAll(/(?:current )?interest rate\s*:?\s*(\d{1,2}(?:\.\d+)?)\s*%/gi)].map(match => Number(match[1]));
   if (new Set(rates).size > 1) throw fail('Conflicting mortgage interest rates were found.');
-  const origination = readDate(/^(?:origination date|loan origination date)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'origination date');
-  const maturity = readDate(/^(?:maturity date|loan maturity date)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'maturity date');
-  const first = readDate(/^first payment date\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-](?:\d{4}|\d{2}))\b/i, 'first payment date');
+  const origination = readDate(/^(?:origination date|loan origination date)\s*:?\s*/i, 'origination date');
+  const maturity = readDate(/^(?:maturity date|loan maturity date)\s*:?\s*/i, 'maturity date');
+  const first = readDate(/^first payment date\s*:?\s*/i, 'first payment date');
   const terms = [...text.matchAll(/(?:original )?loan term\s*:?\s*(\d+)\s*(years?|months?)\b/gi)]
     .map(match => Number(match[1]) * (/year/i.test(match[2]) ? 12 : 1));
   if (new Set(terms).size > 1 || terms.some(term => term < 1 || term > 600)) throw fail('The mortgage term is conflicting or invalid.');
   const term = terms[0] || null;
-  const escrow = labeledMoney(lines, /^(?:monthly escrow(?: payment)?|escrow(?: payment)?(?: \(taxes and insurance\))?)\s*:?\s*/i, 'monthly escrow payment');
-  const pi = labeledMoney(lines, /^principal (?:and|&) interest\s*:?\s*/i, 'principal and interest payment');
+  const breakdowns = [];
+  for (let index = 0; index < lines.length; index++) {
+    if (!/^contractual amount due\s*:?\s*$/i.test(lines[index])) continue;
+    const end = lines.findIndex((line, offset) => offset > index && /^regular monthly payment\s*:/i.test(line));
+    if (end > index && end - index <= 12) breakdowns.push(...lines.slice(index + 1, end + 1));
+  }
+  // Past-payment and year-to-date tables are not the current contractual payment breakdown.
+  const escrowPattern = /^(?:monthly escrow(?: payment)?|escrow(?: payment)?(?: \(taxes (?:and|&) insurance\))?)\s*:\s*/i;
+  const escrow = labeledMoney(breakdowns.length ? breakdowns : lines.filter(line =>
+    /^(?:monthly escrow(?: payment)?|escrow payment)\s*:/i.test(line)), escrowPattern, 'monthly escrow payment');
+  let pi = labeledMoney(lines, /^principal (?:and|&) interest\s*:\s*/i, 'principal and interest payment');
+  if (breakdowns.length) {
+    const principal = labeledMoney(breakdowns, /^principal\s*:\s*/i, 'contractual principal');
+    const interest = labeledMoney(breakdowns, /^interest\s*:\s*/i, 'contractual interest');
+    if (principal != null && interest != null) {
+      if (pi != null && pi !== principal + interest) throw fail('Conflicting principal and interest payment values were found.');
+      pi = principal + interest;
+    }
+  }
   const identity = accountIdentity(lines, false);
   const mortgage = {
     balance: cash(balance), apr: rates[0] ?? null,
@@ -218,7 +239,7 @@ function reconcile(transactions, statement) {
 
 export function parseStatementText(text) {
   const lines = String(text).replace(/\u00a0/g, ' ').replace(/[−–]/g, '-').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  if (/\b(?:mortgage statement|mortgage account statement)\b/i.test(text)
+  if (/\bmortgage (?:(?:account|activity) )?statement\b/i.test(text)
     || (/\b(?:outstanding|unpaid) principal\b/i.test(text) && /\binterest rate\b/i.test(text))) return mortgageStatement(lines);
   if (lines.join('').length < 80) throw fail('This PDF has no readable statement text (it may be a scanned image). Download the original text-based statement or import CSV/OFX instead.');
   const statement = metadata(lines);

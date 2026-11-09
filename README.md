@@ -30,6 +30,9 @@ statements require review. If a manual mortgage already exists, open Mortgage an
 confirm which loan to link. Missing source fields retain manual entries; historical
 statements do not overwrite newer evidence. Import recovery includes loan details
 and rejects undo/restore if those details changed afterward.
+Mortgage PDFs accept numeric or full month-name dates. For activity statements,
+monthly escrow and principal/interest are read from the current contractual
+breakdown, never from historical payment totals or the escrow reserve balance.
 The amortization list positions the current year without expanding it, changing
 the existing styling, or scrolling the whole page. First payment months derived from maturity and term are estimates;
 verify them against the servicer's record. Schedules assume a fixed rate and are
