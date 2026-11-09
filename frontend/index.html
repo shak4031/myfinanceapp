@@ -2293,11 +2293,12 @@
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 ${connection.status === 'relink_required' && connection.lastErrorCode !== 'PLAID_ENVIRONMENT_MISMATCH' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
-                ${connection.status === 'connected' ? `<button class="btn btn-secondary" onclick="syncPlaidConnection(${connection.id})">Sync now</button>` : ''}
+                ${connection.status === 'connected' ? `<button class="btn btn-secondary" data-plaid-sync="${connection.id}" onclick="syncPlaidConnection(${connection.id},this)">Sync now</button>` : ''}
                 ${connection.status === 'connected' && connection.mortgageErrorCode ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Authorize mortgage access</button>` : ''}
-                <button class="btn btn-secondary" onclick="disconnectPlaidConnection(${connection.id})">Disconnect</button>
+                <button class="btn btn-secondary" data-plaid-disconnect="${connection.id}" onclick="disconnectPlaidConnection(${connection.id},this)">Disconnect</button>
               </div>
             </div>
+            <p data-plaid-sync-status="${connection.id}" role="status" aria-live="polite"></p>
             ${connection.accounts.map(account => {
               const eligible = account.type === 'depository' && account.currency === 'USD';
               const reportedBalance = account.availableBalance ?? account.currentBalance;
@@ -2313,24 +2314,70 @@
               </div>`;
             }).join('')}
           </div>`).join('');
+        refreshPlaidSyncFeedback();
       } catch (error) {
         target.textContent = error.message;
       }
     }
 
-    async function syncPlaidConnection(id) {
+    const plaidSyncStates = new Map();
+
+    function refreshPlaidSyncFeedback() {
+      for (const [id, state] of plaidSyncStates) {
+        document.querySelectorAll(`[data-plaid-sync="${id}"]`).forEach(button => {
+          button.disabled = state.pending;
+          button.textContent = state.pending ? 'Syncing...' : 'Sync now';
+          button.setAttribute('aria-busy', String(state.pending));
+        });
+        document.querySelectorAll(`[data-plaid-sync-status="${id}"]`).forEach(status => {
+          status.textContent = state.message;
+          status.setAttribute('role', state.failed ? 'alert' : 'status');
+        });
+      }
+    }
+
+    async function syncPlaidConnection(id, button) {
+      if (plaidSyncStates.get(id)?.pending) return;
       const status = document.getElementById('plaid-status');
+      const state = { pending: true, failed: false, message: 'Syncing transactions and checking account balances...' };
+      plaidSyncStates.set(id, state);
+      const report = () => {
+        if (status) status.textContent = state.message;
+        if (button) {
+          button.disabled = state.pending;
+          button.textContent = state.pending ? 'Syncing...' : 'Sync now';
+          button.setAttribute('aria-busy', String(state.pending));
+        }
+        refreshPlaidSyncFeedback();
+      };
+      report();
       try {
-        status.textContent = 'Syncing transactions and checking account balances...';
         const result = await plaidRequest(`/api/plaid/connections/${id}/sync`, 'POST', {});
-        status.textContent = `Sync complete: ${result.imported ?? result.added} new records saved, ${result.autoMatched || 0} exact matches linked automatically, ${result.released || 0} older held records processed. Plaid reported ${result.modified} changes and ${result.removed} removals.${result.flaggedReviews > 0 ? ` ${result.flaggedReviews} possible duplicates are included in totals; review them under Transactions > Review possible duplicates.` : ''}${result.pendingReviews > 0 ? ` ${result.pendingReviews} older records remain held in other connections or imports.` : ''} A successful check does not mean the bank has supplied today's activity.`;
-        if (result.syncWarning) status.textContent = result.syncWarning;
-        await loadPlaidConnections();
-        await loadTransactionImportReviews();
-        await loadDashboard();
-        await window.FinanceAccounts?.afterImport(result);
+        state.failed = result.success === false || !!result.transactionErrorCode;
+        state.message = state.failed ? `Transaction sync failed: ${result.syncWarning || result.transactionErrorCode || 'The bank connection needs attention.'}`
+          : `Sync complete: ${result.imported ?? result.added ?? 0} new records saved, ${result.autoMatched || 0} exact matches linked automatically, ${result.released || 0} older held records processed. Plaid reported ${result.modified || 0} changes and ${result.removed || 0} removals.${result.ignoredZeroAmount > 0 ? ` ${result.ignoredZeroAmount} zero-dollar bank records were omitted from the ledger.` : ''}${result.flaggedReviews > 0 ? ` ${result.flaggedReviews} possible duplicates are included in totals; review them under Transactions > Review possible duplicates.` : ''}${result.pendingReviews > 0 ? ` ${result.pendingReviews} older records remain held in other connections or imports.` : ''} A successful check does not mean the bank has supplied today's activity.${result.syncWarning ? ` Warning: ${result.syncWarning}` : ''}`;
+        report();
+        try {
+          await loadPlaidConnections();
+          await loadTransactionImportReviews();
+          await loadDashboard();
+          await window.FinanceAccounts?.afterImport(result);
+        } catch (error) {
+          state.message += ` Could not refresh all views: ${error.message}. Reload the page to see the latest saved state.`;
+        }
       } catch (error) {
-        status.textContent = error.message;
+        state.failed = true;
+        state.message = `Sync failed: ${error.message}`;
+        try {
+          await loadPlaidConnections();
+          await window.FinanceAccounts?.loadPage();
+        } catch (refreshError) {
+          state.message += ` Could not refresh connection status: ${refreshError.message}.`;
+        }
+      } finally {
+        state.pending = false;
+        report();
+        notify(state.message);
       }
     }
 
@@ -2346,16 +2393,35 @@
       }
     }
 
-    async function disconnectPlaidConnection(id) {
-      if (!confirm('Disconnect this bank? Existing transactions remain in your history, but automatic updates will stop.')) return;
+    async function disconnectPlaidConnection(id, button) {
+      if (plaidSyncStates.get(id)?.pending) { notify('Wait for this bank check to finish before disconnecting.'); return; }
+      if (!confirm('Disconnect this bank connection and all its linked accounts? Existing transactions remain in your history, but automatic updates will stop.')) return;
       const status = document.getElementById('plaid-status');
+      const state = { pending: true, failed: false, message: 'Disconnecting this bank connection...' };
+      plaidSyncStates.set(id, state);
+      if (button) button.disabled = true;
+      if (status) status.textContent = state.message;
+      refreshPlaidSyncFeedback();
       try {
         const result = await plaidRequest(`/api/plaid/connections/${id}`, 'DELETE');
-        status.textContent = result.message || 'Bank disconnected. Imported transactions were kept.';
-        await loadPlaidConnections();
-        await loadDashboard();
+        state.message = result.message || 'Bank disconnected. Imported transactions were kept.';
+        try {
+          await loadPlaidConnections();
+          await window.FinanceAccounts?.loadPage();
+          await loadDashboard();
+          window.FinancePlan?.invalidate?.();
+        } catch (error) {
+          state.message += ` Could not refresh all views: ${error.message}. Reload to see the saved state.`;
+        }
       } catch (error) {
-        status.textContent = error.message;
+        state.failed = true;
+        state.message = `Disconnect failed: ${error.message}`;
+      } finally {
+        state.pending = false;
+        if (button) button.disabled = false;
+        if (status) status.textContent = state.message;
+        refreshPlaidSyncFeedback();
+        notify(state.message);
       }
     }
 
@@ -2724,7 +2790,7 @@
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
   <script src="refresh.js?v=20261108-health"></script>
-  <script src="accounts.js?v=20261108-mortgage-sync"></script>
+  <script src="accounts.js?v=20261109-account-controls"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261107-support-layout"></script>
   <script src="pro-charts.js?v=20261031c"></script>
@@ -2742,7 +2808,7 @@
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261106-clear-labels"></script>
   <script src="marketing.js?v=20261107-highlights"></script>
-  <script src="household.js?v=20261108-health"></script>
+  <script src="household.js?v=20261109-profile-toggle"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

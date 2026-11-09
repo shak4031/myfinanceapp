@@ -8,6 +8,8 @@
   const support = () => !!window.FinanceSession?.currentSupport?.();
   const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Not available';
   let routeGeneration = 0;
+  let currentRoute = location.hash.slice(1) || 'dashboard';
+  let membershipReturnRoute = currentRoute.split('/')[0] === 'membership' ? 'dashboard' : currentRoute;
   function external(url) {
     const target = new URL(url, location.href);
     if (target.protocol !== 'https:' || target.username || target.password) throw new Error('Billing returned an invalid secure redirect.');
@@ -263,6 +265,12 @@
   window.showView = async function(route = 'dashboard') {
     if (!window.FinanceSession?.isAuthenticated?.()) return;
     if (route === 'settings/billing') route = 'membership';
+    if (route.split('/')[0] === 'membership' && currentRoute.split('/')[0] !== 'membership') membershipReturnRoute = currentRoute;
+    currentRoute = route;
+    document.querySelectorAll('.workspace-profile').forEach(button => {
+      button.setAttribute('aria-expanded', String(route.split('/')[0] === 'membership'));
+      button.setAttribute('aria-controls', 'membership-view');
+    });
     const ticket = ++routeGeneration;
     const name = route.split('/')[0];
     const accessible = ['membership', 'settings', 'tutorials', 'knowledge-base'];
@@ -303,5 +311,11 @@
       view.querySelector('[data-access-retry]').onclick = () => window.showView(route);
     }
   };
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('.workspace-profile');
+    if (!button || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    return window.showView(currentRoute.split('/')[0] === 'membership' ? membershipReturnRoute : 'membership');
+  });
   window.FinanceHousehold = { openBilling, loadSettings, billingMarkup, external };
 })();

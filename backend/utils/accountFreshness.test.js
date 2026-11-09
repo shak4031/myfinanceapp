@@ -63,6 +63,7 @@ test('Accounts includes verified Plaid activity and sync timestamps without refr
   try {
     const result = await load();
     const checking = result.accounts.find(row => row.id === 1);
+    assert.equal(checking.plaid.connectionId, 1, 'only a uniquely verified bank connection supplies a sync target');
     assert.equal(new Date(checking.plaid.lastSyncAt).toISOString(), '2026-11-05T13:00:00.000Z');
     assert.equal(checking.dataAsOf, '2026-11-04');
     assert.equal(checking.lastDataAddedAt, '2026-11-05T13:00:00.000Z');

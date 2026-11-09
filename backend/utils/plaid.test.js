@@ -79,8 +79,18 @@ test('Plaid normalization preserves bank wording and pending-to-posted identifie
   for (const extra of [{ date: '2026-02-30' }, { amount: 1.001 }, { name: '' }]) {
     assert.throws(() => plaidTransaction({
       transaction_id: 'invalid', account_id: 'a', date: '2026-10-15', name: 'Market', amount: 12.50, ...extra
-    }), { status: 400 });
+    }), { status: 502 });
   }
+});
+
+test('Plaid accepts zero-dollar authorizations without relaxing statement import validation', () => {
+  const row = { transaction_id: 'auth', account_id: 'checking', date: '2026-11-09',
+    name: 'BANK AUTHORIZATION', amount: 0, pending: true };
+  assert.equal(plaidTransaction(row).amount, 0);
+  assert.throws(() => validateImportedTransaction(plaidTransaction(row)), /positive value/);
+  assert.throws(() => plaidTransaction({ ...row, amount: 1.001 }), {
+    status: 502, code: 'PLAID_INVALID_TRANSACTION_AMOUNT'
+  });
 });
 
 test('income detection rejects fixed bill credits and transfers without losing explicit deposit choices', () => {

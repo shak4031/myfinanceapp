@@ -8,7 +8,7 @@
     const labels = { userId: 'Customer', connectionId: 'Connection', accountId: 'Bank account', operation: 'Stage',
       trigger: 'Trigger', errorCode: 'Code', errorType: 'Error type', providerRequestId: 'Plaid request',
       durationMs: 'Duration (ms)', added: 'Added', modified: 'Modified', removed: 'Removed', imported: 'Imported',
-      pendingReviews: 'Held reviews', flaggedReviews: 'Flagged reviews', released: 'Released', webhookCode: 'Webhook' };
+      pendingReviews: 'Held reviews', flaggedReviews: 'Flagged reviews', released: 'Released', ignoredZeroAmount: 'Zero-dollar records omitted', webhookCode: 'Webhook' };
     const text = Object.entries(detail || {}).filter(([key]) => labels[key])
       .map(([key, value]) => `<span><b>${labels[key]}:</b> ${esc(value)}</span>`).join(' · ');
     return text ? `<div class="log-detail">${text}</div>` : '';

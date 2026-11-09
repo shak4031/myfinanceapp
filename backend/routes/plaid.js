@@ -59,6 +59,7 @@ async function fetchAllChanges(plaidClient, accessToken, savedCursor) {
     const added = [];
     const modified = [];
     const removed = [];
+    const requestIds = new Map();
     try {
       let response;
       do {
@@ -69,10 +70,13 @@ async function fetchAllChanges(plaidClient, accessToken, savedCursor) {
         });
         added.push(...response.data.added);
         modified.push(...response.data.modified);
+        for (const row of [...response.data.added, ...response.data.modified]) {
+          requestIds.set(row.transaction_id, response.data.request_id);
+        }
         removed.push(...response.data.removed);
         cursor = response.data.next_cursor;
       } while (response.data.has_more);
-      return { added, modified, removed, cursor };
+      return { added, modified, removed, cursor, requestIds };
     } catch (error) {
       if (plaidErrorCode(error) !== 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' || attempt === 2) throw error;
     }
@@ -178,10 +182,20 @@ export async function syncConnection(client, connectionId, onlyIfDue = false, on
       failureDetails: plaidFailureDetails(error),
       syncWarning: `Accounts were checked, but transactions could not sync (${code}). Mortgage details ${mortgageWarning ? `are unavailable (${mortgageWarning}); import a statement or reconnect with mortgage access` : 'were checked separately'}.` };
   }
+  onStage('transactions_validate');
+  const normalize = raw => {
+    try { return plaidTransaction(raw); } catch (error) {
+      error.providerRequestId = changes.requestIds.get(raw?.transaction_id);
+      throw error;
+    }
+  };
+  const normalizedAdded = changes.added.map(normalize);
+  const normalizedModified = changes.modified.map(normalize);
+  const zeroAmount = [...normalizedAdded, ...normalizedModified].filter(row => row.amount === 0);
+  const added = normalizedAdded.filter(row => row.amount > 0);
+  const modified = normalizedModified.filter(row => row.amount > 0);
   onStage('transactions_apply');
   const config = await loadCategorization(client);
-  const added = changes.added.map(plaidTransaction);
-  const modified = changes.modified.map(plaidTransaction);
   const postedPendingIds = new Set([...added, ...modified].map(row => row.pendingTransactionId).filter(Boolean));
   const incoming = [];
 
@@ -210,7 +224,12 @@ export async function syncConnection(client, connectionId, onlyIfDue = false, on
   }
   const imported = await importTransactions(client, incoming, config, 'plaid');
 
-  for (const removed of changes.removed) {
+  // Zero-dollar authorizations have no ledger value. A modified/replaced record
+  // must still retire any earlier nonzero version rather than leave stale money.
+  const removals = new Set([...changes.removed.map(row => row.transaction_id),
+    ...zeroAmount.flatMap(row => [row.plaidTransactionId, row.pendingTransactionId].filter(Boolean))]);
+  for (const transactionId of removals) {
+    const removed = { transaction_id: transactionId };
     if (postedPendingIds.has(removed.transaction_id)) continue;
     const plaidOwned = (await client.query(`SELECT id FROM transactions
       WHERE plaid_transaction_id=$1 AND user_id=current_setting('app.user_id')::integer AND source='plaid'
@@ -263,7 +282,8 @@ export async function syncConnection(client, connectionId, onlyIfDue = false, on
       AND a.connection_id=$1 AND a.user_id=$2 AND t.account_id IS NULL AND a.linked_account_id IS NOT NULL`,
   [connection.id, currentUserId()]);
   await reconcileTransfers(client, currentUserId());
-  return { added: added.length, modified: modified.length, removed: changes.removed.length,
+  return { added: changes.added.length, modified: changes.modified.length, removed: changes.removed.length,
+    ignoredZeroAmount: zeroAmount.length,
     imported: imported.imported, autoMatched: imported.autoMatched || 0, released,
     pendingReviews: reviewCounts.held, flaggedReviews: reviewCounts.flagged, mortgageWarning,
     ...(mortgageWarning ? { syncWarning: `Transactions synced, but mortgage details are unavailable (${mortgageWarning}). Import a mortgage statement or reconnect with mortgage access.` } : {}) };
@@ -287,9 +307,10 @@ async function syncAndRecordFailure(connectionId, onlyIfDue = false, trigger = '
         ...(result.failureDetails || {}), errorCode: code || undefined,
         added: result.added, modified: result.modified, removed: result.removed, imported: result.imported,
         pendingReviews: result.pendingReviews, flaggedReviews: result.flaggedReviews, released: result.released,
+        ignoredZeroAmount: result.ignoredZeroAmount,
         message: result.transactionErrorCode ? `Transactions could not sync (${code}). ${plaidRecovery(code)}`
           : code ? `Transactions synced; mortgage details unavailable (${code}). ${plaidRecovery(code)}`
-            : `Transaction check completed: ${result.added} added, ${result.modified} modified, ${result.removed} removed; ${result.imported} imported, ${result.pendingReviews || 0} held for review.`
+            : `Transaction check completed: ${result.added} added, ${result.modified} modified, ${result.removed} removed; ${result.imported} imported, ${result.pendingReviews || 0} held for review; ${result.ignoredZeroAmount || 0} zero-dollar records omitted from the ledger.`
       });
     }
     return result;

@@ -102,6 +102,17 @@ test('a flagged shopping transaction enters the schedule and unflagging removes 
   assert.deepEqual(buildUpcomingPayments([{ ...transaction, is_fixed: false }], today), []);
 });
 
+test('Amazon marketplace purchases cannot match card repayments even with a shared display name', () => {
+  const bill = tx(1, { description: 'AMAZON STORE CARD PAYMENT', display_name: 'Amazon Card', category: 'Credit Cards' });
+  for (const description of ['Amazon Mkpl', 'AMAZON MKTP US', 'AMZN MKTP US*1234']) {
+    const purchase = tx(2, { description, display_name: 'Amazon Card', category: 'Shopping', is_fixed: false });
+    assert.equal(sameBill(bill, purchase), false);
+    assert.equal(sameBill(purchase, bill), false);
+    const schedule = buildUpcomingPayments([bill, { ...purchase, date: '2026-10-02' }], today);
+    assert.ok(schedule.every(item => item.status === 'projected'));
+  }
+});
+
 test('payments already made match despite missing flag, changed amount or description spacing', () => {
   const result = buildUpcomingPayments([
     tx(1),

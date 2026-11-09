@@ -79,6 +79,21 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
     await new Promise(resolve => server.once('listening', resolve));
     const base = `http://127.0.0.1:${server.address().port}/plaid`;
     try {
+      t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => ({ data: {
+        added: [{ transaction_id: 'invalid', account_id: 'checking', date: '2026-11-09', amount: 1.001, name: 'Private merchant' }],
+        modified: [], removed: [], next_cursor: 'must-not-save', has_more: false, request_id: 'validation-request-123'
+      } }));
+      const invalid = await fetch(`${base}/connections/2/sync`, { method: 'POST' });
+      assert.equal(invalid.status, 502);
+      assert.match((await invalid.json()).error, /invalid transaction amount.*No transaction changes were saved/);
+      const failedConnection = (await client.query('SELECT last_error_code,cursor FROM plaid_connections WHERE id=2')).rows[0];
+      assert.equal(failedConnection.last_error_code, 'PLAID_INVALID_TRANSACTION_AMOUNT');
+      assert.equal(failedConnection.cursor, null);
+      const validationEvent = events.filter(entry => entry.event === 'plaid.sync_failed').at(-1);
+      assert.equal(validationEvent.operation, 'transactions_validate');
+      assert.equal(validationEvent.providerRequestId, 'validation-request-123');
+      assert.match(validationEvent.message, /rolled back.*cursor is unchanged/);
+      assert.equal(JSON.stringify(validationEvent).includes('Private merchant'), false);
       for (const [path, body] of [['/connections/1/update-link', {}], ['/link-token', { connectionId: 1 }]]) {
         const response = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const result = await response.json();
@@ -261,7 +276,7 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     await sync();
     assert.deepEqual((await client.query('SELECT * FROM transactions ORDER BY id')).rows, rows, 'replays do not duplicate transactions');
     changes = { ...changes, modified: [raw('bill-1', 525, 'MORTGAGE', { date: '2026-02-30' })], next_cursor: 'invalid-cursor' };
-    await assert.rejects(sync(), /Invalid transaction date/);
+    await assert.rejects(sync(), /invalid transaction date/);
     assert.deepEqual((await client.query('SELECT * FROM transactions ORDER BY id')).rows, rows);
     assert.equal((await client.query('SELECT cursor FROM plaid_connections WHERE id=$1', [connection.id])).rows[0].cursor, 'cursor-2',
       'an invalid provider update cannot advance the sync cursor');
@@ -276,6 +291,22 @@ test('Plaid sync uses normalized directions for additions, modifications, review
     assert.equal(salary.date, '2026-11-04');
     assert.equal(salary.direction, 'CREDIT');
     assert.ok(incomeSources([salary], new Date(2026, 10, 5)).some(row => row.name === 'Wells Fargo Bank'));
+    changes = { added: [raw('zero-auth', 0, 'AUTHORIZATION', { pending: true }),
+      raw('posted-zero', 0, 'CANCELLED AUTHORIZATION', { pending_transaction_id: 'posted-1' }),
+      raw('valid-after-zero', 12.34, 'MARKET')],
+    modified: [raw('bill-1', 0, 'VOIDED BILL')], removed: [], next_cursor: 'cursor-4', has_more: false };
+    const zeroSync = await sync();
+    assert.equal(zeroSync.ignoredZeroAmount, 3);
+    assert.equal(zeroSync.imported, 1, 'a zero-dollar authorization cannot block other records');
+    const afterZero = (await client.query('SELECT * FROM transactions')).rows;
+    assert.ok(afterZero.some(row => row.plaid_transaction_id === 'valid-after-zero'));
+    assert.ok(!afterZero.some(row => ['zero-auth', 'posted-zero', 'posted-1', 'bill-1'].includes(row.plaid_transaction_id)),
+      'zero updates retire previous amounts and pending records, without saving zero ledger entries');
+    assert.equal((await client.query('SELECT cursor FROM plaid_connections WHERE id=$1', [connection.id])).rows[0].cursor, 'cursor-4');
+    changes = { ...changes, added: [raw('bad-amount', 1.001, 'MARKET')], modified: [], next_cursor: 'bad-amount-cursor' };
+    await assert.rejects(sync(), { code: 'PLAID_INVALID_TRANSACTION_AMOUNT' });
+    assert.deepEqual((await client.query('SELECT * FROM transactions')).rows, afterZero);
+    assert.equal((await client.query('SELECT cursor FROM plaid_connections WHERE id=$1', [connection.id])).rows[0].cursor, 'cursor-4');
   } finally {
     PlaidApi.prototype.transactionsSync = originalSync;
     PlaidApi.prototype.accountsGet = originalAccounts;

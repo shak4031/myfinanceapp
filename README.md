@@ -19,7 +19,25 @@ reported balances may be delayed, so the projection displays the source and
 last app-check time and advises users to verify their bank balance.
 
 Connected Plaid accounts also appear in Accounts and the import picker, including
-loans with no delivered transactions. Mortgage connections request the optional
+loans with no delivered transactions. Use **Sync now** on a linked account in
+**Accounts** or **Connect bank** to check every account on that bank connection.
+Both surfaces show inline progress and retain the result, including zero-change
+checks, warnings and failures; duplicate clicks cannot start overlapping manual
+checks. **Disconnect** on either surface uses the same bank-connection removal:
+it stops automatic updates for every account on that connection and keeps saved
+transactions. Confirmation explicitly states that sibling accounts are affected.
+**Manage bank connection** opens connection repair controls.
+The header's **Profile & membership** control toggles the membership page; clicking
+it again returns to the previous page, including its selected sub-route.
+Zero-dollar bank authorizations are omitted from the ledger and counted in sync
+results. Invalid nonzero amounts or dates fail the batch without advancing its
+cursor; admin events identify the validation field and provider request ID.
+Marketplace purchases cannot settle an Amazon card-payment bill merely through a
+shared display name. Explicitly marking a shopping transaction as fixed remains
+supported; unflagged or inactive historical groups do not add unmatched new
+purchases to paid fixed-bill history.
+
+Mortgage connections request the optional
 Liabilities product and sync loan details independently of Transactions. Enable
 Liabilities for the Plaid deployment; existing Items may need **Authorize mortgage
 access** in Connect bank. Unavailable data is shown explicitly, not inferred.

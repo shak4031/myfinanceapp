@@ -85,6 +85,31 @@ test('unflagging the recurring bill stops future forecasts but does not silently
   assert.deepEqual(result.items.filter(item => item.status === 'projected').map(item => item.date), ['2026-10-05']);
 });
 
+test('marketplace purchases never settle a card bill or appear as its extra paid bills', () => {
+  const bill = tx(1, '2026-10-05', { description: 'AMAZON STORE CARD PAYMENT', display_name: 'Amazon Card',
+    category: 'Credit Cards', account_id: 1 });
+  const original = build([bill]);
+  const result = build([bill, ...['Amazon Mkpl', 'AMAZON MKTP US', 'AMZN MKTP US*1234'].map((description, i) =>
+    tx(i + 2, '2026-11-01', { description, display_name: 'Amazon Card',
+      category: 'Shopping', account_id: 1, amount: 24 + i, is_fixed: false }))], original.occurrences);
+  assert.equal(result.items.filter(item => item.status === 'processed').length, 0);
+  assert.ok(result.items.some(item => item.status === 'projected' && item.description === 'Amazon Card'));
+});
+
+test('old unflagged shopping snapshots do not pull unrelated new purchases into paid history', () => {
+  const shopping = tx(1, '2026-10-05', { description: 'Amazon Mkpl', category: 'Shopping' });
+  const original = build([shopping]);
+  const result = build([{ ...shopping, is_fixed: false },
+    tx(2, '2026-11-01', { description: 'Amazon Mkpl', category: 'Shopping', is_fixed: false })], original.occurrences);
+  assert.equal(result.items.filter(item => item.status === 'processed').length, 0);
+  const expired = build([
+    { ...shopping, date: '2026-03-05' },
+    tx(3, '2026-11-01', { description: 'Amazon Mkpl', category: 'Shopping', is_fixed: false })
+  ]);
+  assert.equal(expired.items.filter(item => item.status === 'processed').length, 0,
+    'an ancient fixed flag cannot turn new marketplace purchases into paid bills');
+});
+
 test('new recorded bill amounts and dates update future estimates, never the unpaid earlier invoice', () => {
   const initial = build([tx(1, '2026-09-05')]);
   const updated = build([tx(1, '2026-09-05'), tx(2, '2026-10-07', { amount: 125 })], initial.occurrences);

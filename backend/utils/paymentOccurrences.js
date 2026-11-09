@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createBillMatcher, isFixedPayment, sameBill } from './fixedPayments.js';
+import { billTypesCompatible, createBillMatcher, isFixedPayment, sameBill } from './fixedPayments.js';
 import { parseTxDate, getCanonicalMerchant } from './normalize.js';
 import { currentReadOnly, currentUserId } from './tenant.js';
 import { sameSourceAccount, sourceAccountsCompatible, TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from './transactionAccount.js';
@@ -10,6 +10,7 @@ const confirmationDate = row => row.resolved_at ? iso(new Date(row.resolved_at))
 
 function accountCompatible(a, b) {
   if (!sourceAccountsCompatible(a, b)) return false;
+  if (!billTypesCompatible(a, b)) return false;
   const mask = tx => (tx.description || '').match(/(?:\bx+|\*{2,})(\d{2,4})\b/i)?.[1];
   return !mask(a) || !mask(b) || mask(a) === mask(b);
 }
@@ -123,6 +124,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     if (matches.length === 1) matches[0].payments.push(tx);
   }
   const estimateGroups = new Map();
+  const activeGroups = new Set();
   for (const estimate of estimates) {
     const matches = groups.filter(group => groupMatches(group, estimate.template));
     if (matches.length > 1 || (matches.length && estimateGroups.has(matches[0]))) {
@@ -135,6 +137,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     group.occurrences = occurrences.filter(row => groupMatches(group, row.template));
     const fixed = group.payments.filter(isFixedPayment);
     const active = fixed.some(tx => tx.date >= recentStart);
+    if (active) activeGroups.add(group);
     const recentEvidence = active || group.occurrences.some(row => row.template.date >= recentStart);
     if (!recentEvidence) {
       for (const row of group.occurrences) {
@@ -264,7 +267,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
   const matched = new Set(occurrences.map(row => row.matched_transaction_id).filter(id => id != null).map(String));
   for (const tx of debits.filter(tx => tx.date.startsWith(month) && !matched.has(String(tx.id))
     && !estimatedItems.some(item => item.id != null && String(item.id) === String(tx.id))
-    && groups.some(group => group.payments.includes(tx)))) {
+    && groups.some(group => activeGroups.has(group) && group.payments.includes(tx)))) {
     items.push({ id: tx.id, date: tx.date, dayOfMonth: Number(tx.date.slice(8, 10)), description: tx.display_name || tx.description,
       category: tx.category || 'Other', amount: tx.amount, isFixed: true, isIncome: false, status: 'processed', payMode: tx.pay_mode || null,
       ...(isFixedPayment(tx) ? { estimateTransactionId: tx.id } : {}) });

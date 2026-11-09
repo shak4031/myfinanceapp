@@ -33,6 +33,19 @@ Plaid request IDs. Provider responses/configs and financial payloads are not
 stored in diagnostic metadata. Match a Plaid request ID in the Plaid dashboard;
 match an app request ID in the application log timeline.
 
+If Plaid shows successful `/transactions/sync` requests but a failed webhook
+delivery, inspect the app's sync event: a provider HTTP 200 does not mean the app
+saved the batch. `PLAID_INVALID_TRANSACTION_AMOUNT`, `..._DATE`, `..._DESCRIPTION`
+and `..._RECORD` identify local validation failures at `transactions_validate`.
+Transaction writes are rolled back and the cursor is unchanged. Invalid provider
+records return HTTP 502 rather than blaming the caller with HTTP 400. Use the
+provider request ID to investigate; do not reconnect merely for validation errors.
+Zero-dollar authorizations are omitted explicitly, with an `ignoredZeroAmount`
+count in successful sync events/results. A zero-dollar modification or replacement
+also retires its previous bank-owned amount; linked statement history is preserved.
+Users can run **Sync now** from **Accounts**, with progress and results next to the
+account, or from the bank connection in the import dialog.
+
 | Endpoint | Purpose |
 |----------|---------|
 | `/api/admin/bank-health?userId=1&accountId=21` | Admin-only current bank-account health; max 500 rows, explicit truncation |

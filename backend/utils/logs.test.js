@@ -57,6 +57,8 @@ test('operational detail is allowlisted and grouped per affected connection', as
     errorCode: 'ITEM_LOGIN_REQUIRED', providerRequestId: 'provider-123', access_token: 'never-store',
     detail: { message: 'Bank authentication failed', secret: 'never-store', amount: 123 } });
   assert.deepEqual(entry.detail, { userId: 7, connectionId: 8, errorCode: 'ITEM_LOGIN_REQUIRED', providerRequestId: 'provider-123' });
+  assert.equal(toStoredEntry({ event: 'plaid.sync_completed', ignoredZeroAmount: 2 }).detail.ignoredZeroAmount, 2);
+  assert.equal(toStoredEntry({ event: 'plaid.sync_completed', ignoredZeroAmount: -1 }).detail.ignoredZeroAmount, undefined);
   assert.equal(entry.message, 'Bank authentication failed');
   assert.equal(groupCauses([entry, { ...entry, detail: { ...entry.detail, connectionId: 9 } }]).length, 2);
   writeEntry({ event: 'plaid.sync_completed', level: 'info', userId: 7, connectionId: 8, message: 'Checked with no changes' });

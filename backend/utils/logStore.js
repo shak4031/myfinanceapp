@@ -11,7 +11,7 @@ const LEVEL_RANK = { debug: 0, info: 1, warn: 2, error: 3 };
 const PERSISTED = new Set(['warn', 'error']);
 const shouldPersist = entry => PERSISTED.has(entry.level) || entry.source.startsWith('plaid.');
 const DETAIL_IDS = ['userId', 'connectionId', 'accountId'];
-const DETAIL_NUMBERS = ['durationMs', 'added', 'modified', 'removed', 'imported', 'pendingReviews', 'flaggedReviews', 'released'];
+const DETAIL_NUMBERS = ['durationMs', 'added', 'modified', 'removed', 'imported', 'pendingReviews', 'flaggedReviews', 'released', 'ignoredZeroAmount'];
 const DETAIL_CODES = ['errorCode', 'errorType', 'providerRequestId', 'operation', 'trigger', 'webhookCode'];
 
 export function logDetail(record) {

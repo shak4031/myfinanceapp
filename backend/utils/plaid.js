@@ -13,21 +13,31 @@ export function plaidTransaction(row) {
   if (!row || typeof row.transaction_id !== 'string' || !row.transaction_id
     || typeof row.account_id !== 'string' || !row.account_id
     || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
-    throw new Error('Plaid returned an invalid transaction record');
+    throw Object.assign(new Error('Plaid returned an invalid transaction record. No transaction changes were saved and the sync cursor is unchanged. Contact support with the bank connection and sync time.'),
+      { status: 502, code: 'PLAID_INVALID_TRANSACTION_RECORD' });
   }
-  return validateImportedTransaction({
-    date: row.date,
-    description: row.original_description?.trim() || row.name || row.merchant_name,
-    amount: Math.abs(row.amount),
-    // Plaid normalizes all institutions: positive amounts are outflows, negative amounts are inflows.
-    direction: row.amount < 0 ? 'CREDIT' : 'DEBIT',
-    balance: null,
-    plaidTransactionId: row.transaction_id,
-    plaidAccountId: row.account_id,
-    isPending: row.pending === true,
-    pendingTransactionId: row.pending_transaction_id || null,
-    ...(row.personal_finance_category?.detailed ? { plaidCategory: row.personal_finance_category.detailed } : {})
-  });
+  try {
+    return validateImportedTransaction({
+      date: row.date,
+      description: row.original_description?.trim() || row.name || row.merchant_name,
+      amount: Math.abs(row.amount),
+      // Plaid normalizes all institutions: positive amounts are outflows, negative amounts are inflows.
+      direction: row.amount < 0 ? 'CREDIT' : 'DEBIT',
+      balance: null,
+      plaidTransactionId: row.transaction_id,
+      plaidAccountId: row.account_id,
+      isPending: row.pending === true,
+      pendingTransactionId: row.pending_transaction_id || null,
+      ...(row.personal_finance_category?.detailed ? { plaidCategory: row.personal_finance_category.detailed } : {})
+    }, { allowZero: true });
+  } catch (error) {
+    if (error.status !== 400) throw error;
+    const field = /amount/i.test(error.message) ? 'AMOUNT'
+      : /date/i.test(error.message) ? 'DATE'
+        : /description/i.test(error.message) ? 'DESCRIPTION' : 'RECORD';
+    throw Object.assign(new Error(`Plaid returned an invalid transaction ${field.toLowerCase()}. No transaction changes were saved and the sync cursor is unchanged. Contact support with the bank connection and sync time.`),
+      { status: 502, code: `PLAID_INVALID_TRANSACTION_${field}` });
+  }
 }
 
 function encryptionKey() {

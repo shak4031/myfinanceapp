@@ -174,7 +174,7 @@ router.get('/', route(async (req, res) => {
     const accounts = (await client.query(`SELECT ${COLUMNS} FROM accounts WHERE user_id = $1 ORDER BY (status = 'needs_review') DESC, kind, name, id`, [userId])).rows;
     const rows = (await client.query(`SELECT id, date, description, category, amount, direction, balance, account_id, plaid_account_id, source, transfer_kind, transfer_account_id, created_at
       FROM transactions WHERE user_id = $1`, [userId])).rows;
-    const linked = (await client.query(`SELECT a.account_id,a.linked_account_id,a.account_link_error,a.mask,a.type,a.subtype,a.current_balance,c.institution_name,
+    const linked = (await client.query(`SELECT a.account_id,a.connection_id,a.linked_account_id,a.account_link_error,a.mask,a.type,a.subtype,a.current_balance,c.institution_name,
       c.status,c.last_sync_at,c.last_sync_attempt_at,c.last_error_code,a.balance_checked_at
       FROM plaid_accounts a JOIN plaid_connections c ON c.id=a.connection_id AND c.user_id=a.user_id
       WHERE a.user_id=$1`, [userId])).rows;
@@ -250,7 +250,7 @@ router.get('/', route(async (req, res) => {
       const bank = plaidByAccount.get(account.id);
       return { ...account, kindLabel: ACCOUNT_KIND_LABELS[account.kind], ...entry, unknownTotal: cents(entry.unknownTotal),
         isMortgage: bank?.subtype === 'mortgage' || account.statement?.type === 'mortgage',
-        plaid: bank ? { status: bank.status, lastSyncAt: bank.last_sync_at, lastAttemptAt: bank.last_sync_attempt_at,
+        plaid: bank ? { connectionId: bank.connection_id, status: bank.status, lastSyncAt: bank.last_sync_at, lastAttemptAt: bank.last_sync_attempt_at,
           lastErrorCode: bank.last_error_code, balanceCheckedAt: bank.balance_checked_at,
           reportedBalance: bank.current_balance == null ? null : Number(bank.current_balance) } : null,
         dataAsOf, balance: balance?.balance ?? null, balanceAsOf: balance?.asOf ?? null };

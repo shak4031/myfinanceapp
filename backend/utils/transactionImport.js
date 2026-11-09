@@ -5,7 +5,7 @@ import { merchantKey } from './analytics.js';
 const MAX_AMOUNT = 999999999999.99;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function validateImportedTransaction(transaction) {
+export function validateImportedTransaction(transaction, { allowZero = false } = {}) {
   if (!transaction || typeof transaction !== 'object') throw failure(400, 'Invalid transaction record');
   const rawDate = String(transaction.date ?? '').trim();
   let year, month, day;
@@ -21,7 +21,7 @@ export function validateImportedTransaction(transaction) {
     || parsedDate.getUTCDate() !== day) throw failure(400, `Invalid transaction date: ${rawDate}`);
 
   const amount = Number(transaction.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_AMOUNT
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount === 0) || amount > MAX_AMOUNT
     || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
     throw failure(400, 'Transaction amount must be a positive value with no more than two decimal places');
   }

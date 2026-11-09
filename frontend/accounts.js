@@ -297,7 +297,7 @@
     const sync = bank ? `<div class="acct-freshness">
       <p><strong>Last successful Plaid sync:</strong> ${bank.lastSyncAt ? stamp(bank.lastSyncAt) : 'Not completed yet'}</p>
       ${bank.lastAttemptAt ? `<p class="muted">Last Plaid attempt: ${stamp(bank.lastAttemptAt)}</p>` : ''}
-      ${bank.status !== 'connected' || bank.lastErrorCode ? `<p class="acct-badge warn">Connection needs attention${bank.lastErrorCode ? `: ${escape(bank.lastErrorCode)}` : ''}. Open Connect bank to review it.</p>` : ''}
+      ${bank.status !== 'connected' || bank.lastErrorCode ? `<p class="acct-badge warn">Connection needs attention${bank.lastErrorCode ? `: ${escape(bank.lastErrorCode)}` : ''}. ${bank.status === 'connected' ? 'Review the sync result below or retry Sync now.' : 'Use Manage bank connection to review or reconnect it.'}</p>` : ''}
       <p class="muted">A successful check may return no new transactions. Activity dates and recorded balances below are separate.</p>
       ${bank.reportedBalance != null ? `<p>Bank-reported balance: <strong>${money(bank.reportedBalance)}</strong>${bank.balanceCheckedAt ? ` (checked ${stamp(bank.balanceCheckedAt)})` : ''}</p>` : ''}
     </div>` : '<p class="muted acct-freshness">No uniquely verified Plaid connection for this saved account. Its activity dates reflect saved transactions and statements, not syncs from other accounts.</p>';
@@ -328,6 +328,12 @@
         ${account.balance != null ? `<div class="acct-balance"><strong>${money(account.balance)}</strong><span class="muted">${account.kind === 'credit_card' ? 'Statement balance' : 'Recorded balance'} · ${escape(account.balanceAsOf || '')}</span></div>` : ''}
       </div>
       ${update.markup}
+      ${account.plaid?.connectionId ? `<div class="acct-actions">
+        ${account.plaid.status === 'connected' ? `<button class="btn btn-secondary" data-act="sync" data-plaid-sync="${account.plaid.connectionId}">Sync now</button>` : ''}
+        <button class="btn btn-secondary" data-act="disconnect" data-plaid-disconnect="${account.plaid.connectionId}">Disconnect</button>
+        <button class="btn btn-ghost" data-act="connect">Manage bank connection</button>
+        <span class="muted">Sync now checks this bank immediately. Sync and Disconnect apply to every account on this bank connection. Saved transactions are kept when disconnected.</span>
+      </div><p data-plaid-sync-status="${account.plaid.connectionId}" role="status" aria-live="polite"></p>` : ''}
       ${account.isMortgage ? '<p><a href="#payoff/mortgage">Open Mortgage to review or link this loan</a></p>' : ''}
       ${account.statement?.type === 'credit-card' ? `<div class="acct-statement"><strong>Latest statement · ${escape(account.statement.closingDate)}</strong><p>Purchase APR: ${account.statement.purchaseApr == null ? 'Not available (check statement)' : `${escape(account.statement.purchaseApr)}%`}${account.statement.minimumPayment == null ? '' : ` · Minimum payment: ${money(account.statement.minimumPayment)}`}${account.statement.paymentDueDate ? ` · Due: ${escape(account.statement.paymentDueDate)}` : ''}${account.statement.creditLimit == null ? '' : ` · Credit limit: ${money(account.statement.creditLimit)}`}</p><p class="muted">Statement facts only. Review any separately entered debt-plan balance or APR before using a payoff forecast.</p></div>` : ''}
       ${review ? `<div class="acct-found"><strong>Is this one of your accounts?</strong><p>This reference appeared in ${account.transfersTo} transfer${account.transfersTo === 1 ? '' : 's'}${account.unknownTotal ? ` totaling ${money(account.unknownTotal)}` : ''}. These transfers are excluded from spending and income until you review it.</p>${account.discovered_from ? `<blockquote>${escape(account.discovered_from)}</blockquote>` : ''}<p>If it is yours, choose its type and confirm below.${account.suggested_kind ? ` Suggested type: <strong>${escape(kindLabel(account.suggested_kind))}</strong> (please check).` : ''}</p></div>` : ''}
@@ -356,6 +362,7 @@
     const unknown = state.unknownTransfers || { count: 0, total: 0, recent: [] };
     root.innerHTML = `
       ${(state.warnings || []).map(warning => `<p class="acct-badge warn" role="alert">${escape(warning)}</p>`).join('')}
+      <div class="acct-actions"><button class="btn btn-primary" data-act="connect">Connect a bank</button><span class="muted">Use Sync now on a connected account to check balances and transactions. Statement-only accounts can be updated by importing a statement.</span></div>
       <div class="acct-summary">
         <div class="panel"><p class="eyebrow">SAVED THIS MONTH</p><strong>${money(state.savedThisMonth?.amount)}</strong><p class="muted">Moved to savings or investments. Not counted as spending.</p></div>
         <div class="panel"><p class="eyebrow">TRANSFERS AWAITING REVIEW</p><strong>${unknown.count}</strong><p class="muted">${unknown.count ? `${money(unknown.total)} excluded from spending and income until reviewed.` : 'No transfers awaiting review.'}</p>${unknown.count ? '<a href="#accounts-review" class="acct-review-link">Review transfer accounts &rarr;</a>' : ''}</div>
@@ -397,6 +404,7 @@
           <li><strong>Not my account:</strong> transfers to it count as spending (or income when money comes in).</li>
         </ul>
       </details>`;
+    window.refreshPlaidSyncFeedback?.();
   }
   async function refreshAll(message) {
     await load();
@@ -423,6 +431,19 @@
     const button = event.target.closest?.('#accounts-root button[data-act]');
     if (!button) return;
     event.preventDefault();
+    if (button.dataset.act === 'disconnect') {
+      await window.disconnectPlaidConnection(Number(button.dataset.plaidDisconnect), button);
+      return;
+    }
+    if (button.dataset.act === 'sync') {
+      await window.syncPlaidConnection(Number(button.dataset.plaidSync), button);
+      return;
+    }
+    if (button.dataset.act === 'connect') {
+      window.openImportModal();
+      window.switchImportTab('plaid');
+      return;
+    }
     const card = button.closest('.acct-card');
     button.disabled = true;
     try {

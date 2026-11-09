@@ -125,6 +125,28 @@ test('profile and membership are accessible during trial, expiry and paid access
   }
 });
 
+test('Profile and membership toggles back to the prior page, preserving its sub-route', async () => {
+  const f = householdFixture({ entitlement: { tier: 'pro', active: true, plusActive: true } });
+  const button = f.node('profile-toggle');
+  f.context.document.querySelectorAll = selector => selector === '.workspace-profile' ? [button] : [];
+  const attributes = {};
+  button.setAttribute = (name, value) => { attributes[name] = value; };
+  const click = () => f.listeners.get('document:click')({ button: 0, preventDefault() {}, target: {
+    closest: selector => selector === '.workspace-profile' ? button : null
+  } });
+  await f.context.showView('analytics/compass');
+  await click();
+  assert.equal(f.context.lastView, 'membership');
+  assert.equal(attributes['aria-expanded'], 'true');
+  await click();
+  assert.equal(f.context.lastView, 'analytics/compass');
+  assert.equal(attributes['aria-expanded'], 'false');
+  await f.context.showView('accounts');
+  await click();
+  await click();
+  assert.equal(f.context.lastView, 'accounts');
+});
+
 test('paid membership cancellation requires confirmation and is finalized in Stripe', async () => {
   const billing = { entitlement: { tier: 'pro', active: true, plusActive: true },
     subscription: { id: 'sub_test', plan: 'pro', status: 'active', cancel_at_period_end: false } };
@@ -1292,9 +1314,9 @@ test('account freshness marks only data older than 45 calendar days and keeps im
 test('Accounts separates current Plaid syncs from old activity, balances and failed attempts', async () => {
   const accounts = [
     { id: 1, name: 'Linked checking', kind: 'checking', dataAsOf: '2026-10-23', balance: 7332.75, balanceAsOf: '2026-10-23',
-      plaid: { status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z', lastAttemptAt: '2026-11-05T13:00:00Z' } },
+      plaid: { connectionId: 7, status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z', lastAttemptAt: '2026-11-05T13:00:00Z' } },
     { id: 2, name: 'Empty linked account', kind: 'savings', dataAsOf: null,
-      plaid: { status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z' } },
+      plaid: { connectionId: 7, status: 'connected', lastSyncAt: '2026-11-05T13:00:00Z' } },
     { id: 3, name: 'Failed checking', kind: 'checking', dataAsOf: '2026-10-23',
       plaid: { status: 'relink_required', lastSyncAt: '2026-11-04T13:00:00Z', lastAttemptAt: '2026-11-05T13:00:00Z', lastErrorCode: 'ITEM_LOGIN_REQUIRED' } },
     { id: 4, name: 'Statement only', kind: 'checking', dataAsOf: '2026-10-23' }
@@ -1314,6 +1336,26 @@ test('Accounts separates current Plaid syncs from old activity, balances and fai
   assert.match(card(3), /Connection needs attention: ITEM_LOGIN_REQUIRED/);
   assert.match(card(4), /No uniquely verified Plaid connection/);
   assert.doesNotMatch(card(4), /Last successful Plaid sync/);
+  assert.match(card(1), /data-act="sync" data-plaid-sync="7"/);
+  assert.match(card(1), /data-act="disconnect" data-plaid-disconnect="7"/);
+  assert.match(card(2), /data-act="sync" data-plaid-sync="7"/);
+  assert.match(card(1), /data-plaid-sync-status="7" role="status"/);
+  assert.doesNotMatch(card(4), /data-act="sync"/);
+  const button = f.node('account-sync');
+  button.dataset = { act: 'sync', plaidSync: '7' };
+  let syncTarget;
+  f.context.syncPlaidConnection = async (id, control) => { syncTarget = [id, control]; };
+  await f.listeners.get('document:click')({ preventDefault() {}, target: {
+    closest: selector => selector === '#accounts-root button[data-act]' ? button : null
+  } });
+  assert.deepEqual(syncTarget, [7, button], 'Accounts invokes the same sync flow as Import');
+  button.dataset = { act: 'disconnect', plaidDisconnect: '7' };
+  let disconnectTarget;
+  f.context.disconnectPlaidConnection = async (id, control) => { disconnectTarget = [id, control]; };
+  await f.listeners.get('document:click')({ preventDefault() {}, target: {
+    closest: selector => selector === '#accounts-root button[data-act]' ? button : null
+  } });
+  assert.deepEqual(disconnectTarget, [7, button], 'Accounts invokes the existing Import disconnect flow');
 });
 
 test('CSV imports use detected accounts without a required global account picker', async () => {
@@ -2361,7 +2403,7 @@ test('Plaid sync reports included flags without claiming the bank delivered curr
   let accountRefreshes = 0;
   f.context.FinanceAccounts = { afterImport: async () => { accountRefreshes++; } };
   const html = source('index.html');
-  const start = html.indexOf('    async function syncPlaidConnection(');
+  const start = html.indexOf('    const plaidSyncStates = ');
   const end = html.indexOf('    async function setPlaidCashflowAccount(', start);
   vm.runInContext(html.slice(start, end), f.context);
   await f.context.syncPlaidConnection(1);
@@ -2370,6 +2412,85 @@ test('Plaid sync reports included flags without claiming the bank delivered curr
   assert.match(f.node('plaid-status').textContent, /does not mean the bank has supplied today's activity/);
   assert.equal(accountRefreshes, 1, 'successful manual sync refreshes the Accounts panel too');
 });
+test('Plaid sync shows inline progress, prevents duplicate clicks and retains results after re-rendering', async () => {
+  const f = fixture();
+  const controls = [f.node('sync-import'), f.node('sync-account')];
+  const statuses = [f.node('status-import'), f.node('status-account')];
+  f.context.document.querySelectorAll = selector => selector === '[data-plaid-sync="7"]' ? controls
+    : selector === '[data-plaid-sync-status="7"]' ? statuses : [];
+  let resolveSync, requests = 0;
+  f.context.plaidRequest = async () => { requests++; return new Promise(resolve => { resolveSync = resolve; }); };
+  f.context.loadPlaidConnections = async () => {};
+  f.context.loadTransactionImportReviews = async () => {};
+  f.context.FinanceAccounts = { afterImport: async () => f.context.refreshPlaidSyncFeedback() };
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('    const plaidSyncStates = '), html.indexOf('    async function setPlaidCashflowAccount(')), f.context);
+  const pending = f.context.syncPlaidConnection(7, controls[0]);
+  assert.ok(controls.every(button => button.disabled && button.textContent === 'Syncing...'));
+  assert.ok(statuses.every(status => /Syncing transactions/.test(status.textContent)));
+  await f.context.syncPlaidConnection(7, controls[1]);
+  assert.equal(requests, 1);
+  resolveSync({ success: true, imported: 0, modified: 0, removed: 0, ignoredZeroAmount: 1 });
+  await pending;
+  assert.ok(controls.every(button => !button.disabled && button.textContent === 'Sync now'));
+  assert.ok(statuses.every(status => /Sync complete: 0 new records saved/.test(status.textContent)));
+  assert.match(statuses[0].textContent, /1 zero-dollar bank records were omitted/);
+  statuses[1].textContent = '';
+  f.context.refreshPlaidSyncFeedback();
+  assert.match(statuses[1].textContent, /Sync complete/);
+});
+
+test('Plaid sync displays HTTP errors and unsuccessful HTTP-200 results without claiming success', async () => {
+  const f = fixture();
+  const button = f.node('sync');
+  const localStatus = f.node('sync-status');
+  f.context.document.querySelectorAll = selector => selector.startsWith('[data-plaid-sync-status=') ? [localStatus]
+    : selector.startsWith('[data-plaid-sync=') ? [button] : [];
+  f.context.loadPlaidConnections = async () => {};
+  f.context.loadTransactionImportReviews = async () => {};
+  f.context.FinanceAccounts = { loadPage: async () => {}, afterImport: async () => {} };
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('    const plaidSyncStates = '), html.indexOf('    async function setPlaidCashflowAccount(')), f.context);
+  f.context.plaidRequest = async () => { throw new Error('Plaid returned an invalid transaction amount. No transaction changes were saved.'); };
+  await f.context.syncPlaidConnection(7, button);
+  assert.match(localStatus.textContent, /Sync failed:.*No transaction changes were saved/);
+  assert.equal(button.disabled, false);
+  f.context.plaidRequest = async () => ({ success: false, transactionErrorCode: 'PRODUCT_NOT_READY', syncWarning: 'Plaid is preparing transactions.' });
+  await f.context.syncPlaidConnection(7, button);
+  assert.match(localStatus.textContent, /Transaction sync failed: Plaid is preparing transactions/);
+  assert.doesNotMatch(localStatus.textContent, /Sync complete/);
+  f.context.plaidRequest = async () => ({ success: true, imported: 2 });
+  f.context.FinanceAccounts.afterImport = async () => { throw new Error('View unavailable'); };
+  await f.context.syncPlaidConnection(7, button);
+  assert.match(localStatus.textContent, /Sync complete: 2 new records saved/);
+  assert.match(localStatus.textContent, /Could not refresh all views: View unavailable/);
+  assert.doesNotMatch(localStatus.textContent, /Sync failed:/);
+});
+
+test('Accounts and Import share confirmed bank disconnection and refresh linked account controls', async () => {
+  const f = fixture();
+  let confirm = false, calls = [], refreshes = 0;
+  f.context.confirm = () => confirm;
+  f.context.plaidRequest = async (url, method) => { calls.push([url, method]); return { message: 'Bank disconnected. Saved transactions were kept.' }; };
+  f.context.loadPlaidConnections = async () => {};
+  f.context.FinanceAccounts = { loadPage: async () => { refreshes++; } };
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('    const plaidSyncStates = '), html.indexOf('    let importReviewOffset = ')), f.context);
+  const button = f.node('disconnect');
+  await f.context.disconnectPlaidConnection(7, button);
+  assert.equal(calls.length, 0, 'cancelling never disconnects the bank');
+  confirm = true;
+  await f.context.disconnectPlaidConnection(7, button);
+  assert.deepEqual(calls, [['/api/plaid/connections/7', 'DELETE']]);
+  assert.equal(refreshes, 1);
+  assert.match(f.node('plaid-status').textContent, /Saved transactions were kept/);
+  assert.equal(button.disabled, false);
+  f.context.plaidRequest = async () => { throw new Error('Bank unavailable'); };
+  await f.context.disconnectPlaidConnection(7, button);
+  assert.match(f.node('plaid-status').textContent, /Disconnect failed: Bank unavailable/);
+  assert.equal(button.disabled, false);
+});
+
 test('import review UI clears successful decisions, blocks double submissions and keeps failures visible', async () => {
   const f = fixture();
   f.context.escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));

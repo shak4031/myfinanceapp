@@ -44,12 +44,31 @@ function accountKey(tx) {
 function matchBill(a, b, { allowMissingMask = false, ignoreDisplayName = false } = {}, identityOf) {
   if (!sourceAccountsCompatible(a, b)) return false;
   const left = identityOf(a, ignoreDisplayName), right = identityOf(b, ignoreDisplayName);
+  if (!compatibleBillTypes(left.kind, right.kind)) return false;
   const leftMask = left.mask, rightMask = right.mask;
   if (leftMask !== rightMask && (!allowMissingMask || (leftMask && rightMask))) return false;
   return !!left.merchant && left.merchant === right.merchant;
 }
 
-const billIdentity = (tx, ignoreDisplayName) => ({ mask: accountKey(tx), merchant: merchantKey(tx, ignoreDisplayName) });
+const AMAZON_MARKETPLACE = /\b(?:amazon|amzn)\s*(?:mkpl|mktp|marketplace)\b/i;
+
+function billType(tx) {
+  const description = tx.description || '';
+  if (AMAZON_MARKETPLACE.test(description)) return 'marketplace';
+  return getFixedBillCategory(description) === 'Credit Cards'
+    || /\bamazon\b.*\b(?:card|payment|pmt)\b/i.test(description) ? 'card' : null;
+}
+
+const compatibleBillTypes = (a, b) => !(a === 'marketplace' && b === 'card') && !(b === 'marketplace' && a === 'card');
+
+export function billTypesCompatible(a, b) {
+  const left = AMAZON_MARKETPLACE.test(a.description || '');
+  const right = AMAZON_MARKETPLACE.test(b.description || '');
+  if (left === right) return true;
+  return billType(left ? b : a) !== 'card';
+}
+
+const billIdentity = (tx, ignoreDisplayName) => ({ mask: accountKey(tx), merchant: merchantKey(tx, ignoreDisplayName), kind: billType(tx) });
 
 export function sameBill(a, b, options) {
   return matchBill(a, b, options, billIdentity);

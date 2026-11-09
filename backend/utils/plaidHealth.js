@@ -1,6 +1,7 @@
 const HOUR = 60 * 60 * 1000;
 
 export function plaidRecovery(code) {
+  if (/^PLAID_INVALID_TRANSACTION_/.test(code || '')) return 'A bank transaction failed local validation. All transaction changes were rolled back and the cursor is unchanged. Check the provider request ID in Plaid and the indicated field; contact support before retrying. Reconnecting is not required for a validation error.';
   if (code === 'PLAID_ENVIRONMENT_MISMATCH') return 'Check PLAID_ENVIRONMENT. Disconnect the old-environment connection and reconnect in the correct environment; saved transactions are kept.';
   if (['ITEM_LOGIN_REQUIRED', 'INVALID_ACCESS_TOKEN', 'ITEM_NOT_FOUND', 'ITEM_ERROR'].includes(code)) return 'Ask the account owner to repair or reconnect this bank in Accounts. Automatic sync cannot repair bank authentication.';
   if (code === 'PRODUCT_NOT_READY') return 'Plaid is still preparing transactions. Retry after the six-hour backoff; check the Plaid dashboard if this persists.';
@@ -39,7 +40,7 @@ export function plaidFailureDetails(error) {
   return {
     errorCode: safe(code) || 'SYNC_FAILED',
     errorType: safe(data?.error_type),
-    providerRequestId: safe(data?.request_id),
+    providerRequestId: safe(data?.request_id || error?.providerRequestId),
     status: Number.isInteger(error?.response?.status) ? error.response.status : undefined
   };
 }

@@ -33,4 +33,7 @@ test('Plaid diagnostics expose only safe metadata, never request configs or payl
   assert.deepEqual(details, { errorCode: 'ITEM_LOGIN_REQUIRED', errorType: 'ITEM_ERROR', providerRequestId: 'provider-123', status: 400 });
   assert.equal(plaidFailureDetails({ code: 'bad\npayload' }).errorCode, 'SYNC_FAILED');
   assert.match(plaidRecovery('PLAID_ENVIRONMENT_MISMATCH'), /PLAID_ENVIRONMENT/);
+  assert.equal(plaidFailureDetails({ code: 'PLAID_INVALID_TRANSACTION_AMOUNT', providerRequestId: 'request-456' }).providerRequestId, 'request-456');
+  assert.match(plaidRecovery('PLAID_INVALID_TRANSACTION_AMOUNT'), /rolled back.*cursor is unchanged/);
+  assert.match(plaidRecovery('PLAID_INVALID_TRANSACTION_AMOUNT'), /Reconnecting is not required/);
 });
