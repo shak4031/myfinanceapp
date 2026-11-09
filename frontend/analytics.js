@@ -23,8 +23,10 @@
   }
   function compassPanel(key, title, renderer, base) {
     const finish = globalThis.FinancePerformance?.begin('cpu', `compass.${key}`);
-    const mf = compassRanges.get(key)?.data || base;
-    const body = ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
+    const state = compassRanges.get(key);
+    const mf = state?.data || base;
+    const body = state && !state.data ? `<p class="pro-empty panel">${pro().format.esc(state.error || 'Loading the selected history…')}</p>`
+      : ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
     const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
     finish?.();
     return html;
@@ -374,15 +376,15 @@
       if (!key) clear.push(shortLabel(c.label)); else (placed[key] ||= []).push(c);
     }
     const svg = globalThis.FinanceMoneyVisuals.signalNetwork(mf.categories.map(c => ({
-      label: c.label, monthly: c.average3,
+      ...c, monthly: c.average3,
       signals: [isAbove(c) && 'a', c.rising && 'b', isUnusual(c) && 'c'].filter(Boolean)
-    })), SIGNAL_NAMES);
+    })), SIGNAL_NAMES, { comparedWith: mf.comparedWith, selectedRange: !!mf.range, monthsAnalyzed: mf.monthsAnalyzed });
     const groups = [3, 2, 1].map(count => ({ count, items: Object.entries(placed).filter(([key]) => key.length === count).flatMap(([key, list]) => list.map(c => ({ c, key }))) })).filter(g => g.items.length);
     const heading = { 3: ['All three signals', 'Act now', 'act'], 2: ['Two signals agree', 'Worth changing', 'act'], 1: ['One signal', 'Keep an eye on it', 'watch'] };
     const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
-      ${clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
+      ${clear.length ? `<p class="pro-venn-clear"><b>No active warning (some readings may need more history):</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
     return card(`Where the signals overlap${how(`Above similar homes: your ${mf.range ? 'selected-period' : '3-month'} average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trend indicators retain their 3/6/12-month windows within the selected history. The latest selected month is compared with earlier months in that history. Short ranges may not support all signals.`)}`,
-      'Follow the links: categories connected to several signals deserve a closer look.', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every signal and on-track category</summary>${side}</details></div>`, 'span-3');
+      'Explore the network: select a category to see every comparison, baseline and delta. Bright links are warnings; muted links are other readings.', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every warning and remaining category</summary>${side}</details></div>`, 'span-3');
   }
 
   // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.
@@ -410,45 +412,14 @@
       'Where the latest selected month landed against your own history and similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
   }
 
-  // Category x month heatmap. Each row is coloured against its own median month, so a steady bill stays neutral and
-  // only real swings light up: red runs hot, green runs cool.
-  const heatColor = (value, base) => {
-    const dev = base > 0 ? value / base - 1 : 0;
-    if (Math.abs(dev) < 0.08) return { bg: 'transparent', k: 0, dev };
-    const k = Math.min(1, Math.abs(dev) / 0.6);
-    return { bg: `rgba(${dev > 0 ? '225,29,72' : '16,185,129'},${(0.12 + 0.78 * k).toFixed(2)})`, k, dev };
-  };
   const compact = value => value >= 9950 ? `$${(value / 1000).toFixed(0)}k` : value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
-  const middle = values => { const s = [...values].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
   function spendHeatmap(mf) {
-    const { money, esc } = pro().format;
     const hm = mf.heatmap;
     if (!hm?.rows?.length) return '';
-    const usual = values => { const m = middle(values); return m > 0 ? m : values.reduce((s, v) => s + v, 0) / values.length; };
-    const totals = hm.months.map((_, i) => hm.rows.reduce((s, row) => s + row.values[i], 0));
-    const cell = (label, month, value, base) => {
-      const c = heatColor(value, base);
-      const note = c.k ? `${Math.round(Math.abs(c.dev) * 100)}% ${c.dev > 0 ? 'above' : 'below'} your usual ${money(base, true)}` : 'about usual';
-      return `<td class="pro-heat-cell${c.k > 0.55 ? ' is-strong' : ''}" style="background:${c.bg}" title="${esc(label)}, ${esc(month)}: ${money(value, true)} (${note})">${value ? compact(value) : '&middot;'}</td>`;
-    };
-    const head = `<tr><th scope="col">Category</th>${hm.months.map(m => `<th scope="col">${esc(m.split(' ')[0])}<small>${esc(m.split(' ')[1].slice(2))}</small></th>`).join('')}<th scope="col" class="num">Usual</th></tr>`;
-    const body = hm.rows.map(row => {
-      const base = usual(row.values);
-      return `<tr><th scope="row">${esc(shortLabel(row.label))}${row.fixed ? '<small>fixed</small>' : ''}</th>${row.values.map((v, i) => cell(row.label, hm.months[i], v, base)).join('')}<td class="num">${money(base, true)}</td></tr>`;
-    }).join('');
-    const totalBase = usual(totals);
-    const foot = `<tr class="pro-heat-total"><th scope="row">All shown</th>${totals.map((v, i) => cell('All shown', hm.months[i], v, totalBase)).join('')}<td class="num">${money(totalBase, true)}</td></tr>`;
-    // The takeaway: the hottest month and the category that drove most of it.
-    const hot = totals.reduce((best, v, i) => v > totals[best] ? i : best, 0);
-    const driver = hm.rows.map(row => ({ row, extra: row.values[hot] - usual(row.values) })).sort((a, b) => b.extra - a.extra)[0];
-    const lede = totals[hot] > totalBase * 1.08 && driver?.extra > 0
-      ? `<p class="pro-heat-lede"><b>${esc(hm.months[hot])}</b> was your hottest month: ${money(totals[hot], true)}, ${money(totals[hot] - totalBase, true)} over your usual month. <b>${esc(shortLabel(driver.row.label))}</b> drove ${money(driver.extra, true)} of it.</p>`
-      : '<p class="pro-heat-lede">No month ran far above your usual. Look along each row for categories that keep running warm.</p>';
-    const legend = '<div class="pro-heat-legend"><span>Cooler than usual</span><i style="background:rgba(16,185,129,.9)"></i><i style="background:rgba(16,185,129,.4)"></i><i class="is-neutral"></i><i style="background:rgba(225,29,72,.4)"></i><i style="background:rgba(225,29,72,.9)"></i><span>Hotter than usual</span></div>';
-    return card(`Hot and cold months${how('Every spending category (transfers between your own accounts excluded), month by month. Each row is coloured against its own median month, so steady bills stay neutral and a category only lights up when it swings: within 8% of usual is blank, and colour deepens up to 60% above or below. "Usual" is that median month. Hover a cell for the exact figure.')}`,
-      'Each row against its own usual month. Red runs hot, green runs cool.',
-      `${lede}${scrollRegion('Monthly spending heatmap', `<table class="pro-heatmap"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>`)}${legend}`, 'span-3');
+    return card(`Hot and cold months${how('Recorded non-transfer spending, including fixed bills and one-off purchases. Each landscape has its own vertical scale and a dashed usual-month baseline: the median, or the mean when the median is zero. Peaks are above usual; valleys are below. Missing imports can look like low spending. Select a month or point for exact amounts and dollar/percentage differences.')}`,
+      'Your spending terrain: warm peaks, cool valleys. Select a month to discover what moved.',
+      globalThis.FinanceMoneyVisuals.monthlyLandscape(hm), 'span-3');
   }
 
   // Merchant bubbles: size and colour switch between attributes; the field itself is a small physics simulation (mountBubbles).
@@ -840,13 +811,27 @@
     try {
       interestState.data = null; interestState.error = '';
       current = await pro().getAnalytics(force);
+      if (tab === 'compass' && current.moneyFlow?.range?.months === 3) {
+        const end = lastCompleteMonth();
+        for (const key of ['signals', 'heatmap']) {
+          if (!compassRanges.has(key)) compassRanges.set(key, {
+            preset: '12', from: monthKey(end - 11), to: monthKey(end), data: null, stale: true, loading: true, error: ''
+          });
+        }
+      }
       if (force || [...compassRanges.values()].some(state => state.stale)) {
+        const requests = new Map();
         await Promise.all([...compassRanges].map(async ([key, state]) => {
           try {
-            const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`);
+            const url = `/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`;
+            if (!requests.has(url)) requests.set(url, pro().request(url));
+            const data = await requests.get(url);
             if (compassRanges.get(key) === state) { state.data = data; state.error = ''; state.stale = false; state.loading = false; }
           } catch (error) {
-            if (compassRanges.get(key) === state) state.error = `Could not refresh this period: ${error.message}. Previous result shown.`;
+            if (compassRanges.get(key) === state) {
+              state.loading = false;
+              state.error = `Could not refresh this period: ${error.message}.${state.data ? ' Previous result shown.' : ' No readings shown; try Apply to retry.'}`;
+            }
           }
         }));
       }

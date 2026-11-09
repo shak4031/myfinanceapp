@@ -4316,6 +4316,49 @@ test('recurring discovery shows every candidate and filters status, type and mer
   assert.doesNotMatch(source('analytics.js'), /unmarked\.slice\(0, 12\)/);
 });
 
+test('signal and monthly explorers load a shared year of evidence rather than the summary three-month window', async () => {
+  const { buildDemoData } = await import('../backend/utils/demo.js');
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
+  const now = new Date(), demo = buildDemoData(now), calls = [];
+  const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const range = months => ({ months, endYear: end.getFullYear(), endMonth: end.getMonth() });
+  const base = { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range: range(3) }), range: range(3) };
+  const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: base };
+  const f = loadPro(async url => {
+    if (url === '/api/license') return response(200, { active: true, plusActive: true, features: [] });
+    if (url.startsWith('/api/analytics/compass?')) {
+      calls.push(url);
+      const params = new URL(url, 'http://local').searchParams;
+      const [year, month] = params.get('to').split('-').map(Number);
+      const [startYear, startMonth] = params.get('from').split('-').map(Number);
+      const requested = { from: params.get('from'), to: params.get('to'), months: (year - startYear) * 12 + month - startMonth + 1, endYear: year, endMonth: month - 1 };
+      return response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range: requested }), range: requested });
+    }
+    return response(200, payload);
+  });
+  await f.context.loadAnalyticsPage(false, 'compass');
+  const html = f.node('analytics-content').innerHTML;
+  assert.equal(calls.length, 1, 'same initial history request is reused by both panels');
+  for (const key of ['signals', 'heatmap']) {
+    const start = html.indexOf(`data-compass-panel="${key}"`);
+    const panel = html.slice(start, html.indexOf('</section>', start));
+    assert.match(panel, /value="12" selected/);
+    assert.match(panel, /12 of 12 completed months available/);
+  }
+  assert.match(html, /Rising signal/);
+  assert.match(html, /Prior-month median/);
+  const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const values = { preset: { value: '6' }, from: { value: key(new Date(end.getFullYear(), end.getMonth() - 5, 1)) }, to: { value: key(end) } };
+  const form = { dataset: { compassRange: 'signals' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
+  await f.listeners.get('document:submit')({ preventDefault() {}, target: { closest: () => form } });
+  await f.context.loadAnalyticsPage(false, 'compass');
+  const updated = f.node('analytics-content').innerHTML;
+  const start = updated.indexOf('data-compass-panel="signals"');
+  assert.match(updated.slice(start, updated.indexOf('</section>', start)), /value="6" selected/);
+  assert.equal(calls.length, 2, 'selected periods are preserved on reload');
+});
+
 test('Compass date ranges offer only four month presets and custom dates, update independently and show errors', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
@@ -4621,8 +4664,12 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Credits are shown separately, not deducted/);
   assert.match(html, /Compare with Transactions using these exact months/);
   assert.match(html, /Hot and cold months/);
-  assert.equal((html.match(/<tbody>[\s\S]*?<\/tbody>/g).find(b => b.includes('pro-heat-cell')).match(/<tr/g) || []).length, mf.heatmap.rows.length + 1);
-  assert.match(html, /<b>[A-Z][a-z]{2} \d{4}<\/b> was your hottest month/);
+  assert.equal((html.match(/class="money-terrain-lane"/g) || []).length, mf.heatmap.rows.length + 1);
+  assert.match(html, /Highest-spend month/);
+  assert.match(html, /Monthly spending landscape/);
+  assert.match(html, /data-money-explorer="signals"/);
+  assert.match(html, /Similar homes \$[\d,.]+\/mo; difference/);
+  assert.match(html, /data-money-reading="0"/);
   assert.match(html, /<details class="pro-mf-details panel"><summary><span>Technical readings/);
   assert.match(html, /Purchases &times; size/);
   assert.match(html, /data-analytics-action="household-save"/);

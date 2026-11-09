@@ -151,7 +151,8 @@ function monthlySeries(transactions, today, months = HISTORY) {
     const typical = median(list.map(entry => entry.amount));
     const series = Array(HISTORY).fill(0), visits = Array(HISTORY).fill(0), skipped = [];
     for (const entry of list) {
-      if (!isFixed(entry.tx) && entry.amount >= Math.max(ONE_OFF_MIN, typical * ONE_OFF_MULTIPLE)) {
+      entry.excludedFromSignals = !isFixed(entry.tx) && entry.amount >= Math.max(ONE_OFF_MIN, typical * ONE_OFF_MULTIPLE);
+      if (entry.excludedFromSignals) {
         skipped.push({ id: entry.tx.id, date: entry.iso, description: entry.tx.description || '', amount: round(entry.amount) });
       } else { series[entry.slot] += entry.amount; visits[entry.slot] += 1; }
     }
@@ -162,7 +163,7 @@ function monthlySeries(transactions, today, months = HISTORY) {
   // A history that starts mid-month makes the first month look artificially cheap, so it is skipped.
   const startIndex = firstIndex + (firstDay > 3 ? 1 : 0);
   const available = Number.isFinite(firstIndex) ? Math.max(0, Math.min(months, currentIndex - startIndex)) : 0;
-  return { byCategory, visitCounts, oneOffs, available, currentIndex };
+  return { byCategory, visitCounts, oneOffs, entries, available, currentIndex };
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -246,7 +247,9 @@ function analyzeCategory(category, series, context, visits = null) {
   const year = last(Math.min(selectedRange ? n : 12, n)), prior = year.slice(0, -1), latest = series[n - 1];
   const range = { p5: round(quantile(year, 0.05)), p50: round(quantile(year, 0.5)), p95: round(quantile(year, 0.95)),
     latest: round(latest), month: monthLabel(currentIndex - 1), months: year.length,
-    higherThan: prior.filter(value => value < latest).length, compared: prior.length };
+    higherThan: prior.filter(value => value < latest).length, compared: prior.length,
+    priorMedian: prior.length ? round(median(prior)) : null,
+    spikeThreshold: prior.length ? round(quantile(prior, 0.95)) : null };
   const spike = prior.length >= 5 && latest > quantile(prior, 0.95) && latest - median(prior) >= 25;
 
   // Price vs volume: was the change driven by more purchases or by pricier ones? Compared with the same three months
@@ -510,7 +513,7 @@ export function buildMoneyFlowSignals({ transactions = [], profile = null, today
   if (range) today = new Date(range.endYear, range.endMonth + 1, 1);
   const normalized = normalizeProfile(profile);
   const profileSet = !!(normalized && (normalized.size || normalized.region || normalized.housing));
-  const { byCategory, visitCounts, oneOffs, available, currentIndex } = monthlySeries(transactions, today, range?.months);
+  const { byCategory, visitCounts, oneOffs, entries, available, currentIndex } = monthlySeries(transactions, today, range?.months);
   const who = profileLabel(normalized);
   const base = { source: SOURCE, profile: normalized, profileSet, comparedWith: who, monthsAnalyzed: available, categories: [], opportunities: [] };
   const { flow, small } = moneyFlow(transactions, today, typical, range?.months, range?.months ?? null, debts);
@@ -522,7 +525,16 @@ export function buildMoneyFlowSignals({ transactions = [], profile = null, today
   const context = { profile: normalized, currentIndex, selectedRange: !!range };
   const categories = BENCHMARK_CATEGORIES
     .filter(category => byCategory.has(category.id))
-    .map(category => ({ ...analyzeCategory(category, byCategory.get(category.id).slice(-available), context, visitCounts.get(category.id).slice(-available)), oneOffs: oneOffs.get(category.id) || [] }))
+    .map(category => {
+      return {
+        ...analyzeCategory(category, byCategory.get(category.id).slice(-available), context, visitCounts.get(category.id).slice(-available)),
+        oneOffs: oneOffs.get(category.id) || [],
+        transactions: (entries.get(category.id) || []).filter(entry => entry.slot >= HISTORY - available)
+          .map(({ tx, amount, iso, excludedFromSignals }) => ({ id: tx.id, date: iso, description: tx.description || '',
+            category: tx.category, amount: round(amount), excludedFromSignals }))
+          .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+      };
+    })
     .filter(row => row.average3 > 0);
   const opportunities = categories.filter(row => row.opportunity)
     .sort((a, b) => b.opportunity.monthly - a.opportunity.monthly)

@@ -229,6 +229,37 @@ serializes database connections, so printed timings are local regression
 observations, **not production PostgreSQL capacity or a real Stripe payment test**.
 Use the staging checklist in [DEPLOYMENT.md](./DEPLOYMENT.md) for those checks.
 
+## Spending Compass visual explorers
+
+**Where the signals overlap** is a selectable category/signal network. Every
+category is visible, not just warnings: bright links indicate a crossed warning
+threshold, muted links an evaluated non-warning, and dotted links an unavailable
+reading. Signals and monthly landscapes initially request 12 completed months
+(other Compass panels keep their existing three-month default); matching requests
+are shared. Customer-selected periods are preserved. Select a category node or its button for household baseline, dollar and
+percentage deltas, moving-average and momentum comparisons, and the latest month
+against its prior median, spike cutoff and volatility band. Unavailable history
+is not labeled as healthy. Short selected ranges may support household comparison
+but not trend/spike tests; choose 12 or 24 months to inspect longer history.
+Seasonal trend comparisons require 15 months. Warning thresholds are unchanged.
+
+**Hot and cold months** uses a spending landscape instead of a numeric heatmap:
+warm peaks rise above each category's usual month and cool valleys fall below it.
+Each lane has its own vertical scale. Select a month button or plotted point for
+all exact category amounts, baselines and dollar/percentage changes. Headline
+totals cover displayed categories only. Usual means the median of selected months,
+falling back to the mean if the median is zero. Low months may indicate missing
+imports, not savings. Fixed bills and one-offs remain included in these ledger
+totals; behavioral signals separately exclude qualifying one-off purchases.
+Select a signal hub or its control to collapse/expand that branch; **Focus** hides
+other branches, and a category's **Focus this category's chain** hides other nodes.
+**Expand all / reset focus** restores the whole graph. Category evidence expands
+into monthly transaction branches, with counted totals and excluded one-offs
+separated so they reconcile to the behavioral series. Individual payments link
+to the existing transaction view. Credits, internal transfers, current-month
+activity and dates outside the analyzed history are not included in this drill-down.
+Both explorers support keyboard selection and horizontal scrolling on small screens.
+
 ## Financial Health foundation
 
 **Financial Health** is a first-class workspace page at `#financial-health`,

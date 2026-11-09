@@ -57,6 +57,28 @@ test('typical spending scales with household size, region and housing', () => {
   assert.equal(expectedMonthly('mortgage', null), null);
 });
 
+test('signal transaction drill-down reconciles each category month and preserves excluded one-offs', () => {
+  const transactions = [
+    ...history('Dining', [100, 110, 120, 130, 140, 150]).map((row, i) => ({ ...row, id: i + 1 })),
+    { id: 90, date: '2026-09-10', description: 'Large banquet', category: 'Restaurants', amount: 900, direction: 'DEBIT' },
+    { id: 91, date: '2026-09-11', description: 'Internal transfer', category: 'Dining', amount: 55, direction: 'DEBIT', transfer_kind: 'internal' },
+    { id: 92, date: '2026-09-12', description: 'Credit', category: 'Dining', amount: 25, direction: 'CREDIT' },
+    { id: 93, date: '2026-10-02', description: 'Current month', category: 'Dining', amount: 150, direction: 'DEBIT' }
+  ];
+  const range = { months: 6, endYear: 2026, endMonth: 8 };
+  const data = buildMoneyFlowSignals({ transactions, today: TODAY, range });
+  const dining = data.categories.find(row => row.id === 'dining');
+  assert.equal(dining.transactions.length, 7);
+  assert.equal(dining.transactions.find(row => row.id === 90).excludedFromSignals, true);
+  assert.ok(dining.transactions.filter(row => row.id !== 90).every(row => !row.excludedFromSignals));
+  const monthKeys = [...new Set(dining.transactions.map(row => row.date.slice(0, 7)))].sort();
+  assert.deepEqual(monthKeys.map(month => dining.transactions
+    .filter(row => row.date.startsWith(month) && !row.excludedFromSignals)
+    .reduce((sum, row) => sum + row.amount, 0)), dining.series);
+  const short = buildMoneyFlowSignals({ transactions, today: TODAY, range: { ...range, months: 3 } }).categories[0];
+  assert.ok(short.transactions.every(row => row.date >= '2026-07-01' && row.date < '2026-10-01'));
+});
+
 test('profiles are validated and labelled; only standard categories match', () => {
   assert.deepEqual(normalizeProfile({ size: 13, region: 'Mars', housing: 'boat' }), { size: null, region: null, housing: null });
   assert.deepEqual(normalizeProfile({ household_size: 4, region: 'WEST', housing: 'Rent' }), { size: 4, region: 'west', housing: 'rent' });
@@ -156,6 +178,9 @@ test('the normal range is your own 5th-95th percentile and a top-5% month is a s
   assert.equal(row.range.month, 'Sep 2026');
   assert.equal(row.range.higherThan, 11);
   assert.equal(row.range.compared, 11);
+  assert.equal(row.range.priorMedian, 200);
+  assert.equal(row.range.spikeThreshold, 212.5);
+  assert.notEqual(row.range.spikeThreshold, row.range.p95, 'warning cutoff excludes the latest month; the displayed whole-range percentile does not');
   assert.ok(row.range.p5 <= row.range.p50 && row.range.p50 <= row.range.p95, JSON.stringify(row.range));
   assert.ok(row.range.p5 >= 185 && row.range.p50 >= 195 && row.range.p50 <= 210);
   assert.equal(row.spike, true);

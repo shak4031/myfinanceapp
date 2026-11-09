@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const esc = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const context = { FinancePro: { format: { esc, money: value => `$${Number(value).toFixed(2)}` } } };
 vm.runInNewContext(readFileSync(new URL('money-visuals.js', import.meta.url), 'utf8'), context);
-const { mosaic, signalNetwork } = context.FinanceMoneyVisuals;
+const { mosaic, signalNetwork, signalEvidence, monthlyLandscape } = context.FinanceMoneyVisuals;
 
 test('mosaic areas represent exact proportions and retain small merchants and escaped details', () => {
   const html = mosaic([{ name: '<Big>', value: 75, detail: '3 payments' }, { name: 'Small', value: 25 }, { name: 'Empty', value: 0 }]);
@@ -34,15 +34,112 @@ test('mosaic does not drop tiny merchants and every rectangle contributes its pr
   assert.doesNotMatch(html, /NaN|Infinity|undefined/);
 });
 
-test('signal network uses one link per real signal, keeps exact spending, and handles empty data', () => {
+test('signal network shows every category reading without manufacturing warnings', () => {
   const html = signalNetwork([{ label: 'Dining & coffee', monthly: 240, signals: ['a', 'b'] },
     { label: 'Gas', monthly: 70, signals: ['c'] }, { label: 'Clear category', monthly: 50, signals: [] }],
   { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' });
-  assert.equal((html.match(/<path /g) || []).length, 3);
+  assert.equal((html.match(/<path /g) || []).length, 9);
   assert.match(html, /Dining &amp; coffee/);
   assert.match(html, /\$240\.00/);
-  assert.match(html, /2 signals/);
-  assert.doesNotMatch(html, /Clear category|NaN|undefined/);
+  assert.match(html, /2 warning signals/);
+  assert.match(html, /Clear category/);
+  assert.doesNotMatch(html, /NaN|undefined/);
   assert.match(html, /not money transfers/);
   assert.match(signalNetwork([], {}), /No category/);
+});
+
+test('signal evidence includes exact benchmark deltas and distinguishes unsupported history from calm data', () => {
+  const category = { label: 'Dining', monthly: 450, expected: 300, signals: ['a'], series: [400, 450, 500],
+    range: { month: 'Oct 2026', latest: 500, compared: 2, priorMedian: 425, spikeThreshold: 447.5 } };
+  const [benchmark, trend, unusual] = signalEvidence(category, { selectedRange: true });
+  assert.equal(benchmark.status, 'warning');
+  assert.match(benchmark.comparison, /Similar homes \$300\.00\/mo; difference \+\$150\.00 \(\+50\.0%\)/);
+  assert.match(benchmark.rule, /Selected-period/);
+  assert.equal(trend.status, 'needs-history');
+  assert.match(trend.comparison, /3 completed months.*At least 6 months/);
+  assert.equal(unusual.status, 'needs-history');
+  assert.match(unusual.comparison, /Prior-month median \$425\.00; difference \+\$75\.00/);
+  assert.match(unusual.comparison, /Only 2 prior months/);
+  const calm = signalEvidence({ ...category, series: Array(12).fill(400),
+    crossover: { fast: 400, slow: 395, slowMonths: 12, state: 'flat' },
+    momentum: { basis: 'monthly-trend', change: 0.02, confirmed: true },
+    range: { ...category.range, compared: 11 },
+    band: { lower: 300, upper: 510, latest: 500, center: 405, position: 'inside' }
+  });
+  assert.equal(calm[1].status, 'within-range');
+  assert.match(calm[1].comparison, /average \$400\.00 versus 12-month average \$395\.00/);
+  assert.match(calm[1].comparison, /\+2\.0% per month/);
+  assert.equal(calm[2].status, 'within-range');
+  assert.match(calm[2].comparison, /band \$300\.00 to \$510\.00/);
+});
+
+test('seasonal and unconfirmed trend evidence is not mislabeled as a warning', () => {
+  const category = { monthly: 100, expected: 90, signals: [], seasonal: true, series: Array(12).fill(100),
+    crossover: { fast: 100, slow: 80, slowMonths: 12, seasonal: true } };
+  const trend = signalEvidence(category)[1];
+  assert.equal(trend.status, 'needs-history');
+  assert.match(trend.comparison, /seasonal; not used alone/);
+  const unconfirmed = signalEvidence({ ...category, momentum: { basis: 'year-over-year', change: 0.4, lastYear: 71.43, confirmed: false } })[1];
+  assert.equal(unconfirmed.status, 'within-range');
+  assert.match(unconfirmed.comparison, /not confirmed by the recent trend/);
+});
+
+test('monthly terrain retains every row and month with baselines, deltas and selectable exact readings', () => {
+  const html = monthlyLandscape({ months: ['Aug 2026', 'Sep 2026', 'Oct 2026'], rows: [
+    { label: 'Dining <out>', values: [100, 200, 300] }, { label: 'Utilities', values: [40, 40, 40], fixed: true }
+  ] });
+  assert.equal((html.match(/class="money-terrain-lane"/g) || []).length, 3);
+  assert.equal((html.match(/data-money-reading="/g) || []).length, 3);
+  assert.match(html, /Highest-spend month<\/span><b>Oct 2026/);
+  assert.match(html, /Lowest-spend month<\/span><b>Aug 2026/);
+  assert.match(html, /Dining &lt;out&gt;/);
+  assert.match(html, /usual \$200\.00; difference \+\$100\.00 \(\+50\.0%\)/);
+  assert.match(html, /Aug 2026: \$100\.00; usual \$200\.00; difference -\$100\.00 \(-50\.0%\)/);
+  assert.match(html, /own vertical scale/);
+  assert.match(html, /missing imports/);
+  assert.doesNotMatch(html, /<table|NaN|Infinity|undefined/);
+});
+
+test('single-month and zero-baseline terrain stay finite and state the mean fallback', () => {
+  for (const values of [[0], [75], [0, 0, 90], [0, 0, 0]]) {
+    const html = monthlyLandscape({ months: values.map((_, i) => `Month ${i + 1}`), rows: [{ label: 'Sparse', values }] });
+    assert.doesNotMatch(html, /NaN|Infinity|undefined/);
+    if (values.length > 1 && values.some(Boolean)) assert.match(html, /Usual \$30\.00 \(mean\)/);
+    if (values.every(value => !value)) assert.match(html, /percentage unavailable: zero baseline/);
+  }
+  assert.match(monthlyLandscape(null), /No monthly spending/);
+});
+
+test('network and terrain selection works with pointer and keyboard without navigation', () => {
+  const listeners = new Map(), choices = [], readings = [];
+  for (let i = 0; i < 3; i++) {
+    choices.push({ dataset: { moneyChoice: String(i) }, setAttribute(name, value) { this[name] = value; } });
+    readings.push({ dataset: { moneyReading: String(i) }, hidden: i !== 0 });
+  }
+  const explorer = { querySelectorAll: selector => selector === '[data-money-choice]' ? choices : readings, querySelector: () => null };
+  choices.forEach(node => { node.closest = () => explorer; });
+  const runtime = { FinancePro: context.FinancePro, document: { addEventListener: (name, listener) => listeners.set(name, listener) } };
+  vm.runInNewContext(readFileSync(new URL('money-visuals.js', import.meta.url), 'utf8'), runtime);
+  listeners.get('click')({ target: { closest: selector => selector === '[data-money-choice]' ? choices[2] : null } });
+  assert.deepEqual(readings.map(node => node.hidden), [true, true, false]);
+  assert.equal(choices[2]['aria-pressed'], 'true');
+  let prevented = false;
+  listeners.get('keydown')({ key: 'Enter', target: { closest: selector => selector === 'g[data-money-choice]' ? choices[1] : null }, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(readings.map(node => node.hidden), [true, false, true]);
+});
+
+test('transaction chain groups counted payments and excluded one-offs by month with safe transaction links', () => {
+  const html = signalNetwork([{ label: 'Dining', monthly: 100, signals: ['a'], transactions: [
+    { id: 12, date: '2026-10-03', category: 'Restaurants', description: '<Cafe>', amount: 40, excludedFromSignals: false },
+    { id: 13, date: '2026-10-04', category: 'Dining', description: 'Banquet', amount: 500, excludedFromSignals: true },
+    { id: 14, date: '2026-09-04', category: 'Dining', description: 'Dinner', amount: 25, excludedFromSignals: false }
+  ] }], { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' });
+  assert.match(html, /Expand transactions \(3\)/);
+  assert.match(html, /2026-10 &#183; \$40\.00 counted &#183; 2 payments &#183; \$500\.00 one-offs excluded/);
+  assert.match(html, /href="#transactions\/12">&lt;Cafe&gt;/);
+  assert.match(html, /2026-09 &#183; \$25\.00 counted/);
+  assert.match(html, /data-money-branch="a" aria-expanded="true"/);
+  assert.match(html, /data-money-focus-branch="b"/);
+  assert.match(html, /data-money-focus-category="0"/);
 });
