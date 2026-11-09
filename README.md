@@ -296,10 +296,11 @@ The household sits at the center of eight distinct flat legs. Each has its own
 colorful SVG illustration and local fan-out, without background boxes, shading
 or 3D controls. Cross-leg flow arrows are off by default
 to avoid a tangled network. Section tiles toggle whole legs with a visible
-shown/hidden state. **Explore** selects a section and fans out labeled items,
-eight at a time; Previous/Next controls cover larger sections without shrinking
-the entire graph. The details list also retains every item and selecting one
-opens its diagram page. **Show full landscape** restores all sections.
+shown/hidden state. **Explore** isolates a section and shows all its items.
+On-map controls unfold or fold each leg and reveal additional items in place,
+with multiple legs open together. The details list retains every item; selecting
+one reveals it without hiding other legs. **Show full landscape** restores
+the initial three-item previews and all sections.
 Select illustrations or item markers to inspect balances and recorded money flows; the inspector also
 offers branch collapse/expand. The overview previews three items per branch.
 **View options** holds expand/collapse-all and flow arrows.
@@ -309,11 +310,12 @@ screens. Its height follows the diagram's aspect ratio rather than a small
 viewport-height cap. Scroll the workspace/page horizontally and vertically to
 explore it; the diagram has no separate internal scroll container or zoom mode.
 The landscape page is exempt from the usual content-width cap.
-Overview labels identify the
-eight sections; item names and amounts are available on selection, hover/focus
-titles, or in the labeled Explore view. Section controls and the details list
+Names and values sit inside illustrated circular nodes throughout the map,
+arranged on household-centered radial legs like the original layout.
+Expanding legs adds outer tiers and grows the canvas instead of scaling nodes down.
+Section controls and the details list
 remain viewport-sized on small screens while the diagram stays large.
-Child badge sizes increase with the absolute amount relative to the largest
+Child illustration sizes increase with the absolute amount relative to the largest
 item of the same measure **within its own leg**, with bounded sizes for readability.
 Monthly activity, balances and planning progress use separate scales (including
 inside the mixed debt leg); negative balances retain their sign in labels.
@@ -322,7 +324,10 @@ Size is not a financial-health score, a share of net worth, or a
 comparison between legs. There is no
 automatic motion. **Map guide** and **Coverage and calculation notes** hold the
 instructions and accounting caveats without paragraphs surrounding the map.
-Activity nodes link to their latest 20 transactions and disclose the full count.
+Activity nodes can fan out to their latest 20 transactions, with amounts and dates
+on the map, full labels on hover/focus, and links to Transactions.
+Controls disclose displayed/total counts when more records exist.
+Keyboard users can activate expansion controls with Enter or Space.
 
 Dashboard balance provenance, last-check time and bank-lag guidance are available
 from the info button beside **Balance** (keyboard/tap accessible); stale balances

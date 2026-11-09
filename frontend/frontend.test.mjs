@@ -136,7 +136,7 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.equal(f.node('landscape-root').onclick, null);
 });
 
-test('landscape uses a large page-scrolled flat diagram without boxes or camera controls and pages large fan-outs', async () => {
+test('landscape expands populated radial nodes and payment fans in place without shrinking the canvas', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: Array.from({ length: 21 }, (_, i) => ({
     id: i + 1, date: '2026-10-10', description: `Shop ${i}`, category: `Category ${i}`, amount: 25, direction: 'DEBIT'
@@ -160,25 +160,34 @@ test('landscape uses a large page-scrolled flat diagram without boxes or camera 
   assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
   assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
   assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
-  await click({ landscapeAction: 'focus', branch: 'spending' });
-  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 10, 'household, hub and at most eight labeled items');
-  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/);
-  assert.match(root.innerHTML, /All 21 recorded connections/);
-  assert.match(root.innerHTML, /data-landscape-source="spending" data-landscape-target="activity-0"/);
-  await click({ landscapeAction: 'next-page' });
-  assert.match(root.innerHTML, /Items 9&ndash;16 of 21/);
-  await click({ landscapeAction: 'next-page' });
-  assert.match(root.innerHTML, /Items 17&ndash;21 of 21/);
-  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 7);
-  await click({ landscapeAction: 'next-page' });
-  assert.match(root.innerHTML, /Items 17&ndash;21 of 21/, 'pagination remains bounded');
+  const canvasWidth = () => Number(root.innerHTML.match(/id="landscape-svg" width="([\d.]+)"/)[1]);
+  const originalWidth = canvasWidth();
+  await click({ landscapeAction: 'fan', branch: 'spending' });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 37, 'household, eight hubs, 21 spending nodes and seven missing nodes');
+  assert.ok(canvasWidth() > originalWidth, 'the radial canvas grows instead of shrinking nodes');
+  assert.doesNotMatch(root.innerHTML, /landscape-pagination|previous-page|next-page/);
   const first = graph.nodes.find(n => n.kind === 'activity');
+  assert.match(root.innerHTML, new RegExp(`data-landscape-source="spending" data-landscape-target="${first.id}"`));
+  assert.match(root.innerHTML, /class="landscape-reading"/);
+  assert.match(root.innerHTML, /Category 20<\/text>/, 'endpoints show their real names');
+  assert.match(root.innerHTML, /\$25\/mo<\/text>/, 'endpoints show their values inside their medallions');
+  await click({ landscapeAction: 'transactions', branch: 'spending', item: first.id });
+  assert.match(root.innerHTML, /class="landscape-node is-transaction"/);
+  assert.match(root.innerHTML, /href="#transactions\/1"/);
+  assert.match(root.innerHTML, /data-landscape-source="activity-0" data-landscape-target="transaction-activity-0-1"/);
+  await click({ landscapeAction: 'transactions', branch: 'spending', item: first.id });
+  assert.doesNotMatch(root.innerHTML, /class="landscape-node is-transaction"/);
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
+  assert.doesNotMatch(root.innerHTML, /<g class="landscape-node[^"]*"[^>]*data-landscape-node="activity-0"/);
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
+  assert.match(root.innerHTML, /data-landscape-node="activity-20"/, 'fold/unfold preserves the expanded leg');
+  await click({ landscapeAction: 'fan', branch: 'spending' });
+  assert.equal(canvasWidth(), originalWidth, 'show fewer restores the preview');
   await click({ landscapeNode: first.id });
-  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/, 'detail navigation reveals the correct item page');
-  assert.match(root.innerHTML, new RegExp(`data-landscape-node="${first.id}"`));
-  await click({ landscapeAction: 'next-page' });
-  await click({ landscapeAction: 'previous-page' });
-  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/);
+  assert.match(f.node('landscape-detail').innerHTML, /href="#transactions\/1"/);
+  await click({ landscapeAction: 'focus', branch: 'spending' });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 23, 'focus shows every item, not a page');
+  assert.match(root.innerHTML, /All 21 recorded connections/);
   await click({ landscapeAction: 'reset' });
   assert.doesNotMatch(root.innerHTML, /landscape-pagination/);
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
@@ -275,8 +284,63 @@ test('landscape size weights stay within each leg and measure, with zero and una
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
   await root.onclick({ target: { dataset: { landscapeAction: 'reset' }, closest() { return this; } } });
   await root.onclick({ target: { dataset: { landscapeNode: 'negative' }, closest() { return this; } } });
-  assert.match(root.innerHTML, /<option value="spending" selected/, 'selecting an item outside the preview opens its full fan-out');
+  assert.doesNotMatch(root.innerHTML, /<option value="spending" selected/, 'revealing a preview-hidden item keeps the other legs visible');
   assert.match(root.innerHTML, /data-landscape-node="negative"/);
+});
+
+test('expanded radial legs keep nodes and controls apart with simultaneous full transaction fans', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape();
+  graph.nodes = graph.nodes.filter(node => ['household', 'branch'].includes(node.kind));
+  graph.edges = graph.edges.filter(edge => edge.source === 'household');
+  const branches = graph.nodes.filter(node => node.kind === 'branch');
+  for (const branch of branches) {
+    branch.count = 7;
+    for (let i = 0; i < 7; i++) {
+      const id = `dense-${branch.id}-${i}`;
+      graph.nodes.push({ id, branch: branch.id, kind: 'activity', label: `Recorded item ${i}`,
+        metric: 'monthly', amount: i + 25, count: 30,
+        transactions: Array.from({ length: 20 }, (_, j) => ({ id: i * 20 + j + 1,
+          label: `Payment ${j}`, date: '2026-10-10', amount: j + .01 })) });
+      graph.edges.push({ source: branch.id, target: id, kind: 'structure' });
+    }
+  }
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root');
+  const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  assert.match(root.innerHTML, /\+ Payments \(20\/30\)/, 'preview limits are disclosed');
+  await click({ landscapeAction: 'expand' });
+  for (const branch of branches) {
+    for (let i = 0; i < 3; i++) {
+      await click({ landscapeAction: 'transactions', branch: branch.id, item: `dense-${branch.id}-${i}` });
+    }
+  }
+  const nodes = [...root.innerHTML.matchAll(/<(g|a) class="landscape-node[^"]*" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?(?:data-landscape-node|href)="([^"]+)"/g)]
+    .map(([, tag, x, y, id]) => ({ id, x: Number(x), y: Number(y), r: tag === 'a' ? 44 : 123 }));
+  assert.equal(nodes.length, 545, 'all eight legs, 56 items, and 480 transactions remain visible together');
+  for (let i = 0; i < nodes.length; i++) {
+    for (const other of nodes.slice(i + 1)) {
+      const node = nodes[i];
+      assert.ok(Math.hypot(node.x - other.x, node.y - other.y) >= node.r + other.r,
+        `${node.id} overlaps ${other.id}`);
+    }
+  }
+  const controls = [...root.innerHTML.matchAll(/class="landscape-expander" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?data-item="([^"]+)"/g)]
+    .map(([, x, y, id]) => ({ id, x: Number(x) - 94, y: Number(y), w: 188, h: 32 }));
+  for (const control of controls) {
+    for (const node of nodes) {
+      if (control.id === node.id) continue;
+      const dx = node.x - Math.max(control.x, Math.min(node.x, control.x + control.w));
+      const dy = node.y - Math.max(control.y, Math.min(node.y, control.y + control.h));
+      assert.ok(Math.hypot(dx, dy) >= node.r, `${control.id}'s control covers ${node.id}`);
+    }
+  }
+  f.context.FinanceLandscape.reset();
+  await f.context.FinanceLandscape.loadPage();
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 33);
+  assert.doesNotMatch(root.innerHTML, /class="landscape-node is-transaction"/, 'logout clears all expansion state');
 });
 
 test('the floating assistant and settings are removed without removing financial checkup', () => {

@@ -3,10 +3,9 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
-  let data = null, selected = 'household', focus = '', page = 0, generation = 0;
-  const pageSize = 8;
+  let data = null, selected = 'household', focus = '', generation = 0;
   let showFlows = false;
-  const collapsed = new Set(), hidden = new Set();
+  const collapsed = new Set(), hidden = new Set(), expanded = new Set(), openTransactions = new Set();
   const children = id => data.nodes.filter(node => node.branch === id && node.kind !== 'branch');
   const icons = {
     household: '<path d="m3 11 9-8 9 8M5 10v11h14V10M10 21v-7h4v7"/>',
@@ -46,8 +45,7 @@
       hidden.delete(node.branch);
       collapsed.delete(node.branch);
       if (focus && focus !== node.branch) focus = node.branch;
-      if (!focus && node.kind !== 'branch' && children(node.branch).findIndex(item => item.id === id) >= 3) focus = node.branch;
-      if (focus && node.kind !== 'branch') page = Math.floor(children(node.branch).findIndex(item => item.id === id) / pageSize);
+      if (node.kind !== 'branch' && children(node.branch).findIndex(item => item.id === id) >= 3) expanded.add(node.branch);
     }
   }
   const value = node => node.amount == null ? node.kind === 'missing' ? 'Coverage missing' : node.metric === 'monthly' ? 'No completed history' : node.kind === 'branch' ? `${node.count} connections` : 'Balance unavailable'
@@ -62,103 +60,98 @@
     }
     return lines.length > 2 ? [lines[0], `${lines[1].slice(0, 18)}...`] : lines;
   };
+  function fitLabels() {
+    $('landscape-map').querySelectorAll('.landscape-reading text, .landscape-transaction-value').forEach(text => {
+      const limit = text.classList.contains('landscape-transaction-value') ? 70 : text.classList.contains('landscape-value') ? 180 : 200;
+      if (text.getComputedTextLength() > limit) {
+        text.setAttribute('textLength', limit);
+        text.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+      }
+    });
+  }
   function scene() {
     const branches = data.nodes.filter(node => node.kind === 'branch');
+    const itemRing = 1200;
     const positions = new Map(), visible = new Set(['household']);
-    const width = 1800, height = 1150;
-    positions.set('household', { x: 900, y: 575 });
-    if (focus) {
-      const list = children(focus);
-      page = Math.max(0, Math.min(page, Math.ceil(list.length / pageSize) - 1));
-      positions.set('household', { x: 900, y: 90 });
-      visible.add(focus);
-      positions.set(focus, { x: 900, y: 310 });
-      if (!collapsed.has(focus)) list.slice(page * pageSize, (page + 1) * pageSize).forEach((node, index, shown) => {
-        const tier = Math.floor(index / 4), count = Math.min(4, shown.length - tier * 4);
-        const angle = count === 1 ? 0 : (index % 4 / (count - 1) - .5) * 2.2;
+    const txEdges = [], txNodes = [];
+    positions.set('household', { x: 0, y: 0 });
+    branches.forEach((branch, index) => {
+      if (hidden.has(branch.id) || (focus && focus !== branch.id)) return;
+      const angle = -Math.PI / 2 + index * Math.PI / 4;
+      visible.add(branch.id);
+      positions.set(branch.id, { x: Math.cos(angle) * 440, y: Math.sin(angle) * 440 });
+      if (collapsed.has(branch.id)) return;
+      const list = children(branch.id).slice(0, expanded.has(branch.id) || focus ? undefined : 3);
+      let radius = itemRing;
+      list.forEach((node, i) => {
+        const tier = Math.floor(i / 3), count = Math.min(3, list.length - tier * 3);
+        // Reserve extra radial space only behind tiers with open transaction fans.
+        if (i && i % 3 === 0) radius += list.slice(i - 3, i).some(item => openTransactions.has(item.id) && item.transactions?.length) ? 1500 : 400;
+        const a = angle + (i % 3 - (count - 1) / 2) * .26;
+        const p = { x: Math.cos(a) * radius, y: Math.sin(a) * radius };
         visible.add(node.id);
-        positions.set(node.id, { x: 900 + Math.sin(angle) * 650, y: 470 + tier * 310 + Math.cos(angle) * 180 });
-      });
-    } else {
-      branches.forEach((branch, index) => {
-        if (hidden.has(branch.id)) return;
-        const angle = -Math.PI / 2 + index * Math.PI / 4;
-        const hub = { x: 900 + Math.cos(angle) * 475, y: 575 + Math.sin(angle) * 290 };
-        visible.add(branch.id);
-        positions.set(branch.id, hub);
-        if (collapsed.has(branch.id)) return;
-        const list = children(branch.id).slice(0, 3);
-        list.forEach((node, i) => {
-          const a = angle + (i - (list.length - 1) / 2) * .65;
-          visible.add(node.id);
-          positions.set(node.id, { x: hub.x + Math.cos(a) * 200, y: hub.y + Math.sin(a) * 155 });
+        positions.set(node.id, p);
+        if (!openTransactions.has(node.id)) return;
+        const transactions = node.transactions || [];
+        transactions.forEach((tx, j) => {
+          const txTier = Math.floor(j / 3), txCount = Math.min(3, transactions.length - txTier * 3);
+          const txAngle = a + (j % 3 - (txCount - 1) / 2) * .065;
+          const txRadius = radius + 330 + txTier * 130;
+          const id = `transaction-${node.id}-${tx.id}`;
+          const txNode = { id, kind: 'transaction', branch: branch.id, label: tx.label,
+            amount: tx.amount, metric: 'transaction', date: tx.date, href: `#transactions/${tx.id}` };
+          txNodes.push(txNode);
+          visible.add(id);
+          positions.set(id, { x: Math.cos(txAngle) * txRadius, y: Math.sin(txAngle) * txRadius });
+          txEdges.push({ source: node.id, target: id, kind: 'structure' });
         });
       });
-    }
-    const connections = data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target) && (edge.kind === 'structure' || showFlows));
+    });
+    const allNodes = [...data.nodes, ...txNodes];
+    const connections = [...data.edges, ...txEdges].filter(edge => visible.has(edge.source) && visible.has(edge.target) && (edge.kind === 'structure' || showFlows));
     const paths = connections.map(edge => {
       const a = positions.get(edge.source), b = positions.get(edge.target);
-      const source = data.nodes.find(node => node.id === edge.source);
-      const target = data.nodes.find(node => node.id === edge.target);
+      const source = allNodes.find(node => node.id === edge.source);
+      const target = allNodes.find(node => node.id === edge.target);
       const related = selected === 'household' || edge.source === selected || edge.target === selected;
       const title = edge.kind === 'structure' ? `${source.label} — ${target.label}: grouped relationship`
         : `${source.label} → ${target.label}: ${money(edge.amount)}/mo recorded ${edge.kind === 'transfer' ? 'transfer' : 'activity'}`;
       const bend = edge.kind === 'structure' ? 0 : (b.x - a.x) * .12;
       return `<path class="landscape-edge is-${edge.kind}${source.kind === 'household' ? ' is-trunk' : ''}${target.kind === 'missing' ? ' is-missing' : ''}${related ? '' : ' is-dim'}" data-landscape-source="${esc(edge.source)}" data-landscape-target="${esc(edge.target)}" d="M ${a.x} ${a.y} Q ${(a.x + b.x) / 2 + bend} ${(a.y + b.y) / 2 - (edge.kind === 'structure' ? 0 : 45)} ${b.x} ${b.y}" stroke="${color(target.kind === 'branch' ? target : target.branch ? target : source)}"${edge.kind === 'structure' ? '' : ' marker-end="url(#landscape-arrow)"'}><title>${esc(title)}</title></path>`;
     }).join('');
-    const visibleNodes = data.nodes.filter(node => visible.has(node.id));
-    const labeledNodes = visibleNodes.filter(node => focus || ['household', 'branch'].includes(node.kind));
-    const labelBoxes = [];
-    const labelPositions = new Map();
-    labeledNodes.forEach(node => {
-      const p = positions.get(node.id), radius = nodeRadius(node);
-      const lines = node.kind === 'household' ? 1 : labelLines(node.label).length + 1;
-      const extra = node.kind === 'branch' && !focus && children(node.id).length > 3 && !collapsed.has(node.id);
-      const h = (lines + (extra ? 1 : 0)) * 36;
-      const candidates = [
-        { x: 0, y: radius + 32 }, { x: 0, y: -radius - h },
-        { x: 150, y: -h / 2 + 20 }, { x: -150, y: -h / 2 + 20 },
-        { x: 0, y: radius + 110 }, { x: 0, y: -radius - h - 85 }
-      ];
-      for (let distance = 1; distance <= 5; distance++) {
-        for (const x of [0, -160, 160, -280, 280]) {
-          candidates.push({ x, y: radius + 32 + distance * 65 }, { x, y: -radius - h - distance * 65 });
-        }
-      }
-      const score = offset => {
-        const box = { x: p.x + offset.x - 145, y: p.y + offset.y - 26, w: 290, h };
-        const overlaps = labelBoxes.reduce((sum, b) => sum + Math.max(0, Math.min(box.x + box.w, b.x + b.w) - Math.max(box.x, b.x)) * Math.max(0, Math.min(box.y + h, b.y + b.h) - Math.max(box.y, b.y)), 0);
-        const outside = box.x < 5 || box.x + box.w > width - 5 || box.y < 5 || box.y + h > height - 5;
-        const onNode = visibleNodes.some(other => other !== node && (() => {
-          const q = positions.get(other.id);
-          return q.x > box.x - 25 && q.x < box.x + box.w + 25 && q.y > box.y - 25 && q.y < box.y + h + 25;
-        })());
-        return { box, penalty: overlaps * 1000 + (outside ? 1e9 : 0) + (onNode ? 10000 : 0) };
-      };
-      const best = candidates.map(offset => ({ offset, ...score(offset) })).sort((a, b) => a.penalty - b.penalty)[0];
-      labelBoxes.push(best.box);
-      labelPositions.set(node.id, best.offset);
-    });
+    const visibleNodes = allNodes.filter(node => visible.has(node.id));
+    const controls = [];
     const nodes = visibleNodes.map(node => {
       const p = positions.get(node.id), hub = node.kind === 'branch', home = node.kind === 'household';
-      const radius = nodeRadius(node);
-      const labelPosition = labelPositions.get(node.id);
+      const transaction = node.kind === 'transaction';
+      const radius = transaction ? 44 : 116;
+      const illustrationSize = home ? 100 : hub ? 85 : nodeRadius(node) * 2;
       const label = home ? ['Your household'] : labelLines(node.label);
-      const more = hub && !focus && children(node.id).length > 3 && !collapsed.has(node.id)
-        ? `<text y="${label.length * 36 + 32}" class="landscape-more">+${children(node.id).length - 3} more · explore</text>` : '';
-      return `<g class="landscape-node${node.kind === 'missing' ? ' is-missing' : ''}${selected === node.id ? ' is-selected' : ''}" transform="translate(${p.x} ${p.y})" role="button" tabindex="0" data-landscape-node="${esc(node.id)}" data-landscape-radius="${radius}" data-landscape-icon="${home ? 'household' : node.branch}"${hub ? ` data-landscape-leg="${node.id}"` : ''} aria-label="${esc(`${node.label}. ${home ? 'Select a branch to explore.' : value(node)}`)}" aria-pressed="${selected === node.id}">
-        <title>${esc(node.label)}${home ? '' : `: ${esc(value(node))}`}</title>${labelPosition && (labelPosition.x || Math.abs(labelPosition.y) > radius + 60) ? `<path class="landscape-label-leader" d="M 0 0 L ${labelPosition.x} ${labelPosition.y - 15}" aria-hidden="true"/>` : ''}<circle r="${radius + 8}" class="landscape-halo"/>
-        ${node.kind === 'missing' ? `<circle r="${radius}" class="landscape-missing-marker"/><text y="6" class="landscape-symbol">?</text>` : home || hub
-          ? `<g class="landscape-illustration" transform="translate(${-radius} ${-radius}) scale(${radius * 2 / 64})">${illustration(home ? 'household' : node.branch)}</g>`
-          : `<circle r="${radius}" fill="${color(node)}" fill-opacity=".12"/><g class="landscape-pictogram" style="color:${color(node)}" transform="translate(${-radius * .6} ${-radius * .6}) scale(${radius * 1.2 / 24})">${icon(node.branch)}</g>`}
-        ${labelPosition ? `<g transform="translate(${labelPosition.x} ${labelPosition.y})">${label.map((line, i) => `<text y="${i * 36}" class="landscape-label">${esc(line)}</text>`).join('')}
-        ${home ? '' : `<text y="${label.length * 36}" class="landscape-value">${esc(value(node))}</text>`}${more}</g>` : ''}</g>`;
+      const total = hub ? children(node.id).length : 0;
+      const expansion = hub ? [
+        { action: 'collapse', text: collapsed.has(node.id) ? `+ Expand (${total})` : '− Fold leg', open: !collapsed.has(node.id) },
+        ...(total > 3 && !collapsed.has(node.id) ? [{ action: 'fan', text: expanded.has(node.id) || focus ? '− Show fewer' : `+${total - 3} more`, open: expanded.has(node.id) || !!focus }] : [])
+      ] : node.transactions?.length ? [{ action: 'transactions', text: `${openTransactions.has(node.id) ? '− Hide payments' : '+ Payments'} (${node.transactions.length}${node.count > node.transactions.length ? `/${node.count}` : ''})`, open: openTransactions.has(node.id) }] : [];
+      expansion.forEach((control, index) => controls.push(`<g class="landscape-expander" transform="translate(${p.x} ${p.y + 104 + index * 36})" role="button" tabindex="0" data-landscape-action="${control.action}" data-branch="${esc(hub ? node.id : node.branch)}" data-item="${esc(node.id)}" aria-expanded="${control.open}" aria-label="${esc(`${control.text}: ${node.label}`)}"><rect x="-94" y="0" width="188" height="32" rx="16"/><text y="21">${esc(control.text)}</text></g>`));
+      const content = transaction
+        ? `<circle r="44" class="landscape-transaction-marker"/><text y="-3" class="landscape-transaction-value">${esc(money(node.amount))}</text><text y="18" class="landscape-transaction-date">${esc(node.date.slice(5))}</text>`
+        : `<circle r="${radius}" class="landscape-medallion" stroke="${color(node)}"/><g class="landscape-illustration" transform="translate(${-illustrationSize / 2} -94) scale(${illustrationSize / 64})">${illustration(home ? 'household' : node.branch)}</g>
+          <g class="landscape-reading">${label.map((line, i) => `<text y="${20 + i * 19}" class="landscape-label">${esc(line)}</text>`).join('')}
+          ${home ? '' : `<text y="${28 + label.length * 19}" class="landscape-value">${esc(value(node))}</text>`}</g>`;
+      return transaction
+        ? `<a class="landscape-node is-transaction" transform="translate(${p.x} ${p.y})" href="${node.href}" aria-label="${esc(`${node.label}. ${node.date}. ${money(node.amount)}`)}"><title>${esc(node.label)} · ${esc(node.date)} · ${esc(money(node.amount))}</title>${content}</a>`
+        : `<g class="landscape-node${node.kind === 'missing' ? ' is-missing' : ''}${selected === node.id ? ' is-selected' : ''}" transform="translate(${p.x} ${p.y})" role="button" tabindex="0" data-landscape-node="${esc(node.id)}" data-landscape-radius="${nodeRadius(node)}" data-landscape-icon="${home ? 'household' : node.branch}"${hub ? ` data-landscape-leg="${node.id}"` : ''} aria-label="${esc(`${node.label}. ${home ? 'Select a branch to explore.' : value(node)}`)}" aria-pressed="${selected === node.id}"><title>${esc(node.label)}${home ? '' : `: ${esc(value(node))}`}</title><circle r="${radius + 7}" class="landscape-halo"/>${content}</g>`;
     }).join('');
-    const bounds = [...labelBoxes, ...[...positions.values()].map(p => ({ x: p.x - 85, y: p.y - 85, w: 170, h: 185 }))];
-    const left = Math.min(...bounds.map(b => b.x)) - 45, top = Math.min(...bounds.map(b => b.y)) - 45;
-    const sceneWidth = Math.max(...bounds.map(b => b.x + b.w)) - left + 45;
+    const bounds = [...positions.values()].map(p => ({ x: p.x - 145, y: p.y - 145, w: 290, h: 345 }));
+    let left = Math.min(...bounds.map(b => b.x)) - 45;
+    const top = Math.min(...bounds.map(b => b.y)) - 45;
+    const contentWidth = Math.max(...bounds.map(b => b.x + b.w)) - left + 45;
+    const sceneWidth = Math.max(1800, contentWidth);
+    left -= (sceneWidth - contentWidth) / 2;
     const sceneHeight = Math.max(...bounds.map(b => b.y + b.h)) - top + 45;
-    return `<svg id="landscape-svg" width="${sceneWidth}" height="${sceneHeight}" viewBox="${left} ${top} ${sceneWidth} ${sceneHeight}" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Financial landscape. Select an illustration or item for details. Explore a section for labeled items."><defs><marker id="landscape-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b8795"/></marker></defs>${paths}${nodes}</svg>`;
+    // Keep the overview's unit scale on wide screens as outer tiers are added.
+    const relativeWidth = sceneWidth / (itemRing * 2 + 380);
+    return `<svg id="landscape-svg" width="${sceneWidth}" height="${sceneHeight}" viewBox="${left} ${top} ${sceneWidth} ${sceneHeight}" style="width:max(${sceneWidth}px, calc(100% * ${relativeWidth}))" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Financial landscape. Expand or fold each leg and reveal recorded payments in place."><defs><marker id="landscape-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b8795"/></marker></defs>${paths}${nodes}${controls.join('')}</svg>`;
   }
   function inspector() {
     const node = data.nodes.find(item => item.id === selected) || data.nodes[0];
@@ -184,19 +177,17 @@
     const root = $('landscape-root');
     if (!root || !data) return;
     const branches = data.nodes.filter(node => node.kind === 'branch');
-    const pageCount = focus ? Math.max(1, Math.ceil(children(focus).length / pageSize)) : 1;
-    page = Math.max(0, Math.min(page, pageCount - 1));
-    root.innerHTML = `<div class="landscape-period"><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)}</span><span>${data.period.months}/3 months recorded</span><details class="landscape-help"><summary>Map guide</summary><p>Each illustrated section has its own fan-out. Tap a section tile to show or hide its leg. The overview previews up to 3 items per leg; select an item for its name and amount, or use Explore for labeled items, 8 at a time. Every item is also available in the details list.</p><p>Item area reflects the absolute amount relative to the largest item with the same measure in that leg. Balances, monthly flows and goal progress use separate scales. Missing amounts have a small unweighted marker; zero remains zero. This is not a financial-health score or share of net worth. Leg sizes are not comparable.</p><p>Colored branches show grouping, not money transfers. Recorded flow arrows are optional; details always retain verified connections. Balances have their own as-of dates; missing coverage is not zero.</p></details></div>
+    root.innerHTML = `<div class="landscape-period"><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)}</span><span>${data.period.months}/3 months recorded</span><details class="landscape-help"><summary>Map guide</summary><p>Each illustrated node contains its name and value. Expand more items or fold a leg using its on-map controls. Payment nodes can reveal their latest recorded transactions; click a payment to open it. The canvas grows as you expand, without shrinking existing nodes. Explore isolates a leg; Show full landscape restores the overview.</p><p>Illustration size reflects the absolute amount relative to the largest item with the same measure in that leg. Balances, monthly flows and goal progress use separate scales. Missing amounts remain unavailable, never zero. This is not a financial-health score or share of net worth. Leg sizes are not comparable.</p><p>Colored branches show grouping, not money transfers. Recorded flow arrows are optional; details always retain verified connections. Balances have their own as-of dates; missing coverage is not zero. Transaction fans show up to the latest 20 records supplied for each item; the payment control shows displayed and total counts when they differ.</p></details></div>
       <div class="landscape-branch-controls" role="group" aria-label="Show or hide financial sections">${branches.map(branch => `<button type="button" class="landscape-section-toggle${hidden.has(branch.id) ? ' is-hidden' : ''}" style="--branch-color:${branch.color}" data-landscape-action="toggle-leg" data-branch="${branch.id}" aria-pressed="${!hidden.has(branch.id)}" aria-label="Show ${esc(branch.label)} section">${icon(branch.id)}<span><b>${esc(branch.label)}</b><small>${hidden.has(branch.id) ? 'Hidden' : `${branch.count} ${branch.count === 1 ? 'item' : 'items'}`}</small></span><span class="landscape-toggle-mark" aria-hidden="true">${hidden.has(branch.id) ? '+' : '&#10003;'}</span></button>`).join('')}</div>
       <div class="landscape-toolbar" role="group" aria-label="Map controls"><label class="landscape-explore">Explore <select id="landscape-explore" aria-label="Explore a financial section"><option value="">All sections</option>${branches.map(branch => `<option value="${branch.id}"${focus === branch.id ? ' selected' : ''}>${esc(branch.label)}</option>`).join('')}</select></label><button data-landscape-action="reset">Show full landscape</button><button data-landscape-action="reload" aria-label="Refresh landscape data">Refresh</button><details class="landscape-view-options"><summary>View options</summary>
       <div class="landscape-toolbar"><button data-landscape-action="expand">Expand all branches</button><button data-landscape-action="collapse-all">Collapse all branches</button><button data-landscape-action="flows" aria-pressed="${showFlows}">Recorded flow arrows</button></div></details></div>
-      ${focus && pageCount > 1 ? `<div class="landscape-pagination" role="group" aria-label="Section items"><button data-landscape-action="previous-page"${page === 0 ? ' disabled' : ''}>Previous</button><span role="status">Items ${page * pageSize + 1}&ndash;${Math.min((page + 1) * pageSize, children(focus).length)} of ${children(focus).length}</span><button data-landscape-action="next-page"${page === pageCount - 1 ? ' disabled' : ''}>Next</button></div>` : ''}
       <div class="landscape-workspace"><div id="landscape-map" class="landscape-map" role="region" aria-label="Large financial network. Scroll the page to explore all legs.">${scene()}</div><aside id="landscape-detail" class="landscape-detail" aria-label="Selected financial details" aria-live="polite">${inspector()}</aside></div>
       <details class="landscape-coverage"><summary>Coverage and calculation notes</summary><p>${esc(data.note)}</p><ul><li>${data.coverage.unassignedActivity} activity records have no verified account connection.</li><li>${data.coverage.unknownTransfers} transfers in the period await classification and are excluded from spending/income.</li><li>${data.coverage.pendingExcluded} pending records are excluded from this map.</li><li>${data.coverage.reviewAccounts} accounts need review and are not mapped as confirmed assets.</li></ul><p>Unlinked debt-plan records may overlap accounts. Goal progress is not added to savings. Investment holdings, returns and employer retirement contributions are not provided by this view.</p></details>`;
+    fitLabels();
     $('landscape-explore').onchange = event => {
       const branch = event.target.value;
-      focus = branch; selected = branch || 'household'; page = 0;
-      if (branch) { hidden.delete(branch); collapsed.delete(branch); }
+      focus = branch; selected = branch || 'household';
+      if (branch) { hidden.delete(branch); collapsed.delete(branch); expanded.add(branch); }
       render();
       $('landscape-explore').focus({ preventScroll: true });
     };
@@ -207,19 +198,20 @@
         selected = button.dataset.landscapeNode;
         const node = data.nodes.find(item => item.id === selected);
         const needsReveal = node?.branch && (hidden.has(node.branch) || collapsed.has(node.branch) || (focus && focus !== node.branch)
-          || (!focus && node.kind !== 'branch' && children(node.branch).findIndex(item => item.id === selected) >= 3)
-          || (focus && node.kind !== 'branch' && Math.floor(children(node.branch).findIndex(item => item.id === selected) / pageSize) !== page));
+          || (!expanded.has(node.branch) && !focus && node.kind !== 'branch' && children(node.branch).findIndex(item => item.id === selected) >= 3));
         if (needsReveal) { reveal(selected); render(); return; }
         // Keep the diagram in place while updating the selected item's details.
         $('landscape-map').innerHTML = scene();
+        fitLabels();
         $('landscape-detail').innerHTML = inspector();
         $('landscape-detail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         return;
       }
       const action = button.dataset.landscapeAction, branch = button.dataset.branch;
+      const anchor = button.getBoundingClientRect?.();
       const optionsOpen = root.querySelector('.landscape-view-options')?.open;
       if (action === 'reload') { await loadPage(); return; }
-      if (action === 'focus') { focus = branch; selected = branch; collapsed.delete(branch); hidden.delete(branch); page = 0; }
+      if (action === 'focus') { focus = branch; selected = branch; collapsed.delete(branch); hidden.delete(branch); expanded.add(branch); }
       if (action === 'toggle-leg') {
         if (hidden.has(branch)) hidden.delete(branch);
         else {
@@ -229,24 +221,38 @@
         }
       }
       if (action === 'flows') showFlows = !showFlows;
+      if (action === 'fan') {
+        if (expanded.has(branch) || focus) { expanded.delete(branch); focus = ''; }
+        else expanded.add(branch);
+        collapsed.delete(branch);
+      }
+      if (action === 'transactions') {
+        const id = button.dataset.item;
+        if (openTransactions.has(id)) openTransactions.delete(id);
+        else openTransactions.add(id);
+      }
       if (action === 'collapse') { collapsed.has(branch) ? collapsed.delete(branch) : collapsed.add(branch); selected = branch; }
       if (action === 'collapse-all') branches.forEach(node => collapsed.add(node.id));
-      if (action === 'expand') collapsed.clear();
-      if (action === 'reset') { focus = ''; selected = 'household'; page = 0; collapsed.clear(); hidden.clear(); showFlows = false; }
-      if (action === 'previous-page' || action === 'next-page') {
-        page = Math.max(0, Math.min(pageCount - 1, page + (action === 'next-page' ? 1 : -1)));
-        selected = focus;
-      }
+      if (action === 'expand') { collapsed.clear(); branches.forEach(node => expanded.add(node.id)); }
+      if (action === 'reset') { focus = ''; selected = 'household'; collapsed.clear(); hidden.clear(); expanded.clear(); openTransactions.clear(); showFlows = false; }
       render();
       if (optionsOpen) root.querySelector('.landscape-view-options').open = true;
-      root.querySelector(`[data-landscape-action="${action}"]${branch ? `[data-branch="${branch}"]` : ''}`)?.focus({ preventScroll: true });
+      const replacement = root.querySelector(`[data-landscape-action="${action}"]${branch ? `[data-branch="${branch}"]` : ''}${button.dataset.item ? `[data-item="${button.dataset.item}"]` : ''}`);
+      if (anchor && button.dataset.item && replacement && ['fan', 'transactions', 'collapse'].includes(action)) {
+        const next = replacement.getBoundingClientRect();
+        const scroller = root.closest('.main-content');
+        const dx = next.left - anchor.left, dy = next.top - anchor.top;
+        if (scroller && getComputedStyle(scroller).overflowY !== 'visible') scroller.scrollBy(dx, dy);
+        else window.scrollBy(dx, dy);
+      }
+      replacement?.focus({ preventScroll: true });
     };
     root.onkeydown = event => {
-      if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('g[data-landscape-node]')) {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('g[data-landscape-node], g[data-landscape-action]')) {
         event.preventDefault();
         const id = event.target.dataset.landscapeNode;
         root.onclick({ target: event.target });
-        root.querySelector(`g[data-landscape-node="${id}"]`)?.focus({ preventScroll: true });
+        if (id) root.querySelector(`g[data-landscape-node="${id}"]`)?.focus({ preventScroll: true });
       }
     };
   }
@@ -270,7 +276,7 @@
     }
   }
   window.FinanceLandscape = { loadPage, reset() {
-    generation++; data = null; selected = 'household'; focus = ''; page = 0; collapsed.clear(); hidden.clear(); showFlows = false;
+    generation++; data = null; selected = 'household'; focus = ''; collapsed.clear(); hidden.clear(); expanded.clear(); openTransactions.clear(); showFlows = false;
     const root = $('landscape-root');
     if (root) { root.innerHTML = ''; root.onclick = null; root.onkeydown = null; }
   } };
