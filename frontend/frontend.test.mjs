@@ -2933,7 +2933,7 @@ test('marking a fixed bill offers similar payments and flags only the confirmed 
     if (url === '/api/dashboard/all-transactions') return response(200, { transactions });
     return response(200, { success: true, updated: 2 });
   });
-  test('pending transactions explain why fixed-payment forecasts have not settled and posted rows do not show the notice', async () => {
+  test('pending transactions show only a short status and posted rows do not show the notice', async () => {
     const transactions = [
       { id: '1', date: '2026-09-29', description: 'OLLO CC', display_name: 'OLLO Card', amount: 150,
         direction: 'DEBIT', category: 'Credit Cards', is_fixed: true, is_pending: true },
@@ -2946,7 +2946,8 @@ test('marking a fixed bill offers similar payments and flags only the confirmed 
     await f.context.loadAllTransactions();
     const html = f.node('full-txn-table').innerHTML;
     assert.equal((html.match(/Pending bank transaction/g) || []).length, 1);
-    assert.match(html, /Not yet posted[\s\S]*forecasts wait for it to post/);
+    assert.match(html, /<p class="tx-pending-notice"><strong>Pending bank transaction<\/strong><\/p>/);
+    assert.doesNotMatch(html, /Not yet posted|forecasts wait for it to post/);
   });
   f.run('refresh.js');
   await f.context.loadAllTransactions();
