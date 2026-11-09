@@ -70,7 +70,7 @@ test('financial landscape supports navigation and remains accessible on Basic', 
   assert.match(source('session.js'), /FinanceLandscape\?\.reset\(\)/);
 });
 
-test('financial network supports pointer/keyboard details, focus, collapse, zoom, reset and precise safe transaction labels', async () => {
+test('financial network supports pointer/keyboard details, focus, collapse, reset and precise safe transaction labels', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'), accounts: [
     { id: 1, name: 'Checking', kind: 'checking', status: 'active' }
@@ -101,12 +101,8 @@ test('financial network supports pointer/keyboard details, focus, collapse, zoom
   assert.match(details, /\$0\.01/);
   assert.match(details, /&lt;img/);
   assert.doesNotMatch(details, /<img/);
-  for (let i = 0; i < 10; i++) await click({ landscapeAction: 'zoom-in' });
-  assert.match(root.innerHTML, /200%/);
-  for (let i = 0; i < 15; i++) await click({ landscapeAction: 'zoom-out' });
-  assert.match(root.innerHTML, /60%/);
   await click({ landscapeAction: 'reset' });
-  assert.match(root.innerHTML, /100%/);
+  assert.match(root.innerHTML, /preserveAspectRatio="xMidYMid meet"/);
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 19);
 });
 
@@ -140,65 +136,48 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.equal(f.node('landscape-root').onclick, null);
 });
 
-test('landscape rotates projected coordinates with presets, drag and keyboard without turning a drag into selection', async () => {
+test('landscape fits a flat illustrated diagram without boxes or camera controls and pages large fan-outs', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
-  const f = fixture(async () => response(200, buildLandscape()));
+  const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: Array.from({ length: 21 }, (_, i) => ({
+    id: i + 1, date: '2026-10-10', description: `Shop ${i}`, category: `Category ${i}`, amount: 25, direction: 'DEBIT'
+  })) });
+  const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
   await f.context.FinanceLandscape.loadPage();
   const root = f.node('landscape-root'), map = f.node('landscape-map');
-  let captured = false;
-  map.setPointerCapture = () => { captured = true; };
-  map.hasPointerCapture = () => captured;
-  map.releasePointerCapture = () => { captured = false; };
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
-  const initial = root.innerHTML.match(/transform="translate\([^)]+\)"/g);
-  assert.match(root.innerHTML, /data-yaw="-15" data-pitch="20"/);
-  assert.doesNotMatch(root.innerHTML, /One household\. Many|landscape-instructions/);
+  assert.match(root.innerHTML, /class="landscape-illustration"/);
+  const drawings = [...root.innerHTML.matchAll(/class="landscape-illustration"[^]*?<svg[^]*?<\/svg>/g)]
+    .map(match => match[0].slice(match[0].indexOf('<svg')));
+  assert.equal(new Set(drawings).size, 9, 'the home and eight legs each have a different colorful illustration');
+  assert.match(root.innerHTML, /preserveAspectRatio="xMidYMid meet"/);
+  assert.doesNotMatch(root.innerHTML, /landscape-island|landscape-light|landscape-sphere|data-yaw|data-pitch|zoom-in|zoom-out|scroll-mode|rotate-left|Depth view|Flat view/);
+  assert.equal(map.onpointerdown, undefined, 'touch scrolling is not intercepted');
+  const css = source('landscape.css');
+  assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: 100%/);
+  assert.doesNotMatch(css, /overflow: auto|min-width: 1100|min-height: 680|drop-shadow/);
   assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
-  await click({ landscapeAction: 'rotate-right' });
-  assert.notDeepEqual(root.innerHTML.match(/transform="translate\([^)]+\)"/g), initial, 'the projected node coordinates really move');
-  await click({ landscapeAction: 'flat' });
-  assert.match(root.innerHTML, /data-yaw="0" data-pitch="0"/);
-  map.onpointerdown({ button: 0, pointerId: 1, clientX: 100, clientY: 100 });
-  map.onpointermove({ pointerId: 2, clientX: 180, clientY: 100 });
-  assert.equal(captured, false, 'a second pointer cannot rotate the map');
-  map.onpointermove({ pointerId: 1, clientX: 104, clientY: 100 });
-  assert.equal(captured, false, 'a click-sized move remains a selection');
-  map.onpointermove({ pointerId: 1, clientX: 200, clientY: 60 });
-  assert.equal(captured, true);
-  assert.match(map.innerHTML, /data-yaw="30" data-pitch="10"/);
-  map.onpointerup({ pointerId: 1 });
-  assert.equal(captured, false);
-  await click({ landscapeNode: 'debt' });
-  assert.equal(f.node('landscape-detail').innerHTML, '', 'the synthetic click after a drag does not change selection');
-  const key = name => root.onkeydown({ key: name, target: map, preventDefault() {} });
-  key('ArrowRight');
-  assert.match(map.innerHTML, /data-yaw="45"/);
-  for (let i = 0; i < 20; i++) key('ArrowUp');
-  assert.match(map.innerHTML, /data-pitch="60"/);
-  for (let i = 0; i < 20; i++) key('ArrowDown');
-  assert.match(map.innerHTML, /data-pitch="-60"/);
-  key('Home');
-  assert.match(map.innerHTML, /data-yaw="-15" data-pitch="20"/);
-  map.onpointerdown({ button: 0, pointerId: 3, clientX: 100, clientY: 100 });
-  map.onpointercancel({ pointerId: 3 });
-  await click({ landscapeNode: 'debt' });
-  assert.match(f.node('landscape-detail').innerHTML, /Debt/);
-  await click({ landscapeAction: 'focus', branch: 'debt' });
-  const focused = root.innerHTML;
-  map.onpointerdown({ button: 0, pointerId: 4, clientX: 100, clientY: 100 });
-  map.onpointermove({ pointerId: 4, clientX: 200, clientY: 100 });
-  key('ArrowLeft');
-  assert.equal(root.innerHTML, focused, 'focus stays a scrollable flat fan-out');
+  await click({ landscapeAction: 'focus', branch: 'spending' });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 10, 'household, hub and at most eight labeled items');
+  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/);
+  assert.match(root.innerHTML, /All 21 recorded connections/);
+  assert.match(root.innerHTML, /data-landscape-source="spending" data-landscape-target="activity-0"/);
+  await click({ landscapeAction: 'next-page' });
+  assert.match(root.innerHTML, /Items 9&ndash;16 of 21/);
+  await click({ landscapeAction: 'next-page' });
+  assert.match(root.innerHTML, /Items 17&ndash;21 of 21/);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 7);
+  await click({ landscapeAction: 'next-page' });
+  assert.match(root.innerHTML, /Items 17&ndash;21 of 21/, 'pagination remains bounded');
+  const first = graph.nodes.find(n => n.kind === 'activity');
+  await click({ landscapeNode: first.id });
+  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/, 'detail navigation reveals the correct item page');
+  assert.match(root.innerHTML, new RegExp(`data-landscape-node="${first.id}"`));
+  await click({ landscapeAction: 'next-page' });
+  await click({ landscapeAction: 'previous-page' });
+  assert.match(root.innerHTML, /Items 1&ndash;8 of 21/);
   await click({ landscapeAction: 'reset' });
-  assert.match(root.innerHTML, /data-yaw="-15" data-pitch="20"/);
-  await click({ landscapeAction: 'scroll-mode' });
-  assert.match(root.innerHTML, /class="landscape-map is-scrollable"/);
-  map.onpointerdown({ button: 0, pointerId: 5, clientX: 100, clientY: 100 });
-  map.onpointermove({ pointerId: 5, clientX: 200, clientY: 100 });
-  assert.equal(captured, false, 'scroll mode leaves touch swipes to native scrolling');
-  await click({ landscapeAction: 'reset' });
-  assert.doesNotMatch(root.innerHTML, /class="landscape-map is-scrollable"/);
+  assert.doesNotMatch(root.innerHTML, /landscape-pagination/);
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
 });
 

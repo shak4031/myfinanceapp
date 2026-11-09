@@ -3,41 +3,35 @@
 .landscape-help { margin-left: auto; max-width: 600px; font-size: 13px; line-height: 1.7; }
 .landscape-help summary { cursor: pointer; color: #285d6e; font-weight: 650; }
 .landscape-help[open] { flex-basis: 100%; padding: 12px 18px; border: 1px solid #d5e3e7; border-radius: 12px; background: #fff; }
-.landscape-toolbar, .landscape-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.landscape-toolbar button, .landscape-actions button, .landscape-branch-controls button { border: 1px solid #c9dce1; background: #fff; padding: 9px 12px; color: #264657; border-radius: 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.landscape-toolbar, .landscape-actions, .landscape-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.landscape-toolbar button, .landscape-actions button, .landscape-branch-controls button, .landscape-pagination button { border: 1px solid #c9dce1; background: #fff; padding: 9px 12px; color: #264657; border-radius: 9px; font: inherit; font-size: 13px; cursor: pointer; }
 .landscape-toolbar button:hover, .landscape-actions button:hover, .landscape-branch-controls button:hover { background: #eaf5f3; }
 .landscape-toolbar button[aria-pressed="true"] { background: #173f51; color: #fff; border-color: #173f51; }
-.landscape-toolbar button:disabled { opacity: .4; cursor: default; }
-.landscape-branch-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
-.landscape-branch-controls .landscape-section-toggle { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 12px; border-radius: 14px; border: 1px solid #d5e3e7; border-left: 4px solid var(--branch-color); text-align: left; }
+.landscape-toolbar button:disabled, .landscape-pagination button:disabled { opacity: .4; cursor: default; }
+.landscape-pagination { justify-content: center; font-size: 13px; color: #395666; }
+.landscape-branch-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.landscape-branch-controls .landscape-section-toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: 24px; border: 1px solid #d5e3e7; text-align: left; }
 .landscape-section-toggle > svg { flex: 0 0 28px; color: var(--branch-color); width: 28px; height: 28px; }
 .landscape-section-toggle b { display: block; font-size: 13px; }
-.landscape-section-toggle small { display: block; margin-top: 5px; font-size: 12px; color: #536e7c; }
+.landscape-section-toggle small { display: none; }
 .landscape-section-toggle .landscape-toggle-mark { margin-left: auto; color: var(--branch-color); font-size: 18px; }
 .landscape-section-toggle.is-hidden { opacity: .65; border-left-color: #9babba; background: #eef2f5; }
 .landscape-section-toggle:focus-visible, .landscape-toolbar button:focus-visible { outline: 3px solid #397f98; outline-offset: 3px; }
 .landscape-explore { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #264657; }
 .landscape-explore select { max-width: 230px; padding: 10px; border: 1px solid #c9dce1; border-radius: 9px; background: #fff; color: #264657; font: inherit; }
-.landscape-zoom { display: flex; align-items: center; gap: 10px; }
-.landscape-zoom span { min-width: 42px; text-align: center; font-size: 13px; }
 .landscape-view-options { position: relative; margin-left: auto; font-size: 13px; }
 .landscape-view-options > summary { cursor: pointer; border: 1px solid #c9dce1; border-radius: 9px; padding: 10px 12px; background: #fff; color: #264657; }
 .landscape-view-options[open] { flex-basis: 100%; padding: 12px; border: 1px solid #c9dce1; border-radius: 12px; background: #f7fafb; }
 .landscape-view-options[open] > summary { margin-bottom: 12px; width: fit-content; }
 .landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
-.landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
-.landscape-map { overflow: auto; max-height: 1050px; border-radius: 20px; border: 1px solid #d9e7eb; background: radial-gradient(ellipse at 42% 35%, #fff, #edf4f8 70%, #e1edf3); scrollbar-gutter: stable; overscroll-behavior: contain; touch-action: none; cursor: grab; }
-.landscape-map.is-rotating, .landscape-map.is-rotating .landscape-node { cursor: grabbing; }
-.landscape-map.is-scrollable { touch-action: auto; cursor: auto; }
-.landscape-map:focus-visible { outline: 3px solid #285d6e; outline-offset: 3px; }
+.landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.landscape-map { width: 100%; min-width: 0; height: clamp(320px, 62vh, 620px); border-radius: 18px; background: #fff; touch-action: auto; }
 .landscape-map svg { user-select: none; }
-.landscape-sphere { filter: drop-shadow(4px 8px 7px #18374838); }
-.landscape-light { pointer-events: none; }
-.landscape-island { fill-opacity: .055; stroke-opacity: .2; stroke-width: 1.5; pointer-events: none; }
-.landscape-pictogram { color: #fff; pointer-events: none; }
+.landscape-illustration, .landscape-pictogram { pointer-events: none; }
+.landscape-illustration svg { display: block; width: 64px; height: 64px; }
 .landscape-pictogram svg { display: block; width: 24px; height: 24px; }
 .landscape-label-leader { fill: none; stroke: #86a6b8; stroke-width: 1; opacity: .5; pointer-events: none; }
-.landscape-map > svg { display: block; min-height: 680px; }
+.landscape-map > svg { display: block; width: 100%; height: 100%; }
 .landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
 .landscape-edge.is-structure { stroke-width: 2.8; opacity: .55; }
 .landscape-edge.is-trunk { stroke-width: 6; opacity: .7; }
@@ -48,15 +42,14 @@
 .landscape-halo { fill: transparent; stroke: transparent; stroke-width: 3; }
 .landscape-node.is-selected .landscape-halo, .landscape-node:focus .landscape-halo { fill: #d7eced; stroke: #254f63; }
 .landscape-node:focus { outline: none; }
-.landscape-node.is-missing .landscape-sphere { fill: #fff; stroke: #8d98aa; stroke-dasharray: 4 3; stroke-width: 2; }
-.landscape-node.is-missing .landscape-light { display: none; }
+.landscape-missing-marker { fill: #fff; stroke: #8d98aa; stroke-dasharray: 4 3; stroke-width: 2; }
 .landscape-node.is-missing .landscape-symbol { fill: #667287; }
 .landscape-node text { text-anchor: middle; pointer-events: none; }
 .landscape-symbol { fill: #fff; font-size: 18px; font-weight: 800; }
-.landscape-label { fill: #173b4c; font-size: 18px; font-weight: 700; paint-order: stroke; stroke: #f7fafb; stroke-width: 4px; stroke-linejoin: round; }
-.landscape-value { fill: #476475; font-size: 16px; paint-order: stroke; stroke: #f7fafb; stroke-width: 3px; }
-.landscape-more { fill: #3b6974; font-size: 14px; }
-.landscape-detail { background: #fff; border: 1px solid #d5e3e7; border-radius: 16px; padding: 20px; max-height: 850px; overflow: auto; overflow-wrap: anywhere; }
+.landscape-label { fill: #173b4c; font-size: 25px; font-weight: 700; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.landscape-value { fill: #476475; font-size: 22px; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.landscape-more { fill: #3b6974; font-size: 19px; }
+.landscape-detail { background: #fff; border: 1px solid #d5e3e7; border-radius: 16px; padding: 20px; overflow-wrap: anywhere; }
 .landscape-detail h2 { margin: 0 0 12px; font-size: 22px; color: #163f50; }
 .landscape-detail h3 { margin-top: 24px; font-size: 16px; }
 .landscape-detail p { font-size: 14px; line-height: 1.7; }
@@ -68,18 +61,13 @@
 .landscape-warning { background: #fff3d9; padding: 10px; border-radius: 8px; color: #754d16; }
 .landscape-coverage { padding: 18px; margin-top: 18px; border: 1px solid #d5e3e7; border-radius: 14px; background: #fff; font-size: 14px; line-height: 1.8; }
 .landscape-coverage summary { cursor: pointer; font-weight: 700; }
-@media (max-width: 1800px) {
-  .landscape-workspace { grid-template-columns: 1fr; }
-  .landscape-detail { max-height: 500px; }
-}
 @media (max-width: 650px) {
-  .landscape-branch-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .landscape-branch-controls .landscape-section-toggle { gap: 8px; padding: 10px 8px; }
   .landscape-section-toggle > svg { flex-basis: 23px; width: 23px; height: 23px; }
   .landscape-explore { width: 100%; }
   .landscape-explore select { flex: 1; max-width: none; min-height: 44px; }
   .landscape-view-options { margin-left: 0; }
-  .landscape-map { max-height: 620px; }
+  .landscape-map { height: 340px; }
   .landscape-toolbar button, .landscape-branch-controls button { min-height: 42px; }
 }
 @media (prefers-reduced-motion: reduce) {

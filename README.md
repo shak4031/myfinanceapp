@@ -292,28 +292,29 @@ Both explorers support keyboard selection and horizontal scrolling on small scre
 
 Open **Financial landscape** in the sidebar, Dashboard or Accounts (`#landscape`).
 This dedicated radial network is available to active Basic and Pro households.
-The household sits at the center of eight distinct legs. Each has its own colored
-platform, pictogram and local fan-out; cross-leg flow arrows are off by default
+The household sits at the center of eight distinct flat legs. Each has its own
+colorful SVG illustration and local fan-out, without background boxes, shading
+or 3D controls. Cross-leg flow arrows are off by default
 to avoid a tangled network. Section tiles toggle whole legs with a visible
-shown/hidden state. **Explore** selects a section and fans out every item;
-**Show full landscape** restores all sections and the initial camera.
-Select circles to inspect balances and recorded money flows; the inspector also
+shown/hidden state. **Explore** selects a section and fans out labeled items,
+eight at a time; Previous/Next controls cover larger sections without shrinking
+the entire graph. The details list also retains every item and selecting one
+opens its diagram page. **Show full landscape** restores all sections.
+Select illustrations or item markers to inspect balances and recorded money flows; the inspector also
 offers branch collapse/expand. The overview previews three items per branch.
-**View options** holds expand/collapse-all, flow arrows and perspective controls.
+**View options** holds expand/collapse-all and flow arrows.
 Recorded connections remain available in details even with arrows hidden.
-Drag the depth view to rotate, or focus the map and
-use arrow keys (Home resets the camera). **Depth view** and **Flat view** offer
-perspective presets; rotation/tilt buttons also work without dragging. Focused
-branches use a flat, tiered fan-out to keep every connection readable. On touch screens,
-drag inside the overview to rotate, enable **Scroll mode** to swipe across the
-map, and swipe outside it to scroll the page.
-Zoom controls resize the map; node labels stay upright during rotation.
+The entire diagram fits a bounded responsive card without an internal scrollbar;
+there is no oversized minimum width or zoom mode. Overview labels identify the
+eight sections; item names and amounts are available on selection, hover/focus
+titles, or in the labeled Explore view. Section controls and the details list
+remain accessible on small screens where the overall map is naturally smaller.
 Child badge sizes increase with the absolute amount relative to the largest
 item of the same measure **within its own leg**, with bounded sizes for readability.
 Monthly activity, balances and planning progress use separate scales (including
 inside the mixed debt leg); negative balances retain their sign in labels.
 Unknown amounts remain unweighted markers, never zero. Hubs stay equal-sized.
-Neither size nor depth is a financial-health score, a share of net worth, or a
+Size is not a financial-health score, a share of net worth, or a
 comparison between legs. There is no
 automatic motion. **Map guide** and **Coverage and calculation notes** hold the
 instructions and accounting caveats without paragraphs surrounding the map.
