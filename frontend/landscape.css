@@ -24,39 +24,36 @@
 .landscape-view-options[open] > summary { margin-bottom: 12px; width: fit-content; }
 .landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
 .landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.landscape-map { width: max(100%, 1800px); height: auto; border-radius: 18px; background: #fff; touch-action: auto; }
-.landscape-map svg { user-select: none; }
+.landscape-map { width: max(100%, 1400px); height: auto; border-radius: 18px; background: #fff; touch-action: auto; }
+.landscape-map svg { user-select: none; cursor: grab; }
+.landscape-map.is-panning, .landscape-map.is-panning * { cursor: grabbing !important; }
 .landscape-illustration, .landscape-pictogram { pointer-events: none; }
 .landscape-illustration svg { display: block; width: 64px; height: 64px; }
 .landscape-pictogram svg { display: block; width: 24px; height: 24px; }
 .landscape-map > svg { display: block; width: 100%; height: auto; background: #fff; border-radius: inherit; }
-.landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
-.landscape-edge.is-structure { stroke-width: 2.8; opacity: .55; }
-.landscape-edge.is-trunk { stroke-width: 6; opacity: .7; }
+.landscape-edge { fill: none; stroke-width: 1.2; opacity: .6; }
+.landscape-edge.is-structure { stroke-width: 1.4; opacity: .65; }
+.landscape-edge.is-trunk { stroke-width: 2; opacity: .75; }
 .landscape-edge.is-missing { stroke-dasharray: 5 6; opacity: .35; }
 .landscape-edge.is-transfer { stroke: #38798a; stroke-width: 2; }
 .landscape-edge.is-dim { opacity: .1; }
 .landscape-node { cursor: pointer; }
-.landscape-halo { fill: transparent; stroke: transparent; stroke-width: 3; }
-.landscape-node.is-selected .landscape-halo, .landscape-node:focus .landscape-halo { fill: #d7eced; stroke: #254f63; }
+.landscape-halo, .landscape-hit-area { fill: transparent; stroke: none; }
+.landscape-node.is-selected .landscape-label, .landscape-node:focus text { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .landscape-node:focus { outline: none; }
-.landscape-medallion { fill: #fff; stroke-width: 1.5; stroke-opacity: .35; }
-.landscape-node.is-missing .landscape-medallion { stroke-dasharray: 5 5; }
-.landscape-node text { text-anchor: middle; pointer-events: none; }
-.landscape-label { fill: #173b4c; font-size: 16px; font-weight: 600; }
-.landscape-value { fill: #285768; font-size: 18px; font-weight: 750; }
-.landscape-node.is-offshoot .landscape-label { font-size: 14px; }
-.landscape-node.is-offshoot .landscape-value { font-size: 15px; }
+.landscape-node text { text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.landscape-label { fill: #173b4c; font-size: 14px; font-weight: 650; }
+.landscape-value { fill: #285768; font-size: 14px; font-weight: 750; }
+.landscape-node.is-offshoot .landscape-label { font-size: 13px; font-weight: 500; }
+.landscape-node.is-offshoot .landscape-value { font-size: 13px; }
 .landscape-expander { cursor: pointer; }
 .landscape-expander rect { fill: #edf5f5; stroke: #bdd2d8; stroke-width: 1; }
 .landscape-expander text { text-anchor: middle; font-size: 14px; font-weight: 650; fill: #285768; pointer-events: none; }
 .landscape-expander.is-compact text { font-size: 12px; }
 .landscape-expander:hover rect, .landscape-expander:focus rect { fill: #d5e9e9; stroke: #285768; stroke-width: 2; }
 .landscape-expander:focus { outline: none; }
-.landscape-transaction-marker { fill: #f0f7f6; stroke: #98bdc0; stroke-width: 1.5; }
 .landscape-transaction-value { fill: #204c5c; font-size: 13px; font-weight: 700; }
 .landscape-transaction-date { fill: #52717c; font-size: 11px; }
-.landscape-node.is-transaction:focus circle { stroke: #285768; stroke-width: 3; }
 .landscape-detail { background: #fff; border: 1px solid #d5e3e7; border-radius: 16px; padding: 20px; overflow-wrap: anywhere; }
 .landscape-detail h2 { margin: 0 0 12px; font-size: 22px; color: #163f50; }
 .landscape-detail h3 { margin-top: 24px; font-size: 16px; }

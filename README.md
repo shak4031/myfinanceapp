@@ -291,9 +291,10 @@ Both explorers support keyboard selection and horizontal scrolling on small scre
 ## Financial landscape
 
 Open **Financial landscape** in the sidebar, Dashboard or Accounts (`#landscape`).
-This dedicated radial network is available to active Basic and Pro households.
-The household sits at the center of eight distinct flat legs. Each has its own
-colorful SVG illustration and local fan-out, without background boxes, shading
+This dedicated cluster network is available to active Basic and Pro households.
+A small household hub connects to eight asymmetrically arranged financial
+clusters. Each has its own colorful SVG illustration and curved local fan-out,
+without background boxes, shading
 or 3D controls. Cross-leg flow arrows are off by default
 to avoid a tangled network. Section tiles toggle whole legs with a visible
 shown/hidden state. **Explore** isolates a section and shows all its items.
@@ -305,15 +306,20 @@ Select illustrations or item markers to inspect balances and recorded money flow
 offers branch collapse/expand. The overview previews three items per branch.
 **View options** holds expand/collapse-all and flow arrows.
 Recorded connections remain available in details even with arrows hidden.
-The diagram is a large canvas, at least 1800 pixels wide, and grows with wider
-screens. Its height follows the diagram's aspect ratio rather than a small
+The diagram is a large canvas, at least 1400 pixels wide. Its height follows
+the diagram's aspect ratio rather than a small
 viewport-height cap. Scroll the workspace/page horizontally and vertically to
 explore it; the diagram has no separate internal scroll container or zoom mode.
 The landscape page is exempt from the usual content-width cap.
-Names and values sit inside illustrated circular nodes throughout the map,
-arranged on household-centered radial legs like the original layout.
-Offshoot bubbles are smaller than the section hubs, with tighter outer-tier
-spacing. The white canvas background covers the full SVG even when expanded
+Names and values accompany unframed illustrations throughout the map,
+arranged as small endpoints around each cluster hub rather than on a shared
+household-centered ring. Curved colored connections carry the hierarchy;
+there are no circular bubbles. Local fans use up to five items per tier, and
+expanded clusters move outward only as needed to avoid other nodes and controls.
+Node sizes remain stable as the canvas grows. Hold the left mouse button and drag
+anywhere on the map to pan horizontally and vertically. A short click still
+selects items or activates controls; dragging does not activate them. Phones
+retain native touch scrolling. The white canvas background covers the full SVG even when expanded
 branches extend beyond the initial page width.
 Expanding legs adds outer tiers and grows the canvas instead of scaling nodes down.
 Section controls and the details list

@@ -136,7 +136,7 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.equal(f.node('landscape-root').onclick, null);
 });
 
-test('landscape expands populated radial nodes and payment fans in place without shrinking the canvas', async () => {
+test('landscape expands populated cluster fans in place without shrinking nodes', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: Array.from({ length: 21 }, (_, i) => ({
     id: i + 1, date: '2026-10-10', description: `Shop ${i}`, category: `Category ${i}`, amount: 25, direction: 'DEBIT'
@@ -152,15 +152,28 @@ test('landscape expands populated radial nodes and payment fans in place without
   assert.equal(new Set(drawings).size, 9, 'the home and eight legs each have a different colorful illustration');
   assert.match(root.innerHTML, /preserveAspectRatio="xMidYMid meet"/);
   assert.doesNotMatch(root.innerHTML, /landscape-island|landscape-light|landscape-sphere|data-yaw|data-pitch|zoom-in|zoom-out|scroll-mode|rotate-left|Depth view|Flat view/);
-  assert.equal(map.onpointerdown, undefined, 'touch scrolling is not intercepted');
+  assert.equal(typeof map.onpointerdown, 'function', 'mouse panning is available');
   const css = source('landscape.css');
-  assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1800px\); height: auto/);
+  assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1400px\); height: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*background: #fff; border-radius: inherit/,
     'the white background follows the expanded SVG, not just its narrower wrapper');
-  assert.match(root.innerHTML, /class="landscape-node is-offshoot[^]*?<circle r="80" class="landscape-medallion"/,
-    'offshoot bubbles are smaller than the 116-unit hubs');
-  assert.match(css, /\.landscape-node\.is-offshoot .landscape-label \{ font-size: 14px/);
+  assert.doesNotMatch(root.innerHTML, /landscape-medallion|landscape-transaction-marker/);
+  assert.match(root.innerHTML, /style="width:[\d.]+px"/, 'expanding never rescales existing nodes');
+  assert.match(css, /\.landscape-node\.is-offshoot .landscape-label \{ font-size: 13px/);
+  assert.match(root.innerHTML, /d="M [^"]+ C /, 'fan connections are curved');
+  const locations = [...root.innerHTML.matchAll(/transform="translate\(([^ ]+) ([^)]+)\)"[^>]*data-landscape-node="([^"]+)"/g)]
+    .map(([, x, y, id]) => ({ id, x: Number(x), y: Number(y) }));
+  const hubs = graph.nodes.filter(node => node.kind === 'branch').map(branch => locations.find(p => p.id === branch.id));
+  assert.ok(new Set(hubs.map(p => Math.round(Math.hypot(p.x, p.y)))).size > 3,
+    'cluster hubs have distinct distances rather than forming a rigid ring');
+  for (const item of graph.nodes.filter(node => node.kind !== 'branch' && node.branch)) {
+    const p = locations.find(point => point.id === item.id);
+    if (!p) continue;
+    const hub = hubs.find(point => point.id === item.branch);
+    assert.ok(Math.abs(Math.hypot(p.x - hub.x, p.y - hub.y) - 280) < .001,
+      'preview endpoints fan out from their own hub');
+  }
   assert.match(css, /#landscape-view \{[^}]*max-width: none/);
   assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
   assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
@@ -169,13 +182,13 @@ test('landscape expands populated radial nodes and payment fans in place without
   const originalWidth = canvasWidth();
   await click({ landscapeAction: 'fan', branch: 'spending' });
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 37, 'household, eight hubs, 21 spending nodes and seven missing nodes');
-  assert.ok(canvasWidth() > originalWidth, 'the radial canvas grows instead of shrinking nodes');
+  assert.ok(canvasWidth() > originalWidth, 'the cluster canvas grows instead of shrinking nodes');
   assert.doesNotMatch(root.innerHTML, /landscape-pagination|previous-page|next-page/);
   const first = graph.nodes.find(n => n.kind === 'activity');
   assert.match(root.innerHTML, new RegExp(`data-landscape-source="spending" data-landscape-target="${first.id}"`));
   assert.match(root.innerHTML, /class="landscape-reading"/);
   assert.match(root.innerHTML, /Category 20<\/text>/, 'endpoints show their real names');
-  assert.match(root.innerHTML, /\$25\/mo<\/text>/, 'endpoints show their values inside their medallions');
+  assert.match(root.innerHTML, /\$25\/mo<\/text>/, 'endpoints show their real values beside their illustrations');
   await click({ landscapeAction: 'transactions', branch: 'spending', item: first.id });
   assert.match(root.innerHTML, /class="landscape-node is-transaction"/);
   assert.match(root.innerHTML, /href="#transactions\/1"/);
@@ -196,6 +209,48 @@ test('landscape expands populated radial nodes and payment fans in place without
   await click({ landscapeAction: 'reset' });
   assert.doesNotMatch(root.innerHTML, /landscape-pagination/);
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
+});
+
+test('landscape mouse dragging pans both axes without activating items and leaves touch scrolling native', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const f = fixture(async () => response(200, buildLandscape()));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const map = f.node('landscape-map'), moves = [];
+  let capture = null;
+  map.closest = () => ({ scrollBy: (x, y) => moves.push([x, y]) });
+  f.context.getComputedStyle = () => ({ overflowY: 'auto' });
+  map.setPointerCapture = id => { capture = id; };
+  map.hasPointerCapture = id => capture === id;
+  map.releasePointerCapture = () => { capture = null; };
+  const event = (x, y, extra = {}) => ({ pointerType: 'mouse', button: 0, pointerId: 1,
+    clientX: x, clientY: y, preventDefault() {}, ...extra });
+  map.onpointerdown(event(200, 200));
+  map.onpointermove(event(202, 202));
+  assert.equal(moves.length, 0, 'small click movements do not pan');
+  map.onpointermove(event(150, 140));
+  map.onpointermove(event(170, 180));
+  assert.deepEqual(moves, [[50, 60], [-20, -40]]);
+  assert.equal(map.classList.contains('is-panning'), true);
+  map.onpointerup(event(170, 180));
+  assert.equal(capture, null);
+  assert.equal(map.classList.contains('is-panning'), false);
+  let prevented = false, stopped = false;
+  map.listeners.click({ detail: 1, preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
+  assert.ok(prevented && stopped, 'the click following a drag cannot select or follow a transaction link');
+  map.onpointerdown(event(200, 200));
+  map.onpointerup(event(200, 200));
+  map.listeners.click({ detail: 1, preventDefault() { assert.fail('normal clicks must work'); } });
+  for (const extra of [{ pointerType: 'touch' }, { pointerType: 'pen' }, { button: 2 }]) {
+    map.onpointerdown(event(200, 200, extra));
+    map.onpointermove(event(100, 100, extra));
+  }
+  assert.equal(moves.length, 2, 'touch, pen and right-click do not engage mouse panning');
+  map.onpointerdown(event(200, 200));
+  map.onpointermove(event(100, 100));
+  map.onpointercancel(event(100, 100));
+  assert.equal(capture, null);
+  assert.equal(map.classList.contains('is-panning'), false);
 });
 
 test('landscape has independent fan-out legs, pictograms, simple visibility filters and optional cross-leg flows', async () => {
@@ -293,15 +348,15 @@ test('landscape size weights stay within each leg and measure, with zero and una
   assert.match(root.innerHTML, /data-landscape-node="negative"/);
 });
 
-test('expanded radial legs keep nodes and controls apart with simultaneous full transaction fans', async () => {
+for (const itemCount of [3, 7, 12]) test(`expanded cluster fans keep names, values and controls apart with ${itemCount} items per leg`, async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape();
   graph.nodes = graph.nodes.filter(node => ['household', 'branch'].includes(node.kind));
   graph.edges = graph.edges.filter(edge => edge.source === 'household');
   const branches = graph.nodes.filter(node => node.kind === 'branch');
   for (const branch of branches) {
-    branch.count = 7;
-    for (let i = 0; i < 7; i++) {
+    branch.count = itemCount;
+    for (let i = 0; i < itemCount; i++) {
       const id = `dense-${branch.id}-${i}`;
       graph.nodes.push({ id, branch: branch.id, kind: 'activity', label: `Recorded item ${i}`,
         metric: 'monthly', amount: i + 25, count: 30,
@@ -323,26 +378,27 @@ test('expanded radial legs keep nodes and controls apart with simultaneous full 
     }
   }
   const nodes = [...root.innerHTML.matchAll(/<(g|a) class="landscape-node([^"]*)" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?(?:data-landscape-node|href)="([^"]+)"/g)]
-    .map(([, tag, classes, x, y, id]) => ({ id, x: Number(x), y: Number(y), r: tag === 'a' ? 36 : classes.includes('is-offshoot') ? 87 : 123 }));
-  assert.equal(nodes.length, 545, 'all eight legs, 56 items, and 480 transactions remain visible together');
+    .map(([, tag, classes, x, y, id]) => ({ id, x: Number(x) - (tag === 'a' ? 40 : 90),
+      y: Number(y) - (tag === 'a' ? 25 : 55), w: tag === 'a' ? 80 : 180,
+      h: tag === 'a' ? 55 : classes.includes('is-offshoot') ? 160 : 180 }));
+  assert.equal(nodes.length, 9 + 8 * itemCount + 480, 'all eight legs, their items and 480 transactions remain visible together');
   for (let i = 0; i < nodes.length; i++) {
     for (const other of nodes.slice(i + 1)) {
       const node = nodes[i];
-      assert.ok(Math.hypot(node.x - other.x, node.y - other.y) >= node.r + other.r,
+      assert.ok(node.x + node.w <= other.x || other.x + other.w <= node.x || node.y + node.h <= other.y || other.y + other.h <= node.y,
         `${node.id} overlaps ${other.id}`);
     }
   }
   const controls = [...root.innerHTML.matchAll(/class="landscape-expander([^"]*)" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?data-item="([^"]+)"/g)]
     .map(([, classes, x, y, id]) => {
-      const w = classes.includes('is-compact') ? 168 : 188;
+      const w = 160;
       return { id, x: Number(x) - w / 2, y: Number(y), w, h: 32 };
     });
   for (const control of controls) {
     for (const node of nodes) {
       if (control.id === node.id) continue;
-      const dx = node.x - Math.max(control.x, Math.min(node.x, control.x + control.w));
-      const dy = node.y - Math.max(control.y, Math.min(node.y, control.y + control.h));
-      assert.ok(Math.hypot(dx, dy) >= node.r, `${control.id}'s control covers ${node.id}`);
+      assert.ok(control.x + control.w <= node.x || node.x + node.w <= control.x || control.y + control.h <= node.y || node.y + node.h <= control.y,
+        `${control.id}'s control covers ${node.id}`);
     }
   }
   f.context.FinanceLandscape.reset();
