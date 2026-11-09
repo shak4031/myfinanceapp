@@ -136,7 +136,7 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.equal(f.node('landscape-root').onclick, null);
 });
 
-test('landscape fits a flat illustrated diagram without boxes or camera controls and pages large fan-outs', async () => {
+test('landscape uses a large page-scrolled flat diagram without boxes or camera controls and pages large fan-outs', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: Array.from({ length: 21 }, (_, i) => ({
     id: i + 1, date: '2026-10-10', description: `Shop ${i}`, category: `Category ${i}`, amount: 25, direction: 'DEBIT'
@@ -154,8 +154,11 @@ test('landscape fits a flat illustrated diagram without boxes or camera controls
   assert.doesNotMatch(root.innerHTML, /landscape-island|landscape-light|landscape-sphere|data-yaw|data-pitch|zoom-in|zoom-out|scroll-mode|rotate-left|Depth view|Flat view/);
   assert.equal(map.onpointerdown, undefined, 'touch scrolling is not intercepted');
   const css = source('landscape.css');
-  assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: 100%/);
-  assert.doesNotMatch(css, /overflow: auto|min-width: 1100|min-height: 680|drop-shadow/);
+  assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1800px\); height: auto/);
+  assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: auto/);
+  assert.match(css, /#landscape-view \{[^}]*max-width: none/);
+  assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
+  assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
   assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
   await click({ landscapeAction: 'focus', branch: 'spending' });
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 10, 'household, hub and at most eight labeled items');

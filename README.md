@@ -304,11 +304,15 @@ Select illustrations or item markers to inspect balances and recorded money flow
 offers branch collapse/expand. The overview previews three items per branch.
 **View options** holds expand/collapse-all and flow arrows.
 Recorded connections remain available in details even with arrows hidden.
-The entire diagram fits a bounded responsive card without an internal scrollbar;
-there is no oversized minimum width or zoom mode. Overview labels identify the
+The diagram is a large canvas, at least 1800 pixels wide, and grows with wider
+screens. Its height follows the diagram's aspect ratio rather than a small
+viewport-height cap. Scroll the workspace/page horizontally and vertically to
+explore it; the diagram has no separate internal scroll container or zoom mode.
+The landscape page is exempt from the usual content-width cap.
+Overview labels identify the
 eight sections; item names and amounts are available on selection, hover/focus
 titles, or in the labeled Explore view. Section controls and the details list
-remain accessible on small screens where the overall map is naturally smaller.
+remain viewport-sized on small screens while the diagram stays large.
 Child badge sizes increase with the absolute amount relative to the largest
 item of the same measure **within its own leg**, with bounded sizes for readability.
 Monthly activity, balances and planning progress use separate scales (including

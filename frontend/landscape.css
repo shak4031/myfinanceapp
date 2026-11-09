@@ -1,4 +1,4 @@
-#landscape-view { min-width: 0; }
+#landscape-view { min-width: 0; max-width: none; }
 .landscape-period { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 18px; font-size: 14px; color: #395666; }
 .landscape-help { margin-left: auto; max-width: 600px; font-size: 13px; line-height: 1.7; }
 .landscape-help summary { cursor: pointer; color: #285d6e; font-weight: 650; }
@@ -25,13 +25,13 @@
 .landscape-view-options[open] > summary { margin-bottom: 12px; width: fit-content; }
 .landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
 .landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.landscape-map { width: 100%; min-width: 0; height: clamp(320px, 62vh, 620px); border-radius: 18px; background: #fff; touch-action: auto; }
+.landscape-map { width: max(100%, 1800px); height: auto; border-radius: 18px; background: #fff; touch-action: auto; }
 .landscape-map svg { user-select: none; }
 .landscape-illustration, .landscape-pictogram { pointer-events: none; }
 .landscape-illustration svg { display: block; width: 64px; height: 64px; }
 .landscape-pictogram svg { display: block; width: 24px; height: 24px; }
 .landscape-label-leader { fill: none; stroke: #86a6b8; stroke-width: 1; opacity: .5; pointer-events: none; }
-.landscape-map > svg { display: block; width: 100%; height: 100%; }
+.landscape-map > svg { display: block; width: 100%; height: auto; }
 .landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
 .landscape-edge.is-structure { stroke-width: 2.8; opacity: .55; }
 .landscape-edge.is-trunk { stroke-width: 6; opacity: .7; }
@@ -67,7 +67,6 @@
   .landscape-explore { width: 100%; }
   .landscape-explore select { flex: 1; max-width: none; min-height: 44px; }
   .landscape-view-options { margin-left: 0; }
-  .landscape-map { height: 340px; }
   .landscape-toolbar button, .landscape-branch-controls button { min-height: 42px; }
 }
 @media (prefers-reduced-motion: reduce) {
