@@ -200,10 +200,13 @@
   }
 
   function merchantsCard(a) {
-    const { money, pct, esc } = pro().format;
-    const max = Math.max(...a.merchants.map(m => m.total), 1);
-    const list = a.merchants.map((m, i) => `<li><span class="pro-rank">${i + 1}</span><div class="pro-merchant"><div><strong>${esc(m.merchant)}</strong><small>${m.count} visit${m.count === 1 ? '' : 's'} &middot; avg ${money(m.average, true)} &middot; ${pct(m.share)} of spend</small></div><span class="pro-share"><i style="width:${((m.total / max) * 100).toFixed(1)}%"></i></span></div><div class="num"><strong>${money(m.total, true)}</strong>${m.change == null ? '' : arrow(m.change)}</div></li>`).join('');
-    return card('Top merchants', 'Where the last 90 days of spending went', list ? `<ol class="pro-list is-scroll is-tall">${list}</ol>` : '<p class="pro-empty">No merchant spending in the last 90 days.</p>');
+    const { money, pct } = pro().format;
+    const items = a.merchants.map(m => ({
+      name: m.merchant, value: m.total,
+      detail: `${m.count} payments; average ${money(m.average)}; ${pct(m.share)} of all spending${m.change == null ? '' : `; ${Math.abs(m.change * 100).toFixed(0)}% ${m.change >= 0 ? 'more' : 'less'} than the previous period`}`
+    }));
+    return card('Top merchants', 'Your spending landscape over the last 90 days · larger tiles mean more money out',
+      globalThis.FinanceMoneyVisuals.mosaic(items));
   }
 
   function weekdayCard(a) {
@@ -362,35 +365,24 @@
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }
 
-  // Three-set Venn diagram: the categories where several independent signals agree are the ones worth acting on.
   const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' };
-  function signalVenn(mf) {
+  function signalConnections(mf) {
     const { esc } = pro().format;
-    const regions = { a: [128, 140], b: [432, 140], c: [280, 372], ab: [280, 96], ac: [192, 262], bc: [368, 262], abc: [280, 200] };
-    const MAX_NAMES = { a: 5, b: 5, c: 4, ab: 2, ac: 3, bc: 3, abc: 3 };
     const placed = {}, clear = [];
     for (const c of mf.categories) {
       const key = `${isAbove(c) ? 'a' : ''}${c.rising ? 'b' : ''}${isUnusual(c) ? 'c' : ''}`;
       if (!key) clear.push(shortLabel(c.label)); else (placed[key] ||= []).push(c);
     }
-    const names = Object.entries(placed).map(([key, list]) => {
-      const [x, y0] = regions[key];
-      const shown = list.slice(0, MAX_NAMES[key]), more = list.length - shown.length;
-      const lines = shown.map(c => shortLabel(c.label)).concat(more ? [`+${more} more`] : []);
-      const start = y0 - (lines.length - 1) * 10 + (key === 'abc' ? 12 : 0);
-      return lines.map((label, i) => `<text x="${x}" y="${start + i * 20}" class="pro-venn-name${key.length >= 2 ? ' is-act' : ''}${more && i === lines.length - 1 ? ' is-more' : ''}" text-anchor="middle">${esc(label)}</text>`).join('');
-    }).join('');
-    const svg = `<svg class="pro-venn" viewBox="0 0 560 446" role="img" aria-label="Signals overlap: ${Object.entries(placed).map(([k, l]) => `${l.map(c => shortLabel(c.label)).join(', ')} in ${k.length} signal${k.length === 1 ? '' : 's'}`).join('; ') || 'no category flagged'}">
-      <circle cx="200" cy="165" r="140" class="pro-venn-a"/><circle cx="360" cy="165" r="140" class="pro-venn-b"/><circle cx="280" cy="285" r="140" class="pro-venn-c"/>
-      <text x="64" y="16" class="pro-venn-set">${SIGNAL_NAMES.a}</text><text x="496" y="16" class="pro-venn-set" text-anchor="end">${SIGNAL_NAMES.b}</text><text x="280" y="442" class="pro-venn-set" text-anchor="middle">${SIGNAL_NAMES.c}</text>
-      ${placed.abc ? '<text x="280" y="178" class="pro-venn-tag" text-anchor="middle">ACT NOW</text>' : ''}${names}</svg>`;
-    // The same overlap in words, strongest first, so nothing depends on reading small text inside the circles.
+    const svg = globalThis.FinanceMoneyVisuals.signalNetwork(mf.categories.map(c => ({
+      label: c.label, monthly: c.average3,
+      signals: [isAbove(c) && 'a', c.rising && 'b', isUnusual(c) && 'c'].filter(Boolean)
+    })), SIGNAL_NAMES);
     const groups = [3, 2, 1].map(count => ({ count, items: Object.entries(placed).filter(([key]) => key.length === count).flatMap(([key, list]) => list.map(c => ({ c, key }))) })).filter(g => g.items.length);
     const heading = { 3: ['All three signals', 'Act now', 'act'], 2: ['Two signals agree', 'Worth changing', 'act'], 1: ['One signal', 'Keep an eye on it', 'watch'] };
     const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
       ${clear.length ? `<p class="pro-venn-clear">${pro().ICONS.check} <b>On track:</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
     return card(`Where the signals overlap${how(`Above similar homes: your ${mf.range ? 'selected-period' : '3-month'} average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trend indicators retain their 3/6/12-month windows within the selected history. The latest selected month is compared with earlier months in that history. Short ranges may not support all signals.`)}`,
-      'One signal is worth watching. Where circles overlap, act.', `<div class="pro-venn-layout">${svg}${side}</div>`, 'span-3');
+      'Follow the links: categories connected to several signals deserve a closer look.', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every signal and on-track category</summary>${side}</details></div>`, 'span-3');
   }
 
   // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.
@@ -679,7 +671,7 @@
     const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
     return `<div class="pro-compass">${compassPanel('plan', 'Compass plan and headline', m => compassHero(m) + compassInsights(m), mf)}
       <div class="pro-grid pro-compass-grid">${[
-        ['flow', 'Where your money flows', flowSankey], ['signals', 'Where the signals overlap', signalVenn],
+        ['flow', 'Where your money flows', flowSankey], ['signals', 'Where the signals overlap', signalConnections],
         ['vendors', 'Who gets your money', vendorField], ['heatmap', 'Hot and cold months', spendHeatmap],
         ['range', 'Your normal range', rangeStrips], ['readings', 'Technical readings', compassReadings]
       ].map(([key, title, renderer]) => compassPanel(key, title, renderer, mf)).join('')}</div>${source}</div>`;

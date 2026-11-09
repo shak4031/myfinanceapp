@@ -64,6 +64,13 @@
     .log-cause { border: 1px solid #eedbd8; border-left: 4px solid #b84239; border-radius: 10px; padding: 10px 12px; background: #fffaf9; }
     .log-cause.warn { border-color: #f0e2bd; border-left-color: #c99520; background: #fffdf6; }
     .log-cause small { color: #63716a; }
+    .alarm-critical, .alarm-major { border-left: 4px solid #b84239; }
+    .alarm-warning { border-left: 4px solid #c99520; }
+    .alarm-clear { border-left: 4px solid #257252; }
+    .monitor-alarm { margin: 8px 0; padding: 10px 12px; background: #f6f8f4; border-radius: 6px; }
+    #bank-health td { min-width: 130px; }
+    #bank-health td:last-child { min-width: 300px; }
+    .log-detail { margin-top: 6px; color: #53645a; line-height: 1.7; overflow-wrap: anywhere; }
     .log-ok { border-left: 4px solid #257252; background: #f3faf6; border-radius: 10px; padding: 10px 12px; margin: 12px 0 16px; color: #1f5a40; font-weight: 600; }
     .filters label.inline { display: flex; align-items: center; gap: 6px; }
     #logs td:nth-child(4) { word-break: break-word; }
@@ -93,6 +100,7 @@
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="active">Overview</button>
         <button data-tab="traffic">Traffic</button>
+        <button data-tab="monitor">Bank monitoring</button>
         <button data-tab="logs">App logs</button>
         <button data-tab="users">Users</button>
         <button data-tab="errors">Error logs</button>
@@ -118,6 +126,24 @@
           <div id="users" class="table-scroll"></div>
         </div>
       </section>
+      <section data-panel="monitor" hidden>
+        <div class="card">
+          <h2>Bank event console</h2>
+          <p class="muted">Current alarms are derived from connection state and clear automatically when that state recovers. No balances, transaction descriptions or bank credentials are shown. A bank connection can cover several accounts; its sync events apply to every account on that connection.</p>
+          <div class="filters">
+            <label>Customer user ID<input id="bank-user" type="number" min="1" placeholder="All customers"></label>
+            <label>Bank account<select id="bank-account"><option value="">All bank accounts</option></select></label>
+            <label>Severity<select id="bank-severity"><option value="">All health states</option><option value="alarm">Active alarms only</option><option value="critical">Critical</option><option value="major">Major</option><option value="warning">Warning</option><option value="clear">Clear</option></select></label>
+            <button class="btn btn-primary" id="bank-refresh">Refresh health</button>
+            <label class="inline"><input type="checkbox" id="bank-live"> Auto-refresh every 30s</label>
+          </div>
+          <div id="bank-summary" role="status"></div>
+          <div id="bank-health" class="table-scroll"></div>
+          <h3>Event timeline</h3>
+          <div class="filters"><label>Time range<select id="bank-since"><option value="24h">Last 24 hours</option><option value="7d" selected>Last 7 days</option><option value="30d">Last 30 days</option></select></label></div>
+          <div id="bank-events" class="table-scroll" aria-live="polite"></div>
+        </div>
+      </section>
       <section data-panel="logs" hidden>
         <div class="card">
           <div class="filters">
@@ -125,10 +151,12 @@
             <label>Time range<select id="logs-since"><option value="15m">Last 15 minutes</option><option value="1h">Last hour</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
             <label>Search<input id="logs-q" placeholder="module, message or route"></label>
             <label>Request ID<input id="logs-request" placeholder="Paste request ID" style="width:280px"></label>
+            <label>Customer user ID<input id="logs-user" type="number" min="1" placeholder="All"></label>
+            <label>Connection ID<input id="logs-connection" type="number" min="1" placeholder="All"></label>
             <button class="btn btn-primary" id="logs-search">Search logs</button>
             <label class="inline"><input type="checkbox" id="logs-live"> Auto-refresh every 30s</label>
           </div>
-          <p class="muted">Server application logs with problems grouped by cause. Messages are redacted (amounts, emails, tokens), so no customer financial data is shown. Warnings and errors are kept for every server instance; “Everything” adds recent info lines from the instance that answered. Click a request ID to see every line from that request.</p>
+          <p class="muted">Server application logs with problems grouped by cause and account. Messages are redacted (amounts, emails, tokens). Plaid events, warnings and errors are retained across server instances; other info lines are live on this instance only. Click a request ID to see every line from that request.</p>
           <div id="logs-summary" aria-live="polite"></div>
           <div id="logs" class="table-scroll"></div>
         </div>
@@ -217,6 +245,6 @@
   <div id="admin-toast" hidden role="status"></div>
   <script src="ui.js?v=20261017r"></script>
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="admin.js?v=20261106-ticket-updates"></script>
+  <script src="admin.js?v=20261109-bank-monitor"></script>
 </body>
 </html>

@@ -1,5 +1,64 @@
 # MyFinanceApp Logging & Troubleshooting Endpoints
 
+## Current admin console
+
+Sign in as an administrator and open **Bank monitoring** for the bank event console.
+Select a customer user ID and/or bank account, then filter severity. **View events**
+scopes the timeline to that bank connection. A connection-level failure affects all
+its bank accounts; the console labels bank account record IDs and linked app account
+IDs separately. No balances, transaction descriptions, provider account IDs or
+credentials are returned. Customer names/emails identify the support account.
+
+- **Critical:** authentication/environment attention; automatic sync is stopped.
+- **Major:** latest transaction check failed. Read its failed stage and recovery steps.
+- **Warning:** no successful check in over 26 hours, never synced, mortgage details
+  unavailable, or a pending transaction older than seven days.
+- **Clear:** no current alarm, not a guarantee of current bank activity.
+
+Alarms reflect current state and clear automatically on recovery. There is no
+manual acknowledgement workflow. Retained events remain searchable after recovery.
+Optional 30-second refresh runs only while the monitoring tab is visible.
+Shared connection alarms can appear on several bank account rows.
+
+Compare **last successful check**, **latest attempt**, **last webhook**, and
+**latest activity date**. Newest transaction date alone cannot establish a stalled
+sync. Scheduled scans run hourly; connections become eligible 24 hours after a
+success and six hours after an attempt. Webhooks and owner-initiated checks can
+run sooner. Relink-required connections need owner action. Plaid calls time out
+after 30 seconds; the initial scheduled scan starts after the HTTP listener.
+
+Use **App logs** for customer/connection filtering, grouped causes, failed stages,
+error codes, duration, imported/modified/removed/review counts, app request IDs and
+Plaid request IDs. Provider responses/configs and financial payloads are not
+stored in diagnostic metadata. Match a Plaid request ID in the Plaid dashboard;
+match an app request ID in the application log timeline.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/admin/bank-health?userId=1&accountId=21` | Admin-only current bank-account health; max 500 rows, explicit truncation |
+| `/api/admin/logs?level=info&since=7d&userId=1&connectionId=11` | Admin-only retained sync event timeline |
+| `/api/admin/logs?level=warn&since=24h` | Warnings/errors grouped by cause and affected connection |
+| `/api/monitor/logs` | Automated monitoring; requires configured monitor bearer token |
+| `/api/health` | Liveness, not account sync health |
+
+`accountId` means the internal `plaid_accounts.id`, not a provider ID or linked app
+account ID. Sync events use `connectionId`, because Plaid checks the whole bank
+connection. Health and log ID filters reject invalid IDs.
+
+All Plaid lifecycle events (including zero-change successes), warnings and errors
+are persisted across instances/restarts for `LOG_RETENTION_DAYS` (default 30).
+Other info events are held in this instance's bounded live buffer. Log searches
+consider up to the newest 5,000 stored matches and return up to 1,000 entries.
+History and webhook timestamps begin with this deployment; old discarded
+metadata cannot be reconstructed. Database-read failures display a coverage warning.
+Apply the normal startup schema migration when deploying these changes.
+
+## Legacy endpoint reference (obsolete)
+
+**Do not use the `/api/logs*` examples below.** Global legacy log access is disabled
+with HTTP 403; use the authenticated admin endpoints above. The remainder is kept
+only as historical documentation and does not describe the current API.
+
 All endpoints are accessible at: `https://myfinanceapp-production.up.railway.app`
 
 ## Quick Reference

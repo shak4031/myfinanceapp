@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { migratePrivateSchema } from './schema.js';
-import { log } from './logger.js';
-import { redactLogText, groupCauses, parseSince, queryLogs, startLogStore, stopLogStore, flushLogStore } from './logStore.js';
+import { log, writeEntry } from './logger.js';
+import { redactLogText, groupCauses, parseSince, queryLogs, startLogStore, stopLogStore, flushLogStore, toStoredEntry } from './logStore.js';
 import application from '../app.js';
 
 test('log text is redacted before support staff can see it', () => {
@@ -50,6 +50,20 @@ test('in-memory query filters by level, text and request', async () => {
   assert.equal(everything.total, 3);
   const errors = await queryLogs({ level: 'error', since, q: marker, includeDatabase: false });
   assert.equal(errors.causes[0].message, `${marker} exploded`);
+});
+
+test('operational detail is allowlisted and grouped per affected connection', async () => {
+  const entry = toStoredEntry({ event: 'plaid.sync_failed', level: 'error', userId: 7, connectionId: 8,
+    errorCode: 'ITEM_LOGIN_REQUIRED', providerRequestId: 'provider-123', access_token: 'never-store',
+    detail: { message: 'Bank authentication failed', secret: 'never-store', amount: 123 } });
+  assert.deepEqual(entry.detail, { userId: 7, connectionId: 8, errorCode: 'ITEM_LOGIN_REQUIRED', providerRequestId: 'provider-123' });
+  assert.equal(entry.message, 'Bank authentication failed');
+  assert.equal(groupCauses([entry, { ...entry, detail: { ...entry.detail, connectionId: 9 } }]).length, 2);
+  writeEntry({ event: 'plaid.sync_completed', level: 'info', userId: 7, connectionId: 8, message: 'Checked with no changes' });
+  writeEntry({ event: 'plaid.sync_completed', level: 'info', userId: 9, connectionId: 10, message: 'Other customer' });
+  const result = await queryLogs({ level: 'info', userId: 7, connectionId: 8, includeDatabase: false });
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].message, 'Checked with no changes');
 });
 
 test('support can view logs in the admin console API; monitoring needs its token', async t => {
@@ -114,6 +128,35 @@ test('support can view logs in the admin console API; monitoring needs its token
     assert.equal((await call('/api/admin/logs?since=whenever', { cookie: ownerCookie })).status, 400);
     assert.equal((await call('/api/admin/logs', { cookie: memberCookie })).status, 403);
     assert.equal((await call('/api/admin/logs')).status, 401);
+    await database.exec(`INSERT INTO plaid_connections(id,user_id,item_id,access_token_ciphertext,last_sync_at,last_error_code,status)
+      VALUES(11,1,'private-item','private-cipher','2026-11-06T12:00:00Z','ITEM_LOGIN_REQUIRED','relink_required'),
+        (12,2,'other-private-item','other-private-cipher',NOW(),NULL,'connected');
+      INSERT INTO plaid_accounts(id,connection_id,user_id,account_id,name,type,subtype)
+        VALUES(21,11,1,'private-bank-id','Private bank name','depository','checking'),
+        (22,12,2,'other-bank-id','Other private bank','depository','checking');
+      INSERT INTO transactions(user_id,date,description,amount,direction,source,plaid_account_id,is_pending)
+        VALUES(1,'2026-11-01','Private merchant',99,'DEBIT','plaid','private-bank-id',TRUE)`);
+    writeEntry({ event: 'plaid.sync_completed', level: 'info', userId: 1, connectionId: 11,
+      added: 0, modified: 0, removed: 0, message: 'Successful check with no changes' });
+    writeEntry({ event: 'plaid.sync_failed', level: 'warn', userId: 2, connectionId: 12,
+      errorCode: 'PRODUCT_NOT_READY', message: 'Other bank needs time' });
+    await flushLogStore();
+    const persistedInfo = (await database.query("SELECT detail FROM app_logs WHERE source='plaid.sync_completed' AND detail->>'connectionId'='11'")).rows;
+    assert.equal(persistedInfo.length, 1, 'successful zero-change checks survive restarts');
+    const scoped = await call('/api/admin/logs?level=info&userId=1&connectionId=11', { cookie: ownerCookie });
+    assert.equal(scoped.body.total, 1);
+    assert.equal(scoped.body.entries[0].detail.added, 0);
+    const health = await call('/api/admin/bank-health?userId=1&accountId=21', { cookie: ownerCookie });
+    assert.equal(health.status, 200, JSON.stringify(health.body));
+    assert.equal(health.body.accounts.length, 1);
+    assert.equal(health.body.accounts[0].severity, 'critical');
+    assert.equal(health.body.accounts[0].pendingCount, 1);
+    assert.equal(health.body.accounts[0].connectionId, 11);
+    assert.doesNotMatch(JSON.stringify(health.body), /private-item|private-cipher|private-bank-id|Private merchant|Private bank name|current_balance/);
+    assert.equal((await call('/api/admin/bank-health', { cookie: memberCookie })).status, 403);
+    assert.equal((await call('/api/admin/bank-health')).status, 401);
+    assert.equal((await call('/api/admin/bank-health?userId=-1', { cookie: ownerCookie })).status, 400);
+    assert.equal((await call('/api/admin/logs?connectionId=bad', { cookie: ownerCookie })).status, 400);
     const overview = await call('/api/admin/overview', { cookie: ownerCookie });
     assert.ok(overview.body.stats.app_errors_24h >= 1);
     assert.equal(overview.body.monitorTokenConfigured, false);

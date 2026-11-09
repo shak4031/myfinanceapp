@@ -4,6 +4,20 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const when = value => value ? new Date(value).toLocaleString() : '—';
   let oldestAuditId = null;
+  const detailMarkup = detail => {
+    const labels = { userId: 'Customer', connectionId: 'Connection', accountId: 'Bank account', operation: 'Stage',
+      trigger: 'Trigger', errorCode: 'Code', errorType: 'Error type', providerRequestId: 'Plaid request',
+      durationMs: 'Duration (ms)', added: 'Added', modified: 'Modified', removed: 'Removed', imported: 'Imported',
+      pendingReviews: 'Held reviews', flaggedReviews: 'Flagged reviews', released: 'Released', webhookCode: 'Webhook' };
+    const text = Object.entries(detail || {}).filter(([key]) => labels[key])
+      .map(([key, value]) => `<span><b>${labels[key]}:</b> ${esc(value)}</span>`).join(' · ');
+    return text ? `<div class="log-detail">${text}</div>` : '';
+  };
+  const eventTable = entries => entries.length ? `<table><thead><tr><th>When</th><th>Level</th><th>Event / diagnosis</th><th>Request ID</th></tr></thead><tbody>${entries.map(entry =>
+    `<tr><td>${esc(when(entry.time))}</td><td><span class="level-pill level-${esc(entry.level)}">${esc(entry.level)}</span></td>
+    <td><code>${esc(entry.source)}</code><p>${esc(entry.message)}</p>${detailMarkup(entry.detail)}</td>
+    <td>${entry.requestId ? `<a href="#" data-log-request="${esc(entry.requestId)}">${esc(entry.requestId)}</a>` : 'Background task'}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted">No retained events match this period. New instrumentation cannot reconstruct older sync events.</p>';
 
   function toast(message) {
     const node = $('admin-toast');
@@ -329,12 +343,77 @@
     $('errors').innerHTML = `<p class="outcome-error">${esc(error.message)}</p>`;
   });
 
+  let bankTimer = null, bankGeneration = 0, bankRows = [];
+  async function loadBankMonitor(refresh = false) {
+    const generation = ++bankGeneration;
+    const user = $('bank-user').value.trim();
+    const selected = $('bank-account').value;
+    const healthParams = new URLSearchParams();
+    if (user) healthParams.set('userId', user);
+    if (refresh) healthParams.set('refresh', '1');
+    try {
+      const report = await api(`/api/admin/bank-health?${healthParams}`);
+      if (generation !== bankGeneration) return;
+      bankRows = report.accounts;
+      const key = row => row.accountId ? `a${row.accountId}` : `c${row.connectionId}`;
+      $('bank-account').innerHTML = '<option value="">All bank accounts</option>' + bankRows.map(row =>
+        `<option value="${esc(key(row))}">${esc(row.userEmail || `Customer #${row.userId}`)} · ${row.accountId ? `Bank #${esc(row.accountId)} · ${esc(row.subtype || row.type || 'account')}` : `Connection #${esc(row.connectionId)} (no accounts)`}</option>`).join('');
+      $('bank-account').value = bankRows.some(row => key(row) === selected) ? selected : '';
+      const chosen = bankRows.find(row => key(row) === $('bank-account').value);
+      const severity = $('bank-severity').value;
+      const scoped = chosen ? [chosen] : bankRows;
+      const shown = scoped.filter(row => !severity || (severity === 'alarm' ? row.alarms.length : row.severity === severity));
+      const alarmConnections = new Set(scoped.filter(row => row.alarms.length).map(row => row.connectionId));
+      $('bank-summary').innerHTML = `<p><b>${alarmConnections.size} connections need attention</b> · ${scoped.length} bank account records · ${shown.length} shown · updated ${esc(when(report.generatedAt))}</p>
+        ${report.truncated ? '<div class="warn">Limited to 500 bank account records. Filter by customer user ID to narrow the results.</div>' : ''}
+        <p class="muted">Scheduled scans run hourly. Successful connections are eligible after 24 hours; failed attempts have a six-hour backoff. Webhook/manual checks can run sooner. An eligible time is not a guaranteed execution time. No recent purchases does not mean sync failed.</p>`;
+      $('bank-health').innerHTML = shown.length ? `<table><thead><tr><th>Severity / customer</th><th>Account / connection</th><th>Sync health</th><th>Provider activity</th><th>Active alarms / next steps</th></tr></thead><tbody>${shown.map(row =>
+        `<tr class="alarm-${esc(row.severity)}"><td><strong>${esc(row.severity.toUpperCase())}</strong><br>${esc(row.userName)}<br>${esc(row.userEmail)}<br>Customer #${esc(row.userId)}</td>
+        <td>${row.accountId ? `Bank #${esc(row.accountId)} · ${esc(row.subtype || row.type)}` : 'No accounts discovered'}<br>Connection #${esc(row.connectionId)}${row.linkedAccountId ? `<br>App account #${esc(row.linkedAccountId)}` : ''}
+        <br><button class="btn btn-secondary" data-bank-events="${esc(key(row))}">View events</button></td>
+        <td>Status: ${esc(row.status)}<br>Successful check: ${esc(when(row.lastSyncAt))}<br>Latest attempt: ${esc(when(row.lastAttemptAt))}<br>Next eligible: ${esc(when(row.nextEligibleAt))}</td>
+        <td>Webhook: ${esc(when(row.lastWebhookAt))}<br>${esc(row.lastWebhookCode || 'None recorded')}<br>Latest activity date: ${esc(row.latestTransactionDate || 'None')}<br>Pending: ${esc(row.pendingCount)}${row.oldestPendingDate ? ` (oldest ${esc(row.oldestPendingDate)})` : ''}<br>Import reviews: ${esc(row.reviewCount)}</td>
+        <td>${row.alarms.length ? row.alarms.map(alarm => `<div class="monitor-alarm alarm-${esc(alarm.severity)}"><b>${esc(alarm.severity.toUpperCase())} · ${esc(alarm.code)}</b><br>${esc(alarm.message)}<br><small>Since ${esc(when(alarm.since))}</small><p>${esc(alarm.action)}</p></div>`).join('') : '<span class="outcome-success">No active alarms. Latest check succeeded; the bank may return no changes.</span>'}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted">No bank accounts match these filters.</p>';
+      const params = new URLSearchParams({ level: 'info', since: $('bank-since').value, q: 'plaid.', limit: '300' });
+      if (user) params.set('userId', user);
+      if (chosen) { params.set('userId', chosen.userId); params.set('connectionId', chosen.connectionId); }
+      if (refresh) params.set('refresh', '1');
+      const events = await api(`/api/admin/logs?${params}`);
+      if (generation !== bankGeneration) return;
+      $('bank-events').innerHTML = `${events.coverage.databaseAvailable ? '' : '<div class="warn">Stored event history unavailable; only this instance’s memory is shown.</div>'}
+        <p class="muted">Newest ${events.entries.length} of ${events.total} matching events (query capped at 5,000). ${chosen ? 'Connection-level events apply to this account and its sibling accounts.' : 'Showing all connections in the customer scope.'}</p>${eventTable(events.entries)}`;
+    } catch (error) {
+      if (generation !== bankGeneration) return;
+      $('bank-summary').innerHTML = `<p class="outcome-error" role="alert">Monitoring could not refresh: ${esc(error.message)}. Any earlier results below may be stale.</p>`;
+      throw error;
+    }
+  }
+  $('bank-refresh').onclick = () => loadBankMonitor().catch(error => toast(error.message));
+  for (const id of ['bank-user', 'bank-account', 'bank-severity', 'bank-since']) {
+    $(id).onchange = () => loadBankMonitor().catch(error => toast(error.message));
+  }
+  $('bank-health').addEventListener('click', event => {
+    const button = event.target.closest('[data-bank-events]');
+    if (!button) return;
+    $('bank-account').value = button.dataset.bankEvents;
+    loadBankMonitor().catch(error => toast(error.message));
+  });
+  $('bank-live').onchange = () => {
+    clearInterval(bankTimer);
+    if ($('bank-live').checked) bankTimer = setInterval(() => {
+      if (!document.querySelector('[data-panel="monitor"]').hidden) loadBankMonitor(true).catch(error => toast(error.message));
+    }, 30000);
+  };
+
   let logsTimer = null;
   async function loadAppLogs(refresh = false) {
     if (!refresh) $('logs').innerHTML = '<p class="muted">Loading application logs…</p>';
     const params = new URLSearchParams({ level: $('logs-level').value, since: $('logs-since').value, limit: '300' });
     if ($('logs-q').value.trim()) params.set('q', $('logs-q').value.trim());
     if ($('logs-request').value.trim()) params.set('requestId', $('logs-request').value.trim());
+    if ($('logs-user').value.trim()) params.set('userId', $('logs-user').value.trim());
+    if ($('logs-connection').value.trim()) params.set('connectionId', $('logs-connection').value.trim());
     if (refresh) params.set('refresh', '1');
     const data = await api(`/api/admin/logs?${params}`);
     const { counts, failedRequests } = data.summary;
@@ -343,6 +422,7 @@
       ? `<h3 style="margin:16px 0 0">Problems (${data.causes.length})</h3><div class="log-causes">${data.causes.slice(0, 15).map(cause => `
           <div class="log-cause ${cause.level === 'warn' ? 'warn' : ''}">
             <span class="level-pill level-${esc(cause.level)}">${esc(cause.level)}</span> <b>${esc(cause.count)}×</b> <code>${esc(cause.source)}</code> ${esc(cause.message)}
+            ${detailMarkup(cause.detail)}
             <br><small>Last ${esc(when(cause.last))} · first ${esc(when(cause.first))}${cause.routes.length ? ` · ${esc(cause.routes.join(', '))}` : ''}</small>
             ${cause.requestIds.length ? `<br><small>Requests: ${cause.requestIds.map(id => `<a href="#" data-log-request="${esc(id)}"><code>${esc(id)}</code></a>`).join(' ')}</small>` : ''}
           </div>`).join('')}</div>`
@@ -356,7 +436,7 @@
       <p class="muted">Updated ${esc(when(data.generatedAt))} · instance ${esc(data.coverage.instance)} · showing ${esc(data.entries.length)} of ${esc(data.total)} lines</p>`;
     $('logs').innerHTML = data.entries.length ? `<table><thead><tr><th>When</th><th>Level</th><th>Source</th><th>Message</th><th>Route</th><th>Request ID</th></tr></thead><tbody>${
       data.entries.map(entry => `<tr><td>${esc(when(entry.time))}</td><td><span class="level-pill level-${esc(entry.level)}">${esc(entry.level)}</span></td>
-        <td><code>${esc(entry.source)}</code></td><td>${esc(entry.message)}</td><td>${esc(entry.route || '')}</td>
+        <td><code>${esc(entry.source)}</code></td><td>${esc(entry.message)}${detailMarkup(entry.detail)}</td><td>${esc(entry.route || '')}</td>
         <td>${entry.requestId ? `<a href="#" data-log-request="${esc(entry.requestId)}"><code>${esc(entry.requestId)}</code></a>` : '—'}</td></tr>`).join('')
     }</tbody></table>` : '<p class="muted">No log lines match these filters.</p>';
   }
@@ -377,6 +457,8 @@
     $('logs-level').value = 'info';
     $('logs-since').value = '30d';
     $('logs-q').value = '';
+    $('logs-user').value = '';
+    $('logs-connection').value = '';
     if (document.querySelector('[data-panel="logs"]').hidden) openTab('logs'); else loadAppLogs().catch(showLogsError);
   });
 
@@ -486,7 +568,7 @@
     } catch (error) { output.textContent = `Request not sent: ${error.message}`; }
   });
 
-  const loaders = { overview: loadOverview, traffic: loadTraffic, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, tickets: () => loadTickets(), api: loadApi };
+  const loaders = { overview: loadOverview, monitor: () => loadBankMonitor(), traffic: loadTraffic, logs: () => loadAppLogs(), users: loadUsers, errors: loadErrorLogs, audit: () => loadAudit(), support: loadGrants, tickets: () => loadTickets(), api: loadApi };
 
   (async () => {
     try {

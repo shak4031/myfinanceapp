@@ -28,11 +28,17 @@ process.on('uncaughtException', error => {
   setTimeout(() => process.exit(1), 2000).unref();
 });
 
+let plaidScanRunning = false;
 async function syncPlaid() {
+  if (plaidScanRunning) return;
+  plaidScanRunning = true;
   try {
     await syncDuePlaidConnections(structuredLog);
   } catch (error) {
-    structuredLog('error', { event: 'plaid.scheduled_sync_scan_failed', name: error?.name });
+    structuredLog('error', { event: 'plaid.scheduled_sync_scan_failed', name: error?.name,
+      message: 'Could not scan due bank connections. Check database connectivity and scheduler configuration; no banks were checked by this scan.' });
+  } finally {
+    plaidScanRunning = false;
   }
 }
 
@@ -42,8 +48,6 @@ try {
   startTrialReminders();
   await purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
-  await syncPlaid();
-  setInterval(syncPlaid, 60 * 60 * 1000).unref();
   if (demoEnabled()) {
     await startDemoResets(
       async () => {
@@ -55,7 +59,11 @@ try {
   }
   const port = process.env.PORT || 3000;
   process.once('SIGTERM', () => { flushLogStore().finally(() => process.exit(0)); });
-  app.listen(port, '0.0.0.0', () => log('SERVER', `MyFinanceApp listening on port ${port} with private account sessions`));
+  app.listen(port, '0.0.0.0', () => {
+    log('SERVER', `MyFinanceApp listening on port ${port} with private account sessions`);
+    syncPlaid();
+    setInterval(syncPlaid, 60 * 60 * 1000).unref();
+  });
 } catch (error) {
   log('SERVER', `Startup failed: ${error.message}`);
   process.exitCode = 1;

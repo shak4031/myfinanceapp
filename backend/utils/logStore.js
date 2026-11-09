@@ -9,6 +9,22 @@ import { INSTANCE_ID, onLogEntry } from './logger.js';
 const MEMORY_LIMIT = Math.min(Math.max(Number(process.env.LOG_MEMORY_ENTRIES) || 5000, 100), 50000);
 const LEVEL_RANK = { debug: 0, info: 1, warn: 2, error: 3 };
 const PERSISTED = new Set(['warn', 'error']);
+const shouldPersist = entry => PERSISTED.has(entry.level) || entry.source.startsWith('plaid.');
+const DETAIL_IDS = ['userId', 'connectionId', 'accountId'];
+const DETAIL_NUMBERS = ['durationMs', 'added', 'modified', 'removed', 'imported', 'pendingReviews', 'flaggedReviews', 'released'];
+const DETAIL_CODES = ['errorCode', 'errorType', 'providerRequestId', 'operation', 'trigger', 'webhookCode'];
+
+export function logDetail(record) {
+  const detail = {};
+  const source = { ...record.detail, ...record };
+  for (const key of [...DETAIL_IDS, ...DETAIL_NUMBERS]) {
+    if (Number.isSafeInteger(source[key]) && source[key] >= 0) detail[key] = source[key];
+  }
+  for (const key of DETAIL_CODES) {
+    if (typeof source[key] === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(source[key])) detail[key] = source[key];
+  }
+  return detail;
+}
 // Lines that repeat information already reported by a more specific error line.
 const ECHO_EVENTS = new Set(['http.request', 'server.error']);
 const memory = [];
@@ -38,7 +54,8 @@ export function toStoredEntry(record) {
     time: record.time || new Date().toISOString(),
     level: LEVEL_RANK[record.level] !== undefined ? record.level : 'info',
     source: String(record.module || record.event || 'app').slice(0, 80),
-    message: redactLogText(record.message || fromRequest || record.name || record.outcome || ''),
+    message: redactLogText(record.message || record.detail?.message || fromRequest || record.name || record.outcome || record.event || ''),
+    detail: logDetail(record),
     requestId: record.requestId ? String(record.requestId).slice(0, 64) : null,
     route: (record.route || (record.method && record.path ? `${record.method} ${record.path}` : null))?.slice(0, 200) || null,
     status: Number.isInteger(record.status) ? record.status : null,
@@ -51,7 +68,7 @@ onLogEntry(record => {
   const entry = toStoredEntry(record);
   memory.push(entry);
   if (memory.length > MEMORY_LIMIT) memory.splice(0, memory.length - MEMORY_LIMIT);
-  if (persisting && PERSISTED.has(entry.level)) {
+  if (persisting && shouldPersist(entry)) {
     pending.push(entry);
     if (pending.length > 5000) pending.splice(0, pending.length - 5000);
   }
@@ -60,10 +77,10 @@ onLogEntry(record => {
 async function writeBatch(batch) {
   const column = key => batch.map(entry => entry[key]);
   await administrativeTransaction(client => client.query(`
-    INSERT INTO app_logs (entry_id, created_at, level, source, message, request_id, route, status, instance)
-    SELECT * FROM unnest($1::text[], $2::timestamptz[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[])
+    INSERT INTO app_logs (entry_id, created_at, level, source, message, request_id, route, status, instance, detail)
+    SELECT * FROM unnest($1::text[], $2::timestamptz[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[], $10::jsonb[])
     ON CONFLICT (entry_id) DO NOTHING`,
-  [column('id'), column('time'), column('level'), column('source'), column('message'), column('requestId'), column('route'), column('status'), column('instance')]));
+  [column('id'), column('time'), column('level'), column('source'), column('message'), column('requestId'), column('route'), column('status'), column('instance'), batch.map(entry => JSON.stringify(entry.detail))]));
 }
 
 /** Writes queued warnings/errors to the database. Failures go to stderr only, never back into the log. */
@@ -74,6 +91,7 @@ export function flushLogStore() {
       try {
         await writeBatch(batch);
       } catch (error) {
+        pending.unshift(...batch);
         console.error(JSON.stringify({ time: new Date().toISOString(), level: 'error', module: 'LOG_STORE', message: `Could not persist ${batch.length} log entries: ${error.message}` }));
         return;
       }
@@ -85,7 +103,7 @@ export function flushLogStore() {
 export function startLogStore({ intervalMs = 2000 } = {}) {
   if (persisting) return;
   persisting = true;
-  pending.push(...memory.filter(entry => PERSISTED.has(entry.level)));
+  pending.push(...memory.filter(shouldPersist));
   flushTimer = setInterval(() => { flushLogStore(); }, intervalMs);
   flushTimer.unref();
 }
@@ -129,8 +147,8 @@ export function groupCauses(entries) {
   const causes = new Map();
   for (const entry of entries) {
     if (!PERSISTED.has(entry.level) || ECHO_EVENTS.has(entry.source)) continue;
-    const key = `${entry.level}|${causeKey(entry)}`;
-    const cause = causes.get(key) || { level: entry.level, source: entry.source, message: entry.message, count: 0, first: entry.time, last: entry.time, routes: new Set(), requestIds: [] };
+    const key = `${entry.level}|${causeKey(entry)}|${entry.detail?.userId || ''}|${entry.detail?.connectionId || ''}|${entry.detail?.errorCode || ''}`;
+    const cause = causes.get(key) || { level: entry.level, source: entry.source, message: entry.message, detail: entry.detail || {}, count: 0, first: entry.time, last: entry.time, routes: new Set(), requestIds: [] };
     cause.count++;
     if (entry.time < cause.first) cause.first = entry.time;
     if (entry.time > cause.last) cause.last = entry.time;
@@ -157,30 +175,36 @@ function summarize(entries) {
  * Reads logs from memory (all levels, this instance) and the database (warnings/errors, all instances).
  * level is the minimum level: 'error', 'warn' or 'info'.
  */
-export async function queryLogs({ level = 'warn', since = new Date(Date.now() - 86400e3), q = '', requestId = '', limit = 200, includeDatabase = true } = {}) {
+export async function queryLogs({ level = 'warn', since = new Date(Date.now() - 86400e3), q = '', requestId = '', userId = null, connectionId = null, accountId = null, limit = 200, includeDatabase = true } = {}) {
   const minimum = LEVEL_RANK[level] ?? LEVEL_RANK.warn;
   const sinceIso = since.toISOString();
   const needle = String(q || '').trim().toLowerCase().slice(0, 200);
   const request = String(requestId || '').trim().slice(0, 64);
   const matches = entry => LEVEL_RANK[entry.level] >= minimum && entry.time >= sinceIso
     && (!request || entry.requestId === request)
-    && (!needle || `${entry.source} ${entry.message} ${entry.route || ''}`.toLowerCase().includes(needle));
+    && (!userId || entry.detail?.userId === userId)
+    && (!connectionId || entry.detail?.connectionId === connectionId)
+    && (!accountId || entry.detail?.accountId === accountId)
+    && (!needle || `${entry.source} ${entry.message} ${entry.route || ''} ${JSON.stringify(entry.detail || {})}`.toLowerCase().includes(needle));
   const merged = new Map(memory.filter(matches).map(entry => [entry.id, entry]));
   let databaseAvailable = includeDatabase;
   if (includeDatabase) {
     try {
-      const params = [sinceIso, minimum >= LEVEL_RANK.error ? ['error'] : ['warn', 'error']];
+      const params = [sinceIso, minimum >= LEVEL_RANK.error ? ['error'] : minimum >= LEVEL_RANK.warn ? ['warn', 'error'] : ['info', 'warn', 'error']];
       const filters = ['created_at >= $1', 'level = ANY($2)'];
       if (request) { params.push(request); filters.push(`request_id = $${params.length}`); }
-      if (needle) { params.push(`%${needle.replace(/[%_\\]/g, '')}%`); filters.push(`lower(source || ' ' || message || ' ' || COALESCE(route, '')) LIKE $${params.length}`); }
+      for (const [key, value] of Object.entries({ userId, connectionId, accountId })) {
+        if (value) { params.push(String(value)); filters.push(`detail->>'${key}' = $${params.length}`); }
+      }
+      if (needle) { params.push(`%${needle.replace(/[%_\\]/g, '')}%`); filters.push(`lower(source || ' ' || message || ' ' || COALESCE(route, '') || ' ' || detail::text) LIKE $${params.length}`); }
       const rows = await administrativeTransaction(async client => (await client.query(`
-        SELECT entry_id, created_at, level, source, message, request_id, route, status, instance
+        SELECT entry_id, created_at, level, source, message, request_id, route, status, instance, detail
         FROM app_logs WHERE ${filters.join(' AND ')} ORDER BY created_at DESC LIMIT 5000`, params)).rows);
       for (const row of rows) {
         if (merged.has(row.entry_id)) continue;
         merged.set(row.entry_id, {
           id: row.entry_id, time: new Date(row.created_at).toISOString(), level: row.level, source: row.source, message: row.message,
-          requestId: row.request_id, route: row.route, status: row.status, instance: row.instance
+          requestId: row.request_id, route: row.route, status: row.status, instance: row.instance, detail: row.detail || {}
         });
       }
     } catch {
@@ -202,7 +226,7 @@ export async function queryLogs({ level = 'warn', since = new Date(Date.now() - 
       memoryFrom: memory[0]?.time || null,
       persisted: persisting,
       databaseAvailable,
-      note: 'Info entries come from this server instance only; warnings and errors are stored for all instances.'
+      note: 'Plaid events and warnings/errors are retained across instances. Other info entries are live on this instance only. Results are limited to the newest 5000 stored matches.'
     }
   };
 }

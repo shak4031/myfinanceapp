@@ -3708,7 +3708,7 @@ test('successful logout clears protected markup before reload', async () => {
 });
 const loadPro = (fetchImpl) => {
   const f = fixture(fetchImpl);
-  for (const file of ['refresh.js', 'pro-charts.js', 'pro-core.js', 'pro-dashboard.js', 'pro-categories.js', 'analytics.js']) f.run(file);
+  for (const file of ['refresh.js', 'pro-charts.js', 'pro-core.js', 'pro-dashboard.js', 'pro-categories.js', 'money-visuals.js', 'analytics.js']) f.run(file);
   return f;
 };
 test('Pro scripts load without a browser and expose their APIs', () => {
@@ -4043,6 +4043,47 @@ test('traffic reports public views and signup entry clicks, but not signed-in vi
     }
   }
 });
+test('bank event console scopes connection history and reports stale refresh failures explicitly', async () => {
+  const calls = [];
+  let fail = false;
+  const f = fixture(async url => {
+    calls.push(url);
+    let body = { stats: {} }, status = 200;
+    if (url === '/api/auth/me') body = { user: { role: 'admin', name: 'Owner', email: 'owner@example.test' } };
+    if (url.startsWith('/api/admin/bank-health?')) {
+      status = fail ? 503 : 200;
+      body = fail ? { error: 'Database unavailable' } : { generatedAt: '2026-11-09T15:00:00Z', accounts: [{
+        userId: 7, userName: 'Customer', userEmail: 'customer@example.test', accountId: 21, connectionId: 11,
+        subtype: 'checking', status: 'relink_required', severity: 'critical', pendingCount: 2, reviewCount: 0,
+        alarms: [{ severity: 'critical', code: 'ITEM_LOGIN_REQUIRED', message: 'Repair bank authentication', action: 'Ask owner to reconnect' }]
+      }] };
+    }
+    if (url.startsWith('/api/admin/logs?')) body = {
+      entries: [{ time: '2026-11-09T15:00:00Z', level: 'warn', source: 'plaid.sync_failed',
+        message: 'Could not sync', detail: { userId: 7, connectionId: 11, providerRequestId: 'provider-123' } }],
+      total: 1, coverage: { databaseAvailable: true }
+    };
+    return { ok: status === 200, status, text: async () => JSON.stringify(body), headers: { get: () => null } };
+  });
+  f.node('bank-user').value = '7';
+  f.node('bank-since').value = '7d';
+  f.run('admin.js');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  f.node('tabs').listeners.click({ target: { dataset: { tab: 'monitor' } } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(f.node('bank-health').innerHTML, /CRITICAL[\s\S]*ITEM_LOGIN_REQUIRED[\s\S]*Ask owner to reconnect/);
+  f.node('bank-account').value = 'a21';
+  await f.node('bank-account').onchange();
+  assert.ok(calls.some(url => url.includes('/api/admin/logs?') && url.includes('userId=7') && url.includes('connectionId=11')));
+  assert.match(f.node('bank-events').innerHTML, /provider-123/);
+  f.node('bank-severity').value = 'clear';
+  await f.node('bank-severity').onchange();
+  assert.match(f.node('bank-health').innerHTML, /No bank accounts match/);
+  fail = true;
+  await f.node('bank-refresh').onclick();
+  assert.match(f.node('bank-summary').innerHTML, /Database unavailable[\s\S]*may be stale/);
+});
+
 test('admin MFA reset requires explicit confirmation and clears reauthentication secrets on success and failure', async () => {
   let enabled = true, fail = false;
   const requests = [];
@@ -4545,16 +4586,17 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /over 5 years/);
   assert.equal((html.match(/<ol class="pro-hero-plan">[\s\S]*?<\/ol>/)[0].match(/<li>/g) || []).length, mf.opportunities.length);
   assert.match(html, /<b>Dining<\/b><small>\$\d[\d,]* &rarr; \$\d[\d,]* a month/);
-  // Insight cards, money-flow Sankey, signal Venn and the percentile range strips.
+  // Insight cards, money-flow Sankey, signal relationships and the percentile range strips.
   assert.equal((html.match(/class="pro-insight tone-/g) || []).length, mf.insights.length);
   assert.ok(mf.insights.length >= 2 && mf.insights.length <= 4);
   assert.match(html, /Where your money flows/);
   assert.match(html, /<svg class="pro-sankey"[^>]*aria-label="Money flow: income/);
   assert.match(html, /Of every \$100 you bring home: .*left over/);
-  assert.match(html, /<svg class="pro-venn"/);
+  assert.match(html, /<svg class="money-network"/);
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual latest month/);
-  // The Venn takes the full row with its overlap spelled out beside it, strongest signals first.
-  assert.match(html, /<div class="pro-venn-layout"><svg class="pro-venn" viewBox="0 0 560 446"/);
+  assert.match(html, /Category signal relationship network/);
+  assert.match(html, /connections show|Connections show/);
+  assert.match(overview, /class="money-mosaic"/);
   const flagged = mf.categories.filter(c => c.benchmarkStatus === 'high' || c.benchmarkStatus === 'above' || c.rising || c.spike || c.band?.position === 'above');
   const readStart = html.indexOf('<div class="pro-venn-read">');
   const reading = html.slice(readStart, html.indexOf('class="pro-card', readStart));

@@ -101,6 +101,8 @@ export async function migratePrivateSchema(client) {
     );
     CREATE INDEX IF NOT EXISTS app_logs_created_idx ON app_logs (created_at DESC);
     CREATE INDEX IF NOT EXISTS app_logs_request_idx ON app_logs (request_id);
+    ALTER TABLE app_logs ADD COLUMN IF NOT EXISTS detail JSONB NOT NULL DEFAULT '{}';
+    CREATE INDEX IF NOT EXISTS app_logs_subject_idx ON app_logs ((detail->>'userId'), (detail->>'connectionId'), created_at DESC);
     CREATE TABLE IF NOT EXISTS categories (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, icon TEXT, color TEXT
     );
@@ -215,6 +217,8 @@ export async function migratePrivateSchema(client) {
       user_id INTEGER NOT NULL REFERENCES users(id)
     );
     ALTER TABLE plaid_connections ADD COLUMN IF NOT EXISTS last_sync_attempt_at TIMESTAMPTZ;
+    ALTER TABLE plaid_connections ADD COLUMN IF NOT EXISTS last_webhook_at TIMESTAMPTZ;
+    ALTER TABLE plaid_connections ADD COLUMN IF NOT EXISTS last_webhook_code TEXT;
     ALTER TABLE plaid_accounts ADD COLUMN IF NOT EXISTS balance_checked_at TIMESTAMPTZ;
     ALTER TABLE transaction_import_reviews ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE transaction_import_reviews ADD COLUMN IF NOT EXISTS matched_transaction_id INTEGER;

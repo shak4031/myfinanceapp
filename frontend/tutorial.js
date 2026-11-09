@@ -592,14 +592,15 @@
               </div>
             </div>${cursor('small', 3.8)}`;
           } },
-        { id: 'signals', title: 'Read the signals', caption: 'Where the signals overlap sorts each category into three circles: above similar homes, trending up, and an unusual last month. Where circles overlap, act. Your normal range shows the band that 9 in 10 of your months fall in, and where last month landed. The crossover, momentum, breakout and breadth readings sit under Technical readings.',
+        { id: 'signals', title: 'Read the signals', caption: 'Where the signals overlap links categories to above similar homes, trending up, and an unusual last month. More links mean more signals agree, not more spending. Your normal range contains 9 in 10 of your months. Crossover, momentum, breakout and breadth sit under Technical readings.',
           render: () => `${chip(4, 'Read the signals')}
             <div class="tm-split tm-split-tight tm-split-wide">
               <div class="tm-panel tut-in" ${at(0.3)}><small>WHERE THE SIGNALS OVERLAP</small>
                 <svg class="tm-venn" viewBox="0 0 240 200" aria-hidden="true">
-                  <circle cx="92" cy="78" r="60" class="is-a tut-pop" ${at(0.8)}/><circle cx="148" cy="78" r="60" class="is-b tut-pop" ${at(1.4)}/><circle cx="120" cy="128" r="60" class="is-c tut-pop" ${at(2)}/>
-                  <text x="14" y="12">Above similar homes</text><text x="232" y="12" text-anchor="end">Trending up</text><text x="120" y="198" text-anchor="middle">Unusual month</text>
-                  <text x="120" y="60" text-anchor="middle" class="tm-bad tut-in" ${at(3)}>Dining</text><text x="178" y="74" text-anchor="middle" class="tut-in" ${at(3.6)}>Utilities</text><text x="62" y="74" text-anchor="middle" class="tut-in" ${at(3.9)}>Gas</text>
+                  <path d="M25 35 C90 35 100 80 165 80 M25 100 C90 100 100 80 165 80 M25 100 C90 100 100 140 165 140 M25 165 C90 165 100 175 165 175" fill="none" stroke="#7999b9" stroke-width="2"/>
+                  <circle cx="25" cy="35" r="8" class="is-a tut-pop" ${at(0.8)}/><circle cx="25" cy="100" r="8" class="is-b tut-pop" ${at(1.4)}/><circle cx="25" cy="165" r="8" class="is-c tut-pop" ${at(2)}/>
+                  <text x="10" y="18">Above similar homes</text><text x="10" y="85">Trending up</text><text x="10" y="150">Unusual month</text>
+                  <text x="170" y="80" class="tm-bad tut-in" ${at(3)}>Dining</text><text x="170" y="140" class="tut-in" ${at(3.6)}>Utilities</text><text x="170" y="175" class="tut-in" ${at(3.9)}>Gas</text>
                 </svg>
                 <span class="tm-pill tm-pill-act tut-pop" ${at(4.4)}>Two signals agree: act on Dining</span>
               </div>

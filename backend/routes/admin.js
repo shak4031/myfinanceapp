@@ -15,6 +15,7 @@ import { stripeClient } from '../utils/billing.js';
 import { trafficReport } from '../utils/traffic.js';
 import { revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
 import { consumeFactor } from '../utils/mfa.js';
+import { bankHealthReport } from '../utils/bankMonitor.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -315,12 +316,34 @@ router.get('/errors', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+function monitorFilters(query) {
+  const result = {};
+  for (const key of ['userId', 'connectionId', 'accountId']) {
+    if (query[key] === undefined || query[key] === '') continue;
+    const id = parseId(query[key]);
+    if (!id) throw Object.assign(new Error(`${key} must be a positive integer`), { status: 400 });
+    result[key] = id;
+  }
+  return result;
+}
+
+router.get('/bank-health', async (req, res, next) => {
+  try {
+    const filters = monitorFilters(req.query);
+    const report = await administrativeTransaction(client => bankHealthReport(client, filters));
+    if (req.query.refresh !== '1') await recordAudit(req, 'admin.bank_health_viewed', 'success', {
+      status: 200, detail: filters
+    });
+    res.json(report);
+  } catch (error) { next(error); }
+});
+
 router.get('/logs', async (req, res, next) => {
   try {
     const level = ['error', 'warn', 'info'].includes(req.query.level) ? req.query.level : 'warn';
     const since = parseSince(typeof req.query.since === 'string' ? req.query.since : '', '24h');
     const result = await queryLogs({
-      level, since,
+      level, since, ...monitorFilters(req.query),
       q: typeof req.query.q === 'string' ? req.query.q : '',
       requestId: typeof req.query.requestId === 'string' ? req.query.requestId : '',
       limit: Number(req.query.limit) || 200

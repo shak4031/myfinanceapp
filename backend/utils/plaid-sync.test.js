@@ -9,6 +9,7 @@ import { encryptPlaidToken } from './plaid.js';
 import { incomeSources, projectIncome } from './income.js';
 import plaidRouter, { syncConnection, syncDuePlaidConnections } from '../routes/plaid.js';
 import { withUser } from './tenant.js';
+import { onLogEntry } from './logger.js';
 
 function adapter(pg) {
   return {
@@ -21,6 +22,8 @@ function adapter(pg) {
 
 test('scheduled Plaid failures persist retry state, isolate connections and stop wrong-environment retries', async t => {
   const pg = new PGlite(), client = adapter(pg);
+  const events = [];
+  const unsubscribe = onLogEntry(entry => { if (entry.event?.startsWith('plaid.')) events.push(entry); });
   const keys = ['PLAID_ENVIRONMENT', 'PLAID_CLIENT_ID', 'PLAID_SECRET', 'PLAID_TOKEN_ENCRYPTION_KEY', 'APP_ORIGIN'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
@@ -38,7 +41,7 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
     t.mock.method(PlaidApi.prototype, 'accountsGet', async () => ({ data: { accounts: [] } }));
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => {
       remoteCalls++;
-      throw { response: { data: { error_code: 'PRODUCT_NOT_READY' } } };
+      throw { response: { status: 400, data: { error_code: 'PRODUCT_NOT_READY', request_id: 'provider-request-123', error_type: 'ITEM_ERROR' } } };
     });
     const messages = [];
     await syncDuePlaidConnections((level, event) => messages.push(event));
@@ -51,6 +54,14 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
     assert.equal(remoteCalls, 1, 'wrong-environment token never reaches Plaid');
     assert.equal(messages.length, 2);
     assert.equal(JSON.stringify(messages).includes('private'), false);
+    const failures = events.filter(entry => entry.event === 'plaid.sync_failed');
+    assert.equal(failures.length, 2);
+    assert.equal(failures[0].operation, 'configuration');
+    assert.equal(failures[0].connectionId, 1);
+    assert.equal(failures[1].operation, 'transactions_fetch');
+    assert.equal(failures[1].providerRequestId, 'provider-request-123');
+    assert.equal(failures[1].errorCode, 'PRODUCT_NOT_READY');
+    assert.equal(JSON.stringify(events).includes('private'), false);
     await syncDuePlaidConnections(() => assert.fail('connections should not retry immediately'));
     assert.equal(remoteCalls, 1, 'permanent mismatch stops; transient errors respect six-hour backoff');
     await client.query(`INSERT INTO users(id,name) VALUES(2,'Other household');
@@ -84,6 +95,7 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
       assert.equal((await client.query('SELECT description FROM transactions')).rows[0].description, 'Stored history');
     } finally { await new Promise(resolve => server.close(resolve)); }
   } finally {
+    unsubscribe();
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
     }
