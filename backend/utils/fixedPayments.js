@@ -28,9 +28,9 @@ export function isFixedPayment(tx) {
   return fixed && String(tx.direction).toUpperCase() === 'DEBIT';
 }
 
-function merchantKey(tx) {
+function merchantKey(tx, ignoreDisplayName = false) {
   // A user's rename groups every payment it names, whatever the bank wrote.
-  if (String(tx.display_name ?? '').trim()) return `NAME:${normalizeDescription(String(tx.display_name).toUpperCase())}`;
+  if (!ignoreDisplayName && String(tx.display_name ?? '').trim()) return `NAME:${normalizeDescription(String(tx.display_name).toUpperCase())}`;
   const lender = (tx.description || '').match(/\b(?:ollo|capital\s+one|credit\s+one|chase|discover|amex|american\s+express|citicards)\b/i);
   if (lender) return normalizeDescription(lender[0]);
   return normalizeDescription(getCanonicalMerchant(tx.description));
@@ -41,12 +41,30 @@ function accountKey(tx) {
   return (tx.description || '').match(/(?:\bx+|\*{2,})\d{2,4}\b/i)?.[0].toUpperCase().replace(/^[X*]+/, '') || '';
 }
 
-export function sameBill(a, b, { allowMissingMask = false } = {}) {
+function matchBill(a, b, { allowMissingMask = false, ignoreDisplayName = false } = {}, identityOf) {
   if (!sourceAccountsCompatible(a, b)) return false;
-  const leftMask = accountKey(a), rightMask = accountKey(b);
+  const left = identityOf(a, ignoreDisplayName), right = identityOf(b, ignoreDisplayName);
+  const leftMask = left.mask, rightMask = right.mask;
   if (leftMask !== rightMask && (!allowMissingMask || (leftMask && rightMask))) return false;
-  const merchant = merchantKey(a);
-  return !!merchant && merchant === merchantKey(b);
+  return !!left.merchant && left.merchant === right.merchant;
+}
+
+const billIdentity = (tx, ignoreDisplayName) => ({ mask: accountKey(tx), merchant: merchantKey(tx, ignoreDisplayName) });
+
+export function sameBill(a, b, options) {
+  return matchBill(a, b, options, billIdentity);
+}
+
+// Scope the cache to one reconciliation; edits and other tenants never reuse identities.
+export function createBillMatcher() {
+  const identities = new WeakMap();
+  const identityOf = (tx, ignoreDisplayName) => {
+    let cached = identities.get(tx);
+    if (!cached) { cached = {}; identities.set(tx, cached); }
+    const key = ignoreDisplayName ? 'original' : 'display';
+    return cached[key] ??= billIdentity(tx, ignoreDisplayName);
+  };
+  return (a, b, options) => matchBill(a, b, options, identityOf);
 }
 
 export function buildUpcomingPayments(transactions, today = new Date(), { through = null } = {}) {

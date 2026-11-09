@@ -188,6 +188,18 @@ deletions are audited.
 Run `npm test` for focused regressions, including embedded PostgreSQL isolation
 tests and HTTP account/session flows. Tests do not connect to your live database.
 
+Dashboard bill reconciliation caches normalized merchant identities only for the
+duration of a reconciliation and compares repeated historical identities once.
+All payment rows, account boundaries, renamed/provider descriptions, estimates
+and saved confirmations retain their existing matching rules. No financial
+responses are cached across requests or households. A synthetic 3,901-transaction
+regression checks full output against a compact reference and enforces a
+2.5-second reconciliation budget (not an end-to-end page-load guarantee):
+
+```powershell
+node --test backend\utils\fixedPayments.test.js backend\utils\paymentOccurrences.test.js backend\utils\dashboard-resilience.test.js
+```
+
 For the table dictionary, database constraints, household isolation diagram, and
 bank-account-scoped import matching, see
 [Database architecture and deduplication](./DATABASE_ARCHITECTURE.md) and its

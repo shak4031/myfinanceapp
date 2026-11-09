@@ -1,12 +1,44 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildUpcomingPayments, isFixedPayment } from './fixedPayments.js';
+import { buildUpcomingPayments, createBillMatcher, isFixedPayment, sameBill } from './fixedPayments.js';
 import { detectPayMode, inheritPayMode } from './payMode.js';
 
 const today = new Date(2026, 9, 14);
 const tx = (id, changes = {}) => ({
   id, date: '2026-09-20', description: 'PSEG PAYMENT', category: 'Utilities',
   amount: 125.50, direction: 'DEBIT', is_fixed: true, ...changes
+});
+
+test('scoped bill matching caches identities without changing account, mask or rename rules', () => {
+  const rows = [
+    tx(1), tx(2, { description: 'pseg   payment', display_name: 'Electric' }),
+    tx(3, { description: 'OLLO PAYMENT X1234', account_id: 1 }),
+    tx(4, { description: 'OLLO PAYMENT XX5678', account_id: 1 }),
+    tx(5, { description: 'OLLO PAYMENT', account_id: 1 }),
+    tx(6, { description: 'OLLO PAYMENT X1234', account_id: 2 }),
+    tx(7, { description: 'OLLO PAYMENT X1234', plaid_account_id: 'bank',
+      account_institution: 'Example', account_kind: 'checking', account_last4: '1234' }),
+    tx(8, { description: 'OLLO PAYMENT X1234', account_id: 1,
+      account_institution: 'Example', account_kind: 'checking', account_last4: '1234' })
+  ];
+  const matches = createBillMatcher();
+  for (const a of rows) for (const b of rows) {
+    for (const options of [{}, { allowMissingMask: true }, { ignoreDisplayName: true },
+      { allowMissingMask: true, ignoreDisplayName: true }]) {
+      const originalA = options.ignoreDisplayName ? { ...a, display_name: null } : a;
+      const originalB = options.ignoreDisplayName ? { ...b, display_name: null } : b;
+      assert.equal(matches(a, b, options), sameBill(originalA, originalB, { allowMissingMask: options.allowMissingMask }));
+    }
+  }
+  let reads = 0;
+  const observed = { get description() { reads++; return 'PSEG PAYMENT'; } };
+  matches(observed, rows[0]);
+  const initialReads = reads;
+  for (let n = 0; n < 100; n++) assert.equal(matches(observed, rows[0]), true);
+  assert.equal(reads, initialReads, 'repeated matches do not normalize the same identity again');
+  rows[0].description = 'DIFFERENT BILL';
+  assert.equal(createBillMatcher()(rows[0], rows[1], { ignoreDisplayName: true }), false,
+    'a new reconciliation sees edits rather than stale cached identities');
 });
 
 test('the user fixed flag is authoritative regardless of category or merchant', () => {

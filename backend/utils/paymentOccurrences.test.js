@@ -10,6 +10,34 @@ const tx = (id, date, extra = {}) => ({ id, date, description: 'UTILITY PAYMENT'
 const build = (transactions, stored = [], today = new Date(2026, 10, 2)) =>
   reconcilePaymentOccurrences(transactions, stored, today, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30));
 
+test('long histories match compact reference history within the reconciliation performance budget', t => {
+  const history = [];
+  for (let month = 0; month < 130; month++) {
+    const date = new Date(2016, month, 5);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-05`;
+    for (let bill = 0; bill < 10; bill++) {
+      history.push(tx(history.length + 1, key, { description: `SERVICE ${String.fromCharCode(65 + bill)} BILL`,
+        account_id: 1, amount: 100 + month + bill }));
+    }
+    for (let purchase = 0; purchase < 20; purchase++) {
+      history.push(tx(history.length + 1, key, { description: 'GROCERY STORE',
+        account_id: 1, is_fixed: false, amount: 20 + purchase }));
+    }
+  }
+  history.push(tx(history.length + 1, '2026-11-01', {
+    description: 'SERVICE A BILL', account_id: 1, is_fixed: false, amount: 235
+  }));
+  const reference = build(history.filter(row => row.date.startsWith('2016-01') || row.date >= '2026-08-01'));
+  const start = performance.now();
+  const result = build(history);
+  const elapsed = performance.now() - start;
+  assert.deepEqual(result, reference, 'all historical payments and forecast identities are preserved');
+  assert.equal(result.items.find(item => item.id === history.at(-1).id)?.amount, 235);
+  assert.equal(result.items.filter(item => item.status === 'projected' && item.date.startsWith('2026-11')).length, 9);
+  assert.ok(elapsed < 2500, `${history.length} transactions took ${Math.round(elapsed)}ms; budget is 2500ms`);
+  t.diagnostic(`${history.length} transactions reconciled in ${Math.round(elapsed)}ms`);
+});
+
 test('carryover is limited to last month and recorded payments settle their own month', () => {
   const initial = build([tx(1, '2026-09-05')]);
   assert.deepEqual(initial.items.map(item => item.date), ['2026-10-05', '2026-11-05']);

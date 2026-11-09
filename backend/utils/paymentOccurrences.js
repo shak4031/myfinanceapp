@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isFixedPayment, sameBill } from './fixedPayments.js';
+import { createBillMatcher, isFixedPayment, sameBill } from './fixedPayments.js';
 import { parseTxDate, getCanonicalMerchant } from './normalize.js';
 import { currentReadOnly, currentUserId } from './tenant.js';
 import { sameSourceAccount, sourceAccountsCompatible, TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from './transactionAccount.js';
@@ -14,28 +14,37 @@ function accountCompatible(a, b) {
   return !mask(a) || !mask(b) || mask(a) === mask(b);
 }
 
-export function samePayment(a, b) {
+export function samePayment(a, b, matchesBill = sameBill) {
   if (!accountCompatible(a, b)) return false;
   if (a.id != null && String(a.id) === String(b.id)) return true;
   const crossSource = (a.account_id != null && a.plaid_account_id == null && b.plaid_account_id != null && b.account_id == null)
     || (b.account_id != null && b.plaid_account_id == null && a.plaid_account_id != null && a.account_id == null);
   if (crossSource) return false;
   // Renames are presentation, not a different bill identity.
-  return sameBill(a, b) || sameBill({ ...a, display_name: null }, { ...b, display_name: null });
+  return matchesBill(a, b) || matchesBill(a, b, { ignoreDisplayName: true });
 }
 
-function descriptionVariant(a, b) {
+const merchantWords = tx => new Set(getCanonicalMerchant(tx.description).toUpperCase().split(/[^A-Z]+/)
+  .filter(word => word.length >= 3 && !['GOOGLE', 'PAYPAL', 'ONLINE', 'PAYMENT', 'CARD', 'PREMIUM', 'THE', 'AND', 'FOR'].includes(word)));
+
+function descriptionVariant(a, b, matchesBill, words) {
   if (!accountCompatible(a, b) || !sameSourceAccount(a, b)) return false;
-  if (sameBill(a, b, { allowMissingMask: true })
-    || sameBill({ ...a, display_name: null }, { ...b, display_name: null }, { allowMissingMask: true })) return true;
-  const words = tx => new Set(getCanonicalMerchant(tx.description).toUpperCase().split(/[^A-Z]+/)
-    .filter(word => word.length >= 3 && !['GOOGLE', 'PAYPAL', 'ONLINE', 'PAYMENT', 'CARD', 'PREMIUM', 'THE', 'AND', 'FOR'].includes(word)));
+  if (matchesBill(a, b, { allowMissingMask: true })
+    || matchesBill(a, b, { allowMissingMask: true, ignoreDisplayName: true })) return true;
   const left = words(a), right = words(b);
   return Math.min(left.size, right.size) >= 2
     && ([...left].every(word => right.has(word)) || [...right].every(word => left.has(word)));
 }
 
 export function reconcilePaymentOccurrences(transactions, stored, today, through, estimates = []) {
+  const matchesBill = createBillMatcher();
+  const matchesPayment = (a, b) => samePayment(a, b, matchesBill);
+  const wordCache = new WeakMap();
+  const words = tx => {
+    if (!wordCache.has(tx)) wordCache.set(tx, merchantWords(tx));
+    return wordCache.get(tx);
+  };
+  const matchesVariant = (a, b) => descriptionVariant(a, b, matchesBill, words);
   const todayKey = iso(today);
   const month = todayKey.slice(0, 7);
   const previousMonthStart = iso(new Date(today.getFullYear(), today.getMonth() - 1, 1));
@@ -68,7 +77,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
   const estimatedItems = [];
   const groups = [];
   for (const tx of [...debits.filter(isFixedPayment), ...occurrences.map(row => row.template)]) {
-    let group = groups.find(group => group.templates.some(template => samePayment(template, tx)));
+    let group = groups.find(group => group.templates.some(template => matchesPayment(template, tx)));
     if (!group) { group = { template: tx, templates: [], payments: [], occurrences: [] }; groups.push(group); }
     group.templates.push(tx);
   }
@@ -77,7 +86,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
     && group.templates.every(left => other.templates.every(right => accountCompatible(left, right)))
     && !group.templates.some(left => isFixedPayment(left)
       && other.templates.some(right => isFixedPayment(right) && left.date.slice(0, 7) === right.date.slice(0, 7)))
-    && group.templates.some(left => other.templates.some(right => descriptionVariant(left, right))));
+    && group.templates.some(left => other.templates.some(right => matchesVariant(left, right))));
   for (const group of [...groups]) {
     if (!groups.includes(group)) continue;
     const matches = partners(group);
@@ -86,15 +95,36 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       groups.splice(groups.indexOf(matches[0]), 1);
     }
   }
+  // Dates, amounts and flags do not affect identity. Compare repeated historical
+  // identities once, but retain every payment and the same-ID shortcut.
+  for (const group of groups) {
+    const identities = new Map();
+    group.templatesById = new Map();
+    for (const template of group.templates) {
+      const signature = JSON.stringify([template.description, template.display_name,
+        template.account_id, template.plaid_account_id, template.account_institution,
+        template.account_last4, template.account_kind]);
+      if (!identities.has(signature)) identities.set(signature, template);
+      if (template.id != null) {
+        const id = String(template.id);
+        if (!group.templatesById.has(id)) group.templatesById.set(id, []);
+        group.templatesById.get(id).push(template);
+      }
+    }
+    group.identities = [...identities.values()];
+  }
+  const groupMatches = (group, tx) =>
+    (tx.id != null && group.templatesById.get(String(tx.id))?.some(template => matchesPayment(template, tx)))
+    || group.identities.some(template => matchesPayment(template, tx));
   // Amounts vary month to month; identity, verified source and ambiguity decide matches.
   for (const tx of debits) {
-    const exact = groups.filter(group => group.templates.some(template => samePayment(template, tx)));
-    const matches = exact.length ? exact : groups.filter(group => group.templates.some(template => descriptionVariant(template, tx)));
+    const exact = groups.filter(group => groupMatches(group, tx));
+    const matches = exact.length ? exact : groups.filter(group => group.identities.some(template => matchesVariant(template, tx)));
     if (matches.length === 1) matches[0].payments.push(tx);
   }
   const estimateGroups = new Map();
   for (const estimate of estimates) {
-    const matches = groups.filter(group => group.templates.some(template => samePayment(template, estimate.template)));
+    const matches = groups.filter(group => groupMatches(group, estimate.template));
     if (matches.length > 1 || (matches.length && estimateGroups.has(matches[0]))) {
       throw new Error('A fixed payment estimate matches more than one bill. Review its transactions.');
     }
@@ -102,7 +132,7 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
   }
   for (const group of groups) {
     const estimate = estimateGroups.get(group);
-    group.occurrences = occurrences.filter(row => group.templates.some(template => samePayment(template, row.template)));
+    group.occurrences = occurrences.filter(row => groupMatches(group, row.template));
     const fixed = group.payments.filter(isFixedPayment);
     const active = fixed.some(tx => tx.date >= recentStart);
     const recentEvidence = active || group.occurrences.some(row => row.template.date >= recentStart);
