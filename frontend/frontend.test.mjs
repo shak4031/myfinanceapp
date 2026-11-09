@@ -156,6 +156,11 @@ test('landscape expands populated radial nodes and payment fans in place without
   const css = source('landscape.css');
   assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1800px\); height: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: auto/);
+  assert.match(css, /\.landscape-map > svg \{[^}]*background: #fff; border-radius: inherit/,
+    'the white background follows the expanded SVG, not just its narrower wrapper');
+  assert.match(root.innerHTML, /class="landscape-node is-offshoot[^]*?<circle r="80" class="landscape-medallion"/,
+    'offshoot bubbles are smaller than the 116-unit hubs');
+  assert.match(css, /\.landscape-node\.is-offshoot .landscape-label \{ font-size: 14px/);
   assert.match(css, /#landscape-view \{[^}]*max-width: none/);
   assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
   assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
@@ -317,8 +322,8 @@ test('expanded radial legs keep nodes and controls apart with simultaneous full 
       await click({ landscapeAction: 'transactions', branch: branch.id, item: `dense-${branch.id}-${i}` });
     }
   }
-  const nodes = [...root.innerHTML.matchAll(/<(g|a) class="landscape-node[^"]*" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?(?:data-landscape-node|href)="([^"]+)"/g)]
-    .map(([, tag, x, y, id]) => ({ id, x: Number(x), y: Number(y), r: tag === 'a' ? 44 : 123 }));
+  const nodes = [...root.innerHTML.matchAll(/<(g|a) class="landscape-node([^"]*)" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?(?:data-landscape-node|href)="([^"]+)"/g)]
+    .map(([, tag, classes, x, y, id]) => ({ id, x: Number(x), y: Number(y), r: tag === 'a' ? 36 : classes.includes('is-offshoot') ? 87 : 123 }));
   assert.equal(nodes.length, 545, 'all eight legs, 56 items, and 480 transactions remain visible together');
   for (let i = 0; i < nodes.length; i++) {
     for (const other of nodes.slice(i + 1)) {
@@ -327,8 +332,11 @@ test('expanded radial legs keep nodes and controls apart with simultaneous full 
         `${node.id} overlaps ${other.id}`);
     }
   }
-  const controls = [...root.innerHTML.matchAll(/class="landscape-expander" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?data-item="([^"]+)"/g)]
-    .map(([, x, y, id]) => ({ id, x: Number(x) - 94, y: Number(y), w: 188, h: 32 }));
+  const controls = [...root.innerHTML.matchAll(/class="landscape-expander([^"]*)" transform="translate\(([^ ]+) ([^)]+)\)"[^>]*?data-item="([^"]+)"/g)]
+    .map(([, classes, x, y, id]) => {
+      const w = classes.includes('is-compact') ? 168 : 188;
+      return { id, x: Number(x) - w / 2, y: Number(y), w, h: 32 };
+    });
   for (const control of controls) {
     for (const node of nodes) {
       if (control.id === node.id) continue;

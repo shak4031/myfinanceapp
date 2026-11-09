@@ -312,6 +312,9 @@ explore it; the diagram has no separate internal scroll container or zoom mode.
 The landscape page is exempt from the usual content-width cap.
 Names and values sit inside illustrated circular nodes throughout the map,
 arranged on household-centered radial legs like the original layout.
+Offshoot bubbles are smaller than the section hubs, with tighter outer-tier
+spacing. The white canvas background covers the full SVG even when expanded
+branches extend beyond the initial page width.
 Expanding legs adds outer tiers and grows the canvas instead of scaling nodes down.
 Section controls and the details list
 remain viewport-sized on small screens while the diagram stays large.

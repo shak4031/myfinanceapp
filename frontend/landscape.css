@@ -29,7 +29,7 @@
 .landscape-illustration, .landscape-pictogram { pointer-events: none; }
 .landscape-illustration svg { display: block; width: 64px; height: 64px; }
 .landscape-pictogram svg { display: block; width: 24px; height: 24px; }
-.landscape-map > svg { display: block; width: 100%; height: auto; }
+.landscape-map > svg { display: block; width: 100%; height: auto; background: #fff; border-radius: inherit; }
 .landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
 .landscape-edge.is-structure { stroke-width: 2.8; opacity: .55; }
 .landscape-edge.is-trunk { stroke-width: 6; opacity: .7; }
@@ -45,14 +45,17 @@
 .landscape-node text { text-anchor: middle; pointer-events: none; }
 .landscape-label { fill: #173b4c; font-size: 16px; font-weight: 600; }
 .landscape-value { fill: #285768; font-size: 18px; font-weight: 750; }
+.landscape-node.is-offshoot .landscape-label { font-size: 14px; }
+.landscape-node.is-offshoot .landscape-value { font-size: 15px; }
 .landscape-expander { cursor: pointer; }
 .landscape-expander rect { fill: #edf5f5; stroke: #bdd2d8; stroke-width: 1; }
 .landscape-expander text { text-anchor: middle; font-size: 14px; font-weight: 650; fill: #285768; pointer-events: none; }
+.landscape-expander.is-compact text { font-size: 12px; }
 .landscape-expander:hover rect, .landscape-expander:focus rect { fill: #d5e9e9; stroke: #285768; stroke-width: 2; }
 .landscape-expander:focus { outline: none; }
 .landscape-transaction-marker { fill: #f0f7f6; stroke: #98bdc0; stroke-width: 1.5; }
-.landscape-transaction-value { fill: #204c5c; font-size: 15px; font-weight: 700; }
-.landscape-transaction-date { fill: #52717c; font-size: 12px; }
+.landscape-transaction-value { fill: #204c5c; font-size: 13px; font-weight: 700; }
+.landscape-transaction-date { fill: #52717c; font-size: 11px; }
 .landscape-node.is-transaction:focus circle { stroke: #285768; stroke-width: 3; }
 .landscape-detail { background: #fff; border: 1px solid #d5e3e7; border-radius: 16px; padding: 20px; overflow-wrap: anywhere; }
 .landscape-detail h2 { margin: 0 0 12px; font-size: 22px; color: #163f50; }

@@ -62,7 +62,8 @@
   };
   function fitLabels() {
     $('landscape-map').querySelectorAll('.landscape-reading text, .landscape-transaction-value').forEach(text => {
-      const limit = text.classList.contains('landscape-transaction-value') ? 70 : text.classList.contains('landscape-value') ? 180 : 200;
+      const compact = text.closest('.is-offshoot');
+      const limit = text.classList.contains('landscape-transaction-value') ? 60 : text.classList.contains('landscape-value') ? compact ? 116 : 180 : compact ? 140 : 200;
       if (text.getComputedTextLength() > limit) {
         text.setAttribute('textLength', limit);
         text.setAttribute('lengthAdjust', 'spacingAndGlyphs');
@@ -71,7 +72,7 @@
   }
   function scene() {
     const branches = data.nodes.filter(node => node.kind === 'branch');
-    const itemRing = 1200;
+    const itemRing = 1000;
     const positions = new Map(), visible = new Set(['household']);
     const txEdges = [], txNodes = [];
     positions.set('household', { x: 0, y: 0 });
@@ -86,7 +87,7 @@
       list.forEach((node, i) => {
         const tier = Math.floor(i / 3), count = Math.min(3, list.length - tier * 3);
         // Reserve extra radial space only behind tiers with open transaction fans.
-        if (i && i % 3 === 0) radius += list.slice(i - 3, i).some(item => openTransactions.has(item.id) && item.transactions?.length) ? 1500 : 400;
+        if (i && i % 3 === 0) radius += list.slice(i - 3, i).some(item => openTransactions.has(item.id) && item.transactions?.length) ? 1250 : 300;
         const a = angle + (i % 3 - (count - 1) / 2) * .26;
         const p = { x: Math.cos(a) * radius, y: Math.sin(a) * radius };
         visible.add(node.id);
@@ -96,7 +97,7 @@
         transactions.forEach((tx, j) => {
           const txTier = Math.floor(j / 3), txCount = Math.min(3, transactions.length - txTier * 3);
           const txAngle = a + (j % 3 - (txCount - 1) / 2) * .065;
-          const txRadius = radius + 330 + txTier * 130;
+          const txRadius = radius + 250 + txTier * 130;
           const id = `transaction-${node.id}-${tx.id}`;
           const txNode = { id, kind: 'transaction', branch: branch.id, label: tx.label,
             amount: tx.amount, metric: 'transaction', date: tx.date, href: `#transactions/${tx.id}` };
@@ -124,23 +125,25 @@
     const nodes = visibleNodes.map(node => {
       const p = positions.get(node.id), hub = node.kind === 'branch', home = node.kind === 'household';
       const transaction = node.kind === 'transaction';
-      const radius = transaction ? 44 : 116;
-      const illustrationSize = home ? 100 : hub ? 85 : nodeRadius(node) * 2;
+      const offshoot = !home && !hub;
+      const radius = transaction ? 36 : offshoot ? 80 : 116;
+      const illustrationSize = home ? 100 : hub ? 85 : nodeRadius(node) * 1.6;
       const label = home ? ['Your household'] : labelLines(node.label);
       const total = hub ? children(node.id).length : 0;
       const expansion = hub ? [
         { action: 'collapse', text: collapsed.has(node.id) ? `+ Expand (${total})` : '− Fold leg', open: !collapsed.has(node.id) },
         ...(total > 3 && !collapsed.has(node.id) ? [{ action: 'fan', text: expanded.has(node.id) || focus ? '− Show fewer' : `+${total - 3} more`, open: expanded.has(node.id) || !!focus }] : [])
       ] : node.transactions?.length ? [{ action: 'transactions', text: `${openTransactions.has(node.id) ? '− Hide payments' : '+ Payments'} (${node.transactions.length}${node.count > node.transactions.length ? `/${node.count}` : ''})`, open: openTransactions.has(node.id) }] : [];
-      expansion.forEach((control, index) => controls.push(`<g class="landscape-expander" transform="translate(${p.x} ${p.y + 104 + index * 36})" role="button" tabindex="0" data-landscape-action="${control.action}" data-branch="${esc(hub ? node.id : node.branch)}" data-item="${esc(node.id)}" aria-expanded="${control.open}" aria-label="${esc(`${control.text}: ${node.label}`)}"><rect x="-94" y="0" width="188" height="32" rx="16"/><text y="21">${esc(control.text)}</text></g>`));
+      const controlWidth = offshoot ? 168 : 188;
+      expansion.forEach((control, index) => controls.push(`<g class="landscape-expander${offshoot ? ' is-compact' : ''}" transform="translate(${p.x} ${p.y + radius - 12 + index * 36})" role="button" tabindex="0" data-landscape-action="${control.action}" data-branch="${esc(hub ? node.id : node.branch)}" data-item="${esc(node.id)}" aria-expanded="${control.open}" aria-label="${esc(`${control.text}: ${node.label}`)}"><rect x="${-controlWidth / 2}" y="0" width="${controlWidth}" height="32" rx="16"/><text y="21">${esc(control.text)}</text></g>`));
       const content = transaction
-        ? `<circle r="44" class="landscape-transaction-marker"/><text y="-3" class="landscape-transaction-value">${esc(money(node.amount))}</text><text y="18" class="landscape-transaction-date">${esc(node.date.slice(5))}</text>`
-        : `<circle r="${radius}" class="landscape-medallion" stroke="${color(node)}"/><g class="landscape-illustration" transform="translate(${-illustrationSize / 2} -94) scale(${illustrationSize / 64})">${illustration(home ? 'household' : node.branch)}</g>
-          <g class="landscape-reading">${label.map((line, i) => `<text y="${20 + i * 19}" class="landscape-label">${esc(line)}</text>`).join('')}
-          ${home ? '' : `<text y="${28 + label.length * 19}" class="landscape-value">${esc(value(node))}</text>`}</g>`;
+        ? `<circle r="${radius}" class="landscape-transaction-marker"/><text y="-3" class="landscape-transaction-value">${esc(money(node.amount))}</text><text y="18" class="landscape-transaction-date">${esc(node.date.slice(5))}</text>`
+        : `<circle r="${radius}" class="landscape-medallion" stroke="${color(node)}"/><g class="landscape-illustration" transform="translate(${-illustrationSize / 2} ${offshoot ? -70 : -94}) scale(${illustrationSize / 64})">${illustration(home ? 'household' : node.branch)}</g>
+          <g class="landscape-reading">${label.map((line, i) => `<text y="${(offshoot ? 6 : 20) + i * (offshoot ? 17 : 19)}" class="landscape-label">${esc(line)}</text>`).join('')}
+          ${home ? '' : `<text y="${offshoot ? 15 + label.length * 17 : 28 + label.length * 19}" class="landscape-value">${esc(value(node))}</text>`}</g>`;
       return transaction
         ? `<a class="landscape-node is-transaction" transform="translate(${p.x} ${p.y})" href="${node.href}" aria-label="${esc(`${node.label}. ${node.date}. ${money(node.amount)}`)}"><title>${esc(node.label)} · ${esc(node.date)} · ${esc(money(node.amount))}</title>${content}</a>`
-        : `<g class="landscape-node${node.kind === 'missing' ? ' is-missing' : ''}${selected === node.id ? ' is-selected' : ''}" transform="translate(${p.x} ${p.y})" role="button" tabindex="0" data-landscape-node="${esc(node.id)}" data-landscape-radius="${nodeRadius(node)}" data-landscape-icon="${home ? 'household' : node.branch}"${hub ? ` data-landscape-leg="${node.id}"` : ''} aria-label="${esc(`${node.label}. ${home ? 'Select a branch to explore.' : value(node)}`)}" aria-pressed="${selected === node.id}"><title>${esc(node.label)}${home ? '' : `: ${esc(value(node))}`}</title><circle r="${radius + 7}" class="landscape-halo"/>${content}</g>`;
+        : `<g class="landscape-node${offshoot ? ' is-offshoot' : ''}${node.kind === 'missing' ? ' is-missing' : ''}${selected === node.id ? ' is-selected' : ''}" transform="translate(${p.x} ${p.y})" role="button" tabindex="0" data-landscape-node="${esc(node.id)}" data-landscape-radius="${nodeRadius(node)}" data-landscape-icon="${home ? 'household' : node.branch}"${hub ? ` data-landscape-leg="${node.id}"` : ''} aria-label="${esc(`${node.label}. ${home ? 'Select a branch to explore.' : value(node)}`)}" aria-pressed="${selected === node.id}"><title>${esc(node.label)}${home ? '' : `: ${esc(value(node))}`}</title><circle r="${radius + 7}" class="landscape-halo"/>${content}</g>`;
     }).join('');
     const bounds = [...positions.values()].map(p => ({ x: p.x - 145, y: p.y - 145, w: 290, h: 345 }));
     let left = Math.min(...bounds.map(b => b.x)) - 45;
