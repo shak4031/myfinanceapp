@@ -189,7 +189,7 @@ test('landscape rotates projected coordinates with presets, drag and keyboard wi
   map.onpointerdown({ button: 0, pointerId: 4, clientX: 100, clientY: 100 });
   map.onpointermove({ pointerId: 4, clientX: 200, clientY: 100 });
   key('ArrowLeft');
-  assert.equal(root.innerHTML, focused, 'focus stays a scrollable flat grid');
+  assert.equal(root.innerHTML, focused, 'focus stays a scrollable flat fan-out');
   await click({ landscapeAction: 'reset' });
   assert.match(root.innerHTML, /data-yaw="-15" data-pitch="20"/);
   await click({ landscapeAction: 'scroll-mode' });
@@ -200,6 +200,101 @@ test('landscape rotates projected coordinates with presets, drag and keyboard wi
   await click({ landscapeAction: 'reset' });
   assert.doesNotMatch(root.innerHTML, /class="landscape-map is-scrollable"/);
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
+});
+
+test('landscape has independent fan-out legs, pictograms, simple visibility filters and optional cross-leg flows', async () => {
+  const { buildLandscape, LANDSCAPE_BRANCHES } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape({ now: new Date('2026-11-09'),
+    accounts: [{ id: 1, name: 'Checking', kind: 'checking', status: 'active' }],
+    transactions: [{ id: 1, date: '2026-10-10', description: 'Lunch', amount: 25, direction: 'DEBIT', category: 'Dining', account_id: 1 }] });
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root'), click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8);
+  assert.equal((root.innerHTML.match(/class="landscape-section-toggle/g) || []).length, 8);
+  assert.match(root.innerHTML, /<select id="landscape-explore"/);
+  assert.match(root.innerHTML, /<details class="landscape-view-options">/);
+  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
+  const badges = [...root.innerHTML.matchAll(/class="landscape-section-toggle[^]*?<svg[^]*?<\/svg>/g)].map(match => match[0].slice(match[0].indexOf('<svg')));
+  assert.equal(new Set(badges).size, 8, 'every leg has a distinct pictogram');
+  for (const [id] of LANDSCAPE_BRANCHES) {
+    assert.match(root.innerHTML, new RegExp(`data-landscape-source="household" data-landscape-target="${id}"`));
+    for (const child of graph.nodes.filter(node => node.branch === id && node.kind !== 'branch')) {
+      assert.match(root.innerHTML, new RegExp(`data-landscape-source="${id}" data-landscape-target="${child.id}"`));
+    }
+  }
+  const options = root.querySelector('.landscape-view-options');
+  options.open = true;
+  await click({ landscapeAction: 'flows' });
+  assert.match(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.equal(options.open, true, 'view options remain open while adjusting controls');
+  await click({ landscapeAction: 'toggle-leg', branch: 'cash' });
+  assert.doesNotMatch(root.innerHTML, /data-landscape-node="account-1"/);
+  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.match(root.innerHTML, /data-branch="cash" aria-pressed="false"/);
+  f.node('landscape-explore').onchange({ target: { value: 'cash' } });
+  assert.match(root.innerHTML, /data-branch="cash" aria-pressed="true"/);
+  assert.match(root.innerHTML, /data-landscape-node="account-1"/);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 3);
+  await click({ landscapeAction: 'toggle-leg', branch: 'cash' });
+  assert.doesNotMatch(root.innerHTML, /<option value="cash" selected/);
+  await click({ landscapeNode: 'account-1' });
+  assert.match(root.innerHTML, /data-landscape-node="account-1"/, 'following a connection reveals its hidden leg');
+  for (const [id] of LANDSCAPE_BRANCHES) await click({ landscapeAction: 'toggle-leg', branch: id });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 1, 'all legs may be hidden without losing the household');
+  await click({ landscapeAction: 'reset' });
+  assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8);
+  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
+  f.node('landscape-explore').onchange({ target: { value: 'spending' } });
+  await click({ landscapeNode: 'account-1' });
+  assert.match(root.innerHTML, /<option value="cash" selected/, 'related detail navigation switches focused legs');
+  f.context.FinanceLandscape.reset();
+  await f.context.FinanceLandscape.loadPage();
+  assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8, 'logout clears filters');
+});
+
+test('landscape size weights stay within each leg and measure, with zero and unavailable amounts preserved', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape();
+  const items = [
+    ['small', 'spending', 'monthly', 25], ['large', 'spending', 'monthly', 100],
+    ['zero', 'spending', 'monthly', 0], ['unknown', 'spending', 'monthly', null],
+    ['negative', 'spending', 'monthly', -100], ['salary', 'income', 'monthly', 20000],
+    ['balance', 'debt', 'balance', 90000], ['payment', 'debt', 'monthly', 1800]
+  ];
+  for (const [id, branch, metric, amount] of items) {
+    graph.nodes.push({ id, branch, metric, amount, kind: 'activity', label: id });
+    graph.edges.push({ source: branch, target: id, kind: 'structure' });
+  }
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root');
+  const radius = id => Number(root.innerHTML.match(new RegExp(`data-landscape-node="${id}" data-landscape-radius="([^"]+)"`))[1]);
+  const explore = branch => f.node('landscape-explore').onchange({ target: { value: branch } });
+  explore('spending');
+  assert.equal(radius('large'), 40);
+  assert.equal(radius('negative'), radius('large'));
+  assert.ok(radius('small') > radius('zero') && radius('small') < radius('large'));
+  assert.ok(Math.abs((radius('small') ** 2 - 22 ** 2) / (radius('large') ** 2 - 22 ** 2) - .25) < 1e-10,
+    'area above the minimum marker area follows the amount ratio');
+  assert.equal(radius('zero'), 22);
+  assert.equal(radius('unknown'), 22);
+  assert.match(root.innerHTML, /\$0\/mo/);
+  assert.match(root.innerHTML, /-\$100\/mo/);
+  assert.match(root.innerHTML, /No completed history/);
+  explore('income');
+  assert.equal(radius('salary'), 40, 'income uses its own scale, not a combined household total');
+  explore('debt');
+  assert.equal(radius('balance'), 40);
+  assert.equal(radius('payment'), 40, 'monthly debt payments are not scaled against debt balances');
+  assert.match(root.innerHTML, /not a financial-health score/);
+  assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
+  await root.onclick({ target: { dataset: { landscapeAction: 'reset' }, closest() { return this; } } });
+  await root.onclick({ target: { dataset: { landscapeNode: 'negative' }, closest() { return this; } } });
+  assert.match(root.innerHTML, /<option value="spending" selected/, 'selecting an item outside the preview opens its full fan-out');
+  assert.match(root.innerHTML, /data-landscape-node="negative"/);
 });
 
 test('the floating assistant and settings are removed without removing financial checkup', () => {

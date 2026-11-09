@@ -8,11 +8,22 @@
 .landscape-toolbar button:hover, .landscape-actions button:hover, .landscape-branch-controls button:hover { background: #eaf5f3; }
 .landscape-toolbar button[aria-pressed="true"] { background: #173f51; color: #fff; border-color: #173f51; }
 .landscape-toolbar button:disabled { opacity: .4; cursor: default; }
-.landscape-branch-controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.landscape-branch-controls > div { display: flex; border-left: 4px solid var(--branch-color); border-radius: 9px; }
-.landscape-branch-controls button { border-radius: 0; padding: 8px; }
-.landscape-branch-controls button:first-child { font-weight: 700; }
-.landscape-branch-controls button[aria-pressed="true"] { background: #e1efef; }
+.landscape-branch-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.landscape-branch-controls .landscape-section-toggle { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 12px; border-radius: 14px; border: 1px solid #d5e3e7; border-left: 4px solid var(--branch-color); text-align: left; }
+.landscape-section-toggle > svg { flex: 0 0 28px; color: var(--branch-color); width: 28px; height: 28px; }
+.landscape-section-toggle b { display: block; font-size: 13px; }
+.landscape-section-toggle small { display: block; margin-top: 5px; font-size: 12px; color: #536e7c; }
+.landscape-section-toggle .landscape-toggle-mark { margin-left: auto; color: var(--branch-color); font-size: 18px; }
+.landscape-section-toggle.is-hidden { opacity: .65; border-left-color: #9babba; background: #eef2f5; }
+.landscape-section-toggle:focus-visible, .landscape-toolbar button:focus-visible { outline: 3px solid #397f98; outline-offset: 3px; }
+.landscape-explore { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #264657; }
+.landscape-explore select { max-width: 230px; padding: 10px; border: 1px solid #c9dce1; border-radius: 9px; background: #fff; color: #264657; font: inherit; }
+.landscape-zoom { display: flex; align-items: center; gap: 10px; }
+.landscape-zoom span { min-width: 42px; text-align: center; font-size: 13px; }
+.landscape-view-options { position: relative; margin-left: auto; font-size: 13px; }
+.landscape-view-options > summary { cursor: pointer; border: 1px solid #c9dce1; border-radius: 9px; padding: 10px 12px; background: #fff; color: #264657; }
+.landscape-view-options[open] { flex-basis: 100%; padding: 12px; border: 1px solid #c9dce1; border-radius: 12px; background: #f7fafb; }
+.landscape-view-options[open] > summary { margin-bottom: 12px; width: fit-content; }
 .landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
 .landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
 .landscape-map { overflow: auto; max-height: 1050px; border-radius: 20px; border: 1px solid #d9e7eb; background: radial-gradient(ellipse at 42% 35%, #fff, #edf4f8 70%, #e1edf3); scrollbar-gutter: stable; overscroll-behavior: contain; touch-action: none; cursor: grab; }
@@ -22,11 +33,15 @@
 .landscape-map svg { user-select: none; }
 .landscape-sphere { filter: drop-shadow(4px 8px 7px #18374838); }
 .landscape-light { pointer-events: none; }
-.landscape-orbit { fill: none; stroke: #9fbfcf; stroke-width: 1; opacity: .25; }
+.landscape-island { fill-opacity: .055; stroke-opacity: .2; stroke-width: 1.5; pointer-events: none; }
+.landscape-pictogram { color: #fff; pointer-events: none; }
+.landscape-pictogram svg { display: block; width: 24px; height: 24px; }
 .landscape-label-leader { fill: none; stroke: #86a6b8; stroke-width: 1; opacity: .5; pointer-events: none; }
-.landscape-map svg { display: block; min-height: 680px; }
+.landscape-map > svg { display: block; min-height: 680px; }
 .landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
-.landscape-edge.is-structure { stroke-dasharray: 4 5; opacity: .32; }
+.landscape-edge.is-structure { stroke-width: 2.8; opacity: .55; }
+.landscape-edge.is-trunk { stroke-width: 6; opacity: .7; }
+.landscape-edge.is-missing { stroke-dasharray: 5 6; opacity: .35; }
 .landscape-edge.is-transfer { stroke: #38798a; stroke-width: 2; }
 .landscape-edge.is-dim { opacity: .1; }
 .landscape-node { cursor: pointer; }
@@ -58,6 +73,12 @@
   .landscape-detail { max-height: 500px; }
 }
 @media (max-width: 650px) {
+  .landscape-branch-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .landscape-branch-controls .landscape-section-toggle { gap: 8px; padding: 10px 8px; }
+  .landscape-section-toggle > svg { flex-basis: 23px; width: 23px; height: 23px; }
+  .landscape-explore { width: 100%; }
+  .landscape-explore select { flex: 1; max-width: none; min-height: 44px; }
+  .landscape-view-options { margin-left: 0; }
   .landscape-map { max-height: 620px; }
   .landscape-toolbar button, .landscape-branch-controls button { min-height: 42px; }
 }
