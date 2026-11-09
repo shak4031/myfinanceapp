@@ -4806,12 +4806,36 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
 
   // A month that spends more than came in shows the shortfall under income instead of a "left over" block.
-  payload.moneyFlow.flow = { ...mf.flow, left: -300, discretionary: { ...mf.flow.discretionary, total: mf.flow.discretionary.total + 300 - mf.flow.left } };
+  payload.moneyFlow.flow = { ...mf.flow, left: -300, discretionary: { ...mf.flow.discretionary,
+    total: mf.flow.income + 300 - mf.flow.fixed.total - mf.flow.debt.total } };
   await f.context.loadAnalyticsPage(true, 'compass');
   const over = f.node('analytics-content').innerHTML;
   assert.match(over, /Overspent \$300\/mo/);
   assert.doesNotMatch(over, /class="pro-sk-in">Left over/);
   assert.doesNotMatch(over, /undefined|NaN|Infinity/);
+  const ribbons = [...over.matchAll(/data-flow-source="(income|shortfall)" data-flow-target="([^"]+)" data-flow-amount="([^"]+)"/g)]
+    .map(([, source, target, amount]) => ({ source, target, amount: Number(amount) }));
+  for (const key of ['fixed', 'discretionary', 'debt']) {
+    const income = ribbons.find(row => row.source === 'income' && row.target === key);
+    const deficit = ribbons.find(row => row.source === 'shortfall' && row.target === key);
+    assert.ok(income?.amount > 0, `${key} receives an income ribbon even when spending exceeds income`);
+    assert.ok(deficit?.amount > 0, `${key} shares the shortfall instead of attributing it only to debt`);
+    assert.ok(Math.abs(income.amount + deficit.amount - payload.moneyFlow.flow[key].total) < 0.000001);
+  }
+  assert.ok(Math.abs(ribbons.filter(row => row.source === 'income').reduce((sum, row) => sum + row.amount, 0) - mf.flow.income) < 0.000001);
+  assert.ok(Math.abs(ribbons.filter(row => row.source === 'shortfall').reduce((sum, row) => sum + row.amount, 0) - 300) < 0.000001);
+  assert.match(over, /does not identify which payments used savings or borrowing/);
+  payload.moneyFlow.flow = { income: 100, left: 30, months: 3,
+    fixed: { total: 1, items: [] }, discretionary: { total: 39, items: [] }, debt: { total: 30, items: [] } };
+  await f.context.loadAnalyticsPage(true, 'compass');
+  const surplus = f.node('analytics-content').innerHTML;
+  assert.doesNotMatch(surplus, /data-flow-source="shortfall"/);
+  assert.match(surplus, /data-flow-source="income" data-flow-target="debt" data-flow-amount="30"/);
+  assert.match(surplus, /data-flow-source="income" data-flow-target="left" data-flow-amount="30"/);
+  assert.match(surplus, /class="pro-sk-in">Fixed expenses<\/text><text[^>]+class="pro-sk-in-sub">\$1 · 1%<\/text>/,
+    'a thin fixed-expense block keeps its amount on a separate line');
+  const fixedRect = surplus.match(/class="pro-sk-block" x="340"[^>]+height="([\d.]+)"/);
+  assert.ok(Number(fixedRect?.[1]) >= 50, 'even a tiny group has room for both label lines');
 });
 
 const browserBits = (f, { reduced = true } = {}) => {

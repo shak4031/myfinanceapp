@@ -300,7 +300,7 @@
     const byId = new Map(mf.categories.map(c => [c.id, c]));
     // Income and the four groups are labelled blocks; categories are thin bars with labels that never collide.
     const W = 960, TOP = 30, BASE_H = 380, SRC_W = 132, MID_X = 340, MID_W = 168, DST_X = 720, DST_W = 10;
-    const GAP = 16, MIN_BLOCK = 30, SLOT = 22, CHILD_GAP = 6, GROUP_GAP = 16, INCOME = '#059669';
+    const GAP = 16, MIN_BLOCK = 50, SLOT = 22, CHILD_GAP = 6, GROUP_GAP = 16, INCOME = '#059669';
     const shortfall = Math.max(0, -f.left);
     const middle = [
       { key: 'fixed', label: 'Fixed expenses', value: f.fixed.total, color: '#3a6ea5', children: f.fixed.items },
@@ -308,21 +308,19 @@
       { key: 'debt', label: 'Debt payments', value: f.debt.total, color: '#c05621', children: f.debt.items },
       { key: 'left', label: 'Left over', value: Math.max(0, f.left), color: '#10b981', children: [] }
     ].filter(node => node.value > 0);
-    const total = Math.max(f.income + shortfall, middle.reduce((s, n) => s + n.value, 0));
+    const total = middle.reduce((s, n) => s + n.value, 0);
     const scale = (BASE_H - GAP * (middle.length - 1)) / total;
     const pct = value => `${Math.round(value / f.income * 100)}%`;
     const fx = value => value.toFixed(1);
     let defs = '', bands = '', nodes = '', labels = '', gradient = 0;
-    const band = (x0, a0, a1, x2, b0, b1, from, to, title) => {
+    const band = (x0, a0, a1, x2, b0, b1, from, to, title, source = '', target = '', amount = 0) => {
       const id = `pro-sk-g${gradient++}`, mx = (x0 + x2) / 2;
       defs += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x2}" y2="0"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient>`;
-      bands += `<path class="pro-sk-band" d="M${x0} ${fx(a0)}C${mx} ${fx(a0)} ${mx} ${fx(b0)} ${x2} ${fx(b0)}L${x2} ${fx(b1)}C${mx} ${fx(b1)} ${mx} ${fx(a1)} ${x0} ${fx(a1)}Z" fill="url(#${id})"><title>${esc(title)}</title></path>`;
+      bands += `<path class="pro-sk-band"${source ? ` data-flow-source="${source}" data-flow-target="${target}" data-flow-amount="${amount}"` : ''} d="M${x0} ${fx(a0)}C${mx} ${fx(a0)} ${mx} ${fx(b0)} ${x2} ${fx(b0)}L${x2} ${fx(b1)}C${mx} ${fx(b1)} ${mx} ${fx(a1)} ${x0} ${fx(a1)}Z" fill="url(#${id})"><title>${esc(title)}</title></path>`;
     };
     const block = (x, y, w, h, color, name, value, title) => {
       nodes += `<rect class="pro-sk-block" x="${x}" y="${fx(y)}" width="${w}" height="${fx(h)}" rx="8" fill="${color}"><title>${esc(title)}</title></rect>`;
-      labels += h >= 46
-        ? `<text x="${x + 14}" y="${fx(y + 23)}" class="pro-sk-in">${esc(name)}</text><text x="${x + 14}" y="${fx(y + 40)}" class="pro-sk-in-sub">${value}</text>`
-        : `<text x="${x + 14}" y="${fx(y + h / 2 + 4.5)}" class="pro-sk-in">${esc(name)}<tspan class="pro-sk-in-sub" dx="6">${value}</tspan></text>`;
+      labels += `<text x="${x + 14}" y="${fx(y + 23)}" class="pro-sk-in">${esc(name)}</text><text x="${x + 14}" y="${fx(y + 40)}" class="pro-sk-in-sub">${value}</text>`;
     };
     const incomeH = f.income * scale;
     block(0, 0, SRC_W, incomeH, INCOME, 'Income', `${money(f.income, true)}/mo`, `Income ${money(f.income, true)} a month`);
@@ -333,11 +331,23 @@
       labels += `<text x="0" y="${fx(incomeH + sh + 18)}" class="pro-sk-label is-bad">Overspent ${money(shortfall, true)}/mo</text>`;
       bottom = incomeH + sh + 24;
     }
-    let y = 0, source = 0, rightY = 0;
+    let y = 0, incomeSource = 0, shortfallSource = incomeH, rightY = 0;
     for (const node of middle) {
       const h = node.value * scale, bh = Math.max(h, MIN_BLOCK), inset = (bh - h) / 2;
       const name = node.title || node.label;
-      band(SRC_W, source, source + h, MID_X, y + inset, y + inset + h, INCOME, node.color, `${name}: ${money(node.value, true)} a month (${pct(node.value)} of income)`);
+      // The shortfall is not tied to particular purchases; share it across groups
+      // rather than implying the last group alone was funded beyond income.
+      const incomeAmount = node.value * f.income / total;
+      const incomePart = incomeAmount * scale;
+      band(SRC_W, incomeSource, incomeSource + incomePart, MID_X, y + inset, y + inset + incomePart, INCOME, node.color,
+        `Income share toward ${name}: ${money(incomeAmount, true)} a month`, 'income', node.key, incomeAmount);
+      incomeSource += incomePart;
+      if (shortfall > 0) {
+        const shortfallAmount = node.value - incomeAmount, shortfallPart = h - incomePart;
+        band(SRC_W, shortfallSource, shortfallSource + shortfallPart, MID_X, y + inset + incomePart, y + inset + h, '#e11d48', node.color,
+          `Spending beyond income, proportional share of ${name}: ${money(shortfallAmount, true)} a month`, 'shortfall', node.key, shortfallAmount);
+        shortfallSource += shortfallPart;
+      }
       block(MID_X, y, MID_W, bh, node.color, node.label, `${money(node.value, true)} · ${pct(node.value)}`, `${name}: ${money(node.value, true)} a month (${pct(node.value)} of income)`);
       const kids = node.children.map(child => ({ child, h: child.amount * scale, slot: Math.max(child.amount * scale, SLOT) }));
       const span = kids.reduce((s, k) => s + k.slot, 0) + CHILD_GAP * Math.max(0, kids.length - 1);
@@ -352,7 +362,7 @@
         offset += kid.h; cy += kid.slot + CHILD_GAP;
       }
       if (kids.length) rightY = cy - CHILD_GAP + GROUP_GAP;
-      source += h; y += bh + GAP;
+      y += bh + GAP;
     }
     const H = Math.ceil(Math.max(y - GAP, rightY - GROUP_GAP, bottom)) + TOP + 4;
     const heads = [[0, 'MONEY IN'], [MID_X, 'WHERE IT GOES'], [DST_X, 'BY CATEGORY · SHARE OF INCOME']]
@@ -362,7 +372,7 @@
     const split = [['fixed', f.fixed.total], ['discretionary', f.discretionary.total], ['debt payments', f.debt.total]]
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
-    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
+    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}${shortfall > 0 ? '<p class="pro-sk-allocation">Spending exceeds income. Income and the shortfall are shared proportionally across all spending groups in this illustration; this does not identify which payments used savings or borrowing.</p>' : ''}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
     return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Debt payments are mortgage, auto, card, student and other loan payments plus interest charges (a mortgage counts here even though it is also a fixed bill)${f.debt.unrecorded ? ', including minimums for debts you added but have not imported yet' : ''}. Fixed expenses are other payments marked as fixed; everything else is discretionary. Red and amber ribbons are categories the Compass flags.`)}`,
       `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
   }

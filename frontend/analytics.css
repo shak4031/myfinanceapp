@@ -356,6 +356,7 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-sk-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .pro-sk-legend i { width: 10px; height: 10px; border-radius: 3px; }
 .pro-sk-legend .pro-sk-hint { color: #94a3b8; }
+.pro-sk-allocation { margin: 14px 0 0; color: #52637a; font-size: 13px; line-height: 1.6; }
 .pro-venn circle { stroke-width: 1.5; }
 .pro-venn-a { fill: rgba(225,29,72,.12); stroke: #e11d48; } .pro-venn-b { fill: rgba(245,158,11,.13); stroke: #f59e0b; } .pro-venn-c { fill: rgba(124,58,237,.11); stroke: #7c3aed; }
 .pro-venn-set { font-size: 15px; font-weight: 800; fill: #52637a; }

@@ -249,6 +249,13 @@ Use the staging checklist in [DEPLOYMENT.md](./DEPLOYMENT.md) for those checks.
 
 ## Spending Compass visual explorers
 
+**Where your money flows** connects income to every spending group, including
+debt payments. When spending exceeds income, the illustration shares income and
+the shortfall proportionally across groups rather than attributing the shortfall
+to the final group. This does not trace actual savings withdrawals or borrowing.
+Group cards have a minimum height and separate name/amount lines so small totals
+do not force labels outside their blocks.
+
 **Where the signals overlap** is a selectable category/signal network. Every
 category is visible, not just warnings: bright links indicate a crossed warning
 threshold, muted links an evaluated non-warning, and dotted links an unavailable
