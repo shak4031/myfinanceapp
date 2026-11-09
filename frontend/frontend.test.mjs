@@ -25,8 +25,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
-  const nav = ['dashboard', 'financial-health', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+  const views = ['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'financial-health', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
     return item;
@@ -52,6 +52,155 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
   return { context, node, views, listeners, run: file => vm.runInContext(source(file), context) };
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
+
+test('financial landscape supports navigation and remains accessible on Basic', async () => {
+  let loads = 0;
+  const f = fixture();
+  f.context.FinanceLandscape = { loadPage: () => { loads++; } };
+  f.run('refresh.js');
+  await f.context.showView('landscape');
+  assert.equal(loads, 1);
+  assert.equal(f.context.location.hash, '#landscape');
+  assert.ok(f.node('landscape-view').classList.contains('active'));
+  assert.ok(f.node('nav-landscape').classList.contains('active'));
+  const basic = householdFixture({ entitlement: { tier: 'basic', active: true, plusActive: false } });
+  await basic.context.showView('landscape');
+  assert.equal(basic.context.lastView, 'landscape');
+  assert.match(source('session.js'), /'accounts','landscape'/);
+  assert.match(source('session.js'), /FinanceLandscape\?\.reset\(\)/);
+});
+
+test('financial network supports pointer/keyboard details, focus, collapse, zoom, reset and precise safe transaction labels', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape({ now: new Date('2026-11-09'), accounts: [
+    { id: 1, name: 'Checking', kind: 'checking', status: 'active' }
+  ], transactions: Array.from({ length: 5 }, (_, i) => ({
+    id: i + 1, date: '2026-10-10', description: '<img src=x onerror=alert(1)>', amount: .01,
+    category: `Category ${i}`, direction: 'DEBIT', account_id: 1
+  })) });
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root');
+  assert.match(root.innerHTML, /Investment coverage missing|Investment coverage/);
+  assert.match(root.innerHTML, /401\(k\)/);
+  assert.match(root.innerHTML, /\+2 more/);
+  const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  await click({ landscapeAction: 'focus', branch: 'spending' });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 7, 'household, focused hub and every child');
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 2);
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
+  const first = graph.nodes.find(n => n.kind === 'activity');
+  let prevented = false;
+  root.onkeydown({ key: 'Enter', preventDefault() { prevented = true; },
+    target: { dataset: { landscapeNode: first.id }, matches: () => true, closest() { return this; } } });
+  assert.equal(prevented, true);
+  const details = f.node('landscape-detail').innerHTML;
+  assert.match(details, /href="#transactions\/1"/);
+  assert.match(details, /\$0\.01/);
+  assert.match(details, /&lt;img/);
+  assert.doesNotMatch(details, /<img/);
+  for (let i = 0; i < 10; i++) await click({ landscapeAction: 'zoom-in' });
+  assert.match(root.innerHTML, /200%/);
+  for (let i = 0; i < 15; i++) await click({ landscapeAction: 'zoom-out' });
+  assert.match(root.innerHTML, /60%/);
+  await click({ landscapeAction: 'reset' });
+  assert.match(root.innerHTML, /100%/);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 19);
+});
+
+test('landscape reports load errors, supports retry and ignores responses after logout or newer requests', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape();
+  let fail = true;
+  const f = fixture(async () => fail ? response(502, { error: 'Database <unavailable>' }) : response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  assert.match(f.node('landscape-root').innerHTML, /role="alert"/);
+  assert.match(f.node('landscape-root').innerHTML, /Database &lt;unavailable&gt;/);
+  fail = false;
+  await f.node('landscape-retry').onclick();
+  assert.match(f.node('landscape-root').innerHTML, /landscape-svg/);
+  const pending = [];
+  f.context.fetch = () => new Promise(resolve => pending.push(resolve));
+  const old = f.context.FinanceLandscape.loadPage();
+  const latest = f.context.FinanceLandscape.loadPage();
+  pending[1](response(200, graph));
+  await latest;
+  const rendered = f.node('landscape-root').innerHTML;
+  pending[0](response(500, { error: 'Older failed request' }));
+  await old;
+  assert.equal(f.node('landscape-root').innerHTML, rendered);
+  const logout = f.context.FinanceLandscape.loadPage();
+  f.context.FinanceLandscape.reset();
+  pending[2](response(200, graph));
+  await logout;
+  assert.equal(f.node('landscape-root').innerHTML, '');
+  assert.equal(f.node('landscape-root').onclick, null);
+});
+
+test('landscape rotates projected coordinates with presets, drag and keyboard without turning a drag into selection', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const f = fixture(async () => response(200, buildLandscape()));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root'), map = f.node('landscape-map');
+  let captured = false;
+  map.setPointerCapture = () => { captured = true; };
+  map.hasPointerCapture = () => captured;
+  map.releasePointerCapture = () => { captured = false; };
+  const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  const initial = root.innerHTML.match(/transform="translate\([^)]+\)"/g);
+  assert.match(root.innerHTML, /data-yaw="-15" data-pitch="20"/);
+  assert.doesNotMatch(root.innerHTML, /One household\. Many|landscape-instructions/);
+  assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
+  await click({ landscapeAction: 'rotate-right' });
+  assert.notDeepEqual(root.innerHTML.match(/transform="translate\([^)]+\)"/g), initial, 'the projected node coordinates really move');
+  await click({ landscapeAction: 'flat' });
+  assert.match(root.innerHTML, /data-yaw="0" data-pitch="0"/);
+  map.onpointerdown({ button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+  map.onpointermove({ pointerId: 2, clientX: 180, clientY: 100 });
+  assert.equal(captured, false, 'a second pointer cannot rotate the map');
+  map.onpointermove({ pointerId: 1, clientX: 104, clientY: 100 });
+  assert.equal(captured, false, 'a click-sized move remains a selection');
+  map.onpointermove({ pointerId: 1, clientX: 200, clientY: 60 });
+  assert.equal(captured, true);
+  assert.match(map.innerHTML, /data-yaw="30" data-pitch="10"/);
+  map.onpointerup({ pointerId: 1 });
+  assert.equal(captured, false);
+  await click({ landscapeNode: 'debt' });
+  assert.equal(f.node('landscape-detail').innerHTML, '', 'the synthetic click after a drag does not change selection');
+  const key = name => root.onkeydown({ key: name, target: map, preventDefault() {} });
+  key('ArrowRight');
+  assert.match(map.innerHTML, /data-yaw="45"/);
+  for (let i = 0; i < 20; i++) key('ArrowUp');
+  assert.match(map.innerHTML, /data-pitch="60"/);
+  for (let i = 0; i < 20; i++) key('ArrowDown');
+  assert.match(map.innerHTML, /data-pitch="-60"/);
+  key('Home');
+  assert.match(map.innerHTML, /data-yaw="-15" data-pitch="20"/);
+  map.onpointerdown({ button: 0, pointerId: 3, clientX: 100, clientY: 100 });
+  map.onpointercancel({ pointerId: 3 });
+  await click({ landscapeNode: 'debt' });
+  assert.match(f.node('landscape-detail').innerHTML, /Debt/);
+  await click({ landscapeAction: 'focus', branch: 'debt' });
+  const focused = root.innerHTML;
+  map.onpointerdown({ button: 0, pointerId: 4, clientX: 100, clientY: 100 });
+  map.onpointermove({ pointerId: 4, clientX: 200, clientY: 100 });
+  key('ArrowLeft');
+  assert.equal(root.innerHTML, focused, 'focus stays a scrollable flat grid');
+  await click({ landscapeAction: 'reset' });
+  assert.match(root.innerHTML, /data-yaw="-15" data-pitch="20"/);
+  await click({ landscapeAction: 'scroll-mode' });
+  assert.match(root.innerHTML, /class="landscape-map is-scrollable"/);
+  map.onpointerdown({ button: 0, pointerId: 5, clientX: 100, clientY: 100 });
+  map.onpointermove({ pointerId: 5, clientX: 200, clientY: 100 });
+  assert.equal(captured, false, 'scroll mode leaves touch swipes to native scrolling');
+  await click({ landscapeAction: 'reset' });
+  assert.doesNotMatch(root.innerHTML, /class="landscape-map is-scrollable"/);
+  assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
+});
 
 test('the floating assistant and settings are removed without removing financial checkup', () => {
   for (const file of ['index.html', 'account.js', 'session.js', 'refresh.js']) {
@@ -2935,6 +3084,33 @@ test('calculation information controls open readable labeled dialogs with matchi
   dialog.close();
   assert.equal(focused, true);
 });
+
+test('balance provenance lives in accessible help while stale balance warnings stay visible', async () => {
+  const summary = { balance: 1000, income: 2000, expenses: 1000, netCashflow: 1000,
+    balanceSource: 'plaid', balanceCheckedAt: '2026-11-09T12:00:00Z', balanceStale: true };
+  const f = fixture(async url => response(200, url.endsWith('/summary') ? summary : []));
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.context.escapeHtml = String;
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  f.run('ui.js');
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  const metrics = f.node('dashboard-metrics').innerHTML;
+  assert.match(metrics, /aria-label="Balance source and freshness"/);
+  assert.match(metrics, /data-calculation="Plaid-reported balances\. Last checked:/);
+  assert.match(metrics, /Bank data can lag/);
+  assert.match(metrics, />Needs refresh<\/span>/);
+  assert.doesNotMatch(html, /balance-freshness-note/);
+  summary.balanceSource = 'statement';
+  summary.balanceStale = false;
+  await f.context.loadDashboard();
+  assert.match(f.node('dashboard-metrics').innerHTML, /Latest imported statement balance/);
+  assert.doesNotMatch(f.node('dashboard-metrics').innerHTML, /Needs refresh/);
+  summary.balanceSource = null;
+  await f.context.loadDashboard();
+  assert.match(f.node('dashboard-metrics').innerHTML, /Connect a checking account or import a statement balance/);
+});
 test('categories support multi-month selection and full-year options, inherited by the detail dialog', async () => {
   const f = activityFixture(); f.run('refresh.js');
   await f.context.loadCategories();
@@ -4755,7 +4931,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.ok(mf.insights.length >= 2 && mf.insights.length <= 4);
   assert.match(html, /Where your money flows/);
   assert.match(html, /<svg class="pro-sankey"[^>]*aria-label="Money flow: income/);
-  assert.match(html, /Of every \$100 you bring home: .*left over/);
+  assert.match(html, /<details class="money-exact"><summary>Per \$100 of income<\/summary><p>.*left over/);
   assert.match(html, /<svg class="money-network"/);
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual latest month/);
   assert.match(html, /Category signal relationship network/);
@@ -4777,7 +4953,9 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /data-bubble-color="swing" aria-pressed="false">Spending swing %/);
   assert.match(html, /data-bubble-color="change" aria-pressed="false">Vs previous period/);
   assert.doesNotMatch(html, />Visits<\/button>|>Change<\/button>/);
-  assert.match(html, /Swing: \(highest &minus; lowest monthly spending\) &divide; monthly average/);
+  assert.doesNotMatch(html, /<p class="pro-footnote">Size: total spending/);
+  assert.match(html, /<details class="money-exact"><summary>Reading the landscape<\/summary>/);
+  assert.match(html, /<details class="money-exact"><summary>Network guide<\/summary>/);
   assert.match(html, /Widest spending swing/);
   assert.match(source('analytics.css'), /\.compass-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
   assert.match(html, /Your top 5 merchants take <b>\d+%<\/b> of spending/);

@@ -33,6 +33,7 @@ window.FinanceSession = (() => {
     window.FinanceTransactionCleanup?.reset();
     window.FinanceTransactionDuplicates?.reset();
     window.FinanceAccounts?.reset();
+    window.FinanceLandscape?.reset();
     window.FinanceBuckets?.reset();
     window.FinanceMfa?.reset();
     window.FinanceSupportTickets?.reset();
@@ -303,7 +304,7 @@ window.FinanceSession = (() => {
         if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        await showView(['membership','financial-health','categories','category-admin','transactions','transaction-review','activity','accounts','analytics','knowledge-base','etl','payoff','goals','insights','tutorials','settings','subscription'].includes(target.split('/')[0]) ? target : 'dashboard');
+        await showView(['membership','financial-health','categories','category-admin','transactions','transaction-review','activity','accounts','landscape','analytics','knowledge-base','etl','payoff','goals','insights','tutorials','settings','subscription'].includes(target.split('/')[0]) ? target : 'dashboard');
         if (verificationNotice) globalThis.notify?.(verificationNotice);
         return;
       }

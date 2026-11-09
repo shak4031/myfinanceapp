@@ -207,7 +207,7 @@
       name: m.merchant, value: m.total,
       detail: `${m.count} payments; average ${money(m.average)}; ${pct(m.share)} of all spending${m.change == null ? '' : `; ${Math.abs(m.change * 100).toFixed(0)}% ${m.change >= 0 ? 'more' : 'less'} than the previous period`}`
     }));
-    return card('Top merchants', 'Your spending landscape over the last 90 days · larger tiles mean more money out',
+    return card(`Top merchants${how('Last 90 days. Larger tiles mean more money out, not more transactions.')}`, '',
       globalThis.FinanceMoneyVisuals.mosaic(items));
   }
 
@@ -372,9 +372,9 @@
     const split = [['fixed', f.fixed.total], ['discretionary', f.discretionary.total], ['debt payments', f.debt.total]]
       .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
     split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
-    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}${shortfall > 0 ? '<p class="pro-sk-allocation">Spending exceeds income. Income and the shortfall are shared proportionally across all spending groups in this illustration; this does not identify which payments used savings or borrowing.</p>' : ''}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span><span class="pro-sk-hint">Hover a ribbon for the exact amount</span></p>`;
+    const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span></p>`;
     return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Debt payments are mortgage, auto, card, student and other loan payments plus interest charges (a mortgage counts here even though it is also a fixed bill)${f.debt.unrecorded ? ', including minimums for debts you added but have not imported yet' : ''}. Fixed expenses are other payments marked as fixed; everything else is discretionary. Red and amber ribbons are categories the Compass flags.`)}`,
-      `Of every $100 you bring home: ${split.join(' &middot; ')}`, svgEl, 'span-3');
+      '', `<details class="money-exact"><summary>Per $100 of income</summary><p>${split.join(' &middot; ')}</p>${shortfall > 0 ? '<p>Income and the shortfall are shared proportionally across all spending groups. This illustration does not identify which payments used savings or borrowing.</p>' : ''}</details>${svgEl}`, 'span-3');
   }
 
   const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' };
@@ -394,7 +394,7 @@
     const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
       ${clear.length ? `<p class="pro-venn-clear"><b>No active warning (some readings may need more history):</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
     return card(`Where the signals overlap${how(`Above similar homes: your ${mf.range ? 'selected-period' : '3-month'} average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trend indicators retain their 3/6/12-month windows within the selected history. The latest selected month is compared with earlier months in that history. Short ranges may not support all signals.`)}`,
-      'Explore the network: select a category to see every comparison, baseline and delta. Bright links are warnings; muted links are other readings.', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every warning and remaining category</summary>${side}</details></div>`, 'span-3');
+      '', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every warning and remaining category</summary>${side}</details></div>`, 'span-3');
   }
 
   // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.
@@ -419,7 +419,7 @@
     }).join('');
     const legend = '<div class="pro-range-legend"><span><i class="is-band"></i>Your usual range (5th&ndash;95th percentile)</span><span><i class="is-median"></i>Your median</span><span><i class="is-dot"></i>Each month</span><span><i class="is-latest"></i>Latest selected month</span><span><i class="is-typical"></i>Similar households</span></div>';
     return card(`Your normal range${how(`Each row uses ${mf.range ? 'the selected completed months' : 'the last 12 full months'} of that category, scaled to itself. The shaded bar runs from your 5th to your 95th percentile month. The diamond is what similar households spend. Large one-off purchases are set aside.`)}`,
-      'Where the latest selected month landed against your own history and similar households', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
+      '', `${legend}<ul class="pro-range-list">${rows}</ul>`, 'span-3');
   }
 
   const compact = value => value >= 9950 ? `$${(value / 1000).toFixed(0)}k` : value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
@@ -428,7 +428,7 @@
     const hm = mf.heatmap;
     if (!hm?.rows?.length) return '';
     return card(`Hot and cold months${how('Recorded non-transfer spending, including fixed bills and one-off purchases. Each landscape has its own vertical scale and a dashed usual-month baseline: the median, or the mean when the median is zero. Peaks are above usual; valleys are below. Missing imports can look like low spending. Select a month or point for exact amounts and dollar/percentage differences.')}`,
-      'Your spending terrain: warm peaks, cool valleys. Select a month to discover what moved.',
+      '',
       globalThis.FinanceMoneyVisuals.monthlyLandscape(hm), 'span-3');
   }
 
@@ -452,10 +452,10 @@
     const said = item => `${esc(item.name)}: ${money(item.amount)} money out, ${item.transactions} payment${item.transactions === 1 ? '' : 's'}, ${money(item.monthly)} a month; ${swingText(item)}; monthly low ${money(item.monthlyLow)}, high ${money(item.monthlyHigh)}`;
     const bubbles = v.items.map((item, i) => `<button type="button" class="pro-bubble" data-bubble="${i}" aria-label="${said(item)}"><b>${esc(item.name)}</b><small></small></button>`).join('');
     const lede = `Your top 5 merchants take <b>${Math.round(top5 * 100)}%</b> of spending.${widest && widest.swingPct > 0 ? ` Widest spending swing: <b>${esc(widest.name)}</b>, ${Math.round(widest.swingPct * 100)}% (${money(widest.monthlyLow, true)}&ndash;${money(widest.monthlyHigh, true)} per month).` : ''} Tap a bubble to see exact totals and counted transactions.`;
-    const aside = `<p class="pro-footnote">All non-transfer payments count, including fixed bills and large purchases. Credits are shown separately, not deducted from spending. Showing ${v.items.length} of ${v.merchantCount ?? v.items.length} merchants. Compare with Transactions using these exact months; its “Last 3 months” includes the current month, while Compass uses completed months.</p>`;
+    const aside = `<details class="money-exact"><summary>Period and coverage</summary><p>All non-transfer payments count, including fixed bills and large purchases. Credits are shown separately, not deducted from spending. Showing ${v.items.length} of ${v.merchantCount ?? v.items.length} merchants. Compare with Transactions using these exact months; its “Last 3 months” includes the current month, while Compass uses completed months.</p></details>`;
     return card(`Who gets your money${how(`Your ${v.items.length} biggest merchants over ${v.months} completed months. All non-transfer debits count, including fixed bills and large purchases. Renamed payments with the same chosen name are combined. Credits are shown separately. Size shows total money out or actual payment count, not store visits. Category uses one colour per category. Spending swing % is (highest monthly spend minus lowest monthly spend) divided by average monthly spend across the selected period. At least 2 months are needed. Vs previous period compares monthly average spend with the preceding period (${v.compareMonths} comparison months available); red is more and green is less. Drag bubbles to rearrange them.`)}`,
-      `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} completed months`} &middot; ${money(v.totalAmount ?? v.total * v.months)} money out &middot; ${money(v.total)} a month. Drag them around.`,
-      `${controls}<p class="pro-footnote">Size: total spending or transaction count in this period. Swing: (highest &minus; lowest monthly spending) &divide; monthly average. It measures variability, not whether spending is good or bad.</p><div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
+      `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} completed months`} &middot; ${money(v.totalAmount ?? v.total * v.months)} money out &middot; ${money(v.total)} a month`,
+      `${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
        <div class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</div><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
   }
 
@@ -800,7 +800,7 @@
     }
     stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
-    const footnote = `<p class="pro-footnote">As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p>`;
+    const footnote = `<details class="money-exact"><summary>Data and estimates</summary><p>As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p></details>`;
     $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${interestCard()}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
     if (!interestState.data && !interestState.error) loadInterest();
     finish?.();

@@ -70,7 +70,7 @@ const READS = [
   ['GET', '/api/debts'], ['GET', '/api/goals'], ['GET', '/api/goals/funding-analysis'],
   ['GET', '/api/plan'], ['POST', '/api/plan/what-if', { extra: 100 }],
   ['GET', '/api/transactions/income-sources'], ['GET', '/api/transactions/categorization-rules'],
-  ['GET', '/api/support-access'], ['GET', '/api/accounts']
+  ['GET', '/api/support-access'], ['GET', '/api/accounts'], ['GET', '/api/landscape']
 ];
 const CSV_SAMPLES = {
   checking: `Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #

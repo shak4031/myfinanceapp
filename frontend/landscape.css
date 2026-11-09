@@ -1,0 +1,66 @@
+#landscape-view { min-width: 0; }
+.landscape-period { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 18px; font-size: 14px; color: #395666; }
+.landscape-help { margin-left: auto; max-width: 600px; font-size: 13px; line-height: 1.7; }
+.landscape-help summary { cursor: pointer; color: #285d6e; font-weight: 650; }
+.landscape-help[open] { flex-basis: 100%; padding: 12px 18px; border: 1px solid #d5e3e7; border-radius: 12px; background: #fff; }
+.landscape-toolbar, .landscape-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.landscape-toolbar button, .landscape-actions button, .landscape-branch-controls button { border: 1px solid #c9dce1; background: #fff; padding: 9px 12px; color: #264657; border-radius: 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.landscape-toolbar button:hover, .landscape-actions button:hover, .landscape-branch-controls button:hover { background: #eaf5f3; }
+.landscape-toolbar button[aria-pressed="true"] { background: #173f51; color: #fff; border-color: #173f51; }
+.landscape-toolbar button:disabled { opacity: .4; cursor: default; }
+.landscape-branch-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.landscape-branch-controls > div { display: flex; border-left: 4px solid var(--branch-color); border-radius: 9px; }
+.landscape-branch-controls button { border-radius: 0; padding: 8px; }
+.landscape-branch-controls button:first-child { font-weight: 700; }
+.landscape-branch-controls button[aria-pressed="true"] { background: #e1efef; }
+.landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
+.landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+.landscape-map { overflow: auto; max-height: 1050px; border-radius: 20px; border: 1px solid #d9e7eb; background: radial-gradient(ellipse at 42% 35%, #fff, #edf4f8 70%, #e1edf3); scrollbar-gutter: stable; overscroll-behavior: contain; touch-action: none; cursor: grab; }
+.landscape-map.is-rotating, .landscape-map.is-rotating .landscape-node { cursor: grabbing; }
+.landscape-map.is-scrollable { touch-action: auto; cursor: auto; }
+.landscape-map:focus-visible { outline: 3px solid #285d6e; outline-offset: 3px; }
+.landscape-map svg { user-select: none; }
+.landscape-sphere { filter: drop-shadow(4px 8px 7px #18374838); }
+.landscape-light { pointer-events: none; }
+.landscape-orbit { fill: none; stroke: #9fbfcf; stroke-width: 1; opacity: .25; }
+.landscape-label-leader { fill: none; stroke: #86a6b8; stroke-width: 1; opacity: .5; pointer-events: none; }
+.landscape-map svg { display: block; min-height: 680px; }
+.landscape-edge { fill: none; stroke-width: 1.7; opacity: .48; }
+.landscape-edge.is-structure { stroke-dasharray: 4 5; opacity: .32; }
+.landscape-edge.is-transfer { stroke: #38798a; stroke-width: 2; }
+.landscape-edge.is-dim { opacity: .1; }
+.landscape-node { cursor: pointer; }
+.landscape-halo { fill: transparent; stroke: transparent; stroke-width: 3; }
+.landscape-node.is-selected .landscape-halo, .landscape-node:focus .landscape-halo { fill: #d7eced; stroke: #254f63; }
+.landscape-node:focus { outline: none; }
+.landscape-node.is-missing .landscape-sphere { fill: #fff; stroke: #8d98aa; stroke-dasharray: 4 3; stroke-width: 2; }
+.landscape-node.is-missing .landscape-light { display: none; }
+.landscape-node.is-missing .landscape-symbol { fill: #667287; }
+.landscape-node text { text-anchor: middle; pointer-events: none; }
+.landscape-symbol { fill: #fff; font-size: 18px; font-weight: 800; }
+.landscape-label { fill: #173b4c; font-size: 18px; font-weight: 700; paint-order: stroke; stroke: #f7fafb; stroke-width: 4px; stroke-linejoin: round; }
+.landscape-value { fill: #476475; font-size: 16px; paint-order: stroke; stroke: #f7fafb; stroke-width: 3px; }
+.landscape-more { fill: #3b6974; font-size: 14px; }
+.landscape-detail { background: #fff; border: 1px solid #d5e3e7; border-radius: 16px; padding: 20px; max-height: 850px; overflow: auto; overflow-wrap: anywhere; }
+.landscape-detail h2 { margin: 0 0 12px; font-size: 22px; color: #163f50; }
+.landscape-detail h3 { margin-top: 24px; font-size: 16px; }
+.landscape-detail p { font-size: 14px; line-height: 1.7; }
+.landscape-detail .landscape-detail-value { font-size: 23px; font-weight: 750; color: #285d6e; }
+.landscape-detail-list { list-style: none; padding: 0; }
+.landscape-detail-list li { padding: 10px 0; border-bottom: 1px solid #e4ecef; font-size: 13px; line-height: 1.5; }
+.landscape-detail-list span { display: block; color: #576c7a; margin-top: 4px; }
+.landscape-detail-list button { width: 100%; text-align: left; border: 0; background: #f4f8fa; border-radius: 8px; padding: 10px; color: #24566b; cursor: pointer; font: inherit; }
+.landscape-warning { background: #fff3d9; padding: 10px; border-radius: 8px; color: #754d16; }
+.landscape-coverage { padding: 18px; margin-top: 18px; border: 1px solid #d5e3e7; border-radius: 14px; background: #fff; font-size: 14px; line-height: 1.8; }
+.landscape-coverage summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 1800px) {
+  .landscape-workspace { grid-template-columns: 1fr; }
+  .landscape-detail { max-height: 500px; }
+}
+@media (max-width: 650px) {
+  .landscape-map { max-height: 620px; }
+  .landscape-toolbar button, .landscape-branch-controls button { min-height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #landscape-view * { scroll-behavior: auto !important; }
+}

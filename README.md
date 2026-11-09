@@ -288,6 +288,44 @@ to the existing transaction view. Credits, internal transfers, current-month
 activity and dates outside the analyzed history are not included in this drill-down.
 Both explorers support keyboard selection and horizontal scrolling on small screens.
 
+## Financial landscape
+
+Open **Financial landscape** in the sidebar, Dashboard or Accounts (`#landscape`).
+This dedicated radial network is available to active Basic and Pro households.
+Select circles to inspect balances and recorded money flows; collapse branches
+to declutter, or **Focus** a branch to see all its connections. The overview previews
+three connections per branch. Drag the depth view to rotate, or focus the map and
+use arrow keys (Home resets the camera). **Depth view** and **Flat view** offer
+perspective presets; rotation/tilt buttons also work without dragging. Focused
+branches use a flat grid to keep every connection readable. On touch screens,
+drag inside the overview to rotate, enable **Scroll mode** to swipe across the
+map, and swipe outside it to scroll the page.
+Zoom controls resize the map; node labels stay upright during rotation.
+Depth and circle size are navigation cues, not financial values. There is no
+automatic motion. **Map guide** and **Coverage and calculation notes** hold the
+instructions and accounting caveats without paragraphs surrounding the map.
+Activity nodes link to their latest 20 transactions and disclose the full count.
+
+Dashboard balance provenance, last-check time and bank-lag guidance are available
+from the info button beside **Balance** (keyboard/tap accessible); stale balances
+still show **Needs refresh**. Spending visualization guides are collapsed or
+available from their info buttons rather than persistent explanatory paragraphs.
+
+The authenticated, tenant-scoped `GET /api/landscape` maps existing accounts,
+income, spending, debt payments, saved debt plans and goal progress. Monthly
+activity averages posted records across months with records in the last three
+completed calendar months. Transfers are separate connections, not income or
+spending; only verified account relationships create flow arrows. Unassigned
+records remain in activity totals without invented account links.
+
+Balances retain sources and as-of dates; unavailable is not zero. Linked debt
+plans are shown inside their account to avoid duplicating debt nodes. Unlinked
+plans can overlap accounts, and goals are planning progress, not extra savings.
+There is deliberately no net-worth total. Existing investment/retirement accounts
+can appear using saved balances and subtype/name classification; missing
+investment and 401(k) coverage is explicitly marked. This feature adds no live
+investment integration, holdings, performance or employer-contribution data.
+
 ## Financial Health foundation
 
 **Financial Health** is a first-class workspace page at `#financial-health`,

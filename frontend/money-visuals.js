@@ -35,7 +35,7 @@
         <div class="money-tile-face"><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${(item.value / total * 100).toFixed(1)}%</small></div>
         <span class="money-tile-tip">${esc(label)}</span></div>`;
     }).join('')}</div>
-    <p class="pro-footnote">Tile area = money out, not transaction count. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p>
+    <details class="money-exact"><summary>About this view</summary><p>Tile area = money out, not transaction count. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p></details>
     <details class="money-exact"><summary>Exact totals and trends for every displayed merchant</summary><ul class="pro-list is-wrap">${rows.map(item =>
       `<li><div><strong>${esc(item.name)}</strong><small>${esc(item.detail || '')}</small></div><strong>${esc(money(item.value))}</strong></li>`).join('')}</ul></details>`;
   }
@@ -141,11 +141,10 @@
       <button type="button" class="btn btn-secondary btn-compact" data-money-focus-category="${index}">Focus this category's chain</button>
       <div class="money-evidence-grid">${evidence[index].map(reading => `<article class="money-evidence is-${reading.status}"><span class="eyebrow">${esc(signalNames[reading.key])}</span><b>${esc(reading.value)}</b><span class="money-reading-status">${reading.key === 'a' && reading.status === 'needs-history' ? 'No comparable survey benchmark' : ({ warning: 'Warning threshold crossed', 'within-range': 'Evaluated - no warning', 'needs-history': 'Not enough comparable history' })[reading.status]}</span><p>${esc(reading.comparison)}</p><small>${esc(reading.rule)}</small></article>`).join('')}</div>
       ${signalTransactions(category)}</section>`).join('');
-    return `<div data-money-explorer="signals"><p class="pro-footnote">Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0].series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p>
+    return `<div data-money-explorer="signals"><details class="money-exact"><summary>Network guide</summary><p>Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0].series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p><p>Select a signal hub to collapse/expand its chain; Focus hides other chains. Bright links = warnings; muted = no warning; dotted = unavailable. Node size = warning count, not spending. Select a category for evidence, then expand its transactions. Reset restores hidden chains.</p></details>
       <div class="money-chain-controls" aria-label="Network chain controls">${hubs.map(hub => `<div><button type="button" data-money-branch="${hub.key}" aria-expanded="true">${esc(hub.label)}</button><button type="button" data-money-focus-branch="${hub.key}">Focus</button></div>`).join('')}<button type="button" data-money-reset>Expand all / reset focus</button></div>
       <p class="money-chain-status" role="status">All chains expanded.</p>
       <div class="money-network-wrap" role="region" aria-label="Category signal relationship network" tabindex="0"><svg class="money-network" viewBox="0 0 880 ${height}" role="group" aria-label="Connections show every category reading, not money transfers. Bright links are warnings, muted links are evaluated without warning, dotted links need history.">${paths.join('')}${hubMarkup}${nodes.join('')}</svg></div>
-      <p class="pro-footnote">Select a signal hub to collapse/expand its chain; Focus hides other chains. Bright links = warnings; muted = no warning; dotted = unavailable. Node size = warning count, not spending. Select a category for evidence, then expand its transactions. Reset restores hidden chains.</p>
       <div class="money-choice-list" role="group" aria-label="Inspect a category">${ordered.map((category, index) => `<button type="button" data-money-choice="${index}" aria-pressed="${index === 0}">${esc(category.label)}</button>`).join('')}</div>
       <div class="money-reading" aria-live="polite">${details}</div></div>`;
   }
@@ -199,14 +198,14 @@
         <ul class="money-month-drivers">${ranked.map(row => `<li><div><b>${esc(row.label)}</b><small>Usual ${esc(money(row.base))}${row.fixed ? ' &#183; fixed payments' : ''}</small></div><strong>${esc(money(row.values[index]))}<small>${esc(difference(row.values[index], row.base))}</small></strong></li>`).join('')}</ul></section>`;
     }).join('');
     return `<div data-money-explorer="months"><div class="money-season-headline"><div><span>Highest-spend month</span><b>${esc(history.months[hot])}</b><strong>${esc(money(totals[hot]))}</strong><small>${esc(difference(totals[hot], totalBase))} vs usual</small></div><div><span>Lowest-spend month</span><b>${esc(history.months[cool])}</b><strong>${esc(money(totals[cool]))}</strong><small>${esc(difference(totals[cool], totalBase))} vs usual</small></div></div>
-      <div class="money-terrain-guide"><strong>Compare each category with its usual monthly spending</strong>
+      <details class="money-exact"><summary>Reading the landscape</summary><div class="money-terrain-guide">
         <ul><li><span class="money-terrain-key is-higher" aria-hidden="true"></span><b>Coral areas:</b> more spending than usual.</li><li><span class="money-terrain-key is-lower" aria-hidden="true"></span><b>Teal areas:</b> less spending than usual.</li><li><span class="money-terrain-key is-baseline" aria-hidden="true"></span><b>Dashed line:</b> the usual amount printed beside each category.</li></ul>
         <p>Select any dot or month below to see exact amounts and differences.</p>
-        <details><summary>How to interpret this view</summary><p>Each category uses its own vertical scale. Compare changes within a row, not peak heights between rows. Low or zero spending may reflect missing imports, not savings. Rows labeled Fixed payments contain payments marked as fixed bills.</p></details></div>
+        <p>Each category uses its own vertical scale. Compare changes within a row, not peak heights between rows. Low or zero spending may reflect missing imports, not savings. Rows labeled Fixed payments contain payments marked as fixed bills.</p>
+        <p>Totals cover displayed categories only. Usual = median of selected months; when the median is zero, the mean is used instead. All recorded non-transfer payments count, including one-offs and fixed bills. Month comparisons describe recorded data, not a guarantee of complete statements.</p></div></details>
       <div class="money-terrain-wrap" role="region" aria-label="Monthly spending landscape; scroll horizontally for all months" tabindex="0"><svg class="money-terrain" viewBox="0 0 ${width} ${height}" style="min-width:${width}px" role="group" aria-label="Monthly category spending above and below each category's usual month. Points show exact amounts and comparisons.">${grid}${terrain}</svg></div>
       <div class="money-choice-list" role="group" aria-label="Inspect a spending month">${history.months.map((month, index) => `<button type="button" data-money-choice="${index}" aria-pressed="${index === hot}">${esc(month)}</button>`).join('')}</div>
-      <div class="money-reading" aria-live="polite">${details}</div>
-      <p class="pro-footnote">Totals cover displayed categories only. Usual = median of selected months; when the median is zero, the mean is used instead. All recorded non-transfer payments count, including one-offs and fixed bills. Month comparisons describe recorded data, not a guarantee of complete statements.</p></div>`;
+      <div class="money-reading" aria-live="polite">${details}</div></div>`;
   }
 
   function selectReading(target) {

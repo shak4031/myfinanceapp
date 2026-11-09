@@ -337,7 +337,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', 'financial-health': 'Financial Health', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', 'financial-health': 'Financial Health', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', landscape: 'Financial landscape', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
     if (view === 'analytics') sub = sub === 'compass' ? sub : '';
@@ -374,6 +374,7 @@
       'transaction-review': () => window.FinanceReviewTools?.loadTransfers({ refreshImports: true }),
       activity: () => window.FinanceReviewTools?.loadActivity(),
       accounts: () => window.FinanceAccounts?.loadPage(),
+      landscape: () => window.FinanceLandscape?.loadPage(),
       analytics: () => window.loadAnalyticsPage?.(false, sub),
       etl: async () => { await loadEtlStaging(); await loadTransactionImportReviews(); },
       payoff: () => loadPayoffPlan(sub), goals: loadGoals, insights: generateInsights,
