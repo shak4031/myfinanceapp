@@ -82,3 +82,26 @@ test('estimated interest uses the amortization schedule and is capped at the pay
   assert.equal(summary.charges.find(row => row.id === 1).amount, 1500);
   assert.equal(summary.charges.find(row => row.id === 2).amount, 100);
 });
+
+test('credit card interest is estimated from the carried balance unless a card interest charge was found that month', () => {
+  const now = new Date(2026, 2, 20);
+  const summary = buildInterestSummary({ now, months: 3, debts: [
+    { id: 1, name: 'Chase', debt_type: 'credit_card', balance: 3000, apr: 24 }
+  ], transactions: [
+    { id: 1, date: '2026-02-25', description: 'CHASE CARD PAYMENT', amount: 800, direction: 'DEBIT', category: 'Credit Cards' },
+    { id: 2, date: '2026-03-25', description: 'CHASE CARD PAYMENT', amount: 40, direction: 'DEBIT', category: 'Credit Cards' },
+    { id: 3, date: '2026-01-25', description: 'CHASE CARD PAYMENT', amount: 800, direction: 'DEBIT', category: 'Credit Cards' },
+    { id: 4, date: '2026-01-20', description: 'INTEREST CHARGE ON PURCHASES', amount: 55.12, direction: 'DEBIT' }
+  ] });
+  assert.equal(summary.charges.find(row => row.id === 1).amount, 60);
+  assert.equal(summary.charges.find(row => row.id === 1).source, 'estimated');
+  assert.equal(summary.charges.find(row => row.id === 2).amount, 40, 'capped at the payment');
+  assert.equal(summary.charges.some(row => row.id === 3), false, 'a detected card charge is not double counted');
+  assert.equal(summary.totals.credit_card, 155.12);
+  assert.equal(summary.hints.length, 0);
+  const paidOff = buildInterestSummary({ now, months: 3,
+    debts: [{ id: 2, name: 'Paid-off card', debt_type: 'credit_card', balance: 0, apr: 29.99, payment_match: 'citi' }],
+    transactions: [{ id: 5, date: '2026-02-03', description: 'CITI CARD PAYMENT', amount: 300, direction: 'DEBIT' }] });
+  assert.equal(paidOff.total, 0, 'no interest on a zero balance');
+  assert.equal(paidOff.hints.length, 0);
+});

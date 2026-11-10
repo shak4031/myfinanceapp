@@ -7,6 +7,7 @@ export function plaidRecovery(code) {
   if (code === 'PRODUCT_NOT_READY') return 'Plaid is still preparing transactions. Retry after the six-hour backoff; check the Plaid dashboard if this persists.';
   if (code === 'INSTITUTION_DOWN' || code === 'INSTITUTION_NOT_RESPONDING') return 'The institution is unavailable. Check Plaid institution status and retry after the backoff.';
   if (['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND'].includes(code)) return 'The Plaid request timed out or the network failed. Check outbound connectivity and Plaid status; the cursor is unchanged, so retry can safely resume.';
+  if (code === 'LIABILITIES_NOT_ENABLED') return 'Mortgage details from Plaid need the Liabilities product. Import a mortgage statement, or enable Liabilities in Plaid and set PLAID_LIABILITIES_ENABLED=true. Transactions are unaffected.';
   if (code === 'MORTGAGE_DATA_UNAVAILABLE') return 'Transactions may still be current. Ask the owner to enable mortgage access or import a mortgage statement.';
   return 'Inspect the account event timeline and provider request ID. Check server configuration and Plaid dashboard, then ask the owner to retry sync in Accounts.';
 }

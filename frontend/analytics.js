@@ -701,7 +701,7 @@
     const hints = d.hints.length ? `<ul class="pro-int-hints">${d.hints.map(hint => `<li><span class="dot" style="--c:${INTEREST_COLORS[hint.kind]}"></span><span>${esc(hint.message)}</span><a href="#payoff" class="btn btn-secondary btn-compact">Set up</a></li>`).join('')}</ul>` : '';
     if (!d.total) {
       return `<div class="pro-int-empty"><span class="pro-int-empty-icon">%</span><div><strong>No interest found in the last ${d.months.length} months</strong>
-        <p>We look for interest and finance charges on card statements and synced accounts, and estimate the interest inside loan and mortgage payments. Import a credit card statement or connect your bank to start tracking.</p></div></div>${hints}`;
+        <p>We look for interest and finance charges on card statements and synced accounts, and estimate the interest inside loan and mortgage payments and on carried credit card balances. Import a credit card statement or connect your bank to start tracking.</p></div></div>${hints}`;
     }
     const share = kind => d.total ? Math.round(d.totals[kind] / d.total * 100) : 0;
     const charges = d.charges.slice(0, interestState.showAll ? 60 : 6);
@@ -735,7 +735,7 @@
     const { esc } = pro().format;
     const body = interestState.error ? `<p class="pro-empty">Could not load interest: ${esc(interestState.error)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="interest-retry">Try again</button></p>`
       : interestState.data ? interestBody(interestState.data) : '<div class="pro-loading"><span></span><span></span><span></span></div>';
-    return `<article class="pro-card panel span-3 pro-interest" id="pro-interest"><header><div><h2>Interest you paid</h2><p>Credit card, auto, loan and mortgage interest, found on your statements or estimated from loan payments</p></div></header><div class="pro-card-body">${body}</div></article>`;
+    return `<article class="pro-card panel span-3 pro-interest" id="pro-interest"><header><div><h2>Interest you paid</h2><p>Credit card, auto, loan and mortgage interest, found on your statements or estimated from loan payments and card balances</p></div></header><div class="pro-card-body">${body}</div></article>`;
   }
 
   function paintInterest() {

@@ -1359,7 +1359,10 @@
           <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 12px;">
             Plaid and your financial institution process connection data. MyFinanceApp stores an encrypted connection token. Bank-reported balances may be delayed; check your bank before relying on a projection.
           </p>
-          <button class="btn btn-primary" onclick="startPlaidLink()" style="width: 100%;">Connect a bank with Plaid</button>
+          <button id="plaid-connect-button" class="btn btn-primary" onclick="startPlaidLink()" style="width: 100%;">Connect a bank with Plaid</button>
+          <p id="plaid-demo-notice" class="muted" role="note" hidden style="padding: 12px; border: 1px solid var(--border-color, #ccc); border-radius: 8px;">
+            <strong>Bank connections are available only in live accounts.</strong> The demo uses sample data, so connecting a bank is turned off here. Create a free account to connect your bank with Plaid, or try CSV and PDF statement imports in the demo.
+          </p>
           <div id="plaid-status" role="status" style="margin-top: 12px;"></div>
           <div id="plaid-connections" style="margin-top: 16px;"></div>
         </div>
@@ -2278,7 +2281,13 @@
       if (!target) return;
       target.innerHTML = '<p class="muted">Loading connected accounts...</p>';
       try {
-        const { connections } = await plaidRequest('/api/plaid/connections');
+        const { connections, demo } = await plaidRequest('/api/plaid/connections');
+        document.getElementById('plaid-connect-button').style.display = demo ? 'none' : '';
+        document.getElementById('plaid-demo-notice').hidden = !demo;
+        if (demo) {
+          target.innerHTML = '';
+          return;
+        }
         if (!connections.length) {
           target.innerHTML = '<p class="muted">No bank accounts connected. Statement imports remain available in the CSV and PDF tabs.</p>';
           return;
@@ -2291,7 +2300,8 @@
                   ${connection.lastSyncAt ? `Last successful check ${escapeHtml(new Date(connection.lastSyncAt).toLocaleString())}` : 'Initial sync pending'}
                   ${connection.lastAttemptAt ? ` · Last attempt ${escapeHtml(new Date(connection.lastAttemptAt).toLocaleString())}` : ''}
                   ${connection.lastErrorCode ? ` · ${escapeHtml(connection.lastErrorCode)}` : ''}
-                  ${connection.mortgageErrorCode ? ` · Mortgage data unavailable: ${escapeHtml(connection.mortgageErrorCode)}. Reconnect with mortgage access or import a statement.` : ''}
+                  ${connection.mortgageErrorCode === 'LIABILITIES_NOT_ENABLED' ? ' · Mortgage details from this bank are not available; import a mortgage statement instead.'
+                    : connection.mortgageErrorCode ? ` · Mortgage data unavailable: ${escapeHtml(connection.mortgageErrorCode)}. Reconnect with mortgage access or import a statement.` : ''}
                 </div>
                 ${connection.lastErrorCode === 'PLAID_ENVIRONMENT_MISMATCH' ? '<p class="muted">This saved connection belongs to another Plaid environment. Disconnect it, then use Connect bank to create a new connection. Saved transactions are kept; the old remote item must be managed separately.</p>' : ''}
                 ${connection.lastErrorCode === 'INVALID_ACCESS_TOKEN' ? '<p class="muted">The saved access token is no longer usable. If the app changed from sandbox to production, disconnect this old connection and use Connect bank again; Reconnect cannot convert a sandbox connection.</p>' : ''}
@@ -2299,7 +2309,7 @@
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 ${connection.status === 'relink_required' && connection.lastErrorCode !== 'PLAID_ENVIRONMENT_MISMATCH' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Reconnect</button>` : ''}
                 ${connection.status === 'connected' ? `<button class="btn btn-secondary" data-plaid-sync="${connection.id}" onclick="syncPlaidConnection(${connection.id},this)">Sync now</button>` : ''}
-                ${connection.status === 'connected' && connection.mortgageErrorCode ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Authorize mortgage access</button>` : ''}
+                ${connection.status === 'connected' && connection.mortgageErrorCode && connection.mortgageErrorCode !== 'LIABILITIES_NOT_ENABLED' ? `<button class="btn btn-primary" onclick="startPlaidLink(${connection.id})">Authorize mortgage access</button>` : ''}
                 <button class="btn btn-secondary" data-plaid-disconnect="${connection.id}" onclick="disconnectPlaidConnection(${connection.id},this)">Disconnect</button>
               </div>
             </div>

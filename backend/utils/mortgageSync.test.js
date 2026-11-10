@@ -116,11 +116,13 @@ test('read-only support views never run account or mortgage backfill writes', as
 
 test('mortgage sync, account listing, explicit linking, PDF updates and recovery stay in sync', async t => {
   const pg = new PGlite(), client = adapter(pg);
-  const keys = ['PLAID_ENVIRONMENT', 'PLAID_CLIENT_ID', 'PLAID_SECRET', 'PLAID_TOKEN_ENCRYPTION_KEY'];
+  const keys = ['PLAID_ENVIRONMENT', 'PLAID_CLIENT_ID', 'PLAID_SECRET', 'PLAID_TOKEN_ENCRYPTION_KEY', 'PLAID_LIABILITIES_ENABLED', 'APP_ORIGIN'];
   const env = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   let server;
   try {
     process.env.PLAID_ENVIRONMENT = 'sandbox';
+    process.env.APP_ORIGIN = 'https://app.example.test';
+    process.env.PLAID_LIABILITIES_ENABLED = 'true';
     process.env.PLAID_CLIENT_ID = 'test-only-client';
     process.env.PLAID_SECRET = 'test-only-secret';
     process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
@@ -136,8 +138,9 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
       account_id: 'mortgage-account', name: 'FHA Residential', mask: '1234', type: 'loan', subtype: 'mortgage',
       balances: { current: 186000, iso_currency_code: 'USD' }
     }] } }));
-    let liabilityFailure = false;
+    let liabilityFailure = false, liabilityCalls = 0;
     t.mock.method(PlaidApi.prototype, 'liabilitiesGet', async () => {
+      liabilityCalls++;
       if (liabilityFailure) throw { response: { data: { error_code: 'PRODUCT_NOT_ENABLED' } } };
       return { data: { liabilities: { mortgage: [{
         account_id: 'mortgage-account', loan_term: '30 years', maturity_date: '2048-02-01',
@@ -148,7 +151,10 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
     t.mock.method(PlaidApi.prototype, 'transactionsSync', async () => {
       throw { response: { data: { error_code: 'PRODUCT_NOT_SUPPORTED' } } };
     });
+    const linkRequests = [];
     t.mock.method(PlaidApi.prototype, 'linkTokenCreate', async request => {
+      linkRequests.push(request);
+      if (process.env.PLAID_LIABILITIES_ENABLED !== 'true') return { data: { link_token: 'fixture-link' } };
       if (request.access_token) assert.deepEqual(request.additional_consented_products, ['liabilities']);
       else assert.deepEqual(request.optional_products, ['liabilities']);
       return { data: { link_token: 'fixture-link' } };
@@ -205,6 +211,21 @@ test('mortgage sync, account listing, explicit linking, PDF updates and recovery
     assert.equal(missing.mortgageWarning, 'PRODUCT_NOT_ENABLED');
     assert.equal((await call('/mortgage')).sources[0].errorCode, 'PRODUCT_NOT_ENABLED');
     assert.equal((await call('/mortgage')).mortgages[0].apr, 4.125);
+
+    process.env.PLAID_LIABILITIES_ENABLED = 'false';
+    linkRequests.length = 0;
+    const callsBefore = liabilityCalls;
+    await call('/plaid/link-token', {});
+    await call('/plaid/link-token', { connectionId: 1 });
+    await call('/plaid/connections/1/update-link', {});
+    assert.deepEqual(linkRequests[0].products, ['transactions']);
+    assert.ok(linkRequests.length === 3 && linkRequests.every(request => !request.optional_products && !request.additional_consented_products),
+      'unapproved Liabilities is never requested, so Plaid does not reject new connections');
+    const disabled = await call('/plaid/connections/1/sync', {});
+    assert.equal(disabled.mortgageWarning, 'LIABILITIES_NOT_ENABLED');
+    assert.equal(liabilityCalls, callsBefore);
+    assert.equal((await call('/mortgage')).mortgages[0].apr, 4.125, 'saved mortgage details are kept');
+    process.env.PLAID_LIABILITIES_ENABLED = 'true';
 
     // A future-dated fixture keeps this test independent of the machine's current date.
     const pdfBody = { pdfBase64: statementPDF(activityLines.map(line => line.replace('November 1, 2026', 'November 1, 2090'))).toString('base64'), accountId };

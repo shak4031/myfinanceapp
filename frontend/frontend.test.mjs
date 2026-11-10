@@ -3739,6 +3739,20 @@ test('Plaid Link suspends the native import dialog and restores it after complet
     assert.equal(f.dialog.open, false);
   });
 });
+test('the demo replaces Connect bank with a live-accounts-only notice', async () => {
+  const f = fixture(async () => response(200, { connections: [], demo: true }));
+  const html = source('index.html');
+  const start = html.indexOf('    async function plaidRequest(');
+  const end = html.indexOf('    async function loadPlaidConnections(', start);
+  vm.runInContext(html.slice(start, end), f.context);
+  const next = html.slice(end + 10).search(/\n    (async )?function /) + end + 10;
+  vm.runInContext(html.slice(end, next), f.context);
+  await f.context.loadPlaidConnections();
+  assert.equal(f.node('plaid-connect-button').style.display, 'none');
+  assert.equal(f.node('plaid-demo-notice').hidden, false);
+  assert.equal(f.node('plaid-connections').innerHTML, '');
+  assert.match(html, /id="plaid-demo-notice"[^>]*hidden[\s\S]*?available only in live accounts/);
+});
 test('bulk cleanup selects across pages, confirms exact IDs, and invalidates selections on filter changes', async () => {
   const calls = [];
   let accepted = false;

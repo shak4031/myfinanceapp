@@ -94,6 +94,9 @@ export function paymentMatcher(debt, debts) {
   if (debt.debt_type === 'mortgage' && debts.filter(item => item.debt_type === 'mortgage').length === 1) {
     return row => String(row.category || '').toLowerCase() === 'mortgage';
   }
+  if (debt.debt_type === 'credit_card' && debts.filter(item => item.debt_type === 'credit_card').length === 1) {
+    return row => ['credit card', 'credit cards'].includes(String(row.category || '').toLowerCase());
+  }
   return null;
 }
 
@@ -126,8 +129,10 @@ export function buildInterestSummary({ transactions = [], debts = [], now = new 
   }
 
   const hints = [];
-  const loanDebts = debts.filter(debt => debt.debt_type && debt.debt_type !== 'credit_card' && Number(debt.apr) > 0);
-  for (const debt of loanDebts) {
+  // Card interest is estimated from the carried balance only in months without a detected card interest charge.
+  const interestDebts = debts.filter(debt => debt.debt_type && Number(debt.apr) > 0
+    && (debt.debt_type !== 'credit_card' || Number(debt.balance) > 0));
+  for (const debt of interestDebts) {
     const matcher = paymentMatcher(debt, debts);
     const kind = kindFromDebtType(debt.debt_type);
     if (!matcher) {
@@ -141,7 +146,8 @@ export function buildInterestSummary({ transactions = [], debts = [], now = new 
       const amount = estimateInterest(debt, row, month);
       if (!(amount > 0)) continue;
       charges.push({
-        id: row.id, date: isoDate(row.date), month, description: `${debt.name} · interest in payment`,
+        id: row.id, date: isoDate(row.date), month,
+        description: `${debt.name} · ${kind === 'credit_card' ? 'interest on carried balance' : 'interest in payment'}`,
         amount, kind, source: 'estimated', category: row.category || null, paymentAmount: round(row.amount), debtId: debt.id
       });
     }

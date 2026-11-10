@@ -62,8 +62,11 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
     assert.equal(failures[1].providerRequestId, 'provider-request-123');
     assert.equal(failures[1].errorCode, 'PRODUCT_NOT_READY');
     assert.equal(JSON.stringify(events).includes('private'), false);
-    await syncDuePlaidConnections(() => assert.fail('connections should not retry immediately'));
+    await client.query(`INSERT INTO users(id,name,email) VALUES(3,'Demo','demo@myfinance.app');
+      INSERT INTO plaid_connections(user_id,item_id,access_token_ciphertext,status) VALUES(3,'demo-sandbox','x','connected');`);
+    await syncDuePlaidConnections(() => assert.fail('connections should not retry immediately and the demo never syncs'));
     assert.equal(remoteCalls, 1, 'permanent mismatch stops; transient errors respect six-hour backoff');
+    assert.equal((await client.query("SELECT last_sync_attempt_at FROM plaid_connections WHERE item_id='demo-sandbox'")).rows[0].last_sync_attempt_at, null);
     await client.query(`INSERT INTO users(id,name) VALUES(2,'Other household');
       INSERT INTO plaid_accounts(connection_id,user_id,account_id,name) VALUES(1,1,'old-account','Old checking');
       INSERT INTO transactions(user_id,date,description,amount,direction,source,plaid_account_id)

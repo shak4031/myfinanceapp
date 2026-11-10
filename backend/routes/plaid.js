@@ -4,18 +4,28 @@ import Database from '../db.js';
 import { ensurePlaidAccounts, refreshMortgageAccounts, plaidMortgageDetails } from '../utils/mortgageSync.js';
 import { reconcileTransfers } from '../utils/transfers.js';
 import { withUser, currentUserId } from '../utils/tenant.js';
+import { DEMO_EMAIL, isDemoEmail } from '../utils/demo.js';
 import { structuredLog } from '../utils/audit.js';
 import { plaidFailureDetails, plaidRecovery } from '../utils/plaidHealth.js';
 import { classify, failure, loadCategorization } from '../utils/categorization.js';
 import { importTransactions, plaidCategoryValue, refreshImportReviewCandidates, releaseHeldPlaidReviews } from '../utils/transactionImport.js';
 import {
   decryptPlaidToken, encryptPlaidToken, getPlaidClient, plaidErrorCode, plaidTransaction, verifyPlaidWebhook,
-  assertPlaidTokenEnvironment, plaidTokenEnvironment
+  assertPlaidTokenEnvironment, plaidTokenEnvironment, plaidLiabilitiesEnabled
 } from '../utils/plaid.js';
 
 const plaidRouter = express.Router();
 const webhookRouter = express.Router();
 const db = new Database();
+
+export const DEMO_PLAID_MESSAGE = 'Bank connections are available only in live accounts. The demo uses sample data; create a free account to connect your bank.';
+
+// The public demo is shared, so it never talks to Plaid: no connections, links, syncs or Plaid failures.
+plaidRouter.use((req, res, next) => {
+  if (!isDemoEmail(req.user?.email)) return next();
+  if (req.method === 'GET' && req.path === '/connections') return res.json({ connections: [], demo: true });
+  res.status(403).json({ error: DEMO_PLAID_MESSAGE });
+});
 
 function plaidWebhookUrl() {
   let origin;
@@ -89,7 +99,11 @@ async function refreshPlaidAccountBalances(client, connectionId, accessToken, pl
   await saveAccounts(client, connectionId, accounts);
   await ensurePlaidAccounts(client);
   let warning = null;
-  if (accounts.some(account => account.subtype === 'mortgage')) {
+  if (accounts.some(account => account.subtype === 'mortgage') && !plaidLiabilitiesEnabled()) {
+    warning = 'LIABILITIES_NOT_ENABLED';
+    await client.query('UPDATE plaid_connections SET liabilities_error_code=$2 WHERE id=$1 AND user_id=$3',
+      [connectionId, warning, currentUserId()]);
+  } else if (accounts.some(account => account.subtype === 'mortgage')) {
     try {
       const response = await plaidClient.liabilitiesGet({ access_token: accessToken });
       for (const mortgage of response.data.liabilities?.mortgage || []) {
@@ -330,11 +344,12 @@ async function syncAndRecordFailure(connectionId, onlyIfDue = false, trigger = '
 }
 
 export async function syncDuePlaidConnections(structuredLog) {
-  const connections = await administrativeTransaction(async client => (await client.query(`SELECT id,user_id
-    FROM plaid_connections WHERE status='connected'
-      AND (last_sync_at IS NULL OR last_sync_at < NOW() - INTERVAL '24 hours')
-      AND (last_sync_attempt_at IS NULL OR last_sync_attempt_at < NOW() - INTERVAL '6 hours')
-    ORDER BY last_sync_at NULLS FIRST LIMIT 100`)).rows);
+  const connections = await administrativeTransaction(async client => (await client.query(`SELECT c.id,c.user_id
+    FROM plaid_connections c JOIN users u ON u.id=c.user_id
+    WHERE c.status='connected' AND lower(u.email) IS DISTINCT FROM $1
+      AND (c.last_sync_at IS NULL OR c.last_sync_at < NOW() - INTERVAL '24 hours')
+      AND (c.last_sync_attempt_at IS NULL OR c.last_sync_attempt_at < NOW() - INTERVAL '6 hours')
+    ORDER BY c.last_sync_at NULLS FIRST LIMIT 100`, [DEMO_EMAIL])).rows);
   for (const connection of connections) {
     try {
       const result = await withUser(connection.user_id, () => syncAndRecordFailure(connection.id, true, 'scheduled'));
@@ -373,10 +388,10 @@ plaidRouter.post('/link-token', async (req, res, next) => {
       if (!row) throw failure(404, 'Connected bank account not found');
       request.access_token = decryptPlaidToken(row.access_token_ciphertext);
       assertPlaidTokenEnvironment(request.access_token);
-      request.additional_consented_products = ['liabilities'];
+      if (plaidLiabilitiesEnabled()) request.additional_consented_products = ['liabilities'];
     } else {
       request.products = ['transactions'];
-      request.optional_products = ['liabilities'];
+      if (plaidLiabilitiesEnabled()) request.optional_products = ['liabilities'];
       request.transactions = { days_requested: 365 };
     }
     const response = await plaidClient.linkTokenCreate(request);
@@ -493,7 +508,7 @@ plaidRouter.post('/connections/:id/update-link', async (req, res, next) => {
       client_name: 'MyFinanceApp',
       language: 'en',
       country_codes: ['US'],
-      additional_consented_products: ['liabilities'],
+      ...(plaidLiabilitiesEnabled() ? { additional_consented_products: ['liabilities'] } : {}),
       access_token: accessToken
     });
     res.json({ link_token: response.data.link_token, expiration: response.data.expiration });

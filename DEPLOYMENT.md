@@ -130,6 +130,7 @@ PLAID_CLIENT_ID=<Plaid Dashboard client ID>
 PLAID_SECRET=<Sandbox secret>
 PLAID_ENVIRONMENT=sandbox
 PLAID_TOKEN_ENCRYPTION_KEY=<base64-encoded 32-byte key>
+PLAID_LIABILITIES_ENABLED=false  # true only after Liabilities shows Enabled in the Plaid Dashboard
 
 # Audit and monitoring
 AUDIT_HASH_SECRET=<random-secret-at-least-32-characters>
@@ -158,6 +159,17 @@ and the encryption key before enabling bank connections. Never send credentials
 or encryption keys to customers or store them in source control. Changing the
 encryption key without first re-encrypting stored Plaid access tokens will make
 existing connections unusable.
+
+Plaid rejects `/link/token/create` with HTTP 400 when a token requests a product
+the client is not approved for, which blocks every new bank connection. Mortgage
+details use Plaid Liabilities, so they are requested only when
+`PLAID_LIABILITIES_ENABLED=true`. Leave it unset until Liabilities shows Enabled
+in the Plaid Dashboard; connected mortgage accounts then report
+`LIABILITIES_NOT_ENABLED` and users can import a mortgage statement instead.
+
+The public demo never uses Plaid. Its Plaid routes report that bank connections
+are available only in live accounts, scheduled syncs skip it, and every demo
+reset deletes any connections, Plaid accounts and import reviews left behind.
 
 Link tokens specify the public webhook URL
 `<APP_ORIGIN>/api/plaid/webhook`; configure the matching HTTPS origin in Plaid

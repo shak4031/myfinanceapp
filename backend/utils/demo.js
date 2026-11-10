@@ -157,9 +157,9 @@ export function buildDemoData(now = new Date()) {
       { name: 'New car down payment', target_amount: 8000, current_amount: 2400, target_date: ahead(18), priority: 3, icon: '🚗', color: '#8a9c79', notes: null }
     ],
     debts: [
-      { name: 'Chase Sapphire', balance: 3840.12, apr: 24.99, credit_limit: 12000, min_payment: 95, due_date: '25', debt_type: 'credit_card', payment_in_history: true },
-      { name: 'Toyota auto loan', balance: 14620.55, apr: 5.9, credit_limit: 0, min_payment: 412.66, due_date: '12', debt_type: 'auto_loan', payment_in_history: true },
-      { name: 'Nelnet student loan', balance: 18210.4, apr: 4.5, credit_limit: 0, min_payment: 210, due_date: '28', debt_type: 'student_loan', payment_in_history: true }
+      { name: 'Chase Sapphire', balance: 3840.12, apr: 24.99, credit_limit: 12000, min_payment: 95, due_date: '25', debt_type: 'credit_card', payment_in_history: true, payment_match: 'CHASE CARD' },
+      { name: 'Toyota auto loan', balance: 14620.55, apr: 5.9, credit_limit: 0, min_payment: 412.66, due_date: '12', debt_type: 'auto_loan', payment_in_history: true, payment_match: 'TOYOTA FINANCIAL' },
+      { name: 'Nelnet student loan', balance: 18210.4, apr: 4.5, credit_limit: 0, min_payment: 210, due_date: '28', debt_type: 'student_loan', payment_in_history: true, payment_match: 'NELNET' }
     ],
     debtBudget: 1117.66,
     rules: [
@@ -185,7 +185,8 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transactions', 'credit_cards', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'transaction_labels', 'categories']) {
+  // Visitors can leave bank connections or Plaid accounts behind; they must not survive a reset (they duplicate accounts and fail syncs).
+  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transaction_import_reviews', 'transactions', 'plaid_connections', 'plaid_accounts', 'credit_cards', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'transaction_labels', 'categories']) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
@@ -212,8 +213,8 @@ export async function resetDemoAccount(client, now = new Date()) {
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [goal.name, goal.target_amount, goal.current_amount, goal.target_date, goal.priority, goal.icon, goal.color, goal.notes]);
   }
   for (const debt of data.debts) {
-    await client.query(`INSERT INTO credit_cards (name,balance,apr,credit_limit,min_payment,due_date,debt_type,payment_in_history)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [debt.name, debt.balance, debt.apr, debt.credit_limit, debt.min_payment, debt.due_date, debt.debt_type, debt.payment_in_history]);
+    await client.query(`INSERT INTO credit_cards (name,balance,apr,credit_limit,min_payment,due_date,debt_type,payment_in_history,payment_match)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [debt.name, debt.balance, debt.apr, debt.credit_limit, debt.min_payment, debt.due_date, debt.debt_type, debt.payment_in_history, debt.payment_match]);
   }
   const mortgageKeys = Object.keys(data.mortgage);
   await client.query(`INSERT INTO credit_cards (${mortgageKeys.join(',')},account_id)

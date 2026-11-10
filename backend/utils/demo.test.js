@@ -91,8 +91,26 @@ test('demo account resets cleanly, signs in with the published password and unlo
     await client.query("INSERT INTO transactions (date,description,amount,direction,user_id) VALUES ('2026-10-01','KEEP ME',10,'DEBIT',7)");
   });
   const first = await run(client => resetDemoAccount(client));
+  // A visitor connected sandbox banks in the shared demo; the next reset must remove them and their linked accounts.
+  await run(async client => {
+    for (const bank of ['Tartan Bank', 'First Gingham Credit Union']) {
+      const accountId = (await client.query(`INSERT INTO accounts (name,kind,institution,last4,status,user_id)
+        VALUES ('Plaid Checking','checking',$1,'0000','active',$2) RETURNING id`, [bank, first.userId])).rows[0].id;
+      const connectionId = (await client.query(`INSERT INTO plaid_connections (item_id,access_token_ciphertext,institution_name,user_id)
+        VALUES ($1,'x',$2,$3) RETURNING id`, [`item-${bank}`, bank, first.userId])).rows[0].id;
+      await client.query(`INSERT INTO plaid_accounts (connection_id,account_id,name,linked_account_id,user_id)
+        VALUES ($1,$2,'Plaid Checking',$3,$4)`, [connectionId, `acct-${bank}`, accountId, first.userId]);
+      await client.query(`INSERT INTO transactions (date,description,amount,direction,source,account_id,user_id)
+        VALUES ('2026-10-20','KFC',500,'DEBIT','plaid',$1,$2)`, [accountId, first.userId]);
+    }
+  });
   const second = await run(client => resetDemoAccount(client));
   assert.equal(first.userId, second.userId);
+  const leftovers = (await run(client => client.query(`SELECT
+    (SELECT COUNT(*) FROM plaid_connections WHERE user_id=$1)::int AS connections,
+    (SELECT COUNT(*) FROM plaid_accounts WHERE user_id=$1)::int AS plaid_accounts,
+    (SELECT COUNT(*) FROM accounts WHERE user_id=$1 AND name LIKE 'Plaid%')::int AS accounts`, [first.userId]))).rows[0];
+  assert.deepEqual(leftovers, { connections: 0, plaid_accounts: 0, accounts: 0 });
   const counts = (await run(client => client.query(`SELECT user_id, COUNT(*)::int AS n FROM transactions GROUP BY user_id ORDER BY user_id`))).rows;
   assert.deepEqual(counts.sort((a, b) => a.user_id - b.user_id), [{ user_id: first.userId, n: second.transactions }, { user_id: 7, n: 1 }].sort((a, b) => a.user_id - b.user_id));
 
@@ -112,6 +130,11 @@ test('demo account resets cleanly, signs in with the published password and unlo
     const login = await call('/api/auth/login', { body: { email: DEMO_EMAIL, password: DEMO_PASSWORD } });
     assert.equal(login.status, 200);
     const cookie = login.headers.get('set-cookie').split(';')[0];
+    const plaidConnections = await call('/api/plaid/connections', { cookie });
+    assert.deepEqual([plaidConnections.status, plaidConnections.body], [200, { connections: [], demo: true }]);
+    const linkToken = await call('/api/plaid/link-token', { cookie, body: {} });
+    assert.equal(linkToken.status, 403);
+    assert.match(linkToken.body.error, /only in live accounts/);
     const license = await call('/api/license', { cookie });
     assert.deepEqual([license.body.tier, license.body.source, license.body.active], ['pro', 'demo', true]);
     assert.equal((await call('/api/license/trial', { cookie, body: {} })).status, 409);
@@ -142,6 +165,12 @@ test('demo account resets cleanly, signs in with the published password and unlo
     assert.ok(whatIf.body.debt.monthsSaved > 0 && whatIf.body.goal.finishDate);
     const analytics = await call('/api/analytics', { cookie });
     assert.equal(analytics.status, 200);
+    const interest = await call('/api/analytics/interest', { cookie });
+    assert.equal(interest.status, 200);
+    for (const kind of ['mortgage', 'credit_card', 'auto_loan', 'student_loan']) {
+      assert.ok(interest.body.totals[kind] > 0, `demo interest includes ${kind}`);
+    }
+    assert.deepEqual(interest.body.hints, []);
     for (const path of ['/api/budgets', '/api/goals', '/api/debts', '/api/categories']) {
       const response = await call(path, { cookie });
       assert.equal(response.status, 200, path);

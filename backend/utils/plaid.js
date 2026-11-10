@@ -89,6 +89,11 @@ export function getPlaidClient() {
   }));
 }
 
+// Plaid rejects Link tokens that request products the client is not approved for, so Liabilities is opt-in.
+export function plaidLiabilitiesEnabled() {
+  return String(process.env.PLAID_LIABILITIES_ENABLED || '').toLowerCase() === 'true';
+}
+
 export function plaidErrorCode(error) {
   return error?.response?.data?.error_code || error?.response?.data?.error?.error_code
     || (error?.code === 'PLAID_ENVIRONMENT_MISMATCH' ? error.code : null);
