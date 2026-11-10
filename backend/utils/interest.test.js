@@ -105,3 +105,45 @@ test('credit card interest is estimated from the carried balance unless a card i
   assert.equal(paidOff.total, 0, 'no interest on a zero balance');
   assert.equal(paidOff.hints.length, 0);
 });
+
+test('several cards ask for setup only when no card statements are visible', () => {
+  const now = new Date(2026, 2, 20);
+  const debts = [
+    { id: 1, name: 'Ollo Credit Card', debt_type: 'credit_card', balance: 5000, apr: 27.74 },
+    { id: 2, name: 'Amazon Store Card', debt_type: 'credit_card', balance: 3500, apr: 29.49 },
+    { id: 3, name: 'Student', debt_type: 'student_loan', balance: 9000, apr: 4 }
+  ];
+  const fromStatements = buildInterestSummary({ now, months: 3, debts, transactions: [
+    { id: 1, date: '2026-03-03', description: 'INTEREST CHARGE ON PURCHASES', amount: 42.17, direction: 'DEBIT' }
+  ] });
+  assert.deepEqual(fromStatements.hints.map(hint => hint.debtId), [3], 'imported card interest needs no setup');
+  const synced = buildInterestSummary({ now, months: 3, debts, transactions: [
+    { id: 2, date: '2026-03-05', description: 'GROCERY', amount: 80, direction: 'DEBIT', plaid_type: 'credit', plaid_subtype: 'credit card' }
+  ] });
+  assert.deepEqual(synced.hints.map(hint => hint.debtId), [3], 'a Plaid-synced card account counts as statements');
+  const none = buildInterestSummary({ now, months: 3, debts, transactions: [] });
+  assert.deepEqual(none.hints.map(hint => [hint.debtId, hint.action]), [[1, 'accounts'], [2, 'accounts'], [3, 'payoff']]);
+  assert.match(none.hints[0].message, /Import or connect Ollo Credit Card statements/);
+});
+
+test('an imported mortgage with loan terms counts scheduled interest when no payment transactions are found', () => {
+  const now = new Date(2026, 10, 9);
+  const mortgage = { id: 7, name: 'Home mortgage', debt_type: 'mortgage', balance: 187203, apr: 3.38, original_amount: 319000,
+    term_months: 360, first_payment_month: '2010-10', mortgage_source: 'statement', included: false };
+  const summary = buildInterestSummary({ now, months: 12, debts: [mortgage, { ...mortgage, id: 8, name: 'Second home' }], transactions: [
+    { id: 1, date: '2026-10-16', description: 'HOME MORTGAGE AUTOPAY', amount: 2322.01, direction: 'DEBIT' }
+  ] });
+  const scheduled = summary.charges.filter(charge => charge.debtId === 7);
+  assert.equal(scheduled.length, 12, 'every month in the window gets scheduled interest');
+  assert.ok(scheduled.every(charge => charge.scheduled && charge.source === 'estimated' && charge.amount > 0));
+  assert.equal(summary.months.at(-1).byKind.mortgage, round2(scheduled.find(c => c.month === '2026-11').amount * 2));
+  assert.equal(summary.hints.length, 0, 'a mortgage with a schedule needs no payment-matching setup');
+  const matched = buildInterestSummary({ now, months: 2, debts: [{ ...mortgage, payment_match: 'mortgage autopay' }], transactions: [
+    { id: 1, date: '2026-10-16', description: 'HOME MORTGAGE AUTOPAY', amount: 2322.01, direction: 'DEBIT' }
+  ] });
+  assert.deepEqual(matched.charges.map(charge => [charge.month, Boolean(charge.scheduled)]), [['2026-11', true], ['2026-10', false]],
+    'a matched payment month is not counted twice');
+  const paidOff = buildInterestSummary({ now, months: 2, debts: [{ ...mortgage, balance: 0 }], transactions: [] });
+  assert.equal(paidOff.total, 0);
+});
+const round2 = value => Math.round(value * 100) / 100;

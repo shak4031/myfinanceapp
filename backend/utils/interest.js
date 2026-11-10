@@ -129,26 +129,49 @@ export function buildInterestSummary({ transactions = [], debts = [], now = new 
   }
 
   const hints = [];
+  // Card statements (imported or synced) list the actual interest charged, so cards only need help when none are visible.
+  const hasCardStatements = charges.some(charge => charge.kind === 'credit_card')
+    || transactions.some(row => keySet.has(monthOf(row.date)) && inferInterestKind({ ...row, description: '' }) === 'credit_card');
   // Card interest is estimated from the carried balance only in months without a detected card interest charge.
   const interestDebts = debts.filter(debt => debt.debt_type && Number(debt.apr) > 0
     && (debt.debt_type !== 'credit_card' || Number(debt.balance) > 0));
   for (const debt of interestDebts) {
     const matcher = paymentMatcher(debt, debts);
     const kind = kindFromDebtType(debt.debt_type);
-    if (!matcher) {
-      hints.push({ debtId: debt.id, name: debt.name, kind, message: `Tell us how ${debt.name} payments appear so we can estimate its interest.` });
+    const hasSchedule = kind !== 'credit_card' && Number(debt.balance) > 0 && scheduledInterestFor(debt, keys.at(-1)) !== null;
+    if (!matcher && !hasSchedule) {
+      if (kind === 'credit_card') {
+        if (!hasCardStatements) hints.push({ debtId: debt.id, name: debt.name, kind, action: 'accounts',
+          message: `Import or connect ${debt.name} statements so its interest charges are counted.` });
+      } else {
+        hints.push({ debtId: debt.id, name: debt.name, kind, action: 'payoff', message: `Tell us how ${debt.name} payments appear so we can estimate its interest.` });
+      }
       continue;
     }
-    for (const row of transactions) {
+    const paidMonths = new Set();
+    for (const row of matcher ? transactions : []) {
       if (String(row.direction || '').toUpperCase() !== 'DEBIT' || classifyInterest(row)) continue;
       const month = monthOf(row.date);
       if (!keySet.has(month) || explicitKindMonths.has(`${kind}:${month}`) || !matcher(row)) continue;
       const amount = estimateInterest(debt, row, month);
       if (!(amount > 0)) continue;
+      paidMonths.add(month);
       charges.push({
         id: row.id, date: isoDate(row.date), month,
         description: `${debt.name} · ${kind === 'credit_card' ? 'interest on carried balance' : 'interest in payment'}`,
         amount, kind, source: 'estimated', category: row.category || null, paymentAmount: round(row.amount), debtId: debt.id
+      });
+    }
+    if (!hasSchedule) continue;
+    // Loan statements carry terms but no payment lines, so months without a matched payment use the amortization schedule.
+    for (const month of keys) {
+      if (paidMonths.has(month) || explicitKindMonths.has(`${kind}:${month}`)) continue;
+      const amount = scheduledInterestFor(debt, month);
+      if (!(amount > 0)) continue;
+      charges.push({
+        id: `schedule-${debt.id}-${month}`, date: `${month}-01`, month,
+        description: `${debt.name} · scheduled interest`, amount: round(amount), kind, source: 'estimated',
+        category: null, debtId: debt.id, scheduled: true
       });
     }
   }

@@ -1,15 +1,25 @@
 /* MyFinance Pro: plan chrome, toggles, dashboard + category insights, analytics page, dialogs. */
 :root { --pro: #6d28d9; --pro-soft: #f3efff; --pro-grad: linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#0ea5e9 100%); --good: #047857; --bad: #be123c; }
 
-.money-mosaic { position: relative; height: 360px; margin: 8px 0 18px; border-radius: 16px; background: #102b38; }
-.money-tile { position: absolute; box-sizing: border-box; padding: 3px; outline-offset: -3px; }
-.money-tile-face { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 8px; border-radius: 9px; color: #fff; background: linear-gradient(135deg, #102b3855, #102b38bb), var(--tile-color); overflow: hidden; box-shadow: inset 0 1px 0 #ffffff30; container-type: inline-size; }
+/* Tiles sit on the card background, so the gutters between them read as clear white gaps. */
+.money-mosaic { position: relative; height: 420px; margin: 0 -6px 12px; }
+.money-tile { position: absolute; box-sizing: border-box; padding: 6px; outline-offset: -6px; }
+.money-tile-face { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; gap: 5px; padding: 10px; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #102b3833, #102b3899), var(--tile-color); overflow: hidden; box-shadow: 0 2px 6px #0f172a26, inset 0 1px 0 #ffffff30; container-type: size; }
+.pro-merchants .pro-card-body { display: flex; flex-direction: column; }
+.pro-merchants .money-mosaic { flex: 1 0 420px; height: auto; min-height: 420px; }
 .money-tile-face b { font-size: 12px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex-shrink: 0; }
 .money-tile-face strong { font-size: clamp(9px, 17cqi, 20px); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
 .money-tile-face small { font-size: 12px; }
+.money-tile-bar { display: none; }
 .money-tile.is-small .money-tile-face { padding: 4px; }
 .money-tile.is-small .money-tile-face > * { visibility: hidden; }
-@container (max-width: 55px) {
+@container (max-height: 96px) {
+  .money-tile-face small { display: none; }
+}
+@container (max-height: 78px) {
+  .money-tile-face b { -webkit-line-clamp: 1; }
+}
+@container (max-width: 55px) or (max-height: 48px) {
   .money-tile-face > * { visibility: hidden; }
 }
 .money-tile-tip { display: none; position: absolute; z-index: 4; left: 0; top: 0; width: 230px; max-width: 70vw; padding: 12px; border-radius: 8px; background: #102b38; color: #fff; box-shadow: 0 6px 24px #0005; font-size: 13px; line-height: 1.6; pointer-events: none; }
@@ -86,11 +96,20 @@
   .money-season-headline strong { font-size: 21px; }
   .money-reading { padding: 12px; }
 }
-@media (max-width: 480px) {
-  .money-mosaic { height: 320px; }
-  .money-tile-face { padding: 6px; }
-  .money-tile-face b { font-size: 11px; }
-  .money-tile-face strong { font-size: clamp(9px, 17cqi, 18px); }
+@media (max-width: 600px) {
+  /* Treemap slivers are unreadable on phones: show evenly spaced cards, largest first, with a share bar. */
+  .money-mosaic, .pro-merchants .money-mosaic { height: auto; min-height: 0; flex: none; margin: 0 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0; }
+  .money-tile { position: relative; left: auto !important; top: auto !important; width: auto !important; height: auto !important; padding: 0; outline-offset: 2px; }
+  .money-tile:first-child { grid-column: 1 / -1; }
+  .money-tile-face { min-height: 92px; gap: 4px; padding: 12px; container-type: normal; }
+  .money-tile-face b { font-size: 11px; line-height: 1.35; }
+  .money-tile-face strong { font-size: 17px; }
+  .money-tile:first-child .money-tile-face strong { font-size: 22px; }
+  .money-tile-face small { font-size: 11px; opacity: .85; }
+  .money-tile.is-small .money-tile-face { padding: 12px; }
+  .money-tile.is-small .money-tile-face > *, .money-tile-face > * { visibility: visible; }
+  .money-tile-bar { display: block; height: 4px; margin-top: auto; border-radius: 2px; background: linear-gradient(90deg, #fff var(--tile-share), #ffffff33 var(--tile-share)); }
+  .money-tile:hover .money-tile-tip, .money-tile:focus .money-tile-tip { left: 0; right: 0; top: 100%; width: auto; max-width: none; margin-top: 6px; }
 }
 
 .compass-panel { min-width: 0; grid-column: 1 / -1; }

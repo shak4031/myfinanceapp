@@ -28,11 +28,14 @@
       }
     }
     split([...rows].sort((a, b) => b.value - a.value), 0, 0, 100, 100);
+    // Treemap placement is positional; DOM order is largest first so the stacked phone layout reads in rank order.
+    tiles.sort((a, b) => b.value - a.value);
     const total = sum(rows);
+    const top = Math.max(...rows.map(item => item.value));
     return `<div class="money-mosaic" role="group" aria-label="Merchant spending mosaic. Tile area represents share of the displayed merchants.">${tiles.map((item, index) => {
       const label = `${item.name}: ${money(item.value)}, ${(item.value / total * 100).toFixed(1)}% of displayed spending. ${item.detail || ''}`;
-      return `<div class="money-tile${item.w < 14 || item.h < 14 ? ' is-small' : ''}" tabindex="0" role="img" aria-label="${esc(label)}" style="left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;--tile-color:${palette[index % palette.length]}">
-        <div class="money-tile-face"><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${(item.value / total * 100).toFixed(1)}%</small></div>
+      return `<div class="money-tile${item.w < 14 || item.h < 14 ? ' is-small' : ''}" tabindex="0" role="img" aria-label="${esc(label)}" style="left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;--tile-color:${palette[index % palette.length]};--tile-share:${(item.value / top * 100).toFixed(1)}%">
+        <div class="money-tile-face"><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${(item.value / total * 100).toFixed(1)}%</small><i class="money-tile-bar" aria-hidden="true"></i></div>
         <span class="money-tile-tip">${esc(label)}</span></div>`;
     }).join('')}</div>
     <details class="money-exact"><summary>About this view</summary><p>Tile area = money out, not transaction count. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p></details>

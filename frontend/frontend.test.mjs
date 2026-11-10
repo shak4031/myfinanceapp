@@ -4995,7 +4995,8 @@ test('mortgage tab sets up a loan, then shows the schedule, interest and a worki
   html = f.node('plan-debt-root').innerHTML;
   assert.match(html, /&lt;HOME&gt;/);
   assert.doesNotMatch(html, /<Home>/);
-  assert.match(html, /\$1,798\.65 principal &amp; interest \+ \$450\.00 escrow/);
+  assert.match(html, /Principal &amp; interest<\/span><b>\$1,798\.65<\/b>/);
+  assert.match(html, /Escrow<\/span><b>\$450\.00<\/b>/);
   assert.match(html, /\$2,248\.65/);
   assert.match(html, /Interest in \d{4}/);
   assert.match(html, /Payoff simulator/);
@@ -5058,8 +5059,9 @@ test('mortgage shows the full reported payment without adding escrow twice or us
   root.querySelector = selector => selector === '.mtg-years' ? null : query(selector);
   await f.context.loadPayoffPlan('mortgage');
   assert.match(root.innerHTML, /Next reported payment<\/dt><dd>\$1,900\.00/);
-  assert.match(root.innerHTML, /Calculated monthly:/);
-  assert.match(root.innerHTML, /\+ \$450\.00 escrow/);
+  assert.match(root.innerHTML, /Calculated monthly<\/span><b>\$[\d,]+\.\d\d<\/b>/);
+  assert.match(root.innerHTML, /Escrow<\/span><b>\$450\.00/);
+  assert.match(root.innerHTML, /From Plaid &middot; Nov 8, 2026/);
   assert.doesNotMatch(root.innerHTML, /<dd>\$2,350\.00/);
   assert.match(root.innerHTML, /may include insurance, escrow adjustments or fees/);
   const mortgageInput = f.context.FinancePlan.state.mortgage.data.mortgages[0];
@@ -5104,6 +5106,7 @@ test('analytics interest panel shows totals by type, estimates, hints and saves 
   assert.match(card, /&lt;Card&gt; interest charge/);
   assert.match(card, /<span class="pro-int-badge">Estimated<\/span>/);
   assert.match(card, /Student/, 'unmatched loans get a setup hint');
+  assert.match(card, /href="#payoff"[^>]*>Set up/);
   assert.match(card, /data-interest-id="1"/);
 
   f.listeners.get('document:change')({ target: { dataset: { interestId: '1' }, value: 'personal_loan', closest: () => ({}) } });

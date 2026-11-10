@@ -208,7 +208,7 @@
       detail: `${m.count} payments; average ${money(m.average)}; ${pct(m.share)} of all spending${m.change == null ? '' : `; ${Math.abs(m.change * 100).toFixed(0)}% ${m.change >= 0 ? 'more' : 'less'} than the previous period`}`
     }));
     return card(`Top merchants${how('Last 90 days. Larger tiles mean more money out, not more transactions.')}`, '',
-      globalThis.FinanceMoneyVisuals.mosaic(items));
+      globalThis.FinanceMoneyVisuals.mosaic(items), 'pro-merchants');
   }
 
   function weekdayCard(a) {
@@ -698,7 +698,9 @@
   function interestBody(d) {
     const { money, esc } = pro().format;
     const kinds = Object.keys(d.kinds).filter(kind => d.totals[kind] > 0).sort((a, b) => d.totals[b] - d.totals[a]);
-    const hints = d.hints.length ? `<ul class="pro-int-hints">${d.hints.map(hint => `<li><span class="dot" style="--c:${INTEREST_COLORS[hint.kind]}"></span><span>${esc(hint.message)}</span><a href="#payoff" class="btn btn-secondary btn-compact">Set up</a></li>`).join('')}</ul>` : '';
+    const hints = d.hints.length ? `<ul class="pro-int-hints">${d.hints.map(hint => `<li><span class="dot" style="--c:${INTEREST_COLORS[hint.kind]}"></span><span>${esc(hint.message)}</span>${hint.action === 'accounts'
+      ? '<a href="#accounts" data-view="accounts" class="btn btn-secondary btn-compact">Add statements</a>'
+      : '<a href="#payoff" class="btn btn-secondary btn-compact">Set up</a>'}</li>`).join('')}</ul>` : '';
     if (!d.total) {
       return `<div class="pro-int-empty"><span class="pro-int-empty-icon">%</span><div><strong>No interest found in the last ${d.months.length} months</strong>
         <p>We look for interest and finance charges on card statements and synced accounts, and estimate the interest inside loan and mortgage payments and on carried credit card balances. Import a credit card statement or connect your bank to start tracking.</p></div></div>${hints}`;
@@ -708,7 +710,7 @@
     const kindOptions = selected => Object.entries(d.kinds).map(([key, label]) => `<option value="${key}"${key === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
     const row = charge => `<li class="pro-int-row is-${charge.source}">
         <span class="dot" style="--c:${INTEREST_COLORS[charge.kind]}"></span>
-        <div><strong>${esc(charge.description)}</strong><small>${dateShort(charge.date)}${charge.source === 'estimated' ? ` · from a ${money(charge.paymentAmount, false)} payment` : charge.source === 'manual' ? ' · tagged by you' : ''}${charge.category ? ` · ${esc(charge.category)}` : ''}</small></div>
+        <div><strong>${esc(charge.description)}</strong><small>${dateShort(charge.date)}${charge.source === 'estimated' ? (charge.scheduled ? ' · from your loan schedule' : ` · from a ${money(charge.paymentAmount, false)} payment`) : charge.source === 'manual' ? ' · tagged by you' : ''}${charge.category ? ` · ${esc(charge.category)}` : ''}</small></div>
         ${charge.source === 'estimated' ? '<span class="pro-int-badge">Estimated</span>'
           : `<select class="pro-int-kind" data-interest-id="${esc(charge.id)}" aria-label="Interest type for ${esc(charge.description)}">${kindOptions(charge.kind)}</select>
              <button type="button" class="pro-int-remove" data-analytics-action="${charge.source === 'manual' ? 'interest-auto' : 'interest-not'}" data-id="${esc(charge.id)}" title="${charge.source === 'manual' ? 'Undo your tag and use automatic detection' : 'This is not interest'}" aria-label="${charge.source === 'manual' ? 'Reset to automatic' : 'Not interest'}">${charge.source === 'manual' ? '↺' : '×'}</button>`}

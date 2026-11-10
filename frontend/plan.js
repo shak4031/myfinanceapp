@@ -70,18 +70,29 @@
     notifyUser(error.message || 'Something went wrong');
   }
 
+  const dateText = iso => /^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? dayLabel(iso) : esc(iso);
+
   function mortgagePayment(m, sim) {
     const reported = m.reported_payment;
     const hasReported = reported != null && Number.isFinite(Number(reported));
     const source = m.reported_payment_source || m.mortgage_source;
     const asOf = m.reported_payment_as_of || m.mortgage_data_as_of;
-    const estimated = `${cents(sim.payment)} principal &amp; interest${sim.input.escrow ? ` + ${cents(sim.input.escrow)} escrow` : ''}`;
-    return `<div><dt>${hasReported ? 'Next reported payment' : 'Monthly payment'}</dt><dd>${cents(hasReported ? reported : sim.totalPayment)}</dd>
-      <small>${hasReported ? `From ${source === 'plaid' ? 'Plaid' : 'your statement'} &middot; ${esc(asOf)}<br>Calculated monthly: ${cents(sim.totalPayment)} (${estimated})` : estimated}</small>
-      ${m.escrow_payment == null || (hasReported && !sim.input.escrow && Number(reported) > sim.payment + 1)
-        ? '<small>Monthly escrow is not provided. Plaid reports the escrow reserve, not the monthly charge. Import a statement or enter taxes &amp; insurance in Edit details.</small>' : ''}
-      ${hasReported && Math.abs(Number(reported) - sim.totalPayment) >= 1
-        ? '<small>The reported payment differs from the calculation; it may include insurance, escrow adjustments or fees. Verify the breakdown with your servicer.</small>' : ''}
+    const notes = [];
+    if (m.escrow_payment == null || (hasReported && !sim.input.escrow && Number(reported) > sim.payment + 1)) {
+      notes.push('Monthly escrow is not provided. Plaid reports the escrow reserve, not the monthly charge. Import a statement or enter taxes &amp; insurance in Edit details.');
+    }
+    if (hasReported && Math.abs(Number(reported) - sim.totalPayment) >= 1) {
+      notes.push(`Your servicer's amount differs from the calculated ${cents(sim.totalPayment)}; it may include insurance, escrow adjustments or fees.`);
+    }
+    return `<div class="mtg-pay">
+        <div class="mtg-pay-head"><dt>${hasReported ? 'Next reported payment' : 'Monthly payment'}</dt><dd>${cents(hasReported ? reported : sim.totalPayment)}</dd>
+          <small>${hasReported ? `From ${source === 'plaid' ? 'Plaid' : 'your statement'} &middot; ${dateText(asOf)}` : 'Calculated from your loan terms'}</small></div>
+        <ul class="mtg-pay-parts">
+          <li><span>Principal &amp; interest</span><b>${cents(sim.payment)}</b></li>
+          <li><span>Escrow</span><b>${sim.input.escrow ? cents(sim.input.escrow) : '—'}</b></li>
+          ${hasReported ? `<li class="is-total"><span>Calculated monthly</span><b>${cents(sim.totalPayment)}</b></li>` : ''}
+        </ul>
+        ${notes.length ? `<p class="mtg-pay-note">${icon('info', 13)}<span>${notes.join(' ')}</span></p>` : ''}
       </div>`;
   }
 
@@ -552,9 +563,12 @@
           <p class="plan-eyebrow">${icon('home', 12)} ${esc(String(m.name).toUpperCase())}</p>
           ${list.length > 1 ? `<label class="mtg-switch">Mortgage<select id="mtg-select">${list.map(item => `<option value="${esc(item.id)}"${item.id === m.id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label>` : ''}
           <h2>Paid off <b>${monthLabel(sim.baseline.payoffMonth, 'long')}</b></h2>
-          <p>${duration(sim.baseline.months)} to go · ${money(sim.balance)} remaining of ${money(sim.input.principal)}</p>
-          ${m.mortgage_source ? `<p>Details from ${m.mortgage_source === 'plaid' ? 'Plaid' : 'your statement'} &middot; as of ${esc(m.mortgage_data_as_of)}. Missing source fields retain your manual entries.</p>` : ''}
-          <p>Loan originated: ${esc(m.origination_date || 'Not provided')} &middot; Contract maturity: ${esc(m.maturity_date || 'Not provided')}</p>
+          <p class="mtg-hero-sub">${duration(sim.baseline.months)} to go &middot; ${money(sim.balance)} left of ${money(sim.input.principal)}</p>
+          ${m.mortgage_source || m.origination_date || m.maturity_date ? `<p class="mtg-hero-meta">${[
+            m.mortgage_source ? `Updated from ${m.mortgage_source === 'plaid' ? 'Plaid' : 'your statement'} &middot; ${dateText(m.mortgage_data_as_of)}` : '',
+            m.origination_date ? `Originated ${dateText(m.origination_date)}` : '',
+            m.maturity_date ? `Matures ${dateText(m.maturity_date)}` : ''
+          ].filter(Boolean).join('<span aria-hidden="true"> · </span>')}</p>` : ''}
           <div class="mtg-progress" role="img" aria-label="${paidPct}% of the original loan repaid"><span style="width:${paidPct}%"></span></div>
           <p class="mtg-progress-text"><b>${paidPct}%</b> of principal repaid</p>
           ${drift ? `<p class="mtg-drift">${icon('info', 14)}<span>Your balance is ${money(Math.abs(sim.balance - sim.toDate.scheduledBalance))} ${sim.balance < sim.toDate.scheduledBalance ? 'ahead of' : 'behind'} the original schedule${sim.balance < sim.toDate.scheduledBalance ? '. Nice work.' : '.'}</span></p>` : ''}
