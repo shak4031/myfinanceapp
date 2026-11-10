@@ -102,6 +102,10 @@ test('demo account resets cleanly, signs in with the published password and unlo
         VALUES ($1,$2,'Plaid Checking',$3,$4)`, [connectionId, `acct-${bank}`, accountId, first.userId]);
       await client.query(`INSERT INTO transactions (date,description,amount,direction,source,account_id,user_id)
         VALUES ('2026-10-20','KFC',500,'DEBIT','plaid',$1,$2)`, [accountId, first.userId]);
+      // A projection saved against a previous reset's (now deleted) transaction and account.
+      await client.query(`INSERT INTO fixed_payment_occurrences (payment_key,due_date,template,amount,user_id)
+        VALUES ($1,'2099-01-09',$2,198.52,$3)`, [`stale-${bank}`, JSON.stringify({ id: 1, date: '2098-12-09',
+        description: 'GEICO AUTO PAY', amount: 198.52, is_fixed: true, pay_mode: 'auto', account_id: accountId }), first.userId]);
     }
   });
   const second = await run(client => resetDemoAccount(client));
@@ -109,8 +113,9 @@ test('demo account resets cleanly, signs in with the published password and unlo
   const leftovers = (await run(client => client.query(`SELECT
     (SELECT COUNT(*) FROM plaid_connections WHERE user_id=$1)::int AS connections,
     (SELECT COUNT(*) FROM plaid_accounts WHERE user_id=$1)::int AS plaid_accounts,
-    (SELECT COUNT(*) FROM accounts WHERE user_id=$1 AND name LIKE 'Plaid%')::int AS accounts`, [first.userId]))).rows[0];
-  assert.deepEqual(leftovers, { connections: 0, plaid_accounts: 0, accounts: 0 });
+    (SELECT COUNT(*) FROM accounts WHERE user_id=$1 AND name LIKE 'Plaid%')::int AS accounts,
+    (SELECT COUNT(*) FROM fixed_payment_occurrences WHERE user_id=$1 AND payment_key LIKE 'stale-%')::int AS stale`, [first.userId]))).rows[0];
+  assert.deepEqual(leftovers, { connections: 0, plaid_accounts: 0, accounts: 0, stale: 0 });
   const counts = (await run(client => client.query(`SELECT user_id, COUNT(*)::int AS n FROM transactions GROUP BY user_id ORDER BY user_id`))).rows;
   assert.deepEqual(counts.sort((a, b) => a.user_id - b.user_id), [{ user_id: first.userId, n: second.transactions }, { user_id: 7, n: 1 }].sort((a, b) => a.user_id - b.user_id));
 
@@ -147,6 +152,15 @@ test('demo account resets cleanly, signs in with the published password and unlo
     const upcoming = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
     assert.equal(upcoming.status, 200);
     assert.ok(upcoming.body.some(item => item.isIncome), 'paychecks are part of the upcoming calendar');
+    const perDay = new Map();
+    for (const item of upcoming.body.filter(item => !item.isIncome)) {
+      const key = `${item.date} ${item.description}`;
+      perDay.set(key, (perDay.get(key) || 0) + 1);
+    }
+    assert.deepEqual([...perDay].filter(([, count]) => count > 1), [], 'each bill appears once per day on the calendar');
+    // A second visit must not add projections either.
+    const again = await call('/api/dashboard/upcoming-payments', { cookie, body: {} });
+    assert.equal(again.body.length, upcoming.body.length);
     const plan = await call('/api/plan', { cookie });
     assert.equal(plan.status, 200);
     assert.deepEqual([plan.body.debtPlan.strategy, plan.body.debtPlan.budget, plan.body.debtPlan.extra], ['avalanche', 1117.66, 400]);

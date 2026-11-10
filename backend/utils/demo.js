@@ -1,5 +1,5 @@
 import { hashPassword } from './passwords.js';
-import { seedUserCategories } from './schema.js';
+import { seedUserCategories, PRIVATE_TABLES } from './schema.js';
 import { OWNER_USER_ID } from './license.js';
 import { reconcileTransfers } from './transfers.js';
 import { paymentFor, simulateMortgage } from './amortization.js';
@@ -173,6 +173,13 @@ export function buildDemoData(now = new Date()) {
 }
 
 // Rebuilds the demo user and every row it owns. Must run on the administrative connection inside a transaction.
+export const DEMO_RESET_ORDER = ['household_profiles', 'money_plans', 'name_rules', 'fixed_payment_occurrences',
+  'fixed_payment_estimates', 'transaction_duplicate_decisions', 'transaction_import_reviews', 'import_reviews',
+  'transactions', 'import_batches', 'plaid_connections', 'plaid_accounts', 'credit_cards', 'accounts',
+  'staging_transactions', 'category_budgets', 'goal_purchases', 'savings_goals', 'transaction_labels', 'categories'];
+const missingResetTables = PRIVATE_TABLES.filter(table => !DEMO_RESET_ORDER.includes(table));
+if (missingResetTables.length) throw new Error(`Demo reset does not clear: ${missingResetTables.join(', ')}`);
+
 export async function resetDemoAccount(client, now = new Date()) {
   const data = buildDemoData(now);
   const passwordHash = await hashPassword(DEMO_PASSWORD);
@@ -185,8 +192,10 @@ export async function resetDemoAccount(client, now = new Date()) {
   // Row-level security limits every statement below to the demo user's rows.
   await client.query('SET LOCAL ROLE finance_app_runtime');
   await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
-  // Visitors can leave bank connections or Plaid accounts behind; they must not survive a reset (they duplicate accounts and fail syncs).
-  for (const table of ['household_profiles', 'money_plans', 'name_rules', 'transaction_import_reviews', 'transactions', 'plaid_connections', 'plaid_accounts', 'credit_cards', 'accounts', 'staging_transactions', 'category_budgets', 'savings_goals', 'transaction_labels', 'categories']) {
+  // Every private table is cleared (children before parents). Leftovers from earlier resets point at deleted
+  // accounts and transactions: saved bill projections then appear as duplicate calendar entries, and visitor
+  // bank connections duplicate accounts and fail syncs.
+  for (const table of DEMO_RESET_ORDER) {
     await client.query(`DELETE FROM ${table}`);
   }
   await seedUserCategories(client, userId);
