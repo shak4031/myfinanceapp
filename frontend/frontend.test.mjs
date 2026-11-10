@@ -3654,13 +3654,13 @@ test('import and goal editors use native floating dialogs with their controls in
   assert.match(source('transactions.html'), /url=\/#transactions/);
 });
 test('Plaid Link suspends the native import dialog and restores it after completion or exit', async t => {
-  function plaidFixture({ tokenError = false, openError = false, exchangeError = false, dialogOpen = true } = {}) {
+  function plaidFixture({ tokenError = false, requestId = null, openError = false, exchangeError = false, dialogOpen = true } = {}) {
     const requests = [];
     const f = fixture(async (url, options) => {
       requests.push([url, JSON.parse(options.body)]);
       if (url.endsWith('/link-token')) {
         assert.equal(f.node('import-modal').open, dialogOpen);
-        return tokenError ? response(503, { error: 'Plaid is not configured' }) : response(200, { link_token: 'test-link' });
+        return tokenError ? response(503, { error: 'Plaid is not configured', ...(requestId ? { requestId } : {}) }) : response(200, { link_token: 'test-link' });
       }
       return exchangeError ? response(500, { error: 'Could not save bank' }) : response(200, { success: true });
     });
@@ -3712,6 +3712,12 @@ test('Plaid Link suspends the native import dialog and restores it after complet
     assert.equal(f.dialog.open, true);
     assert.equal(f.opened(), false);
     assert.equal(f.node('plaid-status').textContent, 'Plaid is not configured');
+  });
+  await t.test('provider failures show a safe support reference', async () => {
+    const f = plaidFixture({ tokenError: true, requestId: 'support-reference-123' });
+    await f.context.startPlaidLink();
+    assert.equal(f.node('plaid-status').textContent,
+      'Plaid is not configured (support reference: support-reference-123)');
   });
   await t.test('opening failures restore the dialog and show the error', async () => {
     const f = plaidFixture({ openError: true });

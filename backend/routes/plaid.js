@@ -381,7 +381,24 @@ plaidRouter.post('/link-token', async (req, res, next) => {
     }
     const response = await plaidClient.linkTokenCreate(request);
     res.json({ link_token: response.data.link_token, expiration: response.data.expiration });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error?.response) {
+      const details = plaidFailureDetails(error);
+      structuredLog('error', {
+        event: 'plaid.link_token_failed',
+        requestId: req.id,
+        userId: currentUserId(),
+        operation: 'link_token_create',
+        ...details,
+        message: 'Plaid rejected a Link token request.'
+      });
+      return next(Object.assign(
+        new Error('Plaid could not prepare the secure bank connection. Try again; contact support if this continues.'),
+        { status: 502, code: details.errorCode, providerRequestId: details.providerRequestId }
+      ));
+    }
+    next(error);
+  }
 });
 
 plaidRouter.post('/exchange', async (req, res, next) => {

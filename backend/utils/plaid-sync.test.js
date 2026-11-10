@@ -69,7 +69,12 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
       INSERT INTO transactions(user_id,date,description,amount,direction,source,plaid_account_id)
         VALUES(1,'2026-10-26','Stored history',500,'DEBIT','plaid','old-account');`);
     t.mock.method(PlaidApi.prototype, 'itemRemove', () => assert.fail('never send a sandbox token to production for removal'));
-    t.mock.method(PlaidApi.prototype, 'linkTokenCreate', () => assert.fail('update Link cannot convert environments'));
+    t.mock.method(PlaidApi.prototype, 'linkTokenCreate', request => {
+      if (request.access_token) assert.fail('update Link cannot convert environments');
+      throw { response: { status: 400, data: {
+        error_code: 'INVALID_FIELD', error_type: 'INVALID_REQUEST', request_id: 'plaid-request-123'
+      } } };
+    });
     const app = express();
     app.use(express.json());
     app.use((req, res, next) => withUser(Number(req.headers['x-test-user'] || 1), next));
@@ -100,6 +105,17 @@ test('scheduled Plaid failures persist retry state, isolate connections and stop
         assert.equal(response.status, 409, JSON.stringify(result));
         assert.match(result.error, /Disconnect the old connection/);
       }
+      const linkFailure = await fetch(`${base}/link-token`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      });
+      assert.equal(linkFailure.status, 502);
+      assert.match((await linkFailure.json()).error, /could not prepare the secure bank connection/);
+      const linkFailureEvent = events.find(entry => entry.event === 'plaid.link_token_failed');
+      assert.equal(linkFailureEvent.operation, 'link_token_create');
+      assert.equal(linkFailureEvent.errorCode, 'INVALID_FIELD');
+      assert.equal(linkFailureEvent.errorType, 'INVALID_REQUEST');
+      assert.equal(linkFailureEvent.providerRequestId, 'plaid-request-123');
+      assert.equal(JSON.stringify(linkFailureEvent).includes('private'), false);
       assert.equal((await fetch(`${base}/connections/1`, { method: 'DELETE', headers: { 'x-test-user': '2' } })).status, 404);
       const disconnected = await fetch(`${base}/connections/1`, { method: 'DELETE' });
       assert.equal(disconnected.status, 200);

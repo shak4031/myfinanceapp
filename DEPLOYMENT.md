@@ -169,6 +169,10 @@ public HTTPS test environment rather than disabling webhook verification.
 The Connect bank dialog temporarily closes while Plaid Link is open so the
 browser's native modal layer does not obscure Link. It reopens when linking
 completes, is cancelled, or fails, showing connection status or errors.
+If Plaid rejects Link token creation, the app logs the provider error code and
+request ID without logging bank credentials or tokens. Share the app support
+reference shown in the error with support; use the provider request ID when
+checking the corresponding request in the Plaid Dashboard.
 
 Transactions are requested with up to 365 days of initial history. Webhooks
 trigger cursor-based transaction sync, and the server retries missed updates

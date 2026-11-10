@@ -2214,7 +2214,13 @@
         ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       });
       const data = await response.json();
-      if (!response.ok) throw Object.assign(new Error(data.error || `Request failed (${response.status})`), { status: response.status });
+      if (!response.ok) {
+        const requestId = data?.requestId || response.headers?.get?.('X-Request-Id');
+        const safeRequestId = typeof requestId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(requestId)
+          ? requestId : null;
+        throw Object.assign(new Error(`${data.error || `Request failed (${response.status})`}${safeRequestId ? ` (support reference: ${safeRequestId})` : ''}`),
+          { status: response.status, requestId: safeRequestId });
+      }
       return data;
     }
 
