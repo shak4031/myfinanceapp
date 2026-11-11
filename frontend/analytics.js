@@ -4,30 +4,30 @@
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
   const recurringFilters = { status: 'active', kind: 'all', search: '' };
-  const compassRanges = new Map();
-  const panelFlow = key => compassRanges.get(key)?.data || current?.moneyFlow;
+  let compassPeriod = null;
+  const panelFlow = () => compassPeriod?.data || current?.moneyFlow;
   const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
   const lastCompleteMonth = () => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth() - 1; };
-  function rangeControls(key, title) {
+  function rangeControls() {
     const { esc } = pro().format;
-    const state = compassRanges.get(key);
+    const state = compassPeriod;
     const end = lastCompleteMonth();
     const preset = state?.preset || '3';
     const option = (value, label) => `<option value="${value}"${preset === value ? ' selected' : ''}>${label}</option>`;
-    return `<form class="compass-range" data-compass-range="${key}" aria-label="${esc(title)} date range">
+    return `<form class="compass-range" data-compass-range="all" aria-label="Spending Compass date range">
       <label>Time period<select name="preset">${window.monthRangePresets.map(({ months, label }) => option(String(months), label)).join('')}${option('custom', 'Choose months…')}</select></label>
       <label${preset === 'custom' ? '' : ' hidden'}>Start month<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
       <label${preset === 'custom' ? '' : ' hidden'}>End month<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
       <button type="submit" class="btn btn-secondary btn-compact">Apply</button>
-      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Last 3 completed months · missing statements can understate totals. Choose a period to explore.'}</p></form>`;
+      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating all Compass sections…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Last 3 completed months · missing statements can understate totals.'} This period controls every section on Spending Compass.</p></form>`;
   }
   function compassPanel(key, title, renderer, base) {
     const finish = globalThis.FinancePerformance?.begin('cpu', `compass.${key}`);
-    const state = compassRanges.get(key);
+    const state = compassPeriod;
     const mf = state?.data || base;
     const body = state && !state.data ? `<p class="pro-empty panel">${pro().format.esc(state.error || 'Loading the selected history…')}</p>`
       : ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
-    const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
+    const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
     finish?.();
     return html;
   }
@@ -650,7 +650,7 @@
     const mf = a.moneyFlow;
     if (!mf) return '<p class="pro-empty panel">The Spending Compass is not available yet. Try again in a moment.</p>';
     const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
-    return `<div class="pro-compass">${compassPanel('plan', 'Compass plan and headline', m => compassHero(m) + compassInsights(m), mf)}
+    return `<div class="pro-compass">${rangeControls()}${compassPanel('plan', 'Compass plan and headline', m => compassHero(m) + compassInsights(m), mf)}
       <div class="pro-grid pro-compass-grid">${[
         ['flow', 'Where your money flows', flowSankey], ['signals', 'Where the signals overlap', signalConnections],
         ['vendors', 'Who gets your money', vendorField], ['heatmap', 'Hot and cold months', spendHeatmap],
@@ -785,7 +785,7 @@
 
   function tabs(a) {
     const { money } = pro().format;
-    const found = compassRanges.get('plan')?.data?.potentialMonthly ?? a?.moneyFlow?.potentialMonthly;
+    const found = compassPeriod?.data?.potentialMonthly ?? a?.moneyFlow?.potentialMonthly;
     const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
     const help = `<a class="pro-tab-help" href="#tutorials/${tab === 'compass' ? 'compass' : 'analytics'}">&#9654; How it works</a>`;
     return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}${help}</nav>`;
@@ -796,7 +796,7 @@
     const { esc } = pro().format;
     if (tab === 'compass') {
       $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
-      mountBubbles(panelFlow('vendors')?.vendors);
+      mountBubbles(panelFlow()?.vendors);
       finish?.();
       return;
     }
@@ -819,33 +819,22 @@
     const entitlement = await pro().ensureEntitlement();
     if (run !== request) return;
     renderActions();
-    if (!entitlement.plusActive) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
+    if (!entitlement.plusActive) { compassPeriod = null; stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
       interestState.data = null; interestState.error = '';
       current = await pro().getAnalytics(force);
-      if (tab === 'compass' && current.moneyFlow?.range?.months === 3) {
-        const end = lastCompleteMonth();
-        for (const key of ['signals', 'heatmap']) {
-          if (!compassRanges.has(key)) compassRanges.set(key, {
-            preset: '12', from: monthKey(end - 11), to: monthKey(end), data: null, stale: true, loading: true, error: ''
-          });
-        }
-      }
-      if (force || [...compassRanges.values()].some(state => state.stale)) {
-        const requests = new Map();
-        await Promise.all([...compassRanges].map(async ([key, state]) => {
-          try {
-            const url = `/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`;
-            if (!requests.has(url)) requests.set(url, pro().request(url));
-            const data = await requests.get(url);
-            if (compassRanges.get(key) === state) { state.data = data; state.error = ''; state.stale = false; state.loading = false; }
-          } catch (error) {
-            if (compassRanges.get(key) === state) {
-              state.loading = false;
-              state.error = `Could not refresh this period: ${error.message}.${state.data ? ' Previous result shown.' : ' No readings shown; try Apply to retry.'}`;
-            }
+      if (compassPeriod && (force || compassPeriod.stale)) {
+        const state = compassPeriod;
+        try {
+          const url = `/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`;
+          const data = await pro().request(url);
+          if (compassPeriod === state) { state.data = data; state.error = ''; state.stale = false; state.loading = false; }
+        } catch (error) {
+          if (compassPeriod === state) {
+            state.loading = false;
+            state.error = `Could not refresh this period: ${error.message}.${state.data ? ' Previous result shown.' : ' No readings shown; try Apply to retry.'}`;
           }
-        }));
+        }
       }
       if (run === request) render(current);
     } catch (error) {
@@ -891,7 +880,7 @@
       if (target.dataset.bubbleSize) bubbleSize = target.dataset.bubbleSize;
       if (target.dataset.bubbleColor) bubbleColor = target.dataset.bubbleColor;
       target.parentElement?.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === target)));
-      return mountBubbles(panelFlow('vendors')?.vendors);
+      return mountBubbles(panelFlow()?.vendors);
     }
     if (target.dataset.sort) {
       sortDir = sortKey === target.dataset.sort ? -sortDir : target.dataset.sort === 'name' ? 1 : -1;
@@ -961,31 +950,31 @@
     const form = event.target?.closest?.('[data-compass-range]');
     if (!form || !current) return;
     event.preventDefault();
-    const key = form.dataset.compassRange;
-    const finish = globalThis.FinancePerformance?.begin('panel', `compass.${key}.load`);
+    const finish = globalThis.FinancePerformance?.begin('panel', 'compass.all.load');
     const preset = form.querySelector('[name="preset"]').value;
     const from = form.querySelector('[name="from"]').value, to = form.querySelector('[name="to"]').value;
-    const state = { preset, from, to, loading: true, data: compassRanges.get(key)?.data };
-    compassRanges.set(key, state);
+    const state = { preset, from, to, loading: true, data: panelFlow() };
+    compassPeriod = state;
     render(current);
     try {
       const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      if (compassRanges.get(key) !== state) return;
+      if (compassPeriod !== state) return;
       state.data = data; state.loading = false;
       finish?.();
     } catch (error) {
-      if (compassRanges.get(key) !== state) return;
-      state.error = `Could not update this panel: ${error.message}. The previous result is unchanged.`;
+      if (compassPeriod !== state) return;
+      const previous = state.data.range;
+      state.error = `Could not update Spending Compass: ${error.message}. Previous results shown for ${previous?.from || 'the last ' + (previous?.months || 3) + ' completed months'}${previous?.to ? ' through ' + previous.to : ''}.`;
       state.loading = false;
       finish?.('error');
     }
     if (tab === 'compass') render(current);
   });
   document.addEventListener('pro:entitlement', event => {
-    if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
+    if (event.detail && !event.detail.plusActive) { compassPeriod = null; current = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
   });
   document.addEventListener('finance:analytics-invalidated', () => {
     request++;
-    for (const [key, state] of compassRanges) compassRanges.set(key, { ...state, stale: true, loading: false });
+    if (compassPeriod) compassPeriod = { ...compassPeriod, stale: true, loading: false };
   });
 })();

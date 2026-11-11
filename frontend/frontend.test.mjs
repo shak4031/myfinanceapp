@@ -4839,7 +4839,7 @@ test('recurring discovery shows every candidate and filters status, type and mer
   assert.doesNotMatch(source('analytics.js'), /unmarked\.slice\(0, 12\)/);
 });
 
-test('signal and monthly explorers load a shared year of evidence rather than the summary three-month window', async () => {
+test('all Compass explorers share the summary period and preserve a changed period on reload', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
@@ -4862,31 +4862,31 @@ test('signal and monthly explorers load a shared year of evidence rather than th
   });
   await f.context.loadAnalyticsPage(false, 'compass');
   const html = f.node('analytics-content').innerHTML;
-  assert.equal(calls.length, 1, 'same initial history request is reused by both panels');
+  assert.equal(calls.length, 0, 'all sections use the existing three-month summary initially');
+  assert.equal((html.match(/data-compass-range=/g) || []).length, 1);
+  assert.match(html, /Last 3 completed months/);
   for (const key of ['signals', 'heatmap']) {
     const start = html.indexOf(`data-compass-panel="${key}"`);
     const panel = html.slice(start, html.indexOf('</section>', start));
-    assert.match(panel, /value="12" selected/);
-    assert.match(panel, /12 of 12 completed months available/);
+    assert.doesNotMatch(panel, /data-compass-range=/);
   }
-  assert.match(html, /Rising signal/);
-  assert.match(html, /Prior-month median/);
   const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   const values = { preset: { value: '6' }, from: { value: key(new Date(end.getFullYear(), end.getMonth() - 5, 1)) }, to: { value: key(end) } };
   const form = { dataset: { compassRange: 'signals' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
   await f.listeners.get('document:submit')({ preventDefault() {}, target: { closest: () => form } });
   await f.context.loadAnalyticsPage(false, 'compass');
   const updated = f.node('analytics-content').innerHTML;
-  const start = updated.indexOf('data-compass-panel="signals"');
-  assert.match(updated.slice(start, updated.indexOf('</section>', start)), /value="6" selected/);
-  assert.equal(calls.length, 2, 'selected periods are preserved on reload');
+  assert.match(updated, /value="6" selected/);
+  assert.match(updated, /6 of 6 completed months available/);
+  assert.equal(calls.length, 1, 'selected periods are preserved on reload');
 });
 
-test('Compass date ranges offer only four month presets and custom dates, update independently and show errors', async () => {
+test('one Compass date range offers four month presets and custom dates, updates all sections and shows errors', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
-  const now = new Date(), demo = buildDemoData(now), calls = [];
+  const now = new Date(), demo = buildDemoData(now), calls = [], pending = [];
+  let deferRequests = false;
   const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, today: now }) };
   const f = loadPro(async url => {
     calls.push(url);
@@ -4897,22 +4897,24 @@ test('Compass date ranges offer only four month presets and custom dates, update
       const [year, month] = params.get('to').split('-').map(Number);
       const [startYear, startMonth] = params.get('from').split('-').map(Number);
       const range = { from: params.get('from'), to: params.get('to'), months: (year - startYear) * 12 + month - startMonth + 1, endYear: year, endMonth: month - 1 };
-      return response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range }), range });
+      const result = response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range }), range });
+      if (deferRequests) return new Promise(resolve => pending.push(() => resolve(result)));
+      return result;
     }
     return response(200, payload);
   });
   await f.context.loadAnalyticsPage(false, 'compass');
-  assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 7);
+  assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 1);
   const initial = f.node('analytics-content').innerHTML;
   const selectors = [...initial.matchAll(/<select name="preset">([\s\S]*?)<\/select>/g)];
-  assert.equal(selectors.length, 7);
+  assert.equal(selectors.length, 1);
   for (const [, options] of selectors) {
     assert.deepEqual([...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]), ['3', '6', '12', '24', 'custom']);
   }
-  assert.equal((initial.match(/<label hidden>Start month/g) || []).length, 7);
-  assert.equal((initial.match(/<label hidden>End month/g) || []).length, 7);
+  assert.equal((initial.match(/<label hidden>Start month/g) || []).length, 1);
+  assert.equal((initial.match(/<label hidden>End month/g) || []).length, 1);
   const values = { preset: { value: '6' }, from: { value: '', parentElement: {} }, to: { value: '', parentElement: {} } };
-  const form = { dataset: { compassRange: 'heatmap' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
+  const form = { dataset: { compassRange: 'all' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
   const event = { preventDefault() {}, target: { name: 'preset', value: '6', closest: () => form } };
   for (const months of [3, 6, 12, 24]) {
     event.target.value = String(months);
@@ -4929,10 +4931,9 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.match(values.from.value, /^\d{4}-\d{2}$/);
   await f.listeners.get('document:submit')(event);
   let html = f.node('analytics-content').innerHTML;
-  const panel = key => html.split(`data-compass-panel="${key}"`)[1].split('data-compass-panel=')[0];
-  assert.match(panel('heatmap'), /6 of 6 completed months available/);
-  assert.match(panel('flow'), /Last 3 completed months/);
-  assert.match(panel('plan'), /Last 3 completed months/);
+  assert.match(html, /6 of 6 completed months available/);
+  assert.doesNotMatch(html, /Last 3 completed months/);
+  assert.match(html, /value="6" selected/);
   assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, 1);
   values.preset.value = 'custom';
   event.target.value = values.preset.value;
@@ -4946,9 +4947,9 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.equal(values.preset.value, 'custom');
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
-  assert.match(panel('heatmap'), /\d+ of 3 completed months available/);
-  assert.match(panel('heatmap'), /<label>Start month/);
-  assert.match(panel('heatmap'), /<option value="custom" selected>/);
+  assert.match(html, /\d+ of 3 completed months available/);
+  assert.match(html, /<label>Start month/);
+  assert.match(html, /<option value="custom" selected>/);
   assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
   const beforeInvalidation = calls.filter(url => url.startsWith('/api/analytics/compass?')).length;
   f.context.FinancePro.invalidateAnalytics();
@@ -4957,12 +4958,30 @@ test('Compass date ranges offer only four month presets and custom dates, update
   html = f.node('analytics-content').innerHTML;
   assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, beforeInvalidation + 1);
   assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
-  assert.match(panel('heatmap'), /<option value="custom" selected>/);
+  assert.match(html, /<option value="custom" selected>/);
   values.from.value = 'bad';
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
-  assert.match(panel('heatmap'), /Could not update this panel: Choose valid completed months/);
-  assert.match(panel('flow'), /Last 3 completed months/);
+  assert.match(html, /Could not update Spending Compass: Choose valid completed months/);
+  assert.match(html, new RegExp(`Previous results shown for ${now.getFullYear() - 1}-04 through ${now.getFullYear() - 1}-06`));
+  deferRequests = true;
+  values.preset.value = '6';
+  event.target.name = 'preset';
+  event.target.value = '6';
+  f.listeners.get('document:change')(event);
+  const older = f.listeners.get('document:submit')(event);
+  assert.match(f.node('analytics-content').innerHTML, /Updating all Compass sections/);
+  values.preset.value = '12';
+  event.target.value = '12';
+  f.listeners.get('document:change')(event);
+  const newer = f.listeners.get('document:submit')(event);
+  pending[1]();
+  await newer;
+  const latest = f.node('analytics-content').innerHTML;
+  assert.match(latest, /12 of 12 completed months available/);
+  pending[0]();
+  await older;
+  assert.equal(f.node('analytics-content').innerHTML, latest, 'an older response cannot overwrite the shared period');
 });
 
 test('mortgage tab sets up a loan, then shows the schedule, interest and a working payoff simulator', async () => {
@@ -5507,7 +5526,9 @@ test('the dedicated health plan scores the split, walks twelve weeks and saves t
 test('Financial Health is first-class navigation and available to Basic without Pro requests', async () => {
   const html = source('index.html');
   assert.equal((html.match(/id="health-plan-root"/g) || []).length, 1);
-  assert.ok(html.indexOf('data-view="financial-health"') < html.indexOf('data-view="categories"'));
+  const nav = html.match(/<ul class="nav-list">([\s\S]*?)<\/ul>/)[1];
+  assert.deepEqual([...nav.matchAll(/data-view="([^"]+)"/g)].map(match => match[1]).slice(0, 7),
+    ['dashboard', 'analytics', 'transactions', 'categories', 'payoff', 'goals', 'financial-health']);
   assert.match(html, /id="dashboard-health-title"/);
   assert.match(html, /id="financial-health-view"[^]*?id="health-plan-root"/);
   const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');

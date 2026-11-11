@@ -523,7 +523,7 @@
       scenes: [
         { id: 'intro', title: 'Start with the overview', caption: 'Analytics is part of Pro. Start with the overview for cash flow and spending patterns, then choose Spending Compass for household comparisons and possible changes. Both depend on imported records; missing accounts can change the story.',
           render: () => intro('MYFINANCE PRO', 'From totals to patterns', 'Overview for the big picture. Compass for a closer look.', ['Cash flow', 'Spending', 'Compass']) },
-        { id: 'ranges', title: 'Know the analysis period', caption: 'Check each panel range before comparing numbers. Shared rolling choices are 3, 6, 12 and 24 months where applicable. Compass starts with three completed months; category-card trends require at least six completed months even when category totals use a shorter range. All time is an explicit choice, not the default.',
+        { id: 'ranges', title: 'Know the analysis period', caption: 'Spending Compass has one time control at the top for every section. Choices are 3, 6, 12 and 24 completed months, plus custom months. It starts with three completed months; choose a longer period for signals needing more history. Overview is unchanged. Category-card trends require at least six completed months even when category totals use a shorter range. All time is an explicit choice outside Compass, not the default.',
           render: () => `${chip(1, 'Match the question to the window')}
             ${compare([
               { e: '1', title: 'Period totals', when: 'Read the selected dates', asks: ['Last 3 months is a common default.', 'All time can make totals much larger.', 'Custom ranges need selected months.'] },
