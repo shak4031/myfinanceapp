@@ -102,7 +102,7 @@
   }
 
   let marketId = 0;
-  function market({ series, xMax, xTicks = [], pointLabel = String, width = 720, height = 300, label = 'Financial chart', boundary = null }) {
+  function market({ series, xMax, xTicks = [], pointLabel = String, width = 1000, height = 320, label = 'Financial chart', boundary = null }) {
     const id = `market-${++marketId}`;
     const pad = { l: 62, r: 82, t: 28, b: 34 };
     const valid = p => Number.isFinite(p.x) && Number.isFinite(p.v);

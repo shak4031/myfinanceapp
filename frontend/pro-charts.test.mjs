@@ -51,7 +51,7 @@ test('market charts do not interpolate missing history and use unique escaped SV
 test('forecast marks the actual-to-estimate boundary and keeps the supplied projection endpoints only', () => {
   const { testCards } = fixture();
   const html = testCards.forecastCard({ forecast: { daysInMonth: 30, paceCurrent: [0, 100, 250], paceLast: [0, 200, 400, 500], projected: 1800, lastMonth: 2000, mtd: 250, remainingFixed: 900, remainingVariable: 650 } });
-  assert.match(html, /span-2 pro-market/);
+  assert.match(html, /span-3 pro-market/);
   assert.match(html, /ESTIMATE STARTS/);
   assert.match(html, /Day 3\. Last month: \$400\.00\. This month: \$250\.00\. Projection: \$250\.00/);
   assert.match(html, /Day 30\. Projection: \$1,800\.00/);
@@ -64,13 +64,16 @@ test('cash-flow scenario keeps negative endpoints, baseline and surplus, with an
   const cashflow = { startBalance: 8080, basis: 'typical-surplus', monthsUsed: 3,
     months: Array.from({ length: 6 }, (_, i) => ({ month: `2027-0${i + 1}`, balance: 8080 - 3363 * (i + 1), net: -3363 })) };
   const html = testCards.cashflowCard({ cashflow });
-  assert.match(html, /pro-market/);
+  assert.match(html, /span-3 pro-market/);
+  assert.match(html, /viewBox="0 0 1000 320"/);
   assert.match(html, /Scenario, not a guarantee/);
   assert.match(html, /2027-06 estimate\. Estimated balance: -\$12,098\.00/);
   assert.match(html, /class="market-zero"/);
   assert.match(html, /class="market-line is-projected"/);
   assert.match(html, /-\$3,363\.00/);
-  assert.match(testCards.cashflowCard({ cashflow: { startBalance: null } }), /Import a statement with a running balance/);
+  const unavailable = testCards.cashflowCard({ cashflow: { startBalance: null } });
+  assert.match(unavailable, /Import a statement with a running balance/);
+  assert.match(unavailable, /pro-card panel span-3/);
   const zero = testCards.cashflowCard({ cashflow: { ...cashflow, startBalance: 0, months: [{ month: '2027-01', balance: 0, net: 0 }] } });
   assert.match(zero, /Estimated balance: \$0\.00/);
   assert.doesNotMatch(zero, /NaN|Infinity/);
@@ -79,9 +82,18 @@ test('cash-flow scenario keeps negative endpoints, baseline and surplus, with an
 test('monthly trend has real spending bars, income and a correctly delayed three-month average', () => {
   const { testCards } = fixture();
   const html = testCards.trendCard({ months: ['2026-08', '2026-09', '2026-10', '2026-11'], series: { spend: [100, 200, 300, 600], income: [400, 500, 600, 700] } });
+  assert.match(html, /span-3 pro-market/);
+  assert.match(html, /viewBox="0 0 1000 320"/);
   assert.equal((html.match(/class="market-volume"/g) || []).length, 4);
   assert.match(html, /2026-08\. Spending: \$100\.00\. Income: \$400\.00/);
   assert.match(html, /2026-10\. Spending: \$300\.00\. 3-month average: \$200\.00\. Income: \$600\.00/);
   assert.match(html, /2026-11\. Spending: \$600\.00\. 3-month average: \$366\.67\. Income: \$700\.00/);
   assert.match(html, /<th scope="row">2026-08<\/th><td>\$100\.00<\/td><td>&mdash;<\/td><td>\$400\.00<\/td>/);
+});
+
+test('market charts use full content width with a readable scrolling canvas on smaller screens', () => {
+  const css = source('analytics.css');
+  assert.match(css, /#analytics-view \{ max-width: none; \}/);
+  assert.match(css, /\.pro-card\.span-3 \{ grid-column: 1 \/ -1; \}/);
+  assert.match(css, /\.pro-market \.pro-chart-scroll \.pro-market-chart \{ min-width: 1000px; \}/);
 });

@@ -302,7 +302,11 @@ after three supplied monthly values.
 
 Hover, tap or tab through chart periods for exact USD values and a crosshair.
 Each chart also offers **Exact chart values**, a keyboard-accessible data table.
-Phone layouts retain a readable chart width in a horizontally scrollable region.
+Each of these three charts occupies its own full-content-width row. The analytics
+page has no content-width cap; charts share a 1000-by-320 drawing canvas so the
+cash-flow graph is no longer compressed into a sidebar. Smaller screens retain
+the readable 1000-pixel chart width in a horizontally scrollable region rather
+than shrinking labels and data points.
 Existing calculation methods, Pro access and missing-balance states are unchanged.
 
 ## Financial landscape

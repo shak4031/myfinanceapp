@@ -116,13 +116,13 @@
         { name: 'Projection', points: projection, tone: 'violet', dashed: true, area: true, endpoint: true }
       ], xMax, xTicks: ticks, pointLabel: x => `Day ${x}`, boundary: current.length ? { x: current.at(-1).x, label: 'ESTIMATE STARTS' } : null, label: 'Month-end forecast' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="primary">This month</span><span class="primary dashed">Projection</span><span class="muted-line">Last month</span>${verdict}</div>`;
-    return card('Month-end forecast', 'Spending pace this month against last month, with bills still due', body, 'span-2 pro-market');
+    return card('Month-end forecast', 'Spending pace this month against last month, with bills still due', body, 'span-3 pro-market');
   }
 
   function cashflowCard(a) {
     const { money } = pro().format;
     const c = a.cashflow, { market } = charts();
-    if (c.startBalance == null) return card('6-month cash flow', 'Projected balance from your recurring income and spending', '<p class="pro-empty">Import a statement with a running balance to project your cash flow.</p>');
+    if (c.startBalance == null) return card('6-month cash flow', 'Projected balance from your recurring income and spending', '<p class="pro-empty">Import a statement with a running balance to project your cash flow.</p>', 'span-3');
     const points = [{ x: 0, v: c.startBalance }, ...c.months.map((m, i) => ({ x: i + 1, v: m.balance }))];
     const ticks = [{ x: 0, label: 'Now' }, ...c.months.map((m, i) => ({ x: i + 1, label: charts().monthShort(m.month) }))];
     const low = Math.min(...points.map(p => p.v)), end = points[points.length - 1].v;
@@ -132,10 +132,10 @@
       ? how(`Your typical monthly surplus: average income minus average spending over ${basis}, transfers excluded. It is the same number your dashboard, Debt and Goals pages use.`)
       : how('Average income minus last month\'s bills and your average flexible spending.');
     const body = `<div class="market-chart-heading"><span class="market-eyebrow">BALANCE OUTLOOK</span><span class="market-status">Scenario, not a guarantee</span></div>
-      ${scrollRegion('Projected balance chart', market({ series: [{ name: 'Estimated balance', points, tone: end >= c.startBalance ? 'green' : 'rose', dashed: true, area: true, endpoint: true }], xMax: c.months.length, xTicks: ticks, pointLabel: x => x === 0 ? 'Now: recorded balance' : `${c.months[x - 1].month} estimate`, width: 480, height: 300, label: 'Projected balance' }), 'pro-chart-scroll')}
+      ${scrollRegion('Projected balance chart', market({ series: [{ name: 'Estimated balance', points, tone: end >= c.startBalance ? 'green' : 'rose', dashed: true, area: true, endpoint: true }], xMax: c.months.length, xTicks: ticks, pointLabel: x => x === 0 ? 'Now: recorded balance' : `${c.months[x - 1].month} estimate`, label: 'Projected balance' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="${end >= c.startBalance ? 'income' : 'danger'} dashed">Estimated balance</span></div>
       <div class="pro-mini-stats"><div><span>Balance today</span><strong>${money(c.startBalance, true)}</strong></div><div><span>In 6 months</span><strong class="${end < 0 ? 'is-bad' : ''}">${money(end, true)}</strong></div><div><span>${c.basis === 'typical-surplus' ? 'Typical surplus' : 'Net / month'}${netNote}</span><strong class="${net < 0 ? 'is-bad' : 'is-good'}">${net >= 0 ? '+' : ''}${money(net, true)}</strong></div><div><span>Lowest point</span><strong class="${low < 0 ? 'is-bad' : ''}">${money(low, true)}</strong></div></div>`;
-    return card('6-month cash flow', 'Projected balance if your typical surplus continues each month', body, 'pro-market');
+    return card('6-month cash flow', 'Projected balance if your typical surplus continues each month', body, 'span-3 pro-market');
   }
 
   function trendCard(a) {
@@ -148,7 +148,7 @@
         { name: 'Income', points: s.income.map((v, x) => ({ x, v })), tone: 'green', area: true }
       ], xMax: Math.max(1, a.months.length - 1), xTicks: a.months.map((month, x) => ({ x, label: monthShort(month) })), pointLabel: x => a.months[x], label: 'Monthly spending' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="bar">Spending</span><span class="sma">3-month moving average</span><span class="income">Income</span></div>`;
-    return card('Monthly spend trend', 'Twelve months of spending with a 3-month moving average', body, 'span-2 pro-market');
+    return card('Monthly spend trend', 'Twelve months of spending with a 3-month moving average', body, 'span-3 pro-market');
   }
 
   const SIGNAL_TEXT = { above: 'Running hot', below: 'Cooling', inline: 'In line', new: 'New' };

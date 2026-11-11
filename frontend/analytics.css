@@ -281,6 +281,7 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-chart .line.dashed { stroke-dasharray: 6 5; }
 .pro-chart .line.muted-line { stroke: #94a3b8; stroke-width: 1.8; }
 .pro-chart .line.sma { stroke: #f59e0b; } .pro-chart .line.income { stroke: #10b981; stroke-dasharray: 2 5; }
+#analytics-view { max-width: none; }
 #analytics-view .pro-card.pro-market {
   --market-muted: #a7bdd3;
   --market-border: #294159;
@@ -302,6 +303,7 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .market-eyebrow { color: #b8d2eb; font-size: 10px; font-weight: 750; letter-spacing: 1.5px; }
 .market-status { padding: 4px 8px; border: 1px solid #37516b; border-radius: 5px; color: #b5cbe0; background: #142e46; font-size: 10px; }
 .pro-market-chart { font-variant-numeric: tabular-nums; isolation: isolate; }
+.pro-market .pro-chart-scroll .pro-market-chart { min-width: 1000px; }
 .market-backdrop { fill: #0a1a2e66; }
 .market-grid { stroke: #6a95bd; stroke-opacity: .18; stroke-width: 1; }
 .market-grid-vertical { stroke-opacity: .1; }
