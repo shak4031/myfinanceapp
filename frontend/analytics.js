@@ -376,10 +376,10 @@
   const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' };
   function signalConnections(mf) {
     const { esc } = pro().format;
-    const placed = {}, clear = [];
+    const placed = {};
     for (const c of mf.categories) {
       const key = `${isAbove(c) ? 'a' : ''}${c.rising ? 'b' : ''}${isUnusual(c) ? 'c' : ''}`;
-      if (!key) clear.push(shortLabel(c.label)); else (placed[key] ||= []).push(c);
+      if (key) (placed[key] ||= []).push(c);
     }
     const svg = globalThis.FinanceMoneyVisuals.signalNetwork(mf.categories.map(c => ({
       ...c, monthly: c.average3,
@@ -387,10 +387,9 @@
     })), SIGNAL_NAMES, { comparedWith: mf.comparedWith, selectedRange: !!mf.range, monthsAnalyzed: mf.monthsAnalyzed });
     const groups = [3, 2, 1].map(count => ({ count, items: Object.entries(placed).filter(([key]) => key.length === count).flatMap(([key, list]) => list.map(c => ({ c, key }))) })).filter(g => g.items.length);
     const heading = { 3: ['All three signals', 'Act now', 'act'], 2: ['Two signals agree', 'Worth changing', 'act'], 1: ['One signal', 'Keep an eye on it', 'watch'] };
-    const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}
-      ${clear.length ? `<p class="pro-venn-clear"><b>No active warning (some readings may need more history):</b> ${clear.map(esc).join(', ')}</p>` : ''}</div>`;
+    const side = `<div class="pro-venn-read"><h4>Reading the overlap</h4>${groups.length ? groups.map(({ count, items }) => `<div class="pro-venn-group tone-${heading[count][2]}"><p class="pro-venn-group-head"><b>${heading[count][0]}</b><span>${heading[count][1]}</span></p><ul>${items.map(({ c, key }) => `<li><strong>${esc(shortLabel(c.label))}</strong><span>${[...key].map(k => SIGNAL_NAMES[k]).join(' + ')}</span></li>`).join('')}</ul></div>`).join('') : '<p class="pro-empty">No category shows a warning signal right now.</p>'}</div>`;
     return card(`Where the signals overlap${how(`Above similar homes: your ${mf.range ? 'selected-period' : '3-month'} average is more than 10% over the U.S. Bureau of Labor Statistics figure for households like yours. Trend indicators retain their 3/6/12-month windows within the selected history. The latest selected month is compared with earlier months in that history. Short ranges may not support all signals.`)}`,
-      '', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every warning and remaining category</summary>${side}</details></div>`, 'span-3');
+      '', `<div class="pro-signal-network">${svg}<details class="money-exact"><summary>Read every warning</summary>${side}</details></div>`, 'span-3');
   }
 
   // Strip plot per category: your 5th-95th percentile range, your median, every month as a dot, last month and the typical home.
@@ -423,9 +422,9 @@
   function spendHeatmap(mf) {
     const hm = mf.heatmap;
     if (!hm?.rows?.length) return '';
-    return card(`Hot and cold months${how('Recorded non-transfer spending, including fixed bills and one-off purchases. Each landscape has its own vertical scale and a dashed usual-month baseline: the median, or the mean when the median is zero. Peaks are above usual; valleys are below. Missing imports can look like low spending. Select a month or point for exact amounts and dollar/percentage differences.')}`,
+    return card(`Hot and cold months${how('Category-by-month spending heatmap. Green is below the category usual, yellow near usual, orange higher and red much higher. Usual is the selected-month median, or the mean when the median is zero. Cells show exact totals and percentage differences. All non-transfer payments count, including fixed bills and one-offs. Missing imports can look like low spending.')}`,
       '',
-      globalThis.FinanceMoneyVisuals.monthlyLandscape(hm), 'span-3');
+      globalThis.FinanceMoneyVisuals.monthlyHeatmap(hm), 'span-3');
   }
 
   // Merchant bubbles: size and colour switch between attributes; the field itself is a small physics simulation (mountBubbles).

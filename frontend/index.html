@@ -494,7 +494,7 @@
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261107-bill-progress">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
-  <link rel="stylesheet" href="analytics.css?v=20261111-compass-trees">
+  <link rel="stylesheet" href="analytics.css?v=20261111-compass-heatmap">
   <link rel="stylesheet" href="landscape.css?v=20261109-cluster-fans">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
   <link rel="stylesheet" href="categories.css?v=20261027a">
@@ -954,9 +954,9 @@
             <article class="kb-feature panel"><h3>Compass plan and headline</h3><p>Start here. It estimates potential monthly savings for categories where spending is at least $10 above a suggested level and is either above a relevant benchmark or showing an upward trend. Suggested levels are based on your own lower-spending months, typical household spending or—when spending is seasonal—the same months last year. The opportunity is a scenario, not a promised saving or a requirement to spend like another household. Review the category evidence before setting a target.</p></article>
             <div class="kb-grid">
               <article class="kb-card"><h3>Where your money flows</h3><p>Shows how average monthly income is divided among fixed bills, everyday categories, debt minimums and money left over. Use it to see the broad shape of your budget and which category contributes most. It reflects imported and classified activity; it cannot include bills or debt payments that were never recorded.</p></article>
-              <article class="kb-card"><h3>Where the signals overlap</h3><p>Combines three separate checks—above a similar household, trending up and unusually high for your own history. Categories with multiple signals deserve earlier review; one signal alone is a prompt to watch, not a verdict. This adds benchmark and unusual-month context beyond Overview's category trend table.</p></article>
+              <article class="kb-card"><h3>Where the signals overlap</h3><p>Combines three separate checks—above a similar household, trending up and unusually high for your own history. Only categories with active warnings appear. Select a signal button to hide or restore its tree; a category disappears if no visible warning connects to it. Categories with multiple signals deserve earlier review; one signal alone is a prompt to watch, not a verdict.</p></article>
               <article class="kb-card"><h3>Who gets your money</h3><p>Totals all non-transfer payments to each merchant in the exact completed months shown, including fixed bills and large purchases. Payments renamed to the same chosen name are combined. Select a bubble for precise money-out totals, separate credits, net outflow and a list of counted transactions. Credits are not automatically treated as refunds or subtracted from spending. The chart shows the largest 36 merchants; its overall spending total includes all merchants. Compare with Transactions using the same months: Transactions' “Last 3 months” includes the current month, while Compass uses completed months. Missing statements can understate any total.</p></article>
-              <article class="kb-card"><h3>Hot and cold months</h3><p>A category-by-month view that makes seasonality, recurring peaks and unusually quiet months easier to see. Hover or focus a cell for the exact value. Compare complete months only; a missing statement is not a zero-spending month.</p></article>
+              <article class="kb-card"><h3>Hot and cold months</h3><p>A category-by-month heatmap shows exact totals and percentage differences from each category's usual selected month. Green is lower, yellow near usual, orange higher and red much higher—not a judgment of financial health. Usual is the median, or the mean when the median is zero. Hover or focus a cell for exact differences. Compare complete months only; a missing statement is not a zero-spending month.</p></article>
               <article class="kb-card"><h3>Your normal range</h3><p>Compares recent category spending with its historical range and shows how exceptional the latest month is relative to prior months. Use it to distinguish a routine fluctuation from a genuine spike, while checking that the history is complete and relevant.</p></article>
               <article class="kb-card"><h3>Technical readings</h3><p>An optional detail table for average vs. typical spending, momentum, moving-average crossovers, volatility bands, how many recent months rose, and whether change came from purchase frequency or purchase size. It is for investigating the “why” behind a signal; the headline and plan are enough for a quick review.</p></article>
             </div>
@@ -2814,8 +2814,8 @@
   <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261107-persistent"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
-  <script src="money-visuals.js?v=20261111-compass-trees"></script>
-  <script src="analytics.js?v=20261111-compass-trees"></script>
+  <script src="money-visuals.js?v=20261111-compass-heatmap"></script>
+  <script src="analytics.js?v=20261111-compass-heatmap"></script>
   <script src="plan.js?v=20261109-mortgage-card"></script>
   <script src="welcome.js?v=20261030c"></script>
 <script src="buckets.js?v=20261108-health"></script>

@@ -5202,7 +5202,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /data-bubble-color="change" aria-pressed="false">Vs previous period/);
   assert.doesNotMatch(html, />Visits<\/button>|>Change<\/button>/);
   assert.doesNotMatch(html, /<p class="pro-footnote">Size: total spending/);
-  assert.match(html, /<details class="money-exact"><summary>Reading the landscape<\/summary>/);
+  assert.match(html, /<details class="money-exact"><summary>Reading the heatmap<\/summary>/);
   assert.match(html, /<details class="money-exact"><summary>Network guide<\/summary>/);
   assert.match(html, /Widest spending swing/);
   assert.match(source('analytics.css'), /\.compass-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
@@ -5211,9 +5211,9 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Credits are shown separately, not deducted/);
   assert.match(html, /Compare with Transactions using these exact months/);
   assert.match(html, /Hot and cold months/);
-  assert.equal((html.match(/class="money-terrain-lane"/g) || []).length, mf.heatmap.rows.length + 1);
-  assert.match(html, /Highest-spend month/);
-  assert.match(html, /Monthly spending landscape/);
+  assert.equal((html.match(/class="money-heat-cell /g) || []).length, mf.heatmap.rows.length * mf.heatmap.months.length);
+  assert.match(html, /Monthly spending heatmap/);
+  assert.doesNotMatch(html, /money-chain-status|About this view|money-terrain-lane/);
   assert.match(html, /data-money-explorer="signals"/);
   assert.match(html, /Similar homes \$[\d,.]+\/mo; difference/);
   assert.match(html, /data-money-reading="0"/);

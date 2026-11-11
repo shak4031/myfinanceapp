@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const esc = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const context = { FinancePro: { format: { esc, money: value => `$${Number(value).toFixed(2)}` } } };
 vm.runInNewContext(readFileSync(new URL('money-visuals.js', import.meta.url), 'utf8'), context);
-const { mosaic, signalNetwork, signalEvidence, monthlyLandscape } = context.FinanceMoneyVisuals;
+const { mosaic, signalNetwork, signalEvidence, monthlyLandscape, monthlyHeatmap } = context.FinanceMoneyVisuals;
 
 test('mosaic areas represent exact proportions and retain small merchants and escaped details', () => {
   const html = mosaic([{ name: '<Big>', value: 75, detail: '3 payments' }, { name: 'Small', value: 25 }, { name: 'Empty', value: 0 }]);
@@ -34,18 +34,22 @@ test('mosaic does not drop tiny merchants and every rectangle contributes its pr
   assert.doesNotMatch(html, /NaN|Infinity|undefined/);
 });
 
-test('signal network shows every category reading without manufacturing warnings', () => {
+test('signal network shows only active warning categories and connections', () => {
   const html = signalNetwork([{ label: 'Dining & coffee', monthly: 240, signals: ['a', 'b'] },
     { label: 'Gas', monthly: 70, signals: ['c'] }, { label: 'Clear category', monthly: 50, signals: [] }],
   { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' });
-  assert.equal((html.match(/<path /g) || []).length, 9);
+  assert.equal((html.match(/<path /g) || []).length, 3);
   assert.match(html, /Dining &amp; coffee/);
   assert.match(html, /\$240\.00/);
   assert.match(html, /2 warning signals/);
-  assert.match(html, /Clear category/);
+  assert.doesNotMatch(html, /Clear category|money-chain-status|money-signal-edge is-within-range|money-signal-edge is-needs-history/);
   assert.doesNotMatch(html, /NaN|undefined/);
   assert.match(html, /not money transfers/);
   assert.match(signalNetwork([], {}), /No category/);
+  const calm = signalNetwork([{ label: 'Clear category', monthly: 50, signals: [] }],
+    { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' });
+  assert.doesNotMatch(calm, /Clear category|<path |NaN|undefined/);
+  assert.match(calm, /No categories have active warning signals/);
 });
 
 test('signal evidence includes exact benchmark deltas and distinguishes unsupported history from calm data', () => {
@@ -97,7 +101,6 @@ test('monthly terrain retains every row and month with baselines, deltas and sel
   assert.match(html, /Aug 2026: \$100\.00; usual \$200\.00; difference -\$100\.00 \(-50\.0%\)/);
   assert.match(html, /own vertical scale/);
   assert.match(html, /missing imports/);
-  assert.match(html, /Compare each category with its usual monthly spending/);
   assert.match(html, /Coral areas:<\/b> more spending than usual/);
   assert.match(html, /Teal areas:<\/b> less spending than usual/);
   assert.match(html, /class="money-node-value">Fixed payments<\/text>/);
@@ -156,7 +159,12 @@ test('diagram signal buttons independently hide and restore trees with click and
     document: { addEventListener: (name, handler) => { listeners[name] = handler; } }
   });
   const edges = ['a', 'b', 'c'].map(key => ({ dataset: { moneyEdge: key }, style: {} }));
-  const nodes = [{ style: {} }];
+  const nodes = ['a', 'ab', 'c'].map((signals, index) => ({
+    dataset: { moneySignals: signals, moneyChoice: String(index) }, style: {}, attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    getAttribute(name) { return this.attributes[name]; }
+  }));
+  const readings = nodes.map(node => ({ dataset: { moneyReading: node.dataset.moneyChoice }, hidden: false }));
   const buttons = ['a', 'b', 'c'].map(key => ({
     dataset: { moneyBranch: key }, tagName: 'g', attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; },
@@ -167,13 +175,16 @@ test('diagram signal buttons independently hide and restore trees with click and
     dataset: {},
     querySelector: () => status,
     querySelectorAll: selector => selector === '[data-money-edge]' ? edges
-      : selector === '[data-money-branch]' ? buttons : nodes
+      : selector === '[data-money-branch]' ? buttons : selector === '[data-money-reading]' ? readings : nodes
   };
   const event = index => ({ target: { closest: () => buttons[index] } });
   listeners.click(event(0));
   assert.equal(edges[0].style.display, 'none');
   assert.equal(edges[1].style.display, '');
   assert.equal(buttons[0].attributes['aria-expanded'], 'false');
+  assert.equal(nodes[0].style.display, 'none', 'category with only the hidden signal disappears');
+  assert.equal(nodes[1].style.display, '', 'category connected to another visible signal remains');
+  assert.equal(readings[0].hidden, true, 'details for disconnected categories are hidden');
   listeners.click(event(0));
   assert.equal(edges[0].style.display, '');
   assert.equal(buttons[0].attributes['aria-expanded'], 'true');
@@ -186,5 +197,28 @@ test('diagram signal buttons independently hide and restore trees with click and
   for (let i = 0; i < 3; i++) listeners.click(event(i));
   assert.equal(nodes[0].style.display, 'none');
   listeners.click(event(2));
-  assert.equal(nodes[0].style.display, '');
+  assert.equal(nodes[0].style.display, 'none');
+  assert.equal(nodes[2].style.display, '');
+});
+
+test('monthly heatmap preserves every category and month with exact totals and relative color bands', () => {
+  const html = monthlyHeatmap({ months: ['Jan', 'Feb', 'Mar', 'Apr', 'May'], rows: [
+    { label: 'Dining <out>', values: [20, 70, 100, 140, 200] },
+    { label: 'Utilities', values: [40, 40, 40, 40, 40], fixed: true }
+  ] });
+  assert.equal((html.match(/class="money-heat-cell /g) || []).length, 10);
+  for (const level of ['much-lower', 'lower', 'usual', 'higher', 'much-higher']) assert.match(html, new RegExp(`is-${level}"`));
+  assert.match(html, /Dining &lt;out&gt;/);
+  assert.match(html, /Dining &lt;out&gt;, May: \$200\.00; usual \$100\.00; difference \+\$100\.00 \(\+100\.0%\)/);
+  assert.match(html, /Fixed payments/);
+  assert.match(html, /missing imports/i);
+  assert.match(html, /scope="row"/);
+  assert.match(html, /scope="col"/);
+  assert.doesNotMatch(html, /NaN|Infinity|undefined/);
+  for (const values of [[0], [75], [0, 0, 90], [0, 0, 0]]) {
+    const sparse = monthlyHeatmap({ months: values.map((_, i) => `Month ${i}`), rows: [{ label: 'Sparse', values }] });
+    assert.doesNotMatch(sparse, /NaN|Infinity|undefined/);
+    if (values.every(value => !value)) assert.match(sparse, /No baseline/);
+  }
+  assert.match(monthlyHeatmap(null), /No monthly spending/);
 });

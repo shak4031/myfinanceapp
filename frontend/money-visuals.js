@@ -38,7 +38,6 @@
         <div class="money-tile-face"><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${(item.value / total * 100).toFixed(1)}%</small><i class="money-tile-bar" aria-hidden="true"></i></div>
         <span class="money-tile-tip">${esc(label)}</span></div>`;
     }).join('')}</div>
-    <details class="money-exact"><summary>About this view</summary><p>Tile area = money out, not transaction count. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p></details>
     <details class="money-exact"><summary>Exact totals and trends for every displayed merchant</summary><ul class="pro-list is-wrap">${rows.map(item =>
       `<li><div><strong>${esc(item.name)}</strong><small>${esc(item.detail || '')}</small></div><strong>${esc(money(item.value))}</strong></li>`).join('')}</ul></details>`;
   }
@@ -114,7 +113,8 @@
   function signalNetwork(categories, signalNames, context = {}) {
     const { esc, money } = format();
     if (!categories.length) return '<p class="pro-empty">No category history available for this network.</p>';
-    const ordered = [...categories].sort((a, b) => b.signals.length - a.signals.length || b.monthly - a.monthly);
+    const ordered = categories.filter(category => category.signals.some(key => Object.hasOwn(signalNames, key)))
+      .sort((a, b) => b.signals.length - a.signals.length || b.monthly - a.monthly);
     const evidence = ordered.map(category => signalEvidence(category, context));
     const height = Math.max(380, ordered.length * 72 + 60);
     const hubs = Object.entries(signalNames).map(([key, label], index) => ({ key, label,
@@ -125,17 +125,17 @@
       const y = 30 + step * (index + 0.5);
       const color = category.signals.length >= 2 ? '#f49eb8' : category.signals.length ? '#f5bd79' : '#72c2ce';
       for (const reading of evidence[index]) {
+        if (!category.signals.includes(reading.key)) continue;
         const hub = hubs.find(item => item.key === reading.key);
         if (!hub) continue;
-        const warning = reading.status === 'warning';
-        paths.push(`<path data-money-edge="${reading.key}" data-money-category="${index}" class="money-signal-edge is-${reading.status}" d="M 255 ${hub.y} C 370 ${hub.y},390 ${y},510 ${y}" stroke="${hub.color}" stroke-width="${warning ? 3 : 1}" fill="none" opacity="${warning ? '.9' : '.22'}"${reading.status === 'needs-history' ? ' stroke-dasharray="3 7"' : ''}><title>${esc(`${category.label}: ${signalNames[reading.key]} - ${reading.status}. ${reading.comparison}`)}</title></path>`);
+        paths.push(`<path data-money-edge="${reading.key}" data-money-category="${index}" class="money-signal-edge is-warning" d="M 255 ${hub.y} C 370 ${hub.y},390 ${y},510 ${y}" stroke="${hub.color}" stroke-width="3" fill="none" opacity=".9"><title>${esc(`${category.label}: ${signalNames[reading.key]}. ${reading.comparison}`)}</title></path>`);
       }
       const label = `${category.label}: ${money(category.monthly)}/mo, ${category.signals.length} warning signals. Select for baselines and deltas.`;
-      nodes.push(`<g tabindex="0" role="button" data-money-choice="${index}" aria-label="${esc(label)}" aria-pressed="${index === 0}"><title>${esc(label)}</title><circle cx="520" cy="${y}" r="${9 + category.signals.length * 3}" fill="${color}"/><text x="545" y="${y - 2}" class="money-node-label">${esc(category.label.length > 35 ? `${category.label.slice(0, 32)}...` : category.label)}</text><text x="545" y="${y + 19}" class="money-node-value">${esc(money(category.monthly))}/mo &#183; ${category.signals.length} warning${category.signals.length === 1 ? '' : 's'}</text></g>`);
+      nodes.push(`<g tabindex="0" role="button" data-money-signals="${category.signals.join('')}" data-money-choice="${index}" aria-label="${esc(label)}" aria-pressed="${index === 0}"><title>${esc(label)}</title><circle cx="520" cy="${y}" r="${9 + category.signals.length * 3}" fill="${color}"/><text x="545" y="${y - 2}" class="money-node-label">${esc(category.label.length > 35 ? `${category.label.slice(0, 32)}...` : category.label)}</text><text x="545" y="${y + 19}" class="money-node-value">${esc(money(category.monthly))}/mo &#183; ${category.signals.length} warning${category.signals.length === 1 ? '' : 's'}</text></g>`);
     });
     const hubMarkup = hubs.map(hub => {
       const readings = evidence.map(items => items.find(item => item.key === hub.key));
-      const warnings = readings.filter(item => item.status === 'warning').length;
+      const warnings = ordered.filter(category => category.signals.includes(hub.key)).length;
       const unavailable = readings.filter(item => item.status === 'needs-history').length;
       return `<g role="button" tabindex="0" data-money-branch="${hub.key}" aria-expanded="true" aria-label="Collapse ${esc(hub.label)} chain"><circle cx="240" cy="${hub.y}" r="15" fill="${hub.color}"/><text x="210" y="${hub.y - 5}" text-anchor="end" class="money-node-label">${esc(hub.label)}</text><text x="210" y="${hub.y + 16}" text-anchor="end" class="money-node-value">${warnings} flagged &#183; ${unavailable} unavailable</text></g>`;
     }).join('');
@@ -144,10 +144,10 @@
       <div class="money-evidence-grid">${evidence[index].map(reading => `<article class="money-evidence is-${reading.status}"><span class="eyebrow">${esc(signalNames[reading.key])}</span><b>${esc(reading.value)}</b><span class="money-reading-status">${reading.key === 'a' && reading.status === 'needs-history' ? 'No comparable survey benchmark' : ({ warning: 'Warning threshold crossed', 'within-range': 'Evaluated - no warning', 'needs-history': 'Not enough comparable history' })[reading.status]}</span><p>${esc(reading.comparison)}</p><small>${esc(reading.rule)}</small></article>`).join('')}</div>
       ${signalTransactions(category)}</section>`).join('');
     return `<div data-money-explorer="signals">
-      <p class="money-chain-status" role="status">All chains expanded.</p>
-      <div class="money-network-wrap" role="region" aria-label="Category signal relationship network" tabindex="0"><svg class="money-network" viewBox="0 0 880 ${height}" role="group" aria-label="Connections show every category reading, not money transfers. Bright links are warnings, muted links are evaluated without warning, dotted links need history.">${paths.join('')}${hubMarkup}${nodes.join('')}</svg></div>
-      <div class="money-choice-list" role="group" aria-label="Inspect a category">${ordered.map((category, index) => `<button type="button" data-money-choice="${index}" aria-pressed="${index === 0}">${esc(category.label)}</button>`).join('')}</div>
-      <details class="money-exact"><summary>Network guide</summary><p>Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0].series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p><p>Select a signal button in the diagram to hide its tree; select it again to restore it. Bright links = warnings; muted = no warning; dotted = unavailable. Node size = warning count, not spending. Select a category for evidence, then expand its transactions.</p></details>
+      <div class="money-network-wrap" role="region" aria-label="Category signal relationship network" tabindex="0"><svg class="money-network" viewBox="0 0 880 ${height}" role="group" aria-label="Connections show active warning signals, not money transfers. Categories without active warnings are omitted.">${paths.join('')}${hubMarkup}${nodes.join('')}</svg></div>
+      ${ordered.length ? '' : '<p class="pro-empty">No categories have active warning signals in this period.</p>'}
+      <div class="money-choice-list" role="group" aria-label="Inspect a category">${ordered.map((category, index) => `<button type="button" data-money-signals="${category.signals.join('')}" data-money-choice="${index}" aria-pressed="${index === 0}">${esc(category.label)}</button>`).join('')}</div>
+      <details class="money-exact"><summary>Network guide</summary><p>Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0]?.series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p><p>Select a signal button in the diagram to hide its tree; select it again to restore it. Only active warnings have links. Categories disappear when none of their warning trees are visible. Node size = warning count, not spending. Select a category for evidence, then expand its transactions.</p></details>
       <div class="money-reading" aria-live="polite">${details}</div></div>`;
   }
 
@@ -155,6 +155,29 @@
     const sorted = [...values].sort((a, b) => a - b), mid = sorted.length >> 1;
     return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   };
+
+  function monthlyHeatmap(history) {
+    const { esc, money } = format();
+    if (!history?.rows?.length || !history.months?.length) return '<p class="pro-empty">No monthly spending history available.</p>';
+    const levels = [
+      ['much-lower', 'Much lower', '#b9dfc1'], ['lower', 'Lower', '#deedb8'],
+      ['usual', 'Near usual', '#f8e6a3'], ['higher', 'Higher', '#f6bc83'],
+      ['much-higher', 'Much higher', '#ee8d88']
+    ];
+    const rows = history.rows.map(row => {
+      const base = median(row.values) || row.values.reduce((sum, value) => sum + value, 0) / row.values.length;
+      const cells = row.values.map((value, index) => {
+        const ratio = base > 0 ? value / base : value > 0 ? Infinity : 1;
+        const level = levels[ratio < .5 ? 0 : ratio < .9 ? 1 : ratio <= 1.1 ? 2 : ratio <= 1.5 ? 3 : 4];
+        const label = `${row.label}, ${history.months[index]}: ${money(value)}; usual ${money(base)}; difference ${difference(value, base)}. ${level[1]} spending.`;
+        return `<td class="money-heat-cell is-${level[0]}" style="--heat-color:${level[2]}"><div tabindex="0" role="img" aria-label="${esc(label)}"><strong>${esc(money(value))}</strong><small>${base > 0 ? esc(percent((value - base) / base)) : 'No baseline'}</small><span class="money-heat-tip">${esc(label)}</span></div></td>`;
+      }).join('');
+      return `<tr><th scope="row">${esc(row.label)}<small>Usual ${esc(money(base))}${row.fixed ? ' · Fixed payments' : ''}</small></th>${cells}</tr>`;
+    }).join('');
+    return `<div class="money-month-heatmap"><div class="money-heat-scroll" role="region" aria-label="Monthly spending heatmap; scroll horizontally for all months" tabindex="0"><table class="money-heat-table"><caption class="sr-only">Category spending by month, colored relative to each category's usual month</caption><thead><tr><th scope="col">Category / month</th>${history.months.map(month => `<th scope="col">${esc(month)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="money-heat-legend" aria-label="Spending relative to usual">${levels.map(level => `<span><i style="background:${level[2]}" aria-hidden="true"></i>${level[1]}</span>`).join('')}</div>
+      <details class="money-exact"><summary>Reading the heatmap</summary><p>Each row is a category and each column is a completed month. Green means lower spending, yellow near usual, orange higher and red much higher. Colors describe amounts, not financial health. Each cell shows the exact total and percentage difference from that category's usual month.</p><p>Usual is the median of selected months, or the mean if the median is zero. Bands: below 50%, 50–90%, 90–110%, 110–150%, and above 150% of usual. Focus or hover a cell for exact differences. Missing imports may look like low or zero spending; all recorded non-transfer payments count, including fixed bills and one-offs.</p></details></div>`;
+  }
 
   function monthlyLandscape(history) {
     const { esc, money } = format();
@@ -233,10 +256,16 @@
       button.setAttribute('aria-expanded', String(expanded));
       if (button.tagName.toLowerCase() === 'g') button.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} signal chain`);
     });
-    explorer.querySelectorAll('.money-network [data-money-choice]').forEach(node => {
-      node.style.display = branches.length ? '' : 'none';
+    const choices = [...explorer.querySelectorAll('[data-money-choice]')];
+    choices.forEach(node => {
+      node.style.display = [...node.dataset.moneySignals].some(key => branches.includes(key)) ? '' : 'none';
     });
-    explorer.querySelector('.money-chain-status').textContent = `${branches.length} of 3 signal trees visible. Select a signal button to hide or restore its tree.`;
+    const visible = choices.filter(node => node.style.display !== 'none');
+    const selected = visible.find(node => node.getAttribute('aria-pressed') === 'true') || visible[0];
+    choices.forEach(node => node.setAttribute('aria-pressed', String(!!selected && node.dataset.moneyChoice === selected.dataset.moneyChoice)));
+    explorer.querySelectorAll('[data-money-reading]').forEach(node => {
+      node.hidden = !selected || node.dataset.moneyReading !== selected.dataset.moneyChoice;
+    });
   }
   globalThis.document?.addEventListener('click', event => {
     const chain = event.target?.closest?.('[data-money-branch]');
@@ -251,5 +280,5 @@
     if (target && ['Enter', ' '].includes(event.key)) { event.preventDefault(); selectReading(target); }
   });
 
-  globalThis.FinanceMoneyVisuals = { mosaic, signalNetwork, signalEvidence, monthlyLandscape };
+  globalThis.FinanceMoneyVisuals = { mosaic, signalNetwork, signalEvidence, monthlyLandscape, monthlyHeatmap };
 })();
