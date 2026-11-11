@@ -101,5 +101,72 @@
     return `<svg class="pro-donut" viewBox="0 0 ${size} ${size}" role="img" aria-label="Spending by category"><g transform="rotate(-90 ${size / 2} ${size / 2})"><circle class="track" cx="${size / 2}" cy="${size / 2}" r="${n(r)}" stroke-width="${thickness}"/>${segments}</g><text class="donut-label" x="50%" y="46%" text-anchor="middle">${esc(centerLabel)}</text><text class="donut-value" x="50%" y="58%" text-anchor="middle">${esc(centerValue)}</text></svg>`;
   }
 
-  window.ProCharts = { PALETTE, bars, plot, sparkline, trendLine, donut, compact, monthShort, niceMax };
+  let marketId = 0;
+  function market({ series, xMax, xTicks = [], pointLabel = String, width = 720, height = 300, label = 'Financial chart', boundary = null }) {
+    const id = `market-${++marketId}`;
+    const pad = { l: 62, r: 82, t: 28, b: 34 };
+    const valid = p => Number.isFinite(p.x) && Number.isFinite(p.v);
+    const all = series.flatMap(s => s.points.filter(valid).map(p => p.v));
+    if (!all.length) return '<p class="pro-empty">No recorded values available for this chart.</p>';
+    const top = niceMax(Math.max(...all, 0));
+    const bottom = Math.min(...all, 0) < 0 ? -niceMax(-Math.min(...all)) : 0;
+    const iw = width - pad.l - pad.r, ih = height - pad.t - pad.b;
+    const x = value => pad.l + value / (xMax || 1) * iw;
+    const y = value => pad.t + (top - value) / (top - bottom || 1) * ih;
+    const baseline = y(0);
+    const colors = { cyan: '#38d9f5', violet: '#ae9bff', amber: '#f6c76a', green: '#50dfb1', rose: '#ff7899', muted: '#8faac5' };
+    const tone = s => colors[s.tone] || colors.cyan;
+    const exact = v => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+    const gradients = series.map((s, i) => `<linearGradient id="${id}-fill-${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tone(s)}" stop-opacity="${s.type === 'bars' ? '.85' : '.32'}"/><stop offset="100%" stop-color="${tone(s)}" stop-opacity="${s.type === 'bars' ? '.18' : '.015'}"/></linearGradient>`).join('');
+    const grid = Array.from({ length: 5 }, (_, i) => {
+      const v = top - (top - bottom) * i / 4, gy = n(y(v));
+      return `<line class="market-grid" x1="${pad.l}" x2="${width - pad.r}" y1="${gy}" y2="${gy}"/><text class="market-axis" x="${pad.l - 10}" y="${gy + 4}" text-anchor="end">${compact(v)}</text>`;
+    }).join('') + xTicks.map(t => `<line class="market-grid market-grid-vertical" x1="${n(x(t.x))}" x2="${n(x(t.x))}" y1="${pad.t}" y2="${height - pad.b}"/><text class="market-axis" x="${n(x(t.x))}" y="${height - 12}" text-anchor="middle">${esc(t.label)}</text>`).join('');
+    const zero = bottom < 0 ? `<line class="market-zero" x1="${pad.l}" x2="${width - pad.r}" y1="${n(baseline)}" y2="${n(baseline)}"/><text class="market-axis" x="${pad.l - 10}" y="${n(baseline - 5)}" text-anchor="end">$0</text>` : '';
+    const split = boundary && boundary.x >= 0 && boundary.x <= xMax ? `<rect class="market-future" x="${n(x(boundary.x))}" y="${pad.t}" width="${n(x(xMax) - x(boundary.x))}" height="${ih}"/><line class="market-boundary" x1="${n(x(boundary.x))}" x2="${n(x(boundary.x))}" y1="${pad.t}" y2="${height - pad.b}"/><text class="market-boundary-label" x="${n(Math.min(width - pad.r - 100, Math.max(pad.l + 4, x(boundary.x) + 8)))}" y="17">${esc(boundary.label)}</text>` : '';
+    const lines = series.map((s, i) => {
+      const points = s.points.filter(valid);
+      if (!points.length) return '';
+      if (s.type === 'bars') {
+        const bw = Math.min(30, iw / Math.max(points.length, 1) * .48);
+        return points.map(p => `<rect class="market-volume" x="${n(x(p.x) - bw / 2)}" y="${n(Math.min(y(p.v), baseline))}" width="${n(bw)}" height="${n(Math.abs(y(p.v) - baseline))}" rx="3" fill="url(#${id}-fill-${i})" stroke="${tone(s)}" stroke-opacity=".5"/>`).join('');
+      }
+      const segments = [];
+      let segment = [];
+      for (const p of s.points) {
+        if (valid(p)) segment.push(p);
+        else if (segment.length) { segments.push(segment); segment = []; }
+      }
+      if (segment.length) segments.push(segment);
+      const paths = segments.map(points => {
+        const d = points.map((p, index) => `${index ? 'L' : 'M'}${n(x(p.x))},${n(y(p.v))}`).join(' ');
+        return `${s.area ? `<path d="${d} L${n(x(points.at(-1).x))},${n(baseline)} L${n(x(points[0].x))},${n(baseline)} Z" fill="url(#${id}-fill-${i})"/>` : ''}<path class="market-line${s.dashed ? ' is-projected' : ''}" d="${d}" stroke="${tone(s)}"/>`;
+      }).join('');
+      const last = points.at(-1);
+      return `${paths}${points.map(p => `<circle class="market-point" cx="${n(x(p.x))}" cy="${n(y(p.v))}" r="${points.length === 1 ? 4 : 2.5}" fill="${tone(s)}"/>`).join('')}${s.endpoint ? `<line class="market-price-guide" x1="${pad.l}" x2="${width - pad.r}" y1="${n(y(last.v))}" y2="${n(y(last.v))}" stroke="${tone(s)}"/><circle class="market-end-halo" cx="${n(x(last.x))}" cy="${n(y(last.v))}" r="9" fill="${tone(s)}"/><circle cx="${n(x(last.x))}" cy="${n(y(last.v))}" r="4" fill="${tone(s)}" stroke="#0c1e35" stroke-width="2"/><rect x="${width - pad.r + 5}" y="${n(y(last.v) - 11)}" width="72" height="22" rx="5" fill="${tone(s)}"/><text class="market-price" x="${width - pad.r + 41}" y="${n(y(last.v) + 4)}" text-anchor="middle">${esc(compact(last.v))}</text>` : ''}`;
+    }).join('');
+    const positions = [...new Set(series.flatMap(s => s.points.filter(valid).map(p => p.x)))].sort((a, b) => a - b);
+    const details = positions.map((position, index) => {
+      const entries = series.flatMap(s => {
+        const p = s.points.find(p => valid(p) && p.x === position);
+        return p ? [{ name: s.name, value: p.v, color: tone(s) }] : [];
+      });
+      return { position, entries, title: pointLabel(position), index };
+    });
+    const targets = details.map(({ position, entries, title, index }) => {
+      const left = index ? (x(positions[index - 1]) + x(position)) / 2 : pad.l;
+      const right = index < positions.length - 1 ? (x(position) + x(positions[index + 1])) / 2 : width - pad.r;
+      const tw = Math.min(260, iw), th = 32 + entries.length * 22;
+      const tx = Math.max(pad.l, Math.min(width - pad.r - tw, x(position) + 12));
+      const description = `${title}. ${entries.map(e => `${e.name}: ${exact(e.value)}`).join('. ')}`;
+      return `<g class="market-inspect" tabindex="0" role="img" aria-label="${esc(description)}"><rect class="market-hit" x="${n(left)}" y="${pad.t}" width="${n(right - left)}" height="${ih}"/><g class="market-inspection" pointer-events="none"><line class="market-crosshair" x1="${n(x(position))}" x2="${n(x(position))}" y1="${pad.t}" y2="${height - pad.b}"/><rect class="market-tooltip" x="${n(tx)}" y="${pad.t + 8}" width="${tw}" height="${th}" rx="8"/><text class="market-tooltip-title" x="${n(tx + 12)}" y="${pad.t + 29}">${esc(title)}</text>${entries.map((e, i) => `<text class="market-tooltip-label" x="${n(tx + 12)}" y="${pad.t + 51 + i * 22}" fill="${e.color}">${esc(e.name)}</text><text class="market-tooltip-value" x="${n(tx + tw - 12)}" y="${pad.t + 51 + i * 22}" text-anchor="end">${esc(exact(e.value))}</text>`).join('')}</g></g>`;
+    }).join('');
+    const table = `<details class="market-data"><summary>Exact chart values</summary><div class="table-scroll"><table><caption>${esc(label)}. Only supplied data points are listed; blank cells have no value.</caption><thead><tr><th scope="col">Period</th>${series.map(s => `<th scope="col">${esc(s.name)}</th>`).join('')}</tr></thead><tbody>${details.map(d => `<tr><th scope="row">${esc(d.title)}</th>${series.map(s => {
+      const p = s.points.find(p => valid(p) && p.x === d.position);
+      return `<td>${p ? esc(exact(p.v)) : '&mdash;'}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+    return `<div class="market-chart"><svg class="pro-chart pro-market-chart" viewBox="0 0 ${width} ${height}" role="group" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">${esc(label)}</title><desc id="${id}-desc">Hover, tap or tab through data points for exact values. Dashed lines are estimates; lines connect supplied points without inventing intermediate values.</desc><defs>${gradients}</defs><rect class="market-backdrop" x="${pad.l}" y="${pad.t}" width="${iw}" height="${ih}" rx="4"/>${split}${grid}${zero}${lines}${targets}</svg><p class="market-chart-hint">Hover, tap or tab to inspect &middot; USD</p>${table}</div>`;
+  }
+
+  window.ProCharts = { PALETTE, bars, plot, market, sparkline, trendLine, donut, compact, monthShort, niceMax };
 })();

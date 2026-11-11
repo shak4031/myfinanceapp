@@ -288,6 +288,23 @@ to the existing transaction view. Credits, internal transfers, current-month
 activity and dates outside the analyzed history are not included in this drill-down.
 Both explorers support keyboard selection and horizontal scrolling on small screens.
 
+## Analytics overview charts
+
+Month-end forecast, 6-month cash flow and Monthly spend trend use market-style
+SVG charts: dark plotting surfaces, gradient area fills, reference grids, point
+markers and endpoint price labels. These remain household spending and balance
+charts, not securities charts; no OHLC candles, intraday prices or extra data
+points are invented. The forecast shades the estimated period and uses a dashed
+projection; cash flow is explicitly a dashed scenario with a visible zero line
+when balances cross below zero. Monthly spending uses actual monthly bars with
+income and the three-month moving average overlaid. The average begins only
+after three supplied monthly values.
+
+Hover, tap or tab through chart periods for exact USD values and a crosshair.
+Each chart also offers **Exact chart values**, a keyboard-accessible data table.
+Phone layouts retain a readable chart width in a horizontally scrollable region.
+Existing calculation methods, Pro access and missing-balance states are unchanged.
+
 ## Financial landscape
 
 Open **Financial landscape** in the sidebar, Dashboard or Accounts (`#landscape`).
