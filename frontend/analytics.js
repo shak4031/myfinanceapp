@@ -368,13 +368,9 @@
     const heads = [[0, 'MONEY IN'], [MID_X, 'WHERE IT GOES'], [DST_X, 'BY CATEGORY · SHARE OF INCOME']]
       .map(([x, text]) => `<text x="${x}" y="12" class="pro-sk-head">${text}</text>`).join('');
     const svg = `${heads}<g transform="translate(0 ${TOP})">${bands}${nodes}${labels}</g>`;
-    const per100 = value => money(Math.round(value / f.income * 100), true);
-    const split = [['fixed', f.fixed.total], ['discretionary', f.discretionary.total], ['debt payments', f.debt.total]]
-      .filter(([, v]) => v > 0).map(([k, v]) => `<b>${per100(v)}</b> ${k}`);
-    split.push(f.left >= 0 ? `<b class="tone-good">${per100(f.left)}</b> left over` : `<b class="tone-bad">${per100(-f.left)}</b> more than came in`);
     const svgEl = `${scrollRegion('Money flow chart', `<svg class="pro-sankey" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money flow: income ${money(f.income, true)} a month to fixed expenses ${money(f.fixed.total, true)}, discretionary ${money(f.discretionary.total, true)}, debt payments ${money(f.debt.total, true)} and left over ${money(f.left, true)}"><defs>${defs}</defs>${svg}</svg>`, 'pro-sankey-wrap')}<p class="pro-sk-legend"><span><i style="background:${TONE_COLORS.act}"></i>Act on it</span><span><i style="background:${TONE_COLORS.watch}"></i>Worth watching</span></p>`;
     return card(`Where your money flows${how(`Monthly average of ${mf.range ? `the available completed months from ${mf.range.from} through ${mf.range.to}` : `the last ${f.months} full month${f.months === 1 ? '' : 's'}`}. Transfers between your own accounts are left out. ${mf.range ? 'This historical view uses recorded activity only, not current debt minimums or the dashboard forecast.' : '"Left over" is the same typical monthly surplus your dashboard shows.'} Debt payments are mortgage, auto, card, student and other loan payments plus interest charges (a mortgage counts here even though it is also a fixed bill)${f.debt.unrecorded ? ', including minimums for debts you added but have not imported yet' : ''}. Fixed expenses are other payments marked as fixed; everything else is discretionary. Red and amber ribbons are categories the Compass flags.`)}`,
-      '', `<details class="money-exact"><summary>Per $100 of income</summary><p>${split.join(' &middot; ')}</p>${shortfall > 0 ? '<p>Income and the shortfall are shared proportionally across all spending groups. This illustration does not identify which payments used savings or borrowing.</p>' : ''}</details>${svgEl}`, 'span-3');
+      '', `${shortfall > 0 ? '<p class="pro-footnote">Income and the shortfall are shared proportionally across all spending groups. This illustration does not identify which payments used savings or borrowing.</p>' : ''}${svgEl}`, 'span-3');
   }
 
   const SIGNAL_NAMES = { a: 'Above similar homes', b: 'Trending up', c: 'Unusual latest month' };

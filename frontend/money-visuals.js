@@ -141,14 +141,13 @@
     }).join('');
     const details = ordered.map((category, index) => `<section data-money-reading="${index}"${index ? ' hidden' : ''} aria-label="${esc(category.label)} comparison details">
       <h3>${esc(category.label)} <small>${esc(money(category.monthly))}/mo &#183; ${context.selectedRange ? 'selected-period' : 'latest 3-month'} average</small></h3>
-      <button type="button" class="btn btn-secondary btn-compact" data-money-focus-category="${index}">Focus this category's chain</button>
       <div class="money-evidence-grid">${evidence[index].map(reading => `<article class="money-evidence is-${reading.status}"><span class="eyebrow">${esc(signalNames[reading.key])}</span><b>${esc(reading.value)}</b><span class="money-reading-status">${reading.key === 'a' && reading.status === 'needs-history' ? 'No comparable survey benchmark' : ({ warning: 'Warning threshold crossed', 'within-range': 'Evaluated - no warning', 'needs-history': 'Not enough comparable history' })[reading.status]}</span><p>${esc(reading.comparison)}</p><small>${esc(reading.rule)}</small></article>`).join('')}</div>
       ${signalTransactions(category)}</section>`).join('');
-    return `<div data-money-explorer="signals"><details class="money-exact"><summary>Network guide</summary><p>Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0].series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p><p>Select a signal hub to collapse/expand its chain; Focus hides other chains. Bright links = warnings; muted = no warning; dotted = unavailable. Node size = warning count, not spending. Select a category for evidence, then expand its transactions. Reset restores hidden chains.</p></details>
-      <div class="money-chain-controls" aria-label="Network chain controls">${hubs.map(hub => `<div><button type="button" data-money-branch="${hub.key}" aria-expanded="true">${esc(hub.label)}</button><button type="button" data-money-focus-branch="${hub.key}">Focus</button></div>`).join('')}<button type="button" data-money-reset>Expand all / reset focus</button></div>
+    return `<div data-money-explorer="signals">
       <p class="money-chain-status" role="status">All chains expanded.</p>
       <div class="money-network-wrap" role="region" aria-label="Category signal relationship network" tabindex="0"><svg class="money-network" viewBox="0 0 880 ${height}" role="group" aria-label="Connections show every category reading, not money transfers. Bright links are warnings, muted links are evaluated without warning, dotted links need history.">${paths.join('')}${hubMarkup}${nodes.join('')}</svg></div>
       <div class="money-choice-list" role="group" aria-label="Inspect a category">${ordered.map((category, index) => `<button type="button" data-money-choice="${index}" aria-pressed="${index === 0}">${esc(category.label)}</button>`).join('')}</div>
+      <details class="money-exact"><summary>Network guide</summary><p>Compared with ${esc(context.comparedWith || 'the household survey benchmark')}. ${context.monthsAnalyzed || ordered[0].series?.length || 0} completed months available. Short selected ranges can make trend and unusual-month tests unavailable; choose 12 or 24 months above to investigate.</p><p>Select a signal button in the diagram to hide its tree; select it again to restore it. Bright links = warnings; muted = no warning; dotted = unavailable. Node size = warning count, not spending. Select a category for evidence, then expand its transactions.</p></details>
       <div class="money-reading" aria-live="polite">${details}</div></div>`;
   }
 
@@ -215,10 +214,6 @@
     const explorer = target.closest('[data-money-explorer]');
     if (!explorer) return;
     const choice = target.dataset.moneyChoice;
-    if (explorer.dataset?.moneyFocusCategory !== undefined) {
-      explorer.dataset.moneyFocusCategory = choice;
-      updateChains(target);
-    }
     explorer.querySelectorAll('[data-money-choice]').forEach(node => node.setAttribute('aria-pressed', String(node.dataset.moneyChoice === choice)));
     explorer.querySelectorAll('[data-money-reading]').forEach(node => { node.hidden = node.dataset.moneyReading !== choice; });
     explorer.querySelector('.money-reading')?.scrollIntoView?.({ block: 'nearest' });
@@ -227,23 +222,11 @@
     const explorer = target.closest('[data-money-explorer="signals"]');
     if (!explorer) return;
     let branches = explorer.dataset.moneyBranches ?? 'abc';
-    if (target.hasAttribute('data-money-reset')) {
-      branches = 'abc';
-      delete explorer.dataset.moneyFocusCategory;
-    } else if (target.dataset.moneyFocusBranch) {
-      branches = target.dataset.moneyFocusBranch;
-      delete explorer.dataset.moneyFocusCategory;
-    } else if (target.dataset.moneyBranch) {
-      const key = target.dataset.moneyBranch;
-      branches = branches.includes(key) ? branches.replace(key, '') : `${branches}${key}`;
-    } else if (target.dataset.moneyFocusCategory !== undefined) {
-      explorer.dataset.moneyFocusCategory = target.dataset.moneyFocusCategory;
-      branches = 'abc';
-    }
+    const key = target.dataset.moneyBranch;
+    branches = branches.includes(key) ? branches.replace(key, '') : `${branches}${key}`;
     explorer.dataset.moneyBranches = branches;
-    const focus = explorer.dataset.moneyFocusCategory;
     explorer.querySelectorAll('[data-money-edge]').forEach(edge => {
-      edge.style.display = branches.includes(edge.dataset.moneyEdge) && (focus === undefined || focus === edge.dataset.moneyCategory) ? '' : 'none';
+      edge.style.display = branches.includes(edge.dataset.moneyEdge) ? '' : 'none';
     });
     explorer.querySelectorAll('[data-money-branch]').forEach(button => {
       const expanded = branches.includes(button.dataset.moneyBranch);
@@ -251,13 +234,12 @@
       if (button.tagName.toLowerCase() === 'g') button.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} signal chain`);
     });
     explorer.querySelectorAll('.money-network [data-money-choice]').forEach(node => {
-      const visible = focus === undefined || node.dataset.moneyChoice === focus;
-      node.style.display = visible ? '' : 'none';
+      node.style.display = branches.length ? '' : 'none';
     });
-    explorer.querySelector('.money-chain-status').textContent = `${branches.length} of 3 signal chains expanded.${focus === undefined ? '' : ' Focused on one category; other category nodes are hidden.'} Use Expand all / reset focus to restore the full map.`;
+    explorer.querySelector('.money-chain-status').textContent = `${branches.length} of 3 signal trees visible. Select a signal button to hide or restore its tree.`;
   }
   globalThis.document?.addEventListener('click', event => {
-    const chain = event.target?.closest?.('[data-money-branch], [data-money-focus-branch], [data-money-focus-category], [data-money-reset]');
+    const chain = event.target?.closest?.('[data-money-branch]');
     if (chain) { updateChains(chain); return; }
     const target = event.target?.closest?.('[data-money-choice]');
     if (target) selectReading(target);

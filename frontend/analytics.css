@@ -44,11 +44,6 @@
 .money-reading h3 small { display: block; margin-top: 5px; font-size: 12px; font-weight: 500; color: #526576; }
 .money-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .money-reading .money-evidence-grid { margin-top: 16px; }
-.money-chain-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 14px 0; }
-.money-chain-controls > div { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 9px; overflow: hidden; }
-.money-chain-controls button { padding: 8px 11px; background: #f8fafc; border: 0; font: inherit; font-size: 12px; cursor: pointer; color: #334155; }
-.money-chain-controls button[aria-expanded="true"] { background: #23596b; color: #fff; }
-.money-chain-controls > button { border: 1px solid #cbd5e1; border-radius: 9px; }
 .money-chain-status { color: #526576; font-size: 12px; line-height: 1.6; }
 .money-transaction-branch { margin-top: 18px; border-top: 1px solid #d5e0e6; padding-top: 14px; }
 .money-transaction-branch summary { cursor: pointer; font-weight: 650; color: #23596b; line-height: 1.8; }

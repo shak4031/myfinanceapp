@@ -146,6 +146,45 @@ test('transaction chain groups counted payments and excluded one-offs by month w
   assert.match(html, /href="#transactions\/12">&lt;Cafe&gt;/);
   assert.match(html, /2026-09 &#183; \$25\.00 counted/);
   assert.match(html, /data-money-branch="a" aria-expanded="true"/);
-  assert.match(html, /data-money-focus-branch="b"/);
-  assert.match(html, /data-money-focus-category="0"/);
+  assert.doesNotMatch(html, /money-chain-controls|data-money-focus|data-money-reset/);
+  assert.equal((html.match(/data-money-branch=/g) || []).length, 3);
+});
+
+test('diagram signal buttons independently hide and restore trees with click and keyboard', () => {
+  const listeners = {};
+  vm.runInNewContext(readFileSync(new URL('money-visuals.js', import.meta.url), 'utf8'), {
+    document: { addEventListener: (name, handler) => { listeners[name] = handler; } }
+  });
+  const edges = ['a', 'b', 'c'].map(key => ({ dataset: { moneyEdge: key }, style: {} }));
+  const nodes = [{ style: {} }];
+  const buttons = ['a', 'b', 'c'].map(key => ({
+    dataset: { moneyBranch: key }, tagName: 'g', attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    closest() { return explorer; }
+  }));
+  const status = {};
+  const explorer = {
+    dataset: {},
+    querySelector: () => status,
+    querySelectorAll: selector => selector === '[data-money-edge]' ? edges
+      : selector === '[data-money-branch]' ? buttons : nodes
+  };
+  const event = index => ({ target: { closest: () => buttons[index] } });
+  listeners.click(event(0));
+  assert.equal(edges[0].style.display, 'none');
+  assert.equal(edges[1].style.display, '');
+  assert.equal(buttons[0].attributes['aria-expanded'], 'false');
+  listeners.click(event(0));
+  assert.equal(edges[0].style.display, '');
+  assert.equal(buttons[0].attributes['aria-expanded'], 'true');
+  let prevented = false;
+  listeners.keydown({ ...event(1), key: 'Enter', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(edges[1].style.display, 'none');
+  listeners.keydown({ ...event(1), key: ' ', preventDefault() {} });
+  assert.equal(edges[1].style.display, '');
+  for (let i = 0; i < 3; i++) listeners.click(event(i));
+  assert.equal(nodes[0].style.display, 'none');
+  listeners.click(event(2));
+  assert.equal(nodes[0].style.display, '');
 });

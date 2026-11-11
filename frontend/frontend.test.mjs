@@ -5179,7 +5179,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.ok(mf.insights.length >= 2 && mf.insights.length <= 4);
   assert.match(html, /Where your money flows/);
   assert.match(html, /<svg class="pro-sankey"[^>]*aria-label="Money flow: income/);
-  assert.match(html, /<details class="money-exact"><summary>Per \$100 of income<\/summary><p>.*left over/);
+  assert.doesNotMatch(html, /Per \$100 of income/);
   assert.match(html, /<svg class="money-network"/);
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual latest month/);
   assert.match(html, /Category signal relationship network/);
@@ -5228,6 +5228,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /class="pro-sk-in">Fixed expenses(?:<\/text>|<tspan)/);
   assert.equal((html.match(/<linearGradient id="pro-sk-g/g) || []).length, (html.match(/class="pro-sk-band"/g) || []).length);
   assert.match(html, /class="pro-sk-legend"/);
+  assert.doesNotMatch(html, /Per \$100 of income|money-chain-controls|data-money-focus|data-money-reset/);
   await f.context.loadAnalyticsPage(true);
   assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
 
