@@ -1,33 +1,29 @@
-// MyFinance Pro analytics: the Overview tab (KPIs, forecast, cash flow, trends, category signals, recurring charges and more)
-// and the Spending Compass tab (household benchmarks and chart-style signals with realistic savings).
+// One completed-month period is shared by Analytics and household benchmarks.
 (() => {
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
   const recurringFilters = { status: 'active', kind: 'all', search: '' };
-  const compassRanges = new Map();
-  const panelFlow = key => compassRanges.get(key)?.data || current?.moneyFlow;
+  let period = { preset: '3' }, periodError = '', merchantView = 'bubbles';
   const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
   const lastCompleteMonth = () => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth() - 1; };
-  function rangeControls(key, title) {
+  function rangeControls() {
     const { esc } = pro().format;
-    const state = compassRanges.get(key);
+    const state = period;
     const end = lastCompleteMonth();
     const preset = state?.preset || '3';
     const option = (value, label) => `<option value="${value}"${preset === value ? ' selected' : ''}>${label}</option>`;
-    return `<form class="compass-range" data-compass-range="${key}" aria-label="${esc(title)} date range">
+    return `<form class="compass-range panel analytics-global-range" data-compass-range="all" aria-label="All Analytics cards date range">
+      <div><strong>One period. Your whole picture.</strong><small>Applies to Overview and Spending Compass</small></div>
       <label>Time period<select name="preset">${window.monthRangePresets.map(({ months, label }) => option(String(months), label)).join('')}${option('custom', 'Choose months…')}</select></label>
       <label${preset === 'custom' ? '' : ' hidden'}>Start month<input type="month" name="from" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.from || monthKey(end - 2))}"></label>
       <label${preset === 'custom' ? '' : ' hidden'}>End month<input type="month" name="to" required min="1900-01" max="${monthKey(end)}" value="${esc(state?.to || monthKey(end))}"></label>
       <button type="submit" class="btn btn-secondary btn-compact">Apply</button>
-      <p class="compass-range-status" role="status">${state?.error ? esc(state.error) : state?.loading ? 'Updating this panel…' : state?.data ? `${esc(state.from)} through ${esc(state.to)} · ${state.data.monthsAnalyzed} of ${state.data.range.months} completed months available. Missing statements can understate totals.` : 'Last 3 completed months · missing statements can understate totals. Choose a period to explore.'}</p></form>`;
+      <p class="compass-range-status" role="${periodError ? 'alert' : 'status'}">${periodError ? esc(periodError) : `${esc(current?.range?.from || state.from)} through ${esc(current?.range?.to || state.to)} · ${current?.monthsOfHistory ?? 0} of ${current?.range?.months ?? 3} months have recorded activity. Missing statements can understate totals.`}</p></form>`;
   }
   function compassPanel(key, title, renderer, base) {
     const finish = globalThis.FinancePerformance?.begin('cpu', `compass.${key}`);
-    const state = compassRanges.get(key);
-    const mf = state?.data || base;
-    const body = state && !state.data ? `<p class="pro-empty panel">${pro().format.esc(state.error || 'Loading the selected history…')}</p>`
-      : ['signals', 'range', 'readings'].includes(key) && !mf.categories.length ? '' : renderer(mf);
-    const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${rangeControls(key, title)}${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
+    const body = ['signals', 'range', 'readings'].includes(key) && !base.categories.length ? '' : renderer(base);
+    const html = `<section class="compass-panel span-3" data-compass-panel="${key}" aria-label="${title}">${body || '<p class="pro-empty panel">Not enough imported activity for this panel in the selected period.</p>'}</section>`;
     finish?.();
     return html;
   }
@@ -136,7 +132,7 @@
     const sma3 = s.spend.map((_, i) => i < 2 ? null : (s.spend[i] + s.spend[i - 1] + s.spend[i - 2]) / 3);
     const body = `${scrollRegion('Monthly spending chart', bars({ labels: a.months.map(monthShort), values: s.spend, lines: [{ values: sma3, className: 'sma' }, { values: s.income, className: 'income' }], label: 'Monthly spending' }), 'pro-chart-scroll')}
       <div class="pro-legend"><span class="bar">Spending</span><span class="sma">3-month moving average</span><span class="income">Income</span></div>`;
-    return card('Monthly spend trend', 'Twelve months of spending with a 3-month moving average', body, 'span-2');
+    return card('Monthly spend trend', 'Selected completed months · income and a 3-month moving average', body, 'span-2');
   }
 
   const SIGNAL_TEXT = { above: 'Running hot', below: 'Cooling', inline: 'In line', new: 'New' };
@@ -178,12 +174,12 @@
     const shown = unmarked.filter(s => (recurringFilters.status === 'all' || (recurringFilters.status === 'active' ? s.active : !s.active))
       && (recurringFilters.kind === 'all' || (recurringFilters.kind === 'bill' ? s.likelyBill : !s.likelyBill))
       && `${s.merchant} ${s.category}`.toLowerCase().includes(recurringFilters.search.trim().toLowerCase()));
-    const list = shown.map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; ${s.active ? `next ${dateShort(s.nextDate)}` : 'stopped'}${s.likelyBill ? ' &middot; looks like a bill' : ''}</small></div>
+    const list = shown.map(s => `<li class="${s.active ? '' : 'is-inactive'}"><div><strong>${esc(s.merchant)}</strong><small>${esc(s.cadence)} &middot; ${esc(s.category)} &middot; ${s.active ? `pattern would next fall on ${dateShort(s.nextDate)}` : 'stopped'}${s.likelyBill ? ' &middot; looks like a bill' : ''}</small></div>
       <div class="num"><strong>${money(s.amount)}</strong>${s.priceChangePct > 0.02 ? `<small class="pro-move is-bad">▲ ${Math.round(s.priceChangePct * 100)}% price increase</small>` : `<small>${money(s.annualCost, true)} / yr</small>`}${s.active && s.id != null ? `<button type="button" class="btn btn-secondary btn-compact" data-analytics-action="mark-fixed" data-id="${esc(s.id)}" data-merchant="${esc(s.merchant)}" title="Mark every ${esc(s.merchant)} charge as a fixed payment, including future imports">Mark fixed</button>` : ''}</div></li>`).join('');
     const note = fixedCount ? `<p class="muted">${fixedCount} other recurring payment${fixedCount === 1 ? ' is' : 's are'} already marked fixed and on your bill calendar.</p>` : '';
     const option = (value, label, selected) => `<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`;
     const body = `<p class="eyebrow">SPOT THE REPEAT · BUILD YOUR BILL CALENDAR</p><div class="pro-mini-stats"><div><span>Not marked fixed${how('Charges from the same merchant at a steady price on a regular schedule (weekly, monthly, quarterly or yearly) where none of the charges is marked as a fixed payment. Groceries, gas, dining, shopping and transfers between your own accounts are left out. Mark real bills as fixed so they appear on your bill calendar and month-end forecast; review the rest and cancel what you no longer use.')}</span><strong>${active.length}</strong></div><div><span>Per month</span><strong>${money(monthly, true)}</strong></div><div><span>Per year</span><strong>${money(monthly * 12, true)}</strong></div><div><span>Price increases</span><strong class="${increases.length ? 'is-bad' : ''}">${increases.length}</strong></div></div>
-      <p class="recurring-scope">Totals cover all active candidates, regardless of the filters below. Stopped payments are historical patterns, not upcoming bills.</p>
+      <p class="recurring-scope">Totals cover all active candidates, regardless of the filters below. Active/stopped is assessed at the end of ${esc(a.range.to)}, not today. Monthly and yearly costs extrapolate patterns found within this period; they are not actual period totals. Stopped payments are historical patterns, not upcoming bills.</p>
       <div class="recurring-filters"><label>Payment status<select data-recurring-filter="status">${option('active', 'Active payments', recurringFilters.status)}${option('stopped', 'Stopped patterns', recurringFilters.status)}${option('all', 'All patterns', recurringFilters.status)}</select></label>
         <label>Payment type<select data-recurring-filter="kind">${option('all', 'All types', recurringFilters.kind)}${option('bill', 'Likely bills', recurringFilters.kind)}${option('other', 'Other recurring charges', recurringFilters.kind)}</select></label>
         <label class="recurring-search">Find a payment<input type="search" data-recurring-filter="search" placeholder="Merchant or category" value="${esc(recurringFilters.search)}"></label></div>
@@ -217,7 +213,7 @@
     const longNames = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
     const max = Math.max(...a.weekdays, 1), peak = a.weekdays.indexOf(Math.max(...a.weekdays));
     const bars = a.weekdays.map((v, i) => `<div class="pro-weekday${i === peak && v > 0 ? ' is-peak' : ''}"><span style="height:${Math.max(3, (v / max) * 100).toFixed(1)}%" title="${names[i]}: ${money(v, true)}"></span><small>${names[i]}</small></div>`).join('');
-    const note = a.weekdays[peak] > 0 ? `${longNames[peak]} are your biggest spending day (${money(a.weekdays[peak], true)} in 90 days).` : 'Not enough recent activity yet.';
+    const note = a.weekdays[peak] > 0 ? `${longNames[peak]} are your biggest spending day (${money(a.weekdays[peak], true)} in this period).` : 'Not enough recent activity yet.';
     const total = a.weekdays.reduce((s, v) => s + v, 0);
     if (!total) return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div>`);
     const weekend = a.weekdays[0] + a.weekdays[6];
@@ -225,7 +221,7 @@
     const stats = [
       ['Weekdays (Mon&ndash;Fri)', `${money(total - weekend, true)} &middot; ${pct((total - weekend) / total)}`],
       ['Weekends', `${money(weekend, true)} &middot; ${pct(weekend / total)}`],
-      ['Average week', money(total / (90 / 7), true)],
+      ['Average week', money(total / (a.days / 7), true)],
       ['Quietest day', longNames[quiet].slice(0, -1)]
     ].map(([k, v]) => `<li><span>${k}</span><strong>${v}</strong></li>`).join('');
     return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div><ul class="pro-weekday-table">${stats}</ul>`);
@@ -442,7 +438,10 @@
   function vendorField(mf) {
     const { money, esc } = pro().format;
     const v = mf.vendors;
-    if (!v?.items?.length) return '';
+    if (!v?.items?.length) return card('Who gets your money', '', '<p class="pro-empty">No merchant spending in this period.</p>', 'span-3');
+    const viewToggle = `<div class="pro-seg merchant-view" role="group" aria-label="Merchant visualization">${['bubbles', 'heatmap'].map(view => `<button type="button" data-analytics-action="merchant-view" data-merchant-view="${view}" aria-pressed="${merchantView === view}">${view === 'bubbles' ? 'Bubbles' : 'Heatmap'}</button>`).join('')}</div>`;
+    if (merchantView === 'heatmap') return card(`Who gets your money${how('Tile area represents total recorded spending. Red means a higher monthly average than the preceding period; green means lower. New or incomparable merchants are neutral. A spending increase is not necessarily bad.')}`, `${esc(mf.range.from)} through ${esc(mf.range.to)}`,
+      `${viewToggle}${globalThis.FinanceMoneyVisuals.mosaic(v.items.map(item => ({ name: item.name, value: item.amount, category: item.category, change: item.change, isNew: item.isNew, detail: `${item.transactions} payments; ${item.isNew ? 'new in this period' : item.change == null ? 'comparison unavailable' : `${(item.change * 100).toFixed(1)}% vs previous period`}` })))}`, 'span-3 pro-merchants');
     const top5 = v.items.slice(0, 5).reduce((s, i) => s + (i.share || 0), 0);
     const widest = [...v.items].filter(item => item.swingPct != null).sort((a, b) => b.swingPct - a.swingPct)[0];
     const seg = (kind, value, label, active) => `<button type="button" data-bubble-${kind}="${value}" aria-pressed="${active}">${label}</button>`;
@@ -455,7 +454,7 @@
     const aside = `<details class="money-exact"><summary>Period and coverage</summary><p>All non-transfer payments count, including fixed bills and large purchases. Credits are shown separately, not deducted from spending. Showing ${v.items.length} of ${v.merchantCount ?? v.items.length} merchants. Compare with Transactions using these exact months; its “Last 3 months” includes the current month, while Compass uses completed months.</p></details>`;
     return card(`Who gets your money${how(`Your ${v.items.length} biggest merchants over ${v.months} completed months. All non-transfer debits count, including fixed bills and large purchases. Renamed payments with the same chosen name are combined. Credits are shown separately. Size shows total money out or actual payment count, not store visits. Category uses one colour per category. Spending swing % is (highest monthly spend minus lowest monthly spend) divided by average monthly spend across the selected period. At least 2 months are needed. Vs previous period compares monthly average spend with the preceding period (${v.compareMonths} comparison months available); red is more and green is less. Drag bubbles to rearrange them.`)}`,
       `${mf.range ? `${esc(mf.range.from)} through ${esc(mf.range.to)}` : `Last ${v.months} completed months`} &middot; ${money(v.totalAmount ?? v.total * v.months)} money out &middot; ${money(v.total)} a month`,
-      `${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
+      `${viewToggle}${controls}<div class="pro-bubbles" id="pro-bubbles" role="group" aria-label="Merchant bubbles">${bubbles}</div>
        <div class="pro-bubble-detail" id="pro-bubble-detail" aria-live="polite">${lede}</div><div class="pro-bubble-legend" id="pro-bubble-legend"></div>${aside}`, 'span-3');
   }
 
@@ -650,17 +649,31 @@
     const mf = a.moneyFlow;
     if (!mf) return '<p class="pro-empty panel">The Spending Compass is not available yet. Try again in a moment.</p>';
     const source = `<p class="pro-footnote">Similar-household figures: <a href="${esc(mf.source.url)}" target="_blank" rel="noopener noreferrer">${esc(mf.source.label)}</a>, in ${mf.source.year} dollars. No other MyFinance user's data is used. Mortgage, rent, loans, insurance and internet are not compared because they are contracted bills. Survey figures are a guide, not a rule, and this is not financial advice.</p>`;
-    return `<div class="pro-compass">${compassPanel('plan', 'Compass plan and headline', m => compassHero(m) + compassInsights(m), mf)}
-      <div class="pro-grid pro-compass-grid">${[
-        ['flow', 'Where your money flows', flowSankey], ['signals', 'Where the signals overlap', signalConnections],
-        ['vendors', 'Who gets your money', vendorField], ['heatmap', 'Hot and cold months', spendHeatmap],
-        ['range', 'Your normal range', rangeStrips], ['readings', 'Technical readings', compassReadings]
-      ].map(([key, title, renderer]) => compassPanel(key, title, renderer, mf)).join('')}</div>${source}</div>`;
+    return `<div class="pro-compass">${compassPanel('plan', 'Household benchmark profile', benchmarkHero, mf)}
+      ${benchmarkComparison(mf)}${source}</div>`;
+  }
+
+  function benchmarkHero(mf) {
+    const { esc } = pro().format;
+    return `<section class="pro-compass-hero panel"><div class="pro-hero-main"><p class="pro-hero-eyebrow">YOUR PUBLIC-DATA COMPARISON</p><h2>How does your household compare?</h2><p class="pro-hero-sub">Your selected-period monthly average beside the U.S. Consumer Expenditure Survey. These are survey benchmarks, not a financial-health score or a spending target.</p><div class="pro-hero-household"><span>Compared with ${esc(mf.comparedWith)}</span>${householdChips(mf)}<button type="button" class="btn btn-secondary btn-compact" data-analytics-action="household-edit">${mf.profileSet ? 'Edit household' : 'Set your household'}</button></div>${householdForm(mf)}</div></section>`;
+  }
+
+  function benchmarkComparison(mf) {
+    const { money, esc } = pro().format;
+    const rows = mf.categories.filter(c => Number.isFinite(c.expected) && c.expected > 0);
+    if (!rows.length) return '<p class="pro-empty panel">Not enough comparable spending history. Import more completed months or choose a wider period.</p>';
+    return card('You vs. similar households', 'Monthly behavioral averages · large one-off purchases excluded · markers show survey estimates · lower is not automatically better',
+      `<div class="benchmark-comparison">${rows.map(c => {
+        const actual = c.average3 ?? c.monthly;
+        const max = Math.max(actual, c.expected) * 1.15;
+        const delta = (actual / c.expected - 1) * 100;
+        return `<div class="benchmark-row"><div><strong>${esc(c.label)}</strong><small>${esc(c.covers)}</small></div><div class="benchmark-track" role="img" aria-label="${esc(`${c.label}: you ${money(actual)}; survey ${money(c.expected)}; ${Math.abs(delta).toFixed(0)}% ${delta >= 0 ? 'above' : 'below'}`)}"><span style="width:${actual / max * 100}%"></span><i style="left:${c.expected / max * 100}%"></i></div><div><b>${money(actual)}</b><small>Survey ${money(c.expected)}</small><em>${Math.abs(delta).toFixed(0)}% ${delta >= 0 ? 'above' : 'below'}</em></div></div>`;
+      }).join('')}</div>`, 'span-3');
   }
 
   const HEADERS = {
     overview: ['MYFINANCE PRO &middot; FOLLOW THE CLUES', 'Your money, under the magnifying glass', 'Spot the patterns, meet your spending habits, and find the little changes that make room for what matters.'],
-    compass: ['MYFINANCE PRO &middot; SPENDING COMPASS', 'Spending Compass', 'How your everyday spending compares with similar households, which way each category is heading, and where you could realistically save.']
+    compass: ['MYFINANCE PRO &middot; SPENDING COMPASS', 'Spending Compass', 'Your finances in context: compare everyday spending with public U.S. household survey data.']
   };
 
   // ---------- interest paid ----------
@@ -702,8 +715,8 @@
       ? '<a href="#accounts" data-view="accounts" class="btn btn-secondary btn-compact">Add statements</a>'
       : '<a href="#payoff" class="btn btn-secondary btn-compact">Set up</a>'}</li>`).join('')}</ul>` : '';
     if (!d.total) {
-      return `<div class="pro-int-empty"><span class="pro-int-empty-icon">%</span><div><strong>No interest found in the last ${d.months.length} months</strong>
-        <p>We look for interest and finance charges on card statements and synced accounts, and estimate the interest inside loan and mortgage payments and on carried credit card balances. Import a credit card statement or connect your bank to start tracking.</p></div></div>${hints}`;
+      return `<div class="pro-int-empty"><span class="pro-int-empty-icon">%</span><div><strong>No interest found in the selected ${d.months.length} months</strong>
+        <p>This historical view uses detected or manually tagged statement charges only. Today's balances and loan schedules are not used to invent historical interest. Import statements with interest charges to improve coverage.</p></div></div>`;
     }
     const share = kind => d.total ? Math.round(d.totals[kind] / d.total * 100) : 0;
     const charges = d.charges.slice(0, interestState.showAll ? 60 : 6);
@@ -716,16 +729,16 @@
              <button type="button" class="pro-int-remove" data-analytics-action="${charge.source === 'manual' ? 'interest-auto' : 'interest-not'}" data-id="${esc(charge.id)}" title="${charge.source === 'manual' ? 'Undo your tag and use automatic detection' : 'This is not interest'}" aria-label="${charge.source === 'manual' ? 'Reset to automatic' : 'Not interest'}">${charge.source === 'manual' ? '↺' : '×'}</button>`}
         <span class="num">${money(charge.amount, false)}</span></li>`;
     return `<div class="pro-int-kpis">
-        <div class="is-lead"><span>Last ${d.months.length} months</span><strong>${money(d.total, true)}</strong><small>${d.estimated ? `incl. ${money(d.estimated, true)} estimated` : 'from your statements'}</small></div>
-        <div><span>This month</span><strong>${money(d.thisMonth, true)}</strong><small>${money(d.lastMonth, true)} last month</small></div>
+        <div class="is-lead"><span>Selected ${d.months.length} months</span><strong>${money(d.total, true)}</strong><small>from your statements</small></div>
+        <div><span>Final selected month</span><strong>${money(d.thisMonth, true)}</strong><small>${money(d.lastMonth, true)} previous month in range</small></div>
         <div><span>Monthly average</span><strong>${money(d.monthlyAverage, true)}</strong><small>≈ ${money(d.annualized, true)} a year</small></div>
-        <div><span>${new Date().getFullYear()} so far</span><strong>${money(d.yearToDate, true)}</strong><small>year to date</small></div>
+        <div><span>Charges found</span><strong>${d.charges.length}</strong><small>in the selected period</small></div>
       </div>
       <div class="pro-int-grid">
         <figure class="pro-int-figure">${interestChart(d)}</figure>
         <ul class="pro-int-breakdown">${kinds.map(kind => `<li><span class="dot" style="--c:${INTEREST_COLORS[kind]}"></span><span class="label">${esc(d.kinds[kind])}</span><strong>${money(d.totals[kind], true)}</strong><span class="bar"><i style="width:${share(kind)}%;background:${INTEREST_COLORS[kind]}"></i></span><small>${share(kind)}% · ${money(d.totals[kind] / d.months.length, true)}/mo</small></li>`).join('')}</ul>
       </div>
-      ${hints}
+      <p class="pro-footnote">Historical statement charges only; missing imports can understate interest. No estimates from current balances.</p>
       <details class="pro-int-review"${interestState.showAll || interestState.reviewOpen ? ' open' : ''}><summary>Review interest charges <span>${d.charges.length}</span></summary>
         <p class="pro-int-help">Charges are detected from their wording and your bank's category. Change the type, or mark anything that isn't interest. Estimated rows come from loan payments and your loan's rate.</p>
         <ul class="pro-int-list">${charges.map(row).join('')}</ul>
@@ -737,7 +750,7 @@
     const { esc } = pro().format;
     const body = interestState.error ? `<p class="pro-empty">Could not load interest: ${esc(interestState.error)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="interest-retry">Try again</button></p>`
       : interestState.data ? interestBody(interestState.data) : '<div class="pro-loading"><span></span><span></span><span></span></div>';
-    return `<article class="pro-card panel span-3 pro-interest" id="pro-interest"><header><div><h2>Interest you paid</h2><p>Credit card, auto, loan and mortgage interest, found on your statements or estimated from loan payments and card balances</p></div></header><div class="pro-card-body">${body}</div></article>`;
+    return `<article class="pro-card panel span-3 pro-interest" id="pro-interest"><header><div><h2>Interest you paid</h2><p>Detected and manually tagged statement interest in the shared period</p></div></header><div class="pro-card-body">${body}</div></article>`;
   }
 
   function paintInterest() {
@@ -753,7 +766,7 @@
     const run = ++interestState.run;
     interestState.error = '';
     try {
-      const data = await pro().request('/api/analytics/interest');
+      const data = await pro().request(`/api/analytics/interest?from=${encodeURIComponent(current.range.from)}&to=${encodeURIComponent(current.range.to)}`);
       if (run !== interestState.run) return;
       if (!data || !Array.isArray(data.months) || !data.kinds || !Array.isArray(data.charges)) throw new Error('Unexpected response');
       interestState.data = { hints: [], totals: {}, ...data };
@@ -785,25 +798,33 @@
 
   function tabs(a) {
     const { money } = pro().format;
-    const found = compassRanges.get('plan')?.data?.potentialMonthly ?? a?.moneyFlow?.potentialMonthly;
     const link = (id, route, label, extra = '') => `<a href="#${route}" data-view="${route}" class="pro-tab${tab === id ? ' is-active' : ''}"${tab === id ? ' aria-current="page"' : ''}>${label}${extra}</a>`;
     const help = `<a class="pro-tab-help" href="#tutorials/${tab === 'compass' ? 'compass' : 'analytics'}">&#9654; How it works</a>`;
-    return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass', found > 0 ? `<span class="pro-tab-badge">${money(found, true)}/mo</span>` : '')}${help}</nav>`;
+    return `<nav class="pro-tabs" aria-label="Analytics pages">${link('overview', 'analytics', 'Overview')}${link('compass', 'analytics/compass', 'Spending Compass')}${help}</nav>`;
   }
 
   function render(a) {
     const finish = globalThis.FinancePerformance?.begin('cpu', `analytics.${tab}.render`);
     const { esc } = pro().format;
     if (tab === 'compass') {
-      $('analytics-content').innerHTML = `${tabs(a)}${compassPage(a)}`;
-      mountBubbles(panelFlow('vendors')?.vendors);
+      stopField();
+      $('analytics-content').innerHTML = `${tabs(a)}${rangeControls()}${compassPage(a)}`;
       finish?.();
       return;
     }
     stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<details class="money-exact"><summary>Data and estimates</summary><p>As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p></details>`;
-    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${interestCard()}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    const { money, pct } = pro().format;
+    const k = a.kpis;
+    const totals = [['Money in', money(k.income), 'Recorded non-transfer credits'], ['Money out', money(k.spend), `${money(k.avgMonthlySpend)} / calendar month`], ['Net cash flow', money(k.net), 'Money in minus money out'], ['Savings rate', pct(k.savingsRate), 'Net cash flow as a share of money in']];
+    const categoryList = `<ul class="pro-list is-wrap">${a.categories.map(c => `<li><strong>${esc(c.name)}</strong><span>${money(c.total)} · ${k.spend ? pct(c.total / k.spend) : '—'}</span></li>`).join('')}</ul>`;
+    $('analytics-content').innerHTML = `${tabs(a)}${rangeControls()}${thin}<div class="pro-kpis">${totals.map(([title, value, note]) => `<div class="pro-kpi"><span>${title}</span><strong>${value}</strong><small>${note}</small></div>`).join('')}</div>
+      <div class="pro-grid">${trendCard(a)}${card('Spending by category', 'Totals for the selected period', categoryList || '<p class="pro-empty">No spending recorded.</p>')}
+      ${flowSankey(a.moneyFlow)}${vendorField(a.moneyFlow)}${spendHeatmap(a.moneyFlow)}${compassInsights(a.moneyFlow)}
+      ${compassPanel('signals', 'Where the signals overlap', signalConnections, a.moneyFlow)}${compassPanel('range', 'Your normal range', rangeStrips, a.moneyFlow)}${compassPanel('readings', 'Technical readings', compassReadings, a.moneyFlow)}
+      ${recurringCard(a)}${interestCard()}${anomaliesCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    if (merchantView === 'bubbles') mountBubbles(a.moneyFlow?.vendors);
     if (!interestState.data && !interestState.error) loadInterest();
     finish?.();
   }
@@ -819,39 +840,24 @@
     const entitlement = await pro().ensureEntitlement();
     if (run !== request) return;
     renderActions();
-    if (!entitlement.plusActive) { compassRanges.clear(); stopField(); content.innerHTML = lockedPreview(entitlement); return; }
+    if (!entitlement.plusActive) { current = null; stopField(); content.innerHTML = lockedPreview(entitlement); return; }
     try {
-      interestState.data = null; interestState.error = '';
-      current = await pro().getAnalytics(force);
-      if (tab === 'compass' && current.moneyFlow?.range?.months === 3) {
+      interestState.run++; interestState.data = null; interestState.error = '';
+      if (!period.from) {
         const end = lastCompleteMonth();
-        for (const key of ['signals', 'heatmap']) {
-          if (!compassRanges.has(key)) compassRanges.set(key, {
-            preset: '12', from: monthKey(end - 11), to: monthKey(end), data: null, stale: true, loading: true, error: ''
-          });
-        }
+        period = { preset: '3', from: monthKey(end - 2), to: monthKey(end) };
       }
-      if (force || [...compassRanges.values()].some(state => state.stale)) {
-        const requests = new Map();
-        await Promise.all([...compassRanges].map(async ([key, state]) => {
-          try {
-            const url = `/api/analytics/compass?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`;
-            if (!requests.has(url)) requests.set(url, pro().request(url));
-            const data = await requests.get(url);
-            if (compassRanges.get(key) === state) { state.data = data; state.error = ''; state.stale = false; state.loading = false; }
-          } catch (error) {
-            if (compassRanges.get(key) === state) {
-              state.loading = false;
-              state.error = `Could not refresh this period: ${error.message}.${state.data ? ' Previous result shown.' : ' No readings shown; try Apply to retry.'}`;
-            }
-          }
-        }));
-      }
-      if (run === request) render(current);
+      const data = await pro().request(`/api/analytics?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`);
+      if (run !== request) return;
+      current = data;
+      periodError = '';
+      render(current);
     } catch (error) {
       if (run !== request) return;
       if (['PRO_REQUIRED', 'PRO_PLUS_REQUIRED', 'SUBSCRIPTION_REQUIRED'].includes(error.code)) return globalThis.loadAnalyticsPage();
-      content.innerHTML = `<div class="pro-empty panel">Could not load analytics: ${pro().format.esc(error.message)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="retry">Try again</button></div>`;
+      periodError = `Could not load the requested period: ${error.message}. ${current ? `Still showing ${current.range.from} through ${current.range.to}.` : 'Please choose a valid completed-month period and try again.'}`;
+      if (current) render(current);
+      else content.innerHTML = `${rangeControls()}<div class="pro-empty panel">${pro().format.esc(periodError)} <button type="button" class="btn btn-secondary btn-compact" data-analytics-action="retry">Try again</button></div>`;
     }
   };
 
@@ -891,7 +897,7 @@
       if (target.dataset.bubbleSize) bubbleSize = target.dataset.bubbleSize;
       if (target.dataset.bubbleColor) bubbleColor = target.dataset.bubbleColor;
       target.parentElement?.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === target)));
-      return mountBubbles(panelFlow('vendors')?.vendors);
+      return mountBubbles(current?.moneyFlow?.vendors);
     }
     if (target.dataset.sort) {
       sortDir = sortKey === target.dataset.sort ? -sortDir : target.dataset.sort === 'name' ? 1 : -1;
@@ -904,6 +910,7 @@
       return globalThis.openCategoryTransactions?.(target.dataset.open, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
     }
     const action = target.dataset.analyticsAction;
+    if (action === 'merchant-view') { merchantView = target.dataset.merchantView; return current && render(current); }
     if (action === 'retry') return globalThis.loadAnalyticsPage(true);
     if (action === 'upgrade') return pro().openUpgrade();
     if (action === 'budgets') return pro().openBudgets();
@@ -959,33 +966,18 @@
   });
   document.addEventListener('submit', async event => {
     const form = event.target?.closest?.('[data-compass-range]');
-    if (!form || !current) return;
+    if (!form) return;
     event.preventDefault();
-    const key = form.dataset.compassRange;
-    const finish = globalThis.FinancePerformance?.begin('panel', `compass.${key}.load`);
     const preset = form.querySelector('[name="preset"]').value;
     const from = form.querySelector('[name="from"]').value, to = form.querySelector('[name="to"]').value;
-    const state = { preset, from, to, loading: true, data: compassRanges.get(key)?.data };
-    compassRanges.set(key, state);
-    render(current);
-    try {
-      const data = await pro().request(`/api/analytics/compass?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      if (compassRanges.get(key) !== state) return;
-      state.data = data; state.loading = false;
-      finish?.();
-    } catch (error) {
-      if (compassRanges.get(key) !== state) return;
-      state.error = `Could not update this panel: ${error.message}. The previous result is unchanged.`;
-      state.loading = false;
-      finish?.('error');
-    }
-    if (tab === 'compass') render(current);
+    period = { preset, from, to };
+    await globalThis.loadAnalyticsPage(true);
   });
   document.addEventListener('pro:entitlement', event => {
-    if (event.detail && !event.detail.plusActive) { compassRanges.clear(); current = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
+    if (event.detail && !event.detail.plusActive) { period = { preset: '3' }; periodError = ''; current = null; interestState.run++; interestState.data = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
   });
   document.addEventListener('finance:analytics-invalidated', () => {
     request++;
-    for (const [key, state] of compassRanges) compassRanges.set(key, { ...state, stale: true, loading: false });
+    interestState.run++; interestState.data = null;
   });
 })();

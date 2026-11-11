@@ -27,18 +27,35 @@
         split(list.slice(index), x, y + h * ratio, w, h * (1 - ratio));
       }
     }
-    split([...rows].sort((a, b) => b.value - a.value), 0, 0, 100, 100);
+    const groups = new Map();
+    for (const item of rows) {
+      const key = item.category || 'Merchants';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    }
+    split([...groups].map(([name, members]) => ({ name, members, value: sum(members) })).sort((a, b) => b.value - a.value), 0, 0, 100, 100);
+    const regions = tiles.splice(0);
+    for (const group of regions) {
+      const members = [...group.members].sort((a, b) => b.value - a.value);
+      split(members.map((item, index) => ({ ...item, groupLabel: index === 0 ? group.name : '' })), group.x, group.y, group.w, group.h);
+    }
     // Treemap placement is positional; DOM order is largest first so the stacked phone layout reads in rank order.
     tiles.sort((a, b) => b.value - a.value);
     const total = sum(rows);
     const top = Math.max(...rows.map(item => item.value));
-    return `<div class="money-mosaic" role="group" aria-label="Merchant spending mosaic. Tile area represents share of the displayed merchants.">${tiles.map((item, index) => {
+    return `<div class="money-mosaic market-heatmap" role="group" aria-label="Merchant spending heatmap grouped by category. Tile area represents share of the displayed merchants.">${tiles.map(item => {
       const label = `${item.name}: ${money(item.value)}, ${(item.value / total * 100).toFixed(1)}% of displayed spending. ${item.detail || ''}`;
-      return `<div class="money-tile${item.w < 14 || item.h < 14 ? ' is-small' : ''}" tabindex="0" role="img" aria-label="${esc(label)}" style="left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;--tile-color:${palette[index % palette.length]};--tile-share:${(item.value / top * 100).toFixed(1)}%">
-        <div class="money-tile-face"><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${(item.value / total * 100).toFixed(1)}%</small><i class="money-tile-bar" aria-hidden="true"></i></div>
+      const comparable = !item.isNew && Number.isFinite(item.change);
+      const change = comparable ? `${item.change > 0 ? '+' : ''}${(item.change * 100).toFixed(1)}%` : item.isNew ? 'New' : 'No comparison';
+      const intensity = comparable ? Math.min(1, Math.abs(item.change)) : 0;
+      const tileColor = !comparable || Math.abs(item.change) < .005 ? '#334e68'
+        : item.change > 0 ? `hsl(351, ${50 + intensity * 22}%, ${34 + intensity * 8}%)` : `hsl(155, ${45 + intensity * 30}%, ${24 + intensity * 9}%)`;
+      return `<div class="money-tile${item.w < 14 || item.h < 14 ? ' is-small' : ''}" tabindex="0" role="img" aria-label="${esc(label)}" style="left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;--tile-color:${tileColor};--tile-share:${(item.value / top * 100).toFixed(1)}%">
+        <div class="money-tile-face">${item.groupLabel ? `<span class="market-sector">${esc(item.groupLabel)}</span>` : ''}<span class="merchant-monogram" aria-hidden="true">${esc(item.name.slice(0, 2).toUpperCase())}</span><b>${esc(item.name)}</b><strong>${esc(money(item.value))}</strong><small>${esc(change)}</small></div>
         <span class="money-tile-tip">${esc(label)}</span></div>`;
     }).join('')}</div>
-    <details class="money-exact"><summary>About this view</summary><p>Tile area = money out, not transaction count. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p></details>
+    <div class="market-legend"><span>Less spending</span><i aria-hidden="true"></i><span>More spending</span><small>vs previous period · slate = new / unavailable</small></div>
+    <details class="money-exact"><summary>About this view</summary><p>Tile area = money out, not transaction count. Merchants are grouped by category. Color shows the change in monthly average spending, not investment returns or a judgment about a purchase. Percentages describe these displayed merchants, not necessarily all spending. Focus or hover a tile for its full label.</p></details>
     <details class="money-exact"><summary>Exact totals and trends for every displayed merchant</summary><ul class="pro-list is-wrap">${rows.map(item =>
       `<li><div><strong>${esc(item.name)}</strong><small>${esc(item.detail || '')}</small></div><strong>${esc(money(item.value))}</strong></li>`).join('')}</ul></details>`;
   }

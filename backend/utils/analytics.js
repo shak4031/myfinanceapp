@@ -158,7 +158,7 @@ function monthlyTotals(rows, context, predicate) {
 
 function buildAnomalies(rows, categories, context) {
   const anomalies = [];
-  const cutoff = context.end.getTime() - 60 * DAY_MS;
+  const cutoff = context.anomalyStart ?? context.end.getTime() - 60 * DAY_MS;
   const byMerchant = new Map();
   for (const tx of rows) {
     if (!tx.debit || tx.transfer || !tx.merchant) continue;
@@ -367,6 +367,46 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
     weekdays: [0, 1, 2, 3, 4, 5, 6].map(weekday => round(sum(rows
       .filter(tx => tx.debit && !tx.transfer && tx.date >= daysAgo(end, 89) && tx.date.getDay() === weekday)
       .map(tx => tx.amount))))
+  };
+}
+
+export function analyticsRange(from, to, today = new Date()) {
+  const index = value => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)
+    ? Number(value.slice(0, 4)) * 12 + Number(value.slice(5)) - 1 : NaN;
+  const start = index(from), end = index(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1900 * 12 || start > end
+    || end - start >= 24 || end >= today.getFullYear() * 12 + today.getMonth()) {
+    throw new RangeError('Choose 1–24 completed calendar months, with a valid start and end (YYYY-MM).');
+  }
+  return { from, to, months: end - start + 1, endYear: Math.floor(end / 12), endMonth: end % 12 };
+}
+
+export function buildPeriodAnalytics({ transactions = [], budgets = [], range } = {}) {
+  const end = new Date(range.endYear, range.endMonth + 1, 0);
+  const rows = normalize(transactions, end).filter(tx => tx.iso.slice(0, 7) >= range.from && tx.iso.slice(0, 7) <= range.to);
+  const counted = rows.filter(tx => !tx.transfer);
+  const startIndex = range.endYear * 12 + range.endMonth - range.months + 1;
+  const months = Array.from({ length: range.months }, (_, i) => monthKey(startIndex + i));
+  const total = predicate => round(sum(counted.filter(predicate).map(tx => tx.amount)));
+  const spend = total(tx => tx.debit), income = total(tx => !tx.debit);
+  const days = Math.round((new Date(range.endYear, range.endMonth + 1, 1) - new Date(Math.floor(startIndex / 12), startIndex % 12, 1)) / DAY_MS);
+  const snapshot = buildAnalytics({ transactions: rows.map(tx => tx.raw), budgets, today: end });
+  return {
+    range, asOf: isoDay(end), months,
+    monthsOfHistory: new Set(counted.map(tx => tx.iso.slice(0, 7))).size,
+    kpis: { spend, income, net: round(income - spend), savingsRate: income ? round((income - spend) / income, 4) : null,
+      avgMonthlySpend: round(spend / range.months), dailyBurn: round(spend / days) },
+    series: {
+      spend: months.map(month => total(tx => tx.debit && tx.iso.startsWith(month))),
+      income: months.map(month => total(tx => !tx.debit && tx.iso.startsWith(month)))
+    },
+    categories: [...new Set(counted.filter(tx => tx.debit).map(tx => tx.category))].map(name => ({
+      name, total: total(tx => tx.debit && tx.category === name)
+    })).sort((a, b) => b.total - a.total),
+    recurring: snapshot.recurring,
+    anomalies: buildAnomalies(rows, [], { end, anomalyStart: new Date(Math.floor(startIndex / 12), startIndex % 12, 1).getTime() }).filter(item => item.type === 'charge'),
+    weekdays: [0, 1, 2, 3, 4, 5, 6].map(day => total(tx => tx.debit && tx.date.getDay() === day)),
+    days
   };
 }
 

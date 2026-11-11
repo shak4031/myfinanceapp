@@ -2,6 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { analyticsRange, buildPeriodAnalytics } from '../backend/utils/analytics.js';
+import { buildMoneyFlowSignals } from '../backend/utils/benchmarks.js';
+
+function periodPayload(transactions = [], now = new Date(), range) {
+  const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  range ||= analyticsRange(key(new Date(now.getFullYear(), now.getMonth() - 3, 1)), key(new Date(now.getFullYear(), now.getMonth() - 1, 1)), now);
+  return { ...buildPeriodAnalytics({ transactions, range }), moneyFlow: { ...buildMoneyFlowSignals({ transactions, today: now, range }), range } };
+}
 
 const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({}) })) {
@@ -42,6 +50,7 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
       querySelectorAll: selector => selector === '.view' ? views : selector === '.nav-btn' ? nav : [], body: node('body'),
       addEventListener: (name, listener) => listeners.set(`document:${name}`, listener)
     },
+    FinanceUI: { howCalc: text => `<button class="how-calc" data-calculation="${String(text)}">i</button>` },
     notify() {}, closeSidebar() {}, closeAddGoalModal() {}, openAddGoalModal() {},
     transactionAccountLabel: row => row.account_name || 'Account not assigned',
     loadDashboard() {}, loadAllTransactions() {}, loadCategories() {}, loadEtlStaging() {}, loadGoals() {}, loadPayoffPlan() {}, generateInsights() {},
@@ -82,10 +91,11 @@ test('financial network supports pointer/keyboard details, focus, collapse, rese
   f.run('landscape.js');
   await f.context.FinanceLandscape.loadPage();
   const root = f.node('landscape-root');
-  assert.match(root.innerHTML, /Investment coverage missing|Investment coverage/);
+  assert.match(root.innerHTML, /Investments/);
   assert.match(root.innerHTML, /401\(k\)/);
-  assert.match(root.innerHTML, /\+2 more/);
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
+  assert.match(root.innerHTML, /\+2 more/);
   await click({ landscapeAction: 'focus', branch: 'spending' });
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 7, 'household, focused hub and every child');
   await click({ landscapeAction: 'collapse', branch: 'spending' });
@@ -103,7 +113,7 @@ test('financial network supports pointer/keyboard details, focus, collapse, rese
   assert.doesNotMatch(details, /<img/);
   await click({ landscapeAction: 'reset' });
   assert.match(root.innerHTML, /preserveAspectRatio="xMidYMid meet"/);
-  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 19);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 9);
 });
 
 test('landscape reports load errors, supports retry and ignores responses after logout or newer requests', async () => {
@@ -146,6 +156,7 @@ test('landscape expands populated cluster fans in place without shrinking nodes'
   await f.context.FinanceLandscape.loadPage();
   const root = f.node('landscape-root'), map = f.node('landscape-map');
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
+  await click({ landscapeAction: 'collapse', branch: 'spending' });
   assert.match(root.innerHTML, /class="landscape-illustration"/);
   const drawings = [...root.innerHTML.matchAll(/class="landscape-illustration"[^]*?<svg[^]*?<\/svg>/g)]
     .map(match => match[0].slice(match[0].indexOf('<svg')));
@@ -154,7 +165,7 @@ test('landscape expands populated cluster fans in place without shrinking nodes'
   assert.doesNotMatch(root.innerHTML, /landscape-island|landscape-light|landscape-sphere|data-yaw|data-pitch|zoom-in|zoom-out|scroll-mode|rotate-left|Depth view|Flat view/);
   assert.equal(typeof map.onpointerdown, 'function', 'mouse panning is available');
   const css = source('landscape.css');
-  assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1400px\); height: auto/);
+  assert.match(css, /\.landscape-map \{[^}]*max-height: 780px; overflow: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*background: #fff; border-radius: inherit/,
     'the white background follows the expanded SVG, not just its narrower wrapper');
@@ -171,17 +182,16 @@ test('landscape expands populated cluster fans in place without shrinking nodes'
     const p = locations.find(point => point.id === item.id);
     if (!p) continue;
     const hub = hubs.find(point => point.id === item.branch);
-    assert.ok(Math.abs(Math.hypot(p.x - hub.x, p.y - hub.y) - 280) < .001,
-      'preview endpoints fan out from their own hub');
+    assert.equal(Math.abs(p.x - hub.x), 300, 'items occupy the next flow column');
   }
   assert.match(css, /#landscape-view \{[^}]*max-width: none/);
   assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
-  assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
+  assert.doesNotMatch(css, /height: 340px|62vh|drop-shadow/);
   assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
-  const canvasWidth = () => Number(root.innerHTML.match(/id="landscape-svg" width="([\d.]+)"/)[1]);
+  const canvasWidth = () => Number(root.innerHTML.match(/id="landscape-svg"[^>]+height="([\d.]+)"/)[1]);
   const originalWidth = canvasWidth();
   await click({ landscapeAction: 'fan', branch: 'spending' });
-  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 37, 'household, eight hubs, 21 spending nodes and seven missing nodes');
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 30, 'household, eight hubs and 21 spending nodes; other legs stay folded');
   assert.ok(canvasWidth() > originalWidth, 'the cluster canvas grows instead of shrinking nodes');
   assert.doesNotMatch(root.innerHTML, /landscape-pagination|previous-page|next-page/);
   const first = graph.nodes.find(n => n.kind === 'activity');
@@ -218,7 +228,7 @@ test('landscape mouse dragging pans both axes without activating items and leave
   await f.context.FinanceLandscape.loadPage();
   const map = f.node('landscape-map'), moves = [];
   let capture = null;
-  map.closest = () => ({ scrollBy: (x, y) => moves.push([x, y]) });
+  map.scrollBy = (x, y) => moves.push([x, y]);
   f.context.getComputedStyle = () => ({ overflowY: 'auto' });
   map.setPointerCapture = id => { capture = id; };
   map.hasPointerCapture = id => capture === id;
@@ -257,7 +267,8 @@ test('landscape has independent fan-out legs, pictograms, simple visibility filt
   const { buildLandscape, LANDSCAPE_BRANCHES } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'),
     accounts: [{ id: 1, name: 'Checking', kind: 'checking', status: 'active' }],
-    transactions: [{ id: 1, date: '2026-10-10', description: 'Lunch', amount: 25, direction: 'DEBIT', category: 'Dining', account_id: 1 }] });
+    transactions: [{ id: 1, date: '2026-10-10', description: 'Lunch', amount: 25, direction: 'DEBIT', category: 'Dining', account_id: 1 },
+      { id: 2, date: '2026-10-01', description: 'Salary', amount: 1000, direction: 'CREDIT', category: 'Income', account_id: 1 }] });
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
   await f.context.FinanceLandscape.loadPage();
@@ -266,9 +277,13 @@ test('landscape has independent fan-out legs, pictograms, simple visibility filt
   assert.equal((root.innerHTML.match(/class="landscape-section-toggle/g) || []).length, 8);
   assert.match(root.innerHTML, /<select id="landscape-explore"/);
   assert.match(root.innerHTML, /<details class="landscape-view-options">/);
-  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.match(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.match(root.innerHTML, /data-landscape-source="income" data-landscape-target="cash"/);
+  assert.match(root.innerHTML, /data-landscape-source="cash" data-landscape-target="spending"/);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 9, 'the opening view shows the complete routing backbone');
   const badges = [...root.innerHTML.matchAll(/class="landscape-section-toggle[^]*?<svg[^]*?<\/svg>/g)].map(match => match[0].slice(match[0].indexOf('<svg')));
   assert.equal(new Set(badges).size, 8, 'every leg has a distinct pictogram');
+  await click({ landscapeAction: 'expand' });
   for (const [id] of LANDSCAPE_BRANCHES) {
     assert.match(root.innerHTML, new RegExp(`data-landscape-source="household" data-landscape-target="${id}"`));
     for (const child of graph.nodes.filter(node => node.branch === id && node.kind !== 'branch')) {
@@ -278,7 +293,7 @@ test('landscape has independent fan-out legs, pictograms, simple visibility filt
   const options = root.querySelector('.landscape-view-options');
   options.open = true;
   await click({ landscapeAction: 'flows' });
-  assert.match(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
   assert.equal(options.open, true, 'view options remain open while adjusting controls');
   await click({ landscapeAction: 'toggle-leg', branch: 'cash' });
   assert.doesNotMatch(root.innerHTML, /data-landscape-node="account-1"/);
@@ -296,7 +311,7 @@ test('landscape has independent fan-out legs, pictograms, simple visibility filt
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 1, 'all legs may be hidden without losing the household');
   await click({ landscapeAction: 'reset' });
   assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8);
-  assert.doesNotMatch(root.innerHTML, /class="landscape-edge is-activity/);
+  assert.match(root.innerHTML, /class="landscape-edge is-activity/);
   f.node('landscape-explore').onchange({ target: { value: 'spending' } });
   await click({ landscapeNode: 'account-1' });
   assert.match(root.innerHTML, /<option value="cash" selected/, 'related detail navigation switches focused legs');
@@ -340,7 +355,7 @@ test('landscape size weights stay within each leg and measure, with zero and una
   explore('debt');
   assert.equal(radius('balance'), 40);
   assert.equal(radius('payment'), 40, 'monthly debt payments are not scaled against debt balances');
-  assert.match(root.innerHTML, /not a financial-health score/);
+  assert.match(root.innerHTML, /not a net-worth statement or financial-health score/);
   assert.doesNotMatch(root.innerHTML, /NaN|Infinity|undefined/);
   await root.onclick({ target: { dataset: { landscapeAction: 'reset' }, closest() { return this; } } });
   await root.onclick({ target: { dataset: { landscapeNode: 'negative' }, closest() { return this; } } });
@@ -370,8 +385,8 @@ for (const itemCount of [3, 7, 12]) test(`expanded cluster fans keep names, valu
   await f.context.FinanceLandscape.loadPage();
   const root = f.node('landscape-root');
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
-  assert.match(root.innerHTML, /\+ Payments \(20\/30\)/, 'preview limits are disclosed');
   await click({ landscapeAction: 'expand' });
+  assert.match(root.innerHTML, /\+ Payments \(20\/30\)/, 'preview limits are disclosed');
   for (const branch of branches) {
     for (let i = 0; i < 3; i++) {
       await click({ landscapeAction: 'transactions', branch: branch.id, item: `dense-${branch.id}-${i}` });
@@ -403,7 +418,7 @@ for (const itemCount of [3, 7, 12]) test(`expanded cluster fans keep names, valu
   }
   f.context.FinanceLandscape.reset();
   await f.context.FinanceLandscape.loadPage();
-  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 33);
+  assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 9);
   assert.doesNotMatch(root.innerHTML, /class="landscape-node is-transaction"/, 'logout clears all expansion state');
 });
 
@@ -1870,7 +1885,7 @@ test('Knowledge Base has a direct route and explains both analytics offerings', 
   assert.equal(f.node('current-page').textContent, 'Knowledge Base');
   assert.equal(f.context.location.hash, '#knowledge-base');
   const html = source('index.html');
-  for (const text of ['Month-end forecast', '6-month cash flow', 'Monthly spend trend', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
+  for (const text of ['Historical, not a current-month forecast', 'Interest you paid', 'Monthly spend trend', 'Recurring charges not marked fixed', 'Spending by category', 'Unusual activity', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings', 'You vs. similar households']) {
     assert.ok(html.includes(text), `Knowledge Base should explain ${text}`);
   }
 });
@@ -4274,8 +4289,9 @@ test('Pro chart helpers produce scalable SVG', () => {
   assert.match(bars, /viewBox="0 0 640 230"/);
   assert.equal((bars.match(/<rect class="bar/g) || []).length, 2);
   const donut = ProCharts.donut([{ label: 'A <b>', value: 60, color: '#000' }, { label: 'B', value: 40, color: '#fff' }], { centerValue: '$100' });
-  assert.equal((donut.match(/class="slice"/g) || []).length, 2);
-  assert.match(donut, /A &lt;b&gt;: \$60 \(60%\)/);
+  assert.equal((donut.match(/class="radial-slice"/g) || []).length, 2);
+  assert.match(donut, /A &lt;b&gt;: \$60 \(60\.0%\)/);
+  assert.equal((donut.match(/class="radial-share"/g) || []).length, 2);
 });
 test('category analytics derive monthly series but never draw card trends below six months', () => {
   const { FinanceProCategories: C } = loadPro().context;
@@ -4801,7 +4817,7 @@ test('analytics page shows a locked preview without Pro', async () => {
 
 test('recurring discovery shows every candidate and filters status, type and merchant without altering totals', async () => {
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
-  const payload = buildAnalytics({ transactions: [], today: new Date() });
+  const payload = periodPayload();
   payload.recurring = Array.from({ length: 18 }, (_, i) => ({
     id: i + 1, merchant: i === 17 ? '<Last utility>' : `Bill ${i + 1}`,
     category: i % 2 ? 'Utilities' : 'Subscriptions', active: i !== 16, fixed: false,
@@ -4846,71 +4862,66 @@ test('signal and monthly explorers load a shared year of evidence rather than th
   const now = new Date(), demo = buildDemoData(now), calls = [];
   const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const range = months => ({ months, endYear: end.getFullYear(), endMonth: end.getMonth() });
-  const base = { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range: range(3) }), range: range(3) };
-  const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: base };
+  const payload = periodPayload(demo.transactions, now);
   const f = loadPro(async url => {
     if (url === '/api/license') return response(200, { active: true, plusActive: true, features: [] });
-    if (url.startsWith('/api/analytics/compass?')) {
+    if (url.startsWith('/api/analytics?')) {
       calls.push(url);
       const params = new URL(url, 'http://local').searchParams;
       const [year, month] = params.get('to').split('-').map(Number);
       const [startYear, startMonth] = params.get('from').split('-').map(Number);
       const requested = { from: params.get('from'), to: params.get('to'), months: (year - startYear) * 12 + month - startMonth + 1, endYear: year, endMonth: month - 1 };
-      return response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range: requested }), range: requested });
+      return response(200, periodPayload(demo.transactions, now, requested));
     }
     return response(200, payload);
   });
   await f.context.loadAnalyticsPage(false, 'compass');
   const html = f.node('analytics-content').innerHTML;
-  assert.equal(calls.length, 1, 'same initial history request is reused by both panels');
-  for (const key of ['signals', 'heatmap']) {
-    const start = html.indexOf(`data-compass-panel="${key}"`);
-    const panel = html.slice(start, html.indexOf('</section>', start));
-    assert.match(panel, /value="12" selected/);
-    assert.match(panel, /12 of 12 completed months available/);
-  }
-  assert.match(html, /Rising signal/);
-  assert.match(html, /Prior-month median/);
+  assert.equal(calls.length, 1, 'one request supplies the entire selected period');
+  assert.equal((html.match(/data-compass-range=/g) || []).length, 1);
+  assert.match(html, /value="3" selected/);
+  assert.match(html, /You vs. similar households/);
+  assert.doesNotMatch(html, /Who gets your money|Technical readings|Hot and cold months/);
   const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   const values = { preset: { value: '6' }, from: { value: key(new Date(end.getFullYear(), end.getMonth() - 5, 1)) }, to: { value: key(end) } };
   const form = { dataset: { compassRange: 'signals' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
   await f.listeners.get('document:submit')({ preventDefault() {}, target: { closest: () => form } });
   await f.context.loadAnalyticsPage(false, 'compass');
   const updated = f.node('analytics-content').innerHTML;
-  const start = updated.indexOf('data-compass-panel="signals"');
-  assert.match(updated.slice(start, updated.indexOf('</section>', start)), /value="6" selected/);
-  assert.equal(calls.length, 2, 'selected periods are preserved on reload');
+  assert.match(updated, /value="6" selected/);
+  assert.equal(calls.length, 3, 'selected periods are preserved on reload');
+  assert.equal(calls[1], calls[2]);
 });
 
-test('Compass date ranges offer only four month presets and custom dates, update independently and show errors', async () => {
+test('one Analytics date range offers four month presets and custom dates, controls both tabs and shows errors', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
   const now = new Date(), demo = buildDemoData(now), calls = [];
-  const payload = { ...buildAnalytics({ transactions: demo.transactions, today: now }), moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, today: now }) };
+  const payload = periodPayload(demo.transactions, now);
   const f = loadPro(async url => {
     calls.push(url);
     if (url === '/api/license') return response(200, { active: true, plusActive: true, features: [] });
-    if (url.startsWith('/api/analytics/compass?')) {
+    if (url.startsWith('/api/analytics?')) {
       const params = new URL(url, 'http://local').searchParams;
       if (params.get('from') === 'bad') return response(400, { error: 'Choose valid completed months' });
       const [year, month] = params.get('to').split('-').map(Number);
       const [startYear, startMonth] = params.get('from').split('-').map(Number);
       const range = { from: params.get('from'), to: params.get('to'), months: (year - startYear) * 12 + month - startMonth + 1, endYear: year, endMonth: month - 1 };
-      return response(200, { ...buildMoneyFlowSignals({ transactions: demo.transactions, today: now, range }), range });
+      return response(200, periodPayload(demo.transactions, now, range));
     }
     return response(200, payload);
   });
   await f.context.loadAnalyticsPage(false, 'compass');
-  assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 7);
+  assert.equal((f.node('analytics-content').innerHTML.match(/data-compass-range=/g) || []).length, 1);
   const initial = f.node('analytics-content').innerHTML;
   const selectors = [...initial.matchAll(/<select name="preset">([\s\S]*?)<\/select>/g)];
-  assert.equal(selectors.length, 7);
+  assert.equal(selectors.length, 1);
   for (const [, options] of selectors) {
     assert.deepEqual([...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]), ['3', '6', '12', '24', 'custom']);
   }
-  assert.equal((initial.match(/<label hidden>Start month/g) || []).length, 7);
-  assert.equal((initial.match(/<label hidden>End month/g) || []).length, 7);
+  assert.equal((initial.match(/<label hidden>Start month/g) || []).length, 1);
+  assert.equal((initial.match(/<label hidden>End month/g) || []).length, 1);
   const values = { preset: { value: '6' }, from: { value: '', parentElement: {} }, to: { value: '', parentElement: {} } };
   const form = { dataset: { compassRange: 'heatmap' }, querySelector: selector => values[selector.match(/name="([^"]+)"/)[1]] };
   const event = { preventDefault() {}, target: { name: 'preset', value: '6', closest: () => form } };
@@ -4929,11 +4940,8 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.match(values.from.value, /^\d{4}-\d{2}$/);
   await f.listeners.get('document:submit')(event);
   let html = f.node('analytics-content').innerHTML;
-  const panel = key => html.split(`data-compass-panel="${key}"`)[1].split('data-compass-panel=')[0];
-  assert.match(panel('heatmap'), /6 of 6 completed months available/);
-  assert.match(panel('flow'), /Last 3 completed months/);
-  assert.match(panel('plan'), /Last 3 completed months/);
-  assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, 1);
+  assert.match(html, /6 of 6 months have recorded activity/);
+  assert.equal(calls.filter(url => url.startsWith('/api/analytics?')).length, 2);
   values.preset.value = 'custom';
   event.target.value = values.preset.value;
   f.listeners.get('document:change')(event);
@@ -4946,23 +4954,25 @@ test('Compass date ranges offer only four month presets and custom dates, update
   assert.equal(values.preset.value, 'custom');
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
-  assert.match(panel('heatmap'), /\d+ of 3 completed months available/);
-  assert.match(panel('heatmap'), /<label>Start month/);
-  assert.match(panel('heatmap'), /<option value="custom" selected>/);
+  assert.match(html, /\d+ of 3 months have recorded activity/);
+  assert.match(html, /<label>Start month/);
+  assert.match(html, /<option value="custom" selected>/);
   assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
-  const beforeInvalidation = calls.filter(url => url.startsWith('/api/analytics/compass?')).length;
+  const beforeInvalidation = calls.filter(url => url.startsWith('/api/analytics?')).length;
   f.context.FinancePro.invalidateAnalytics();
   f.listeners.get('document:finance:analytics-invalidated')();
   await f.context.loadAnalyticsPage(false, 'compass');
   html = f.node('analytics-content').innerHTML;
-  assert.equal(calls.filter(url => url.startsWith('/api/analytics/compass?')).length, beforeInvalidation + 1);
+  assert.equal(calls.filter(url => url.startsWith('/api/analytics?')).length, beforeInvalidation + 1);
   assert.match(calls.at(-1), new RegExp(`from=${now.getFullYear() - 1}-04&to=${now.getFullYear() - 1}-06`));
-  assert.match(panel('heatmap'), /<option value="custom" selected>/);
+  assert.match(html, /<option value="custom" selected>/);
   values.from.value = 'bad';
   await f.listeners.get('document:submit')(event);
   html = f.node('analytics-content').innerHTML;
-  assert.match(panel('heatmap'), /Could not update this panel: Choose valid completed months/);
-  assert.match(panel('flow'), /Last 3 completed months/);
+  assert.match(html, /Could not load the requested period: Choose valid completed months/);
+  assert.match(html, /Still showing/);
+  await f.context.loadAnalyticsPage(false, '');
+  assert.match(f.node('analytics-content').innerHTML, /Still showing/);
 });
 
 test('mortgage tab sets up a loan, then shows the schedule, interest and a working payoff simulator', async () => {
@@ -5091,22 +5101,20 @@ test('analytics interest panel shows totals by type, estimates, hints and saves 
     calls.push([url, options.method || 'GET', options.body]);
     if (url === '/api/license') return response(200, { tier: 'pro', active: true, plusActive: true, features: [] });
     if (url.startsWith('/api/analytics/interest')) return response(200, url.includes('/transactions/') ? { ok: true } : summary);
-    return response(200, buildAnalytics({ transactions: [], today: now }));
+    return response(200, periodPayload([], now));
   });
   await f.context.loadAnalyticsPage(true, '');
   assert.match(f.node('analytics-content').innerHTML, /id="pro-interest"/);
   await new Promise(resolve => setTimeout(resolve, 0));
   const card = f.node('pro-interest').outerHTML;
   assert.match(card, /Interest you paid/);
-  assert.match(card, /Last 12 months<\/span><strong>\$141/);
-  assert.match(card, /incl\. \$60 estimated/);
+  assert.match(card, /Selected 12 months<\/span><strong>\$141/);
+  assert.match(card, /Historical statement charges only/);
   assert.match(card, /<svg class="pro-int-chart"/);
   assert.match(card, /<span class="label">Credit cards<\/span><strong>\$81<\/strong>/);
   assert.match(card, /<span class="label">Auto<\/span><strong>\$60<\/strong>/);
   assert.match(card, /&lt;Card&gt; interest charge/);
   assert.match(card, /<span class="pro-int-badge">Estimated<\/span>/);
-  assert.match(card, /Student/, 'unmatched loans get a setup hint');
-  assert.match(card, /href="#payoff"[^>]*>Set up/);
   assert.match(card, /data-interest-id="1"/);
 
   f.listeners.get('document:change')({ target: { dataset: { interestId: '1' }, value: 'personal_loan', closest: () => ({}) } });
@@ -5121,40 +5129,40 @@ test('analytics interest panel shows totals by type, estimates, hints and saves 
   assert.deepEqual(JSON.parse(calls.filter(([, method]) => method === 'PUT').at(-1)[2]), { kind: null });
 });
 
-test('analytics keeps the overview light and renders the Spending Compass on its own tab', async () => {
+test('Analytics consolidates merchant views and keeps Spending Compass focused on household benchmarks', async () => {
   const { buildDemoData } = await import('../backend/utils/demo.js');
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildMoneyFlowSignals } = await import('../backend/utils/benchmarks.js');
   const now = new Date();
   const demo = buildDemoData(now);
   const payload = JSON.parse(JSON.stringify({
-    ...buildAnalytics({ transactions: demo.transactions, budgets: [], latestBalance: 9500, today: now }),
+    ...periodPayload(demo.transactions, now),
     moneyFlow: buildMoneyFlowSignals({ transactions: demo.transactions, profile: demo.household, today: now })
   }));
+  payload.moneyFlow.range = payload.range;
   const f = loadPro(async url => url === '/api/license'
     ? response(200, { tier: 'pro', source: 'owner', active: true, plusActive: true, features: [] })
     : response(200, payload));
   await f.context.loadAnalyticsPage(true, '');
   const overview = f.node('analytics-content').innerHTML;
   assert.match(overview, /class="pro-tab is-active" aria-current="page">Overview/);
-  assert.match(overview, /href="#analytics\/compass" data-view="analytics\/compass"[^>]*>Spending Compass<span class="pro-tab-badge">\$\d[\d,]*\/mo/);
-  assert.doesNotMatch(overview, /YOUR COMPASS FOUND|Where your money flows|Technical readings/);
+  assert.match(overview, /href="#analytics\/compass" data-view="analytics\/compass"[^>]*>Spending Compass<\/a>/);
+  assert.match(overview, /Where your money flows|Technical readings/);
   assert.doesNotMatch(overview, /#tutorials\/compass/);
   assert.equal(f.node('analytics-heading').textContent, 'Your money, under the magnifying glass');
 
   await f.context.loadAnalyticsPage(false, 'compass');
-  const html = f.node('analytics-content').innerHTML;
+  const compassHtml = f.node('analytics-content').innerHTML;
   assert.equal(f.node('analytics-heading').textContent, 'Spending Compass');
-  assert.match(html, /class="pro-tab is-active" aria-current="page">Spending Compass/);
-  assert.match(html, /class="pro-tab-help" href="#tutorials\/compass">[^<]*How it works/);
-  assert.match(html, /Compared with a typical 2-person household in the Northeast that owns its home/);
-  assert.doesNotMatch(html, /Monthly spend trend|Category signals/);
+  assert.match(compassHtml, /class="pro-tab is-active" aria-current="page">Spending Compass/);
+  assert.match(compassHtml, /class="pro-tab-help" href="#tutorials\/compass">[^<]*How it works/);
+  assert.match(compassHtml, /Compared with a typical 2-person household in the Northeast that owns its home/);
+  assert.doesNotMatch(compassHtml, /Monthly spend trend|Category signals|Who gets your money|Technical readings|Hot and cold months/);
+  assert.match(compassHtml, /You vs. similar households/);
+  assert.match(compassHtml, /data-analytics-action="household-save"/);
+  assert.match(compassHtml, /Consumer Expenditure Survey/);
+  const html = overview;
   const mf = payload.moneyFlow;
-  // Hero: savings now, per year and over five years, with a plan item per opportunity.
-  assert.match(html, /YOUR COMPASS FOUND<\/p><strong class="pro-hero-figure">\$\d[\d,]* a month/);
-  assert.match(html, /over 5 years/);
-  assert.equal((html.match(/<ol class="pro-hero-plan">[\s\S]*?<\/ol>/)[0].match(/<li>/g) || []).length, mf.opportunities.length);
-  assert.match(html, /<b>Dining<\/b><small>\$\d[\d,]* &rarr; \$\d[\d,]* a month/);
   // Insight cards, money-flow Sankey, signal relationships and the percentile range strips.
   assert.equal((html.match(/class="pro-insight tone-/g) || []).length, mf.insights.length);
   assert.ok(mf.insights.length >= 2 && mf.insights.length <= 4);
@@ -5165,7 +5173,15 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /Above similar homes[\s\S]*Trending up[\s\S]*Unusual latest month/);
   assert.match(html, /Category signal relationship network/);
   assert.match(html, /connections show|Connections show/);
-  assert.match(overview, /class="money-mosaic"/);
+  const click = dataset => f.listeners.get('document:click')({ target: { closest: () => ({ dataset }) } });
+  await f.context.loadAnalyticsPage(false, '');
+  click({ analyticsAction: 'merchant-view', merchantView: 'heatmap' });
+  const heatmap = f.node('analytics-content').innerHTML;
+  assert.match(heatmap, /class="money-mosaic market-heatmap"/);
+  assert.equal((heatmap.match(/<h2>Who gets your money/g) || []).length, 1);
+  assert.doesNotMatch(heatmap, /Top merchants|id="pro-bubbles"/);
+  click({ analyticsAction: 'merchant-view', merchantView: 'bubbles' });
+  assert.match(f.node('analytics-content').innerHTML, /id="pro-bubbles"/);
   const flagged = mf.categories.filter(c => c.benchmarkStatus === 'high' || c.benchmarkStatus === 'above' || c.rising || c.spike || c.band?.position === 'above');
   const readStart = html.indexOf('<div class="pro-venn-read">');
   const reading = html.slice(readStart, html.indexOf('class="pro-card', readStart));
@@ -5200,8 +5216,6 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(html, /data-money-reading="0"/);
   assert.match(html, /<details class="pro-mf-details panel"><summary><span>Technical readings/);
   assert.match(html, /Purchases &times; size/);
-  assert.match(html, /data-analytics-action="household-save"/);
-  assert.match(html, /Consumer Expenditure Survey/);
   assert.doesNotMatch(html, /undefined|NaN|Infinity/);
   // Polished Sankey: labelled blocks with their share of income, one gradient per ribbon, a colour key.
   assert.match(html, /<text[^>]*class="pro-sk-in">Income<\/text>/);
@@ -5210,12 +5224,12 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.equal((html.match(/<linearGradient id="pro-sk-g/g) || []).length, (html.match(/class="pro-sk-band"/g) || []).length);
   assert.match(html, /class="pro-sk-legend"/);
   await f.context.loadAnalyticsPage(true);
-  assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on the Compass');
+  assert.match(f.node('analytics-content').innerHTML, /Where your money flows/, 'a reload after saving stays on Overview');
 
   // A month that spends more than came in shows the shortfall under income instead of a "left over" block.
   payload.moneyFlow.flow = { ...mf.flow, left: -300, discretionary: { ...mf.flow.discretionary,
     total: mf.flow.income + 300 - mf.flow.fixed.total - mf.flow.debt.total } };
-  await f.context.loadAnalyticsPage(true, 'compass');
+  await f.context.loadAnalyticsPage(true, '');
   const over = f.node('analytics-content').innerHTML;
   assert.match(over, /Overspent \$300\/mo/);
   assert.doesNotMatch(over, /class="pro-sk-in">Left over/);
@@ -5234,7 +5248,7 @@ test('analytics keeps the overview light and renders the Spending Compass on its
   assert.match(over, /does not identify which payments used savings or borrowing/);
   payload.moneyFlow.flow = { income: 100, left: 30, months: 3,
     fixed: { total: 1, items: [] }, discretionary: { total: 39, items: [] }, debt: { total: 30, items: [] } };
-  await f.context.loadAnalyticsPage(true, 'compass');
+  await f.context.loadAnalyticsPage(true, '');
   const surplus = f.node('analytics-content').innerHTML;
   assert.doesNotMatch(surplus, /data-flow-source="shortfall"/);
   assert.match(surplus, /data-flow-source="income" data-flow-target="debt" data-flow-amount="30"/);
@@ -5270,14 +5284,16 @@ test('merchant bubble detail exposes precise debit and credit totals and the und
     { id: 2, date: '2026-08-03', amount: 900, direction: 'DEBIT', description: 'HOME DEPOT 2', display_name: 'Home Depot', category: 'Shopping', is_fixed: true },
     { id: 3, date: '2026-09-02', amount: 90.60, direction: 'CREDIT', description: 'HOME DEPOT RETURN', display_name: 'Home Depot', category: 'Shopping' }
   ] });
-  const f = loadPro(async url => response(200, url === '/api/license' ? { active: true, plusActive: true, tier: 'pro' } : { moneyFlow: data }));
+  const payload = periodPayload();
+  data.range = payload.range;
+  const f = loadPro(async url => response(200, url === '/api/license' ? { active: true, plusActive: true, tier: 'pro' } : { ...payload, moneyFlow: data }));
   browserBits(f);
   const el = f.context.document.getElementById('pro-bubbles');
   const button = f.context.document.getElementById('depot-bubble');
   button.dataset.bubble = '0';
   el.isConnected = true; el.clientWidth = 800; el.clientHeight = 450;
   el.querySelectorAll = () => [button];
-  await f.context.loadAnalyticsPage(true, 'compass');
+  await f.context.loadAnalyticsPage(true, '');
   el.listeners.click({ target: { closest: () => button } });
   const html = f.node('pro-bubble-detail').innerHTML;
   assert.match(html, /\$2,232\.27<\/b> money out/);
@@ -5507,7 +5523,9 @@ test('the dedicated health plan scores the split, walks twelve weeks and saves t
 test('Financial Health is first-class navigation and available to Basic without Pro requests', async () => {
   const html = source('index.html');
   assert.equal((html.match(/id="health-plan-root"/g) || []).length, 1);
-  assert.ok(html.indexOf('data-view="financial-health"') < html.indexOf('data-view="categories"'));
+  const nav = html.split('<ul class="nav-list">')[1].split('</ul>')[0];
+  assert.deepEqual([...nav.matchAll(/data-view="([^"]+)"/g)].slice(0, 6).map(match => match[1]),
+    ['dashboard', 'analytics', 'transactions', 'categories', 'payoff', 'goals']);
   assert.match(html, /id="dashboard-health-title"/);
   assert.match(html, /id="financial-health-view"[^]*?id="health-plan-root"/);
   const { buildHealthPlan } = await import('../backend/utils/healthPlan.js');
@@ -5841,7 +5859,7 @@ test('spending compass tutorial walks through the plan, money flow, overlapping 
   assert.equal(tours.state.tutorial.id, 'compass');
   tours.open('compass-signals');
   assert.equal(tours.state.tutorial.scenes[tours.state.index].id, 'signals');
-  assert.match(f.node('tut-caption').textContent, /above similar homes[\s\S]*trending up[\s\S]*unusual last month[\s\S]*9 in 10/i);
+  assert.match(f.node('tut-caption').textContent, /On Analytics Overview[\s\S]*above similar homes[\s\S]*trending up[\s\S]*unusual last month/i);
   assert.match(f.node('tut-canvas').innerHTML, /tm-venn[\s\S]*tm-range-band/);
   tours.open('compass/flow');
   assert.match(f.node('tut-caption').textContent, /fixed expenses, discretionary spending, debt payments and what is left over/);
@@ -5933,7 +5951,7 @@ test('updated tutorials explain recent workflows, account freshness, real import
   tours.open('debt/experiments');
   assert.match(f.node('tut-caption').textContent, /independent[\s\S]*actually free up/);
   tours.open('analytics/ranges');
-  assert.match(f.node('tut-caption').textContent, /3, 6, 12 and 24[\s\S]*three completed months/);
+  assert.match(f.node('tut-caption').textContent, /single period[\s\S]*3, 6, 12 or 24 completed months[\s\S]*both|single period[\s\S]*3, 6, 12 or 24 completed months[\s\S]*Overview and Spending Compass/);
   tours.open('goals/flex');
   assert.match(f.node('tut-caption').textContent, /does not transfer money[\s\S]*does not automatically record/);
   tours.open('categories/select-categories');

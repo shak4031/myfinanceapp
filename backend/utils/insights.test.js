@@ -112,6 +112,11 @@ test('free users get a Pro teaser; Pro users get budget and trend signals', () =
   const result = buildInsights({ today, balance: 1000, upcoming: [], analytics, pro: true });
   const ids = result.insights.map(item => item.id);
   assert.equal(ids[0], 'over:Dining');
+  for (const id of ['over:Dining', 'risk:Groceries']) {
+    assert.deepEqual(result.insights.find(item => item.id === id).action, {
+      label: 'Review categories', view: 'dashboard', anchor: 'mtd-spending-section'
+    });
+  }
   assert.ok(!ids.includes('over:Transfers'));
   assert.ok(ids.includes('risk:Groceries'));
   assert.ok(ids.includes('mover:Groceries'));

@@ -95,6 +95,7 @@
   function actionLink(item, index) {
     if (!item.action) return '';
     const content = `${esc(item.action.label)}${icon('arrow', 16)}`;
+    if (item.action.anchor) return `<button type="button" class="welcome-action" data-welcome-action="${index}">${content}</button>`;
     return item.action.view
       ? `<a class="welcome-action" href="#${esc(item.action.view)}" data-view="${esc(item.action.view)}"${item.id === 'tour' ? ' data-welcome-tour' : ''}>${content}</a>`
       : `<button type="button" class="welcome-action" data-welcome-action="${index}">${content}</button>`;
@@ -225,6 +226,15 @@
     const action = item?.action;
     if (!action) return;
     if (item.id === 'tour') storage.set(TOUR_SEEN_KEY, '1');
+    if (action.anchor) {
+      const section = document.getElementById(action.anchor);
+      if (section) {
+        section.setAttribute('tabindex', '-1');
+        section.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        section.focus({ preventScroll: true });
+      } else window.notify?.('This month\'s categories are not loaded. Refresh the Dashboard and try again.');
+      return;
+    }
     if (action.view) return window.showView?.(action.view);
     if (action.act === 'upcoming') return $('upcoming-section')?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     if (action.act === 'import') return window.openImportModal?.();

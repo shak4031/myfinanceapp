@@ -87,18 +87,24 @@
     return `<svg class="pro-category-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Monthly spending trend, ${labels[0]} to ${labels[labels.length - 1]}. Dashed line: monthly average ${compact(avg)}.`)}"><title>${esc(labels.map((label, i) => `${label}: ${compact(values[i])}`).join('; '))}</title><line class="trend-average" x1="6" x2="${width - 6}" y1="${n(y(avg))}" y2="${n(y(avg))}"/><polyline points="${points}"/>${dots}</svg>`;
   }
 
-  // Donut built from stroked circle segments, with a small gap between slices.
-  function donut(items, { size = 240, thickness = 30, centerLabel = '', centerValue = '' } = {}) {
+  function donut(items, { size = 320, centerLabel = '', centerValue = '' } = {}) {
     const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
-    const r = (size - thickness) / 2, c = 2 * Math.PI * r;
-    let offset = 0;
+    const center = size / 2, inner = size * .20;
+    const largest = Math.max(...items.map(item => item.value), 1);
+    let offset = -Math.PI / 2;
+    const point = (r, a) => `${n(center + r * Math.cos(a))} ${n(center + r * Math.sin(a))}`;
     const segments = items.map((item, i) => {
-      const length = (item.value / total) * c, gap = items.length > 1 ? Math.min(2.5, length / 3) : 0;
-      const segment = `<circle class="slice" data-slice="${i}" cx="${size / 2}" cy="${size / 2}" r="${n(r)}" stroke="${item.color}" stroke-width="${thickness}" stroke-dasharray="${n(Math.max(0, length - gap))} ${n(c)}" stroke-dashoffset="${n(-offset)}"><title>${esc(item.label)}: ${compact(item.value)} (${Math.round((item.value / total) * 100)}%)</title></circle>`;
-      offset += length;
-      return segment;
+      const angle = item.value / total * Math.PI * 2;
+      const gap = items.length > 1 ? Math.min(.018, angle / 4) : .00001;
+      const start = offset + gap, end = offset + angle - gap, mid = (start + end) / 2;
+      const r = size * (.34 + .12 * Math.sqrt(item.value / largest));
+      const large = end - start > Math.PI ? 1 : 0;
+      const labelR = inner + (r - inner) * .58;
+      const path = `M ${point(inner, start)} L ${point(r, start)} A ${r} ${r} 0 ${large} 1 ${point(r, end)} L ${point(inner, end)} A ${inner} ${inner} 0 ${large} 0 ${point(inner, start)} Z`;
+      offset += angle;
+      return `<g><path class="radial-slice" data-slice="${i}" d="${path}" fill="${item.color}"><title>${esc(item.label)}: ${compact(item.value)} (${(item.value / total * 100).toFixed(1)}%)</title></path>${angle > .24 ? `<text class="radial-share" x="${n(center + labelR * Math.cos(mid))}" y="${n(center + labelR * Math.sin(mid))}" text-anchor="middle" dominant-baseline="middle">${Math.round(item.value / total * 100)}%</text>` : ''}</g>`;
     }).join('');
-    return `<svg class="pro-donut" viewBox="0 0 ${size} ${size}" role="img" aria-label="Spending by category"><g transform="rotate(-90 ${size / 2} ${size / 2})"><circle class="track" cx="${size / 2}" cy="${size / 2}" r="${n(r)}" stroke-width="${thickness}"/>${segments}</g><text class="donut-label" x="50%" y="46%" text-anchor="middle">${esc(centerLabel)}</text><text class="donut-value" x="50%" y="58%" text-anchor="middle">${esc(centerValue)}</text></svg>`;
+    return `<svg class="pro-donut" viewBox="0 0 ${size} ${size}" role="img" aria-label="Spending by category. Slice angle represents share; extended radii emphasize larger categories."><g>${segments}</g><text class="donut-label" x="50%" y="47%" text-anchor="middle">${esc(centerLabel)}</text><text class="donut-value" x="50%" y="55%" text-anchor="middle">${esc(centerValue)}</text></svg>`;
   }
 
   window.ProCharts = { PALETTE, bars, plot, sparkline, trendLine, donut, compact, monthShort, niceMax };
