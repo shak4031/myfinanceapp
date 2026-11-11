@@ -136,7 +136,7 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.equal(f.node('landscape-root').onclick, null);
 });
 
-test('landscape expands populated cluster fans in place without shrinking nodes', async () => {
+test('landscape contains single-row items in wide bottom-to-top blocks and expands horizontally', async () => {
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: Array.from({ length: 21 }, (_, i) => ({
     id: i + 1, date: '2026-10-10', description: `Shop ${i}`, category: `Category ${i}`, amount: 25, direction: 'DEBIT'
@@ -154,35 +154,42 @@ test('landscape expands populated cluster fans in place without shrinking nodes'
   assert.doesNotMatch(root.innerHTML, /landscape-island|landscape-light|landscape-sphere|data-yaw|data-pitch|zoom-in|zoom-out|scroll-mode|rotate-left|Depth view|Flat view/);
   assert.equal(typeof map.onpointerdown, 'function', 'mouse panning is available');
   const css = source('landscape.css');
-  assert.match(css, /\.landscape-map \{[^}]*width: max\(100%, 1400px\); height: auto/);
+  assert.match(css, /\.landscape-map \{[^}]*width: 100%; max-height: 900px; overflow: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*width: 100%; height: auto/);
   assert.match(css, /\.landscape-map > svg \{[^}]*background: #fff; border-radius: inherit/,
     'the white background follows the expanded SVG, not just its narrower wrapper');
   assert.doesNotMatch(root.innerHTML, /landscape-medallion|landscape-transaction-marker/);
   assert.match(root.innerHTML, /style="width:[\d.]+px"/, 'expanding never rescales existing nodes');
   assert.match(css, /\.landscape-node\.is-offshoot .landscape-label \{ font-size: 13px/);
-  assert.match(root.innerHTML, /d="M [^"]+ C /, 'fan connections are curved');
+  assert.match(root.innerHTML, /class="landscape-route"[^>]+d="M [^"]+ C /, 'layer pathways are curved and directed');
   const locations = [...root.innerHTML.matchAll(/transform="translate\(([^ ]+) ([^)]+)\)"[^>]*data-landscape-node="([^"]+)"/g)]
     .map(([, x, y, id]) => ({ id, x: Number(x), y: Number(y) }));
   const hubs = graph.nodes.filter(node => node.kind === 'branch').map(branch => locations.find(p => p.id === branch.id));
-  assert.ok(new Set(hubs.map(p => Math.round(Math.hypot(p.x, p.y)))).size > 3,
-    'cluster hubs have distinct distances rather than forming a rigid ring');
+  const hub = id => hubs.find(point => point.id === id);
+  assert.ok(hub('income').y > hub('cash').y);
+  assert.ok(hub('cash').y > hub('spending').y);
+  assert.ok(hub('spending').y > hub('goals').y);
+  const blocks = [...root.innerHTML.matchAll(/data-landscape-block="([^"]+)" x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/g)]
+    .map(([, id, x, y, w, h]) => ({ id, x: Number(x), y: Number(y), w: Number(w), h: Number(h) }));
+  assert.equal(blocks.length, 8);
   for (const item of graph.nodes.filter(node => node.kind !== 'branch' && node.branch)) {
     const p = locations.find(point => point.id === item.id);
     if (!p) continue;
-    const hub = hubs.find(point => point.id === item.branch);
-    assert.ok(Math.abs(Math.hypot(p.x - hub.x, p.y - hub.y) - 280) < .001,
-      'preview endpoints fan out from their own hub');
+    const block = blocks.find(block => block.id === item.branch);
+    assert.ok(p.x - 90 >= block.x && p.x + 90 <= block.x + block.w
+      && p.y - 55 >= block.y && p.y + 105 <= block.y + block.h, 'each item is contained in its own block');
   }
   assert.match(css, /#landscape-view \{[^}]*max-width: none/);
   assert.match(root.innerHTML, /id="landscape-svg" width="[\d.]+" height="[\d.]+" viewBox=/);
-  assert.doesNotMatch(css, /overflow: auto|height: 340px|62vh|drop-shadow/);
+  assert.doesNotMatch(css, /height: 340px|62vh|drop-shadow/);
   assert.match(root.innerHTML, /<details class="landscape-help"><summary>Map guide/);
   const canvasWidth = () => Number(root.innerHTML.match(/id="landscape-svg" width="([\d.]+)"/)[1]);
   const originalWidth = canvasWidth();
   await click({ landscapeAction: 'fan', branch: 'spending' });
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 37, 'household, eight hubs, 21 spending nodes and seven missing nodes');
-  assert.ok(canvasWidth() > originalWidth, 'the cluster canvas grows instead of shrinking nodes');
+  assert.ok(canvasWidth() > originalWidth, 'the layered canvas grows horizontally instead of stacking items');
+  const expandedItems = [...root.innerHTML.matchAll(/transform="translate\(([^ ]+) ([^)]+)\)"[^>]*data-landscape-node="(activity-[^"]+)"/g)];
+  assert.equal(new Set(expandedItems.map(match => match[2])).size, 1, 'all spending items share one row');
   assert.doesNotMatch(root.innerHTML, /landscape-pagination|previous-page|next-page/);
   const first = graph.nodes.find(n => n.kind === 'activity');
   assert.match(root.innerHTML, new RegExp(`data-landscape-source="spending" data-landscape-target="${first.id}"`));
@@ -218,7 +225,7 @@ test('landscape mouse dragging pans both axes without activating items and leave
   await f.context.FinanceLandscape.loadPage();
   const map = f.node('landscape-map'), moves = [];
   let capture = null;
-  map.closest = () => ({ scrollBy: (x, y) => moves.push([x, y]) });
+  map.scrollBy = (x, y) => moves.push([x, y]);
   f.context.getComputedStyle = () => ({ overflowY: 'auto' });
   map.setPointerCapture = id => { capture = id; };
   map.hasPointerCapture = id => capture === id;
@@ -253,7 +260,7 @@ test('landscape mouse dragging pans both axes without activating items and leave
   assert.equal(map.classList.contains('is-panning'), false);
 });
 
-test('landscape has independent fan-out legs, pictograms, simple visibility filters and optional cross-leg flows', async () => {
+test('landscape has contained blocks, pictograms, visibility filters and optional recorded flows', async () => {
   const { buildLandscape, LANDSCAPE_BRANCHES } = await import('../backend/utils/landscape.js');
   const graph = buildLandscape({ now: new Date('2026-11-09'),
     accounts: [{ id: 1, name: 'Checking', kind: 'checking', status: 'active' }],
@@ -270,10 +277,13 @@ test('landscape has independent fan-out legs, pictograms, simple visibility filt
   const badges = [...root.innerHTML.matchAll(/class="landscape-section-toggle[^]*?<svg[^]*?<\/svg>/g)].map(match => match[0].slice(match[0].indexOf('<svg')));
   assert.equal(new Set(badges).size, 8, 'every leg has a distinct pictogram');
   for (const [id] of LANDSCAPE_BRANCHES) {
-    assert.match(root.innerHTML, new RegExp(`data-landscape-source="household" data-landscape-target="${id}"`));
+    assert.match(root.innerHTML, new RegExp(`data-landscape-block="${id}"`));
     for (const child of graph.nodes.filter(node => node.branch === id && node.kind !== 'branch')) {
       assert.match(root.innerHTML, new RegExp(`data-landscape-source="${id}" data-landscape-target="${child.id}"`));
     }
+    assert.match(root.innerHTML, /data-landscape-route="income-cash"/);
+    assert.match(root.innerHTML, /data-landscape-route="cash-spending"/);
+    assert.doesNotMatch(root.innerHTML, /data-landscape-source="household"/);
   }
   const options = root.querySelector('.landscape-view-options');
   options.open = true;

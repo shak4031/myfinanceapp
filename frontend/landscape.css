@@ -24,7 +24,12 @@
 .landscape-view-options[open] > summary { margin-bottom: 12px; width: fit-content; }
 .landscape-small { font-size: 13px; line-height: 1.7; color: #526977; }
 .landscape-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.landscape-map { width: max(100%, 1400px); height: auto; border-radius: 18px; background: #fff; touch-action: auto; }
+.landscape-map { width: 100%; max-height: 900px; overflow: auto; border: 1px solid #d5e3e7; border-radius: 18px; background: #fff; touch-action: auto; }
+.landscape-direction { margin: 0 0 16px; color: #395666; font-size: 13px; line-height: 1.7; }
+.landscape-block { fill-opacity: .065; stroke-opacity: .45; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.landscape-layer-label { text-anchor: middle; fill: #395666; font-size: 16px; font-weight: 750; letter-spacing: 1.4px; }
+.landscape-route { fill: none; stroke: #6b8795; stroke-width: 2.5; stroke-dasharray: 7 6; }
+.landscape-edge.is-structure { display: none; }
 .landscape-map svg { user-select: none; cursor: grab; }
 .landscape-map.is-panning, .landscape-map.is-panning * { cursor: grabbing !important; }
 .landscape-illustration, .landscape-pictogram { pointer-events: none; }

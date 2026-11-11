@@ -76,9 +76,7 @@
     map.onpointerdown = event => {
       suppressClick = false;
       if (event.pointerType !== 'mouse' || event.button !== 0) return;
-      const main = map.closest('.main-content');
-      const scroller = main && getComputedStyle(main).overflowY !== 'visible' ? main : window;
-      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, scroller, moving: false };
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moving: false };
     };
     map.onpointermove = event => {
       if (!drag || drag.id !== event.pointerId) return;
@@ -92,7 +90,7 @@
         map.classList.add('is-panning');
       }
       event.preventDefault();
-      drag.scroller.scrollBy(-dx, -dy);
+      map.scrollBy(-dx, -dy);
       drag.x = event.clientX; drag.y = event.clientY;
     };
     const finish = event => {
@@ -116,64 +114,77 @@
     const branches = data.nodes.filter(node => node.kind === 'branch');
     const positions = new Map(), visible = new Set(['household']);
     const txEdges = [], txNodes = [];
-    const orientations = {
-      income: { angle: -1.65, distance: 300 }, spending: { angle: -.65, distance: 400 },
-      debt: { angle: .12, distance: 340 }, cash: { angle: .8, distance: 350 },
-      savings: { angle: 1.65, distance: 320 }, investments: { angle: 2.85, distance: 370 },
-      retirement: { angle: -2.55, distance: 400 }, goals: { angle: 2.2, distance: 430 }
-    };
-    const footprint = node => node.kind === 'transaction'
-      ? { x: -40, y: -25, w: 80, h: 55 }
-      : { x: -90, y: -55, w: 180, h: node.kind === 'branch' ? 180 : 160 };
-    const occupied = [{ x: -100, y: -65, w: 200, h: 160 }];
-    positions.set('household', { x: 0, y: 0 });
-    branches.forEach(branch => {
-      if (hidden.has(branch.id) || (focus && focus !== branch.id)) return;
-      const { angle, distance } = orientations[branch.id];
-      const local = new Map([[branch.id, { x: 0, y: 0 }]]);
-      visible.add(branch.id);
-      const list = collapsed.has(branch.id) ? [] : children(branch.id).slice(0, expanded.has(branch.id) || focus ? undefined : 3);
-      let radius = list.length <= 3 ? 280 : 480;
-      list.forEach((node, i) => {
-        const tier = Math.floor(i / 5), count = Math.min(5, list.length - tier * 5);
-        // Keep each fan local to its hub, reserving room for open payment subtrees.
-        if (i && i % 5 === 0) radius += list.slice(i - 5, i).some(item => openTransactions.has(item.id) && item.transactions?.length) ? 1300 : 240;
-        const a = angle + (count === 1 ? 0 : (i % 5 / (count - 1) - .5) * 2.2);
-        const p = { x: Math.cos(a) * radius, y: Math.sin(a) * radius };
-        visible.add(node.id);
-        local.set(node.id, p);
-        if (!openTransactions.has(node.id)) return;
-        const transactions = node.transactions || [];
-        transactions.forEach((tx, j) => {
-          const txTier = Math.floor(j / 3), txCount = Math.min(3, transactions.length - txTier * 3);
-          const txAngle = a + (j % 3 - (txCount - 1) / 2) * Math.min(.2, 110 / (radius + 250));
-          const txRadius = radius + 250 + txTier * 130;
-          const id = `transaction-${node.id}-${tx.id}`;
-          const txNode = { id, kind: 'transaction', branch: branch.id, label: tx.label,
-            amount: tx.amount, metric: 'transaction', date: tx.date, href: `#transactions/${tx.id}` };
-          txNodes.push(txNode);
-          visible.add(id);
-          local.set(id, { x: Math.cos(txAngle) * txRadius, y: Math.sin(txAngle) * txRadius });
-          txEdges.push({ source: node.id, target: id, kind: 'structure' });
+    const layers = [
+      { label: 'LONGER-TERM PLANS', ids: ['goals', 'retirement', 'investments'] },
+      { label: 'SPENDING, DEBT & SAVINGS', ids: ['spending', 'debt', 'savings'] },
+      { label: 'ACCOUNTS · CASH & EVERYDAY BANKING', ids: ['cash'] },
+      { label: 'INCOME · WHERE MONEY ENTERS', ids: ['income'] }
+    ];
+    const gap = 35;
+    const activeBranches = layer => layer.ids.map(id => branches.find(branch => branch.id === id))
+      .filter(branch => branch && !hidden.has(branch.id) && (!focus || focus === branch.id));
+    const itemsFor = branch => collapsed.has(branch.id) ? [] : children(branch.id).slice(0, expanded.has(branch.id) || focus ? undefined : 3);
+    const itemWidth = node => openTransactions.has(node.id) && node.transactions?.length ? 350 : 190;
+    const widthFor = branch => Math.max(650, itemsFor(branch).reduce((sum, node) => sum + itemWidth(node), 40));
+    const sceneWidth = Math.max(1240, ...layers.map(layer => {
+      const active = activeBranches(layer);
+      return active.reduce((sum, branch) => sum + widthFor(branch), 0) + Math.max(0, active.length - 1) * gap;
+    }));
+    const blocks = [], routes = [];
+    positions.set('household', { x: sceneWidth / 2, y: 70 });
+    let layerY = 230;
+    for (const layer of layers) {
+      const active = activeBranches(layer);
+      if (!active.length) continue;
+      const spare = (sceneWidth - active.reduce((sum, branch) => sum + widthFor(branch), 0) - (active.length - 1) * gap) / active.length;
+      let blockX = 0;
+      let layerHeight = 0;
+      active.forEach(branch => {
+        const width = widthFor(branch) + spare;
+        const x = blockX, center = x + width / 2;
+        blockX += width + gap;
+        visible.add(branch.id);
+        positions.set(branch.id, { x: center, y: layerY + 100 });
+        const list = itemsFor(branch);
+        const extra = list.length ? (width - 40 - list.reduce((sum, node) => sum + itemWidth(node), 0)) / list.length : 0;
+        let itemLeft = x + 20;
+        const rowY = layerY + 315;
+        let rowHeight = 0;
+        list.forEach(node => {
+          const cellWidth = itemWidth(node) + extra;
+          const itemX = itemLeft + cellWidth / 2;
+          itemLeft += cellWidth;
+          visible.add(node.id);
+          positions.set(node.id, { x: itemX, y: rowY });
+          const transactions = openTransactions.has(node.id) ? node.transactions || [] : [];
+          transactions.forEach((tx, index) => {
+            const id = `transaction-${node.id}-${tx.id}`;
+            txNodes.push({ id, kind: 'transaction', branch: branch.id, label: tx.label,
+              amount: tx.amount, metric: 'transaction', date: tx.date, href: `#transactions/${tx.id}` });
+            visible.add(id);
+            positions.set(id, { x: itemX + (index % 3 - 1) * 100, y: rowY + 160 + Math.floor(index / 3) * 75 });
+            txEdges.push({ source: node.id, target: id, kind: 'structure' });
+          });
+          rowHeight = Math.max(rowHeight, 200 + Math.ceil(transactions.length / 3) * 75);
         });
+        const height = list.length ? rowY + rowHeight - layerY - 55 : 235;
+        blocks.push({ id: branch.id, x, y: layerY, w: width, h: height, color: branch.color });
+        layerHeight = Math.max(layerHeight, height);
       });
-      const localNodes = [branch, ...list, ...txNodes.filter(node => node.branch === branch.id)];
-      const boxes = localNodes.map(node => {
-        const p = local.get(node.id), box = footprint(node);
-        return { x: p.x + box.x, y: p.y + box.y, w: box.w, h: box.h };
-      });
-      let offset, bounds;
-      let separation = distance;
-      do {
-        offset = { x: Math.cos(angle) * separation, y: Math.sin(angle) * separation };
-        bounds = boxes.map(box => ({ ...box, x: box.x + offset.x, y: box.y + offset.y }));
-        separation += 40;
-      } while (bounds.some(candidate => occupied.some(box => candidate.x < box.x + box.w + 35 && candidate.x + candidate.w + 35 > box.x && candidate.y < box.y + box.h + 35 && candidate.y + candidate.h + 35 > box.y)));
-      occupied.push(...bounds);
-      for (const [id, p] of local) positions.set(id, { x: p.x + offset.x, y: p.y + offset.y });
-    });
+      routes.push(`<text class="landscape-layer-label" x="${sceneWidth / 2}" y="${layerY - 24}">${layer.label}</text>`);
+      layerY += layerHeight + 130;
+    }
     const allNodes = [...data.nodes, ...txNodes];
-    const connections = [...data.edges, ...txEdges].filter(edge => visible.has(edge.source) && visible.has(edge.target) && (edge.kind === 'structure' || showFlows));
+    const backbone = [
+      ['income', 'cash'], ['cash', 'spending'], ['cash', 'debt'], ['cash', 'savings'],
+      ['savings', 'goals'], ['savings', 'retirement'], ['savings', 'investments']
+    ].filter(([source, target]) => visible.has(source) && visible.has(target));
+    for (const [source, target] of backbone) {
+      const a = blocks.find(block => block.id === source), b = blocks.find(block => block.id === target);
+      routes.push(`<path class="landscape-route" data-landscape-route="${source}-${target}" d="M ${a.x + a.w / 2} ${a.y} C ${a.x + a.w / 2} ${a.y - 60} ${b.x + b.w / 2} ${b.y + b.h + 60} ${b.x + b.w / 2} ${b.y + b.h}" marker-end="url(#landscape-arrow)"><title>${source} to ${target}: organizational pathway, not a measured transfer</title></path>`);
+    }
+    const connections = [...data.edges, ...txEdges].filter(edge => edge.source !== 'household'
+      && visible.has(edge.source) && visible.has(edge.target) && (edge.kind === 'structure' || showFlows));
     const paths = connections.map(edge => {
       const a = positions.get(edge.source), b = positions.get(edge.target);
       const source = allNodes.find(node => node.id === edge.source);
@@ -181,12 +192,7 @@
       const related = selected === 'household' || edge.source === selected || edge.target === selected;
       const title = edge.kind === 'structure' ? `${source.label} — ${target.label}: grouped relationship`
         : `${source.label} → ${target.label}: ${money(edge.amount)}/mo recorded ${edge.kind === 'transfer' ? 'transfer' : 'activity'}`;
-      const direction = orientations[target.branch || source.branch];
-      const length = Math.hypot(b.x - a.x, b.y - a.y);
-      const tangent = direction?.angle ?? Math.atan2(b.y - a.y, b.x - a.x);
-      const bow = source.kind === 'household' ? length * .16 : 0;
-      const cx = a.x + Math.cos(tangent) * length * .55 - Math.sin(tangent) * bow;
-      const cy = a.y + Math.sin(tangent) * length * .55 + Math.cos(tangent) * bow;
+      const cx = a.x, cy = (a.y + b.y) / 2;
       return `<path class="landscape-edge is-${edge.kind}${source.kind === 'household' ? ' is-trunk' : ''}${target.kind === 'missing' ? ' is-missing' : ''}${related ? '' : ' is-dim'}" data-landscape-source="${esc(edge.source)}" data-landscape-target="${esc(edge.target)}" d="M ${a.x} ${a.y} C ${cx} ${cy} ${(cx + b.x) / 2} ${(cy + b.y) / 2} ${b.x} ${b.y}" stroke="${color(target.kind === 'branch' ? target : target.branch ? target : source)}"${edge.kind === 'structure' ? '' : ' marker-end="url(#landscape-arrow)"'}><title>${esc(title)}</title></path>`;
     }).join('');
     const visibleNodes = allNodes.filter(node => visible.has(node.id));
@@ -200,7 +206,7 @@
       const label = home ? ['Your household'] : labelLines(node.label);
       const total = hub ? children(node.id).length : 0;
       const expansion = hub ? [
-        { action: 'collapse', text: collapsed.has(node.id) ? `+ Expand (${total})` : '− Fold leg', open: !collapsed.has(node.id) },
+        { action: 'collapse', text: collapsed.has(node.id) ? `+ Expand (${total})` : '− Fold block', open: !collapsed.has(node.id) },
         ...(total > 3 && !collapsed.has(node.id) ? [{ action: 'fan', text: expanded.has(node.id) || focus ? '− Show fewer' : `+${total - 3} more`, open: expanded.has(node.id) || !!focus }] : [])
       ] : node.transactions?.length ? [{ action: 'transactions', text: `${openTransactions.has(node.id) ? '− Hide payments' : '+ Payments'} (${node.transactions.length}${node.count > node.transactions.length ? `/${node.count}` : ''})`, open: openTransactions.has(node.id) }] : [];
       const controlWidth = 160;
@@ -214,17 +220,9 @@
         ? `<a class="landscape-node is-transaction" transform="translate(${p.x} ${p.y})" href="${node.href}" aria-label="${esc(`${node.label}. ${node.date}. ${money(node.amount)}`)}"><title>${esc(node.label)} · ${esc(node.date)} · ${esc(money(node.amount))}</title>${content}</a>`
         : `<g class="landscape-node${offshoot ? ' is-offshoot' : ''}${node.kind === 'missing' ? ' is-missing' : ''}${selected === node.id ? ' is-selected' : ''}" transform="translate(${p.x} ${p.y})" role="button" tabindex="0" data-landscape-node="${esc(node.id)}" data-landscape-radius="${nodeRadius(node)}" data-landscape-icon="${home ? 'household' : node.branch}"${hub ? ` data-landscape-leg="${node.id}"` : ''} aria-label="${esc(`${node.label}. ${home ? 'Select a branch to explore.' : value(node)}`)}" aria-pressed="${selected === node.id}"><title>${esc(node.label)}${home ? '' : `: ${esc(value(node))}`}</title><circle r="${radius + 7}" class="landscape-halo"/>${content}</g>`;
     }).join('');
-    const bounds = visibleNodes.map(node => {
-      const p = positions.get(node.id), box = footprint(node);
-      return { x: p.x + box.x, y: p.y + box.y, w: box.w, h: box.h };
-    });
-    let left = Math.min(...bounds.map(b => b.x)) - 45;
-    const top = Math.min(...bounds.map(b => b.y)) - 45;
-    const contentWidth = Math.max(...bounds.map(b => b.x + b.w)) - left + 45;
-    const sceneWidth = Math.max(1400, contentWidth);
-    left -= (sceneWidth - contentWidth) / 2;
-    const sceneHeight = Math.max(...bounds.map(b => b.y + b.h)) - top + 45;
-    return `<svg id="landscape-svg" width="${sceneWidth}" height="${sceneHeight}" viewBox="${left} ${top} ${sceneWidth} ${sceneHeight}" style="width:${sceneWidth}px" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Financial landscape. Drag with the left mouse button to pan, or scroll on touch screens. Expand or fold each leg and reveal recorded payments in place."><defs><marker id="landscape-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b8795"/></marker></defs>${paths}${nodes}${controls.join('')}</svg>`;
+    const sceneHeight = layerY - 100;
+    const containers = blocks.map(block => `<rect class="landscape-block" data-landscape-block="${block.id}" x="${block.x}" y="${block.y}" width="${block.w}" height="${block.h}" rx="22" fill="${block.color}" stroke="${block.color}"/>`).join('');
+    return `<svg id="landscape-svg" width="${sceneWidth}" height="${sceneHeight}" viewBox="-25 -10 ${sceneWidth + 50} ${sceneHeight}" style="width:${sceneWidth}px" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Financial landscape. Read from bottom to top: Income, Accounts, Spending debt and savings, then Longer-term plans. Each block contains its recorded items."><defs><marker id="landscape-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b8795"/></marker></defs>${routes.join('')}${containers}${paths}${nodes}${controls.join('')}</svg>`;
   }
   function inspector() {
     const node = data.nodes.find(item => item.id === selected) || data.nodes[0];
@@ -246,23 +244,29 @@
       ${node.transactions?.length ? `<h3>Recent recorded transactions</h3><p>${node.count} transactions in the comparison period. Showing the latest ${node.transactions.length}.</p><ul class="landscape-detail-list">${node.transactions.map(tx => `<li><a href="#transactions/${tx.id}" class="transaction-link">${esc(tx.label)}</a><span>${esc(tx.date)} · ${esc(money(tx.amount))}</span></li>`).join('')}</ul>` : ''}
       ${node.href ? `<a class="btn btn-secondary" href="${node.href}">Open ${node.href === '#accounts' ? 'Accounts' : node.href === '#goals' ? 'Goals' : 'Debt-free plan'}</a>` : ''}`;
   }
-  function render() {
+  function render(preserveViewport = true) {
     const root = $('landscape-root');
     if (!root || !data) return;
+    const previousMap = $('landscape-map');
+    const viewport = preserveViewport && previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
     const branches = data.nodes.filter(node => node.kind === 'branch');
-    root.innerHTML = `<div class="landscape-period"><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)}</span><span>${data.period.months}/3 months recorded</span><details class="landscape-help"><summary>Map guide</summary><p>Each financial cluster has its own hub and curved fan-out, with names and values beside the illustrations. Hold the left mouse button and drag to move around, or scroll on a touch screen. Expand more items or fold a leg using its on-map controls. Payment nodes can reveal their latest recorded transactions; click a payment to open it. The canvas grows as you expand, without shrinking existing nodes. Explore isolates a leg; Show full landscape restores the overview.</p><p>Illustration size reflects the absolute amount relative to the largest item with the same measure in that leg. Balances, monthly flows and goal progress use separate scales. Missing amounts remain unavailable, never zero. This is not a financial-health score or share of net worth. Leg sizes are not comparable.</p><p>Colored branches show grouping, not money transfers. Recorded flow arrows are optional; details always retain verified connections. Balances have their own as-of dates; missing coverage is not zero. Transaction fans show up to the latest 20 records supplied for each item; the payment control shows displayed and total counts when they differ.</p></details></div>
+    root.innerHTML = `<div class="landscape-period"><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)}</span><span>${data.period.months}/3 months recorded</span><details class="landscape-help"><summary>Map guide</summary><p>Read from south to north: Income at the bottom, cash and everyday banking Accounts above it, then Spending, Debt and Savings, and Longer-term plans at the top. Each tinted block contains its own recorded items. Savings, investment, retirement and debt accounts stay in their labeled destination blocks. Scroll upward through the layers or drag the map with the left mouse button. Expand more items or fold a block using its controls. Select an item for details or reveal its recorded payments. Explore isolates a block; Show full landscape restores all layers.</p><p>Illustration size reflects the absolute amount relative to the largest item with the same measure in that block. Balances, monthly flows and goal progress use separate scales. Missing amounts remain unavailable, never zero. This is not a financial-health score or share of net worth. Block sizes are not comparable.</p><p>Dashed upward arrows describe the organization of the landscape, not verified transfers or a required account route. Optional Recorded flow arrows show only verified activity and may cross layers. Details retain those connections. Balances have their own as-of dates; missing coverage is not zero. Payment lists show up to the latest 20 records supplied for each item; the payment control shows displayed and total counts when they differ.</p></details></div>
+      <p class="landscape-direction">Read bottom to top: Income &uarr; Accounts &uarr; Spending, debt &amp; savings &uarr; Longer-term plans. Each wide block keeps its items in one row; scroll sideways as it expands. Dashed arrows show organization, not measured transfers.</p>
       <div class="landscape-branch-controls" role="group" aria-label="Show or hide financial sections">${branches.map(branch => `<button type="button" class="landscape-section-toggle${hidden.has(branch.id) ? ' is-hidden' : ''}" style="--branch-color:${branch.color}" data-landscape-action="toggle-leg" data-branch="${branch.id}" aria-pressed="${!hidden.has(branch.id)}" aria-label="Show ${esc(branch.label)} section">${icon(branch.id)}<span><b>${esc(branch.label)}</b><small>${hidden.has(branch.id) ? 'Hidden' : `${branch.count} ${branch.count === 1 ? 'item' : 'items'}`}</small></span><span class="landscape-toggle-mark" aria-hidden="true">${hidden.has(branch.id) ? '+' : '&#10003;'}</span></button>`).join('')}</div>
       <div class="landscape-toolbar" role="group" aria-label="Map controls"><label class="landscape-explore">Explore <select id="landscape-explore" aria-label="Explore a financial section"><option value="">All sections</option>${branches.map(branch => `<option value="${branch.id}"${focus === branch.id ? ' selected' : ''}>${esc(branch.label)}</option>`).join('')}</select></label><button data-landscape-action="reset">Show full landscape</button><button data-landscape-action="reload" aria-label="Refresh landscape data">Refresh</button><details class="landscape-view-options"><summary>View options</summary>
       <div class="landscape-toolbar"><button data-landscape-action="expand">Expand all branches</button><button data-landscape-action="collapse-all">Collapse all branches</button><button data-landscape-action="flows" aria-pressed="${showFlows}">Recorded flow arrows</button></div></details></div>
-      <div class="landscape-workspace"><div id="landscape-map" class="landscape-map" role="region" aria-label="Large financial network. Scroll the page to explore all legs.">${scene()}</div><aside id="landscape-detail" class="landscape-detail" aria-label="Selected financial details" aria-live="polite">${inspector()}</aside></div>
+      <div class="landscape-workspace"><div id="landscape-map" class="landscape-map" role="region" tabindex="0" aria-label="Bottom-to-top financial landscape. Scroll upward from Income to explore the layers.">${scene()}</div><aside id="landscape-detail" class="landscape-detail" aria-label="Selected financial details" aria-live="polite">${inspector()}</aside></div>
       <details class="landscape-coverage"><summary>Coverage and calculation notes</summary><p>${esc(data.note)}</p><ul><li>${data.coverage.unassignedActivity} activity records have no verified account connection.</li><li>${data.coverage.unknownTransfers} transfers in the period await classification and are excluded from spending/income.</li><li>${data.coverage.pendingExcluded} pending records are excluded from this map.</li><li>${data.coverage.reviewAccounts} accounts need review and are not mapped as confirmed assets.</li></ul><p>Unlinked debt-plan records may overlap accounts. Goal progress is not added to savings. Investment holdings, returns and employer retirement contributions are not provided by this view.</p></details>`;
     fitLabels();
     bindPanning();
+    const map = $('landscape-map');
+    map.scrollLeft = viewport ? viewport.left : Math.max(0, (map.scrollWidth - map.clientWidth) / 2);
+    map.scrollTop = viewport ? viewport.top : map.scrollHeight - map.clientHeight;
     $('landscape-explore').onchange = event => {
       const branch = event.target.value;
       focus = branch; selected = branch || 'household';
       if (branch) { hidden.delete(branch); collapsed.delete(branch); expanded.add(branch); }
-      render();
+      render(false);
       $('landscape-explore').focus({ preventScroll: true });
     };
     root.onclick = async event => {
@@ -273,7 +277,7 @@
         const node = data.nodes.find(item => item.id === selected);
         const needsReveal = node?.branch && (hidden.has(node.branch) || collapsed.has(node.branch) || (focus && focus !== node.branch)
           || (!expanded.has(node.branch) && !focus && node.kind !== 'branch' && children(node.branch).findIndex(item => item.id === selected) >= 3));
-        if (needsReveal) { reveal(selected); render(); return; }
+        if (needsReveal) { reveal(selected); render(false); root.querySelector(`[data-landscape-node="${selected}"]`)?.scrollIntoView?.({ block: 'center', inline: 'center' }); return; }
         // Keep the diagram in place while updating the selected item's details.
         $('landscape-map').innerHTML = scene();
         fitLabels();
@@ -309,15 +313,13 @@
       if (action === 'collapse-all') branches.forEach(node => collapsed.add(node.id));
       if (action === 'expand') { collapsed.clear(); branches.forEach(node => expanded.add(node.id)); }
       if (action === 'reset') { focus = ''; selected = 'household'; collapsed.clear(); hidden.clear(); expanded.clear(); openTransactions.clear(); showFlows = false; }
-      render();
+      render(!['reset', 'focus'].includes(action));
       if (optionsOpen) root.querySelector('.landscape-view-options').open = true;
       const replacement = root.querySelector(`[data-landscape-action="${action}"]${branch ? `[data-branch="${branch}"]` : ''}${button.dataset.item ? `[data-item="${button.dataset.item}"]` : ''}`);
       if (anchor && button.dataset.item && replacement && ['fan', 'transactions', 'collapse'].includes(action)) {
         const next = replacement.getBoundingClientRect();
-        const scroller = root.closest('.main-content');
         const dx = next.left - anchor.left, dy = next.top - anchor.top;
-        if (scroller && getComputedStyle(scroller).overflowY !== 'visible') scroller.scrollBy(dx, dy);
-        else window.scrollBy(dx, dy);
+        $('landscape-map').scrollBy(dx, dy);
       }
       replacement?.focus({ preventScroll: true });
     };
@@ -342,7 +344,7 @@
       if (ticket !== generation) return;
       data = result;
       if (!data.nodes.some(node => node.id === selected)) selected = 'household';
-      render();
+      render(false);
     } catch (error) {
       if (ticket !== generation) return;
       root.innerHTML = `<p role="alert">Could not load your financial landscape: ${esc(error.message)}</p><button class="btn btn-secondary" id="landscape-retry">Retry</button>`;
