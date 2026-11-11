@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import Database from '../db.js';
 import { requirePro } from '../utils/license.js';
-import { analyticsRange, buildAnalytics, buildPeriodAnalytics, toCsv } from '../utils/analytics.js';
+import { buildAnalytics, toCsv } from '../utils/analytics.js';
 import { buildMoneyFlowSignals, normalizeProfile, REGIONS, HOUSING, MAX_HOUSEHOLD } from '../utils/benchmarks.js';
 import { parseTxDate } from '../utils/normalize.js';
 import { loadPlanInputs, typicalSurplus } from '../utils/moneyPlan.js';
@@ -13,14 +13,6 @@ import { performance } from 'node:perf_hooks';
 
 const router = Router();
 const db = new Database();
-function requestedRange(req, res, now) {
-  try { return analyticsRange(req.query.from, req.query.to, now); }
-  catch (error) {
-    if (!(error instanceof RangeError)) throw error;
-    res.status(400).json({ error: error.message });
-    return null;
-  }
-}
 
 router.use(requirePro);
 
@@ -51,14 +43,6 @@ async function loadInputs() {
 router.get('/', async (req, res, next) => {
   try {
     const now = new Date();
-    if (req.query.from !== undefined || req.query.to !== undefined) {
-      const range = requestedRange(req, res, now);
-      if (!range) return;
-      const inputs = await timed(res, 'inputs', loadInputs);
-      const moneyFlow = buildMoneyFlowSignals({ transactions: inputs.transactions, profile: inputs.household, today: now, range, debts: inputs.debts });
-      moneyFlow.range = range;
-      return res.json({ ...buildPeriodAnalytics({ ...inputs, range }), moneyFlow });
-    }
     const [inputs, planInputs] = await Promise.all([
       timed(res, 'inputs', loadInputs), timed(res, 'plan', () => loadPlanInputs(db, now))
     ]);
@@ -122,16 +106,8 @@ router.put('/household', async (req, res, next) => {
 
 router.get('/interest', async (req, res, next) => {
   try {
-    let months = Math.min(24, Math.max(3, Number.parseInt(req.query.months, 10) || 12));
-    let now = new Date();
-    let historical = false;
-    if (req.query.from !== undefined || req.query.to !== undefined) {
-      const range = requestedRange(req, res, now);
-      if (!range) return;
-      months = range.months;
-      now = new Date(range.endYear, range.endMonth + 1, 0, 12);
-      historical = true;
-    }
+    const months = Math.min(24, Math.max(3, Number.parseInt(req.query.months, 10) || 12));
+    const now = new Date();
     const { transactions, debts } = await timed(res, 'interest', () => db.transaction(async client => ({
       transactions: (await client.query(`SELECT t.id, t.date, t.description, t.display_name, t.amount, t.direction, t.category,
           t.plaid_category, t.interest_kind, t.interest_override, a.kind AS account_kind, pa.type AS plaid_type, pa.subtype AS plaid_subtype
@@ -141,7 +117,7 @@ router.get('/interest', async (req, res, next) => {
         WHERE UPPER(t.direction) = 'DEBIT' ORDER BY t.date, t.id`)).rows,
       debts: (await client.query('SELECT * FROM credit_cards ORDER BY id')).rows
     })));
-    res.json(buildInterestSummary({ transactions, debts: historical ? [] : debts, now, months }));
+    res.json(buildInterestSummary({ transactions, debts, now, months }));
   } catch (error) { next(error); }
 });
 

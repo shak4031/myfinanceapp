@@ -1,52 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyticsRange, buildAnalytics, buildPeriodAnalytics, merchantKey, merchantGroup, trendSlope, toCsv } from './analytics.js';
+import { buildAnalytics, merchantKey, merchantGroup, trendSlope, toCsv } from './analytics.js';
 import { buildMoneyFlowSignals } from './benchmarks.js';
 import { entitlementFromRow } from './license.js';
 import { getCanonicalMerchant } from './normalize.js';
 
 const iso = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 const today = new Date(2026, 5, 15); // 15 Jun 2026
-test('shared Analytics ranges require one to 24 completed months', () => {
-  assert.equal(analyticsRange('2024-06', '2026-05', today).months, 24);
-  assert.equal(analyticsRange('2026-05', '2026-05', today).months, 1);
-  for (const [from, to] of [['2024-05', '2026-05'], ['2026-06', '2026-06'], ['2026-02', '2026-01'],
-    ['bad', '2026-05'], ['2026-00', '2026-05'], ['1899-12', '1900-01'], [undefined, '2026-05']]) {
-    assert.throws(() => analyticsRange(from, to, today), RangeError);
-  }
-});
-
-test('period Analytics totals, category shares, weekdays and chart series use the exact same calendar months', () => {
-  const range = analyticsRange('2026-02', '2026-04', today);
-  const row = (date, amount, direction = 'DEBIT', extra = {}) => ({ date, amount, direction, category: 'Dining', description: 'Bistro', ...extra });
-  const report = buildPeriodAnalytics({ range, transactions: [
-    row('2026-01-31', 999), row('2026-02-01', 100), row('2026-04-30', 200),
-    row('2026-05-01', 888), row('2026-02-01', 1000, 'CREDIT'),
-    row('2026-04-02', 500, 'DEBIT', { transfer_kind: 'internal' }),
-    row('invalid', 900), row('2026-03-01', NaN)
-  ] });
-  assert.deepEqual(report.months, ['2026-02', '2026-03', '2026-04']);
-  assert.deepEqual(report.series.spend, [100, 0, 200]);
-  assert.deepEqual(report.series.income, [1000, 0, 0]);
-  assert.deepEqual(report.categories, [{ name: 'Dining', total: 300 }]);
-  assert.equal(report.kpis.spend, 300);
-  assert.equal(report.kpis.income, 1000);
-  assert.equal(report.kpis.net, 700);
-  assert.equal(report.kpis.savingsRate, .7);
-  assert.equal(report.kpis.avgMonthlySpend, 100, 'missing March is included in the calendar-month denominator');
-  assert.equal(report.monthsOfHistory, 2, 'missing coverage remains visible');
-  assert.equal(report.weekdays.reduce((sum, value) => sum + value, 0), 300);
-  assert.equal(report.days, 89);
-});
-
-test('empty periods and periods without income do not invent a savings rate', () => {
-  const range = analyticsRange('2026-05', '2026-05', today);
-  const empty = buildPeriodAnalytics({ range });
-  assert.equal(empty.kpis.savingsRate, null);
-  assert.equal(empty.monthsOfHistory, 0);
-  assert.deepEqual(empty.series.spend, [0]);
-  assert.equal(empty.days, 31);
-});
 let nextId = 1;
 const tx = (monthOffset, day, amount, category, description, extra = {}) => {
   const date = new Date(2026, 5 + monthOffset, day);

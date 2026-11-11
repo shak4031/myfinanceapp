@@ -89,9 +89,7 @@
 .health-head h2 { margin: 4px 0 6px; font-size: clamp(20px, 2.4vw, 26px); letter-spacing: -.5px; color: var(--text-primary); }
 .health-head p:not(.checkup-kicker) { margin: 0; max-width: 720px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
 .health-top { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px; align-items: center; margin-top: 20px; }
-.health-ring { position: relative; width: 160px; height: 160px; color: #059669; }
-.health-ring.is-watch { color: #d97706; }
-.health-ring.is-bad { color: #e11d48; }
+.health-ring { position: relative; width: 160px; height: 160px; }
 .health-ring svg { width: 100%; height: 100%; }
 .health-ring-track { fill: none; stroke: #e7eef0; stroke-width: 11; }
 .health-ring-fill { fill: none; stroke: #059669; stroke-width: 11; stroke-linecap: round; transition: stroke-dasharray .8s cubic-bezier(.2,.8,.2,1); }

@@ -218,12 +218,12 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
     for (const category of over.slice(0, 2)) {
       add({ id: `over:${category.name}`, tone: 'danger', icon: 'gauge', title: `You're over budget on ${category.name}`,
         detail: `${money(category.mtd)} spent of ${money(category.budget)} (${pct(category.budgetUsed)}) with ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the month.`,
-        action: { label: 'Review categories', view: 'dashboard', anchor: 'mtd-spending-section' } });
+        action: { label: 'Review categories', view: 'categories' } });
     }
     const risk = spending.filter(category => category.budgetStatus === 'risk').sort((a, b) => (b.budgetProjected || 0) - (a.budgetProjected || 0))[0];
     if (risk) add({ id: `risk:${risk.name}`, tone: 'warning', icon: 'gauge', title: `${risk.name} is on pace to go over budget`,
       detail: `${money(risk.mtd)} so far; at this pace you'll reach about ${money(risk.projected)} against a ${money(risk.budget)} budget.`,
-      action: { label: 'Review categories', view: 'dashboard', anchor: 'mtd-spending-section' } });
+      action: { label: 'Review categories', view: 'categories' } });
     const mover = spending.filter(category => category.deltaPct != null && category.deltaPct >= 0.25 && category.deltaMtd >= 50 && category.budgetStatus !== 'over')
       .sort((a, b) => b.deltaMtd - a.deltaMtd)[0];
     if (mover) add({ id: `mover:${mover.name}`, tone: 'info', icon: 'trend', title: `${mover.name} is up ${pct(mover.deltaPct)} vs last month`,

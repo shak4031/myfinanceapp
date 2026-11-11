@@ -105,7 +105,7 @@
     const root = $('bucket-section');
     if (!root) return;
     const data = state.data;
-    const head = (toggle = '') => `<div class="section-head"><div><h2>Where your money goes ${window.FinanceUI.howCalc('Fixed expenses, discretionary spending and debt payments, as a share of your take-home pay.', 'About your spending split')}</h2></div>${toggle}</div>`;
+    const head = (toggle = '') => `<div class="section-head"><div><h2>Where your money goes</h2><div class="bucket-sub">Fixed expenses, discretionary spending and debt payments, as a share of your take-home pay</div></div>${toggle}</div>`;
     if (state.error) { root.innerHTML = `${head()}<div class="bucket-empty"><p>${esc(state.error)}</p><button type="button" class="btn btn-secondary" data-bucket-retry>Try again</button></div>`; return; }
     if (!data) { root.innerHTML = `${head()}<div class="bucket-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>`; return; }
     const hasCurrent = num(data.current.fixed) + num(data.current.discretionary) + num(data.current.debt) + num(data.current.income) > 0;
@@ -217,13 +217,8 @@
   function scoreRing(plan) {
     if (plan.score == null) return `<div class="health-ring is-empty"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="health-ring-track"/></svg><div><strong>–</strong><span>No score yet</span></div></div>`;
     const c = 2 * Math.PI * 50;
-    const score = Math.max(0, Math.min(100, plan.score));
-    const ticks = Array.from({ length: 41 }, (_, i) => {
-      const a = (i / 40 * 270 - 225) * Math.PI / 180;
-      return `<line x1="${60 + 56 * Math.cos(a)}" y1="${60 + 56 * Math.sin(a)}" x2="${60 + 59 * Math.cos(a)}" y2="${60 + 59 * Math.sin(a)}" stroke="${i / 40 * 100 <= score ? 'currentColor' : '#cbd5e1'}" stroke-width="1.5"/>`;
-    }).join('');
     const tone = plan.grade?.tone || 'good';
-    return `<div class="health-ring is-${esc(tone)}" role="img" aria-label="Health score ${plan.score} out of 100, ${esc(plan.grade?.label || '')}"><svg viewBox="0 0 120 120" aria-hidden="true">${ticks}<circle cx="60" cy="60" r="50" class="health-ring-track" stroke-dasharray="${c * .75} ${c}" transform="rotate(135 60 60)"/><circle cx="60" cy="60" r="50" class="health-ring-fill" stroke-dasharray="${(c * .75 * score / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(135 60 60)"/></svg><div><strong>${plan.score}</strong><span>${esc(plan.grade?.label || '')}</span></div></div>`;
+    return `<div class="health-ring is-${esc(tone)}" role="img" aria-label="Health score ${plan.score} out of 100, ${esc(plan.grade?.label || '')}"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="health-ring-track"/><circle cx="60" cy="60" r="50" class="health-ring-fill" stroke-dasharray="${(c * plan.score / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 60 60)"/></svg><div><strong>${plan.score}</strong><span>${esc(plan.grade?.label || '')}</span></div></div>`;
   }
 
   function targetRows(plan) {

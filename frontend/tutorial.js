@@ -523,7 +523,7 @@
       scenes: [
         { id: 'intro', title: 'Start with the overview', caption: 'Analytics is part of Pro. Start with the overview for cash flow and spending patterns, then choose Spending Compass for household comparisons and possible changes. Both depend on imported records; missing accounts can change the story.',
           render: () => intro('MYFINANCE PRO', 'From totals to patterns', 'Overview for the big picture. Compass for a closer look.', ['Cash flow', 'Spending', 'Compass']) },
-        { id: 'ranges', title: 'Know the analysis period', caption: 'Use the single period at the top of Analytics. Choose 3, 6, 12 or 24 completed months, or a custom window of 1–24 months, then Apply. It controls every card on Overview and Spending Compass. Missing imports can understate totals. Category-card trends elsewhere require six completed months.',
+        { id: 'ranges', title: 'Know the analysis period', caption: 'Check each panel range before comparing numbers. Shared rolling choices are 3, 6, 12 and 24 months where applicable. Compass starts with three completed months; category-card trends require at least six completed months even when category totals use a shorter range. All time is an explicit choice, not the default.',
           render: () => `${chip(1, 'Match the question to the window')}
             ${compare([
               { e: '1', title: 'Period totals', when: 'Read the selected dates', asks: ['Last 3 months is a common default.', 'All time can make totals much larger.', 'Custom ranges need selected months.'] },
@@ -532,27 +532,27 @@
         { id: 'mobile', title: 'Explore on your phone', caption: 'Cards stack on phones. Wide charts and tables scroll inside their panels, not across the entire page. Use swipe hints and sticky row labels to keep context. Expand details when you need the method instead of assuming every visible change is a new spending habit.',
           render: () => `${chip(2, 'Keep context on smaller screens')}
             <div class="tm-panel"><small>MOBILE CHECKLIST</small><div class="tm-kv"><span>Cards</span><b>Stack vertically</b></div><div class="tm-kv"><span>Wide charts and tables</span><b>Swipe inside panel</b></div><div class="tm-kv"><span>Method and readings</span><b>Expand when needed</b></div></div>` },
-        { id: 'compass', title: 'Use the Compass thoughtfully', caption: 'Set your household profile and compare monthly spending with public survey estimates. Spending Compass is now dedicated to household benchmarks. Merchant bubbles and heatmap, money flow, signals and normal ranges live on Overview, using the same period.',
+        { id: 'compass', title: 'Use the Compass thoughtfully', caption: 'Set your household profile, inspect overlapping signals and review the underlying spending before acting. Suggested savings and five-year illustrations are possibilities, not promises. The separate Spending Compass tutorial explains money flow, normal ranges, one-offs and seasonal comparisons.',
           render: () => outro('Choose one realistic experiment', 'Review the evidence before changing a habit.', 'Explore the Spending Compass tutorial') },
         { id: 'done', title: 'You are ready', caption: 'Choose a period, read the overview and investigate one pattern at a time. Keep records current through Accounts and imports. Analytics explains the past; it cannot guarantee future income or savings.',
           render: () => outro('Turn evidence into a next step', 'Check dates. Review context. Make one change.', 'Open Analytics') }
       ]
     },
     {
-      id: 'compass', title: 'Spending Compass', blurb: 'Pro: compare your household with public survey benchmarks, then explore personal spending patterns on Overview.', emoji: '🧭',
+      id: 'compass', title: 'Spending Compass', blurb: 'Pro: see where your money flows, which habits stand out against similar households and your own history, and what to change.', emoji: '🧭',
       cta: { label: 'Open my Spending Compass', view: 'analytics/compass' },
       scenes: [
-        { id: 'intro', title: 'Welcome', caption: 'Spending Compass compares your selected-period monthly behavioral spending with published household survey estimates. It is context, not a financial-health score, a census percentile or a requirement to match another household.',
-          render: () => intro('TUTORIAL · UNDER 2 MINUTES', 'Spending Compass', 'Your household. Public data. A clearer comparison.', ['🧭', '🍽️', '⚡', '💰']) },
-        { id: 'open', title: 'Find the Compass', caption: 'Open Analytics and choose Spending Compass. One shared filter above the content controls both tabs, starting with three completed months. Set your household, then read the You vs. similar households bars and survey markers. Spending Compass is part of Pro.',
+        { id: 'intro', title: 'Welcome', caption: 'The Spending Compass shows where your money goes, which habits stand out against households like yours and against your own history, and where you could realistically save.',
+          render: () => intro('TUTORIAL · UNDER 2 MINUTES', 'Spending Compass', 'Where your money goes. What stands out. What to change.', ['🧭', '🍽️', '⚡', '💰']) },
+        { id: 'open', title: 'Find the Compass', caption: 'Open Analytics and choose the Spending Compass tab. It starts with three completed months. The top summarizes potential changes, such as $170 a month or about $10,000 over five years, and lists current and suggested category levels. These are illustrations, not guaranteed savings. Spending Compass is part of Pro.',
           render: () => `${chip(1, 'Find the Compass')}
             <div class="tm-row-head"><div><h3>${swap('Your spending, like a market', 'Spending Compass', 1.4)}</h3><small>Analytics</small></div></div>
-            <div class="tm-tabs"><i class="tm-tab-drop" ${at(1.3)}>Overview</i><i class="tm-tab-pick" ${at(1.3)} data-id="tab">Spending Compass</i></div>
+            <div class="tm-tabs"><i class="tm-tab-drop" ${at(1.3)}>Overview</i><i class="tm-tab-pick" ${at(1.3)} data-id="tab">Spending Compass <em class="tut-pop" ${at(0.6)}>$170/mo</em></i></div>
             <div class="tm-hero tut-in" ${at(1.9)}>
-              <div><small>YOU VS. SIMILAR HOUSEHOLDS</small><b>One shared period</b><span>Illustrative monthly behavioral averages</span></div>
+              <div><small>YOUR COMPASS FOUND</small><b>$170 a month</b><span>$2,043 a year · $10,216 over 5 years</span></div>
               <ol>
-                <li class="tut-in" ${at(3.2)}><span><b>Dining</b><small>You $452 · survey $323 / month</small></span><strong>40% above</strong></li>
-                <li class="tut-in" ${at(3.8)}><span><b>Utilities</b><small>You $440 · survey $399 / month</small></span><strong>10% above</strong></li>
+                <li class="tut-in" ${at(3.2)}><span><b>Dining</b><small>$452 → $323 a month</small></span><strong>$129</strong></li>
+                <li class="tut-in" ${at(3.8)}><span><b>Utilities</b><small>$440 → $399 a month</small></span><strong>$41</strong></li>
               </ol>
             </div>${cursor('tab', 0.4)}` },
         { id: 'household', title: 'Set your household', caption: 'Tell the Compass how many people live with you, your region and whether you rent or own. Typical spending comes from the government Consumer Expenditure Survey for households like yours. No other MyFinance user\'s data is ever used.',
@@ -569,7 +569,7 @@
                 <div class="tm-kv tut-in" ${at(4.2)}><span>🔒 No other MyFinance user's data is used</span></div>
               </div>
             </div>${cursor('save', 2.6)}${toast('Household saved. Your comparison is updated.', 3.6)}` },
-        { id: 'flow', title: 'Continue on Overview: money flow', caption: 'Switch to Analytics Overview for Where your money flows. It follows recorded income into fixed expenses, discretionary spending, debt payments and what is left over. The same shared period applies. The Financial Landscape page adds account-level routing and expandable destinations; dashed links there are organization, not verified transfers.',
+        { id: 'flow', title: 'Where your money flows', caption: 'Where your money flows follows each dollar of income into fixed expenses, discretionary spending, debt payments and what is left over. A red ribbon is a category worth acting on. Beside it, the cards show what stood out, such as $1,435 a year on purchases under $20.',
           render: () => {
             const rib = (x0, a0, a1, x1, b0, b1, cls, delay) => { const m = (x0 + x1) / 2; return `<path class="tm-rib ${cls} tut-in" ${at(delay)} d="M${x0} ${a0}C${m} ${a0} ${m} ${b0} ${x1} ${b0}L${x1} ${b1}C${m} ${b1} ${m} ${a1} ${x0} ${a1}Z"/>`; };
             return `${chip(3, 'Where your money flows')}
@@ -592,7 +592,7 @@
               </div>
             </div>${cursor('small', 3.8)}`;
           } },
-        { id: 'signals', title: 'Continue on Overview: signals', caption: 'On Analytics Overview, Where the signals overlap links categories to above similar homes, trending up, and an unusual last month. More links mean more signals agree, not more spending. Normal ranges and Technical readings also live on Overview; Spending Compass keeps the direct household comparison.',
+        { id: 'signals', title: 'Read the signals', caption: 'Where the signals overlap links categories to above similar homes, trending up, and an unusual last month. More links mean more signals agree, not more spending. Your normal range contains 9 in 10 of your months. Crossover, momentum, breakout and breadth sit under Technical readings.',
           render: () => `${chip(4, 'Read the signals')}
             <div class="tm-split tm-split-tight tm-split-wide">
               <div class="tm-panel tut-in" ${at(0.3)}><small>WHERE THE SIGNALS OVERLAP</small>
@@ -625,8 +625,8 @@
                 <p class="tm-hint tut-in" ${at(5.6)}>Compared with the same months last year, not with summer.</p>
               </div>
             </div>` },
-        { id: 'done', title: 'You are ready', caption: 'Set your household once and use Compass for public-data context. Explore your own patterns on Overview, where Who gets your money switches between bubbles and a category-grouped market heatmap. Both tabs keep the same selected period.',
-          render: () => outro("You're ready", 'Compare in Compass · explore on Overview', 'Open my Spending Compass') }
+        { id: 'done', title: 'You are ready', caption: 'You are ready. Set your household once, check the Compass after each import and pick one category to bring back to a level you have already reached.',
+          render: () => outro("You're ready", 'Follow the flow · read the signals · save', 'Open my Spending Compass') }
       ]
     },
     {

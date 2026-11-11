@@ -57,9 +57,6 @@ async function migrate(extra) {
 
 const failures = [];
 const month = new Date().toISOString().slice(0, 7);
-const now = new Date();
-const monthKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-const analyticsPeriod = `from=${monthKey(new Date(now.getFullYear(), now.getMonth() - 3, 1))}&to=${monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1))}`;
 const READS = [
   ['GET', '/api/auth/me'], ['GET', '/api/license'],
   ['GET', '/api/transactions/cleanup?dateType=imported&start=2026-01-01&end=2026-12-31&source=plaid'],
@@ -70,7 +67,6 @@ const READS = [
   ['POST', '/api/dashboard/category-transactions-for-month', { category: 'Groceries', month }],
   ['POST', '/api/categorizations/category-summary'], ['GET', '/api/staging/attention'],
   ['GET', '/api/categories'], ['GET', '/api/budgets'], ['GET', '/api/analytics'], ['GET', '/api/analytics/export'],
-  ['GET', `/api/analytics?${analyticsPeriod}`], ['GET', `/api/analytics/interest?${analyticsPeriod}`],
   ['GET', '/api/debts'], ['GET', '/api/goals'], ['GET', '/api/goals/funding-analysis'],
   ['GET', '/api/plan'], ['POST', '/api/plan/what-if', { extra: 100 }],
   ['GET', '/api/transactions/income-sources'], ['GET', '/api/transactions/categorization-rules'],

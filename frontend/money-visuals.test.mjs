@@ -34,23 +34,6 @@ test('mosaic does not drop tiny merchants and every rectangle contributes its pr
   assert.doesNotMatch(html, /NaN|Infinity|undefined/);
 });
 
-test('market heatmap groups categories and distinguishes increased, decreased, new and unavailable comparisons', () => {
-  const html = mosaic([
-    { name: 'Higher', value: 100, category: 'Dining', change: .2 },
-    { name: 'Lower', value: 50, category: 'Dining', change: -.1 },
-    { name: 'New', value: 40, category: 'Shopping', change: 5, isNew: true },
-    { name: 'Unknown', value: 10, category: 'Other', change: null }
-  ]);
-  assert.match(html, /market-heatmap/);
-  assert.equal((html.match(/class="market-sector"/g) || []).length, 3);
-  assert.match(html, /\+20\.0%/);
-  assert.match(html, /-10\.0%/);
-  assert.match(html, /hsl\(351/);
-  assert.match(html, /hsl\(155/);
-  assert.equal((html.match(/--tile-color:#334e68/g) || []).length, 2);
-  assert.match(html, /Color shows the change in monthly average spending, not investment returns/);
-});
-
 test('signal network shows every category reading without manufacturing warnings', () => {
   const html = signalNetwork([{ label: 'Dining & coffee', monthly: 240, signals: ['a', 'b'] },
     { label: 'Gas', monthly: 70, signals: ['c'] }, { label: 'Clear category', monthly: 50, signals: [] }],
@@ -114,7 +97,7 @@ test('monthly terrain retains every row and month with baselines, deltas and sel
   assert.match(html, /Aug 2026: \$100\.00; usual \$200\.00; difference -\$100\.00 \(-50\.0%\)/);
   assert.match(html, /own vertical scale/);
   assert.match(html, /missing imports/);
-  assert.match(html, /Reading the landscape/);
+  assert.match(html, /Compare each category with its usual monthly spending/);
   assert.match(html, /Coral areas:<\/b> more spending than usual/);
   assert.match(html, /Teal areas:<\/b> less spending than usual/);
   assert.match(html, /class="money-node-value">Fixed payments<\/text>/);
