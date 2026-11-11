@@ -5,6 +5,7 @@
   const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
   let data = null, selected = 'household', focus = '', generation = 0;
   let showFlows = false;
+  let view = 'overview';
   const collapsed = new Set(), hidden = new Set(), expanded = new Set(), openTransactions = new Set();
   const children = id => data.nodes.filter(node => node.branch === id && node.kind !== 'branch');
   const icons = {
@@ -19,6 +20,91 @@
     goals: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 9-9m-4 0h4v4"/>'
   };
   const icon = id => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[id] || icons.household}</svg>`;
+  const overviewLabels = {
+    income: 'Money in', spending: 'Everyday spending', debt: 'Debt & payments', goals: 'Your goals',
+    cash: 'Cash & other accounts', savings: 'Savings', investments: 'Investments', retirement: 'Retirement / 401(k)'
+  };
+  function monthlyPicture() {
+    const income = data.nodes.find(node => node.id === 'income').amount;
+    const spending = data.nodes.find(node => node.id === 'spending').amount;
+    const debt = children('debt').filter(node => node.metric === 'monthly').reduce((sum, node) => sum + node.amount, 0);
+    const out = data.period.months ? spending + debt : null;
+    return { income, out, remainder: income == null || out == null ? null : Math.round((income - out) * 100) / 100 };
+  }
+  function overviewCard(id) {
+    const branch = data.nodes.find(node => node.id === id);
+    const items = children(id).filter(node => node.kind !== 'missing');
+    let headline, caption;
+    if (['income', 'spending'].includes(id)) {
+      headline = branch.amount == null ? 'No history yet' : money(branch.amount);
+      caption = 'per recorded month';
+    } else if (id === 'debt') {
+      headline = data.period.months
+        ? money(items.filter(node => node.metric === 'monthly').reduce((sum, node) => sum + node.amount, 0))
+        : 'No history yet';
+      caption = 'payments per recorded month';
+    } else if (id === 'goals') {
+      headline = `${items.length} ${items.length === 1 ? 'goal' : 'goals'}`;
+      caption = 'planning progress, not extra savings';
+    } else {
+      const accounts = items.filter(node => node.kind === 'account');
+      const known = accounts.filter(node => node.amount != null);
+      headline = known.length ? money(known.reduce((sum, node) => sum + node.amount, 0)) : 'Not available';
+      caption = known.length ? `${known.length}/${accounts.length} known balances; dates vary` : 'No balance recorded';
+    }
+    // Keep a debt account visible even when activity groups outnumber accounts.
+    const preview = id === 'debt'
+      ? [...items.filter(node => node.metric === 'balance'), ...items.filter(node => node.metric !== 'balance')].slice(0, 2)
+      : items.slice(0, 2);
+    return `<article class="landscape-card" data-landscape-card="${id}" style="--branch-color:${branch.color}">
+      <button class="landscape-card-heading" data-landscape-node="${id}" aria-pressed="${selected === id}">${icon(id)}<span>${overviewLabels[id]}</span><span class="landscape-card-open" aria-hidden="true">&#8599;</span></button>
+      <p class="landscape-card-total">${esc(headline)}</p><p class="landscape-card-caption">${esc(caption)}</p>
+      <ul class="landscape-card-items">${preview.length ? preview.map(node => `<li><button data-landscape-node="${esc(node.id)}" aria-pressed="${selected === node.id}"><span class="landscape-item-name">${esc(node.label)}</span><span class="landscape-item-value">${esc(value(node))}</span></button></li>`).join('')
+        : `<li class="landscape-card-empty">${esc(children(id).find(node => node.kind === 'missing')?.label || 'No records yet')}</li>`}</ul>
+      <button class="landscape-card-more" data-landscape-node="${id}">${items.length ? `View all ${items.length} ${items.length === 1 ? 'item' : 'items'}` : 'Review coverage'} <span aria-hidden="true">&rarr;</span></button>
+    </article>`;
+  }
+  function overview() {
+    const picture = monthlyPicture();
+    const figure = amount => amount == null ? 'Not available' : money(amount);
+    const gaps = data.nodes.filter(node => node.kind === 'missing').length;
+    const missingBalances = data.nodes.filter(node => node.kind === 'account' && node.amount == null).length;
+    const root = $('landscape-root');
+    root.innerHTML = `<div class="landscape-overview-toolbar"><p><b>Your whole picture, one place.</b> Select any item to see its source and connections.</p><div class="landscape-toolbar"><button data-landscape-action="map">Detailed map</button><button data-landscape-action="reload">Refresh</button></div></div>
+      <div class="landscape-one-view" role="region" aria-label="Household financial picture">
+        <div class="landscape-row-label"><span>MONTHLY ACTIVITY &amp; PLANS</span><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)} &middot; ${data.period.months}/3 months recorded</span></div>
+        <div class="landscape-card-grid landscape-card-grid-top">${['income', 'spending', 'debt', 'goals'].map(overviewCard).join('')}</div>
+        <div class="landscape-household">
+          <div class="landscape-household-title">${icon('household')}<div><h2>Your household</h2><p>Recorded monthly cash flow</p></div></div>
+          <dl class="landscape-cashflow"><div><dt>Money in</dt><dd data-landscape-total="income">${esc(figure(picture.income))}</dd></div><span aria-hidden="true">&minus;</span><div><dt>Spending + debt payments</dt><dd data-landscape-total="out">${esc(figure(picture.out))}</dd></div><span aria-hidden="true">=</span><div><dt>Recorded remainder</dt><dd data-landscape-total="remainder">${esc(figure(picture.remainder))}</dd></div></dl>
+          <p class="landscape-remainder-note">Per recorded month. Remainder is not available cash or confirmed savings; missing imports can change it. Transfers excluded.</p>
+        </div>
+        <div class="landscape-card-grid landscape-card-grid-bottom">${['cash', 'savings', 'investments', 'retirement'].map(overviewCard).join('')}</div>
+        <div class="landscape-row-label"><span>ACCOUNTS &amp; BALANCES</span><span>Saved balances, not monthly flows &middot; select an account for its as-of date</span></div>
+      </div>
+      <p class="landscape-overview-note">Lines group your household information; they do not represent transfers. ${gaps} ${gaps === 1 ? 'section has' : 'sections have'} no records. ${missingBalances} ${missingBalances === 1 ? 'account is' : 'accounts are'} missing a balance. No net worth is calculated.</p>
+      <aside id="landscape-detail" class="landscape-detail" aria-label="Selected financial details" aria-live="polite" tabindex="-1"${selected === 'household' ? ' hidden' : ''}>${selected === 'household' ? '' : inspector()}</aside>
+      ${coverageNotes()}`;
+    root.onclick = async event => {
+      const button = event.target.closest('[data-landscape-node], [data-landscape-action]');
+      if (!button) return;
+      if (button.dataset.landscapeAction === 'reload') { await loadPage(); return; }
+      if (button.dataset.landscapeAction === 'map') { view = 'map'; reveal(selected); render(false); return; }
+      if (button.dataset.landscapeNode) {
+        selected = button.dataset.landscapeNode;
+        const detail = $('landscape-detail');
+        detail.innerHTML = inspector();
+        detail.hidden = false;
+        root.querySelectorAll('[data-landscape-node]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.landscapeNode === selected)));
+        detail.focus({ preventScroll: true });
+        detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    };
+    root.onkeydown = null;
+  }
+  function coverageNotes() {
+    return `<details class="landscape-coverage"><summary>Coverage and calculation notes</summary><p>${esc(data.note)}</p><ul><li>${data.coverage.unassignedActivity} activity records have no verified account connection.</li><li>${data.coverage.unknownTransfers} transfers in the period await classification and are excluded from spending/income.</li><li>${data.coverage.pendingExcluded} pending records are excluded.</li><li>${data.coverage.reviewAccounts} accounts need review and are not mapped as confirmed assets.</li></ul><p>Account subtotals include only known account balances within that section; missing balances are not zero and balance dates can differ. Cash / other accounts can include unspecified account types, not confirmed cash. Debt balances and monthly debt payments are separate measures. Unlinked debt-plan records may overlap accounts and are not added into a balance total. Goal progress is not added to savings. Money in includes refunds and one-off credits, not just salary. Investment holdings, returns and employer retirement contributions are not provided by this view.</p></details>`;
+  }
   const illustrations = {
     household: '<path fill="#f3b84b" d="m5 30 27-23 27 23-5 5-22-18-22 18Z"/><path fill="#74bccc" d="M13 31v27h38V31L32 16Z"/><path fill="#fff3d4" d="M27 39h11v19H27ZM18 33h8v9h-8Zm22 0h7v9h-7Z"/><path fill="#df785f" d="M45 10h7v17l-7-6Z"/>',
     income: '<rect x="7" y="24" width="50" height="31" rx="6" fill="#42977e"/><path fill="#f3c35b" d="M23 24v-8h18v8h-5v-4h-8v4Z"/><path fill="#73c9a2" d="M7 29h50v10c-17 8-33 8-50 0Z"/><rect x="28" y="36" width="9" height="11" rx="2" fill="#ffe5a0"/><path fill="#f4b451" d="m32 4 9 10h-6v10h-6V14h-6Z"/>',
@@ -235,7 +321,7 @@
       ${node.minimum != null ? `<p>Saved minimum payment: ${esc(money(node.minimum))}/mo</p>` : ''}
       ${node.target != null ? `<p>Goal target: ${esc(money(node.target))}</p>` : ''}
       ${(node.debts || []).map(debt => `<p>Linked debt plan: <b>${esc(debt.label)}</b> · ${debt.balance == null ? 'balance unavailable' : esc(money(debt.balance))}. Saved plan balance, as-of date unavailable; not an additional debt account.</p>`).join('')}
-      ${node.kind === 'branch' ? `<div class="landscape-actions"><button data-landscape-action="focus" data-branch="${node.id}">Focus this branch</button><button data-landscape-action="collapse" data-branch="${node.id}">${collapsed.has(node.id) ? 'Expand' : 'Collapse'} branch</button></div><h3>${node.count ? `All ${node.count} recorded connections` : 'Coverage gap'}</h3><ul class="landscape-detail-list">${list.map(item => `<li><button data-landscape-node="${esc(item.id)}"><b>${esc(item.label)}</b><span>${esc(value(item))}</span></button></li>`).join('')}</ul>` : ''}
+      ${node.kind === 'branch' ? `${view === 'map' ? `<div class="landscape-actions"><button data-landscape-action="focus" data-branch="${node.id}">Focus this branch</button><button data-landscape-action="collapse" data-branch="${node.id}">${collapsed.has(node.id) ? 'Expand' : 'Collapse'} branch</button></div>` : ''}<h3>${node.count ? `All ${node.count} recorded connections` : 'Coverage gap'}</h3><ul class="landscape-detail-list">${list.map(item => `<li><button data-landscape-node="${esc(item.id)}"><b>${esc(item.label)}</b><span>${esc(value(item))}</span></button></li>`).join('')}</ul>` : ''}
       ${related.length ? `<h3>Recorded connections</h3><ul class="landscape-detail-list">${related.map(edge => {
         const outgoing = edge.source === node.id;
         const other = data.nodes.find(n => n.id === (outgoing ? edge.target : edge.source));
@@ -247,13 +333,14 @@
   function render(preserveViewport = true) {
     const root = $('landscape-root');
     if (!root || !data) return;
+    if (view === 'overview') { overview(); return; }
     const previousMap = $('landscape-map');
     const viewport = preserveViewport && previousMap ? { left: previousMap.scrollLeft, top: previousMap.scrollTop } : null;
     const branches = data.nodes.filter(node => node.kind === 'branch');
     root.innerHTML = `<div class="landscape-period"><span>${esc(data.period.from)} &ndash; ${esc(data.period.to)}</span><span>${data.period.months}/3 months recorded</span><details class="landscape-help"><summary>Map guide</summary><p>Read from south to north: Income at the bottom, cash and everyday banking Accounts above it, then Spending, Debt and Savings, and Longer-term plans at the top. Each tinted block contains its own recorded items. Savings, investment, retirement and debt accounts stay in their labeled destination blocks. Scroll upward through the layers or drag the map with the left mouse button. Expand more items or fold a block using its controls. Select an item for details or reveal its recorded payments. Explore isolates a block; Show full landscape restores all layers.</p><p>Illustration size reflects the absolute amount relative to the largest item with the same measure in that block. Balances, monthly flows and goal progress use separate scales. Missing amounts remain unavailable, never zero. This is not a financial-health score or share of net worth. Block sizes are not comparable.</p><p>Dashed upward arrows describe the organization of the landscape, not verified transfers or a required account route. Optional Recorded flow arrows show only verified activity and may cross layers. Details retain those connections. Balances have their own as-of dates; missing coverage is not zero. Payment lists show up to the latest 20 records supplied for each item; the payment control shows displayed and total counts when they differ.</p></details></div>
       <p class="landscape-direction">Read bottom to top: Income &uarr; Accounts &uarr; Spending, debt &amp; savings &uarr; Longer-term plans. Each wide block keeps its items in one row; scroll sideways as it expands. Dashed arrows show organization, not measured transfers.</p>
       <div class="landscape-branch-controls" role="group" aria-label="Show or hide financial sections">${branches.map(branch => `<button type="button" class="landscape-section-toggle${hidden.has(branch.id) ? ' is-hidden' : ''}" style="--branch-color:${branch.color}" data-landscape-action="toggle-leg" data-branch="${branch.id}" aria-pressed="${!hidden.has(branch.id)}" aria-label="Show ${esc(branch.label)} section">${icon(branch.id)}<span><b>${esc(branch.label)}</b><small>${hidden.has(branch.id) ? 'Hidden' : `${branch.count} ${branch.count === 1 ? 'item' : 'items'}`}</small></span><span class="landscape-toggle-mark" aria-hidden="true">${hidden.has(branch.id) ? '+' : '&#10003;'}</span></button>`).join('')}</div>
-      <div class="landscape-toolbar" role="group" aria-label="Map controls"><label class="landscape-explore">Explore <select id="landscape-explore" aria-label="Explore a financial section"><option value="">All sections</option>${branches.map(branch => `<option value="${branch.id}"${focus === branch.id ? ' selected' : ''}>${esc(branch.label)}</option>`).join('')}</select></label><button data-landscape-action="reset">Show full landscape</button><button data-landscape-action="reload" aria-label="Refresh landscape data">Refresh</button><details class="landscape-view-options"><summary>View options</summary>
+      <div class="landscape-toolbar" role="group" aria-label="Map controls"><button data-landscape-action="overview">Back to overview</button><label class="landscape-explore">Explore <select id="landscape-explore" aria-label="Explore a financial section"><option value="">All sections</option>${branches.map(branch => `<option value="${branch.id}"${focus === branch.id ? ' selected' : ''}>${esc(branch.label)}</option>`).join('')}</select></label><button data-landscape-action="reset">Show full landscape</button><button data-landscape-action="reload" aria-label="Refresh landscape data">Refresh</button><details class="landscape-view-options"><summary>View options</summary>
       <div class="landscape-toolbar"><button data-landscape-action="expand">Expand all branches</button><button data-landscape-action="collapse-all">Collapse all branches</button><button data-landscape-action="flows" aria-pressed="${showFlows}">Recorded flow arrows</button></div></details></div>
       <div class="landscape-workspace"><div id="landscape-map" class="landscape-map" role="region" tabindex="0" aria-label="Bottom-to-top financial landscape. Scroll upward from Income to explore the layers.">${scene()}</div><aside id="landscape-detail" class="landscape-detail" aria-label="Selected financial details" aria-live="polite">${inspector()}</aside></div>
       <details class="landscape-coverage"><summary>Coverage and calculation notes</summary><p>${esc(data.note)}</p><ul><li>${data.coverage.unassignedActivity} activity records have no verified account connection.</li><li>${data.coverage.unknownTransfers} transfers in the period await classification and are excluded from spending/income.</li><li>${data.coverage.pendingExcluded} pending records are excluded from this map.</li><li>${data.coverage.reviewAccounts} accounts need review and are not mapped as confirmed assets.</li></ul><p>Unlinked debt-plan records may overlap accounts. Goal progress is not added to savings. Investment holdings, returns and employer retirement contributions are not provided by this view.</p></details>`;
@@ -286,6 +373,7 @@
         return;
       }
       const action = button.dataset.landscapeAction, branch = button.dataset.branch;
+      if (action === 'overview') { view = 'overview'; selected = 'household'; render(false); return; }
       const anchor = button.getBoundingClientRect?.();
       const optionsOpen = root.querySelector('.landscape-view-options')?.open;
       if (action === 'reload') { await loadPage(); return; }
@@ -352,7 +440,7 @@
     }
   }
   window.FinanceLandscape = { loadPage, reset() {
-    generation++; data = null; selected = 'household'; focus = ''; collapsed.clear(); hidden.clear(); expanded.clear(); openTransactions.clear(); showFlows = false;
+    generation++; data = null; selected = 'household'; view = 'overview'; focus = ''; collapsed.clear(); hidden.clear(); expanded.clear(); openTransactions.clear(); showFlows = false;
     const root = $('landscape-root');
     if (root) { root.innerHTML = ''; root.onclick = null; root.onkeydown = null; }
   } };

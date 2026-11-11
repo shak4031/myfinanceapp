@@ -52,6 +52,11 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
   return { context, node, views, listeners, run: file => vm.runInContext(source(file), context) };
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
+const landscapeClick = (f, dataset) => f.node('landscape-root').onclick({ target: { dataset, closest() { return this; } } });
+async function loadLandscapeMap(f) {
+  await f.context.FinanceLandscape.loadPage();
+  await landscapeClick(f, { landscapeAction: 'map' });
+}
 
 test('financial landscape supports navigation and remains accessible on Basic', async () => {
   let loads = 0;
@@ -80,7 +85,7 @@ test('financial network supports pointer/keyboard details, focus, collapse, rese
   })) });
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const root = f.node('landscape-root');
   assert.match(root.innerHTML, /Investment coverage missing|Investment coverage/);
   assert.match(root.innerHTML, /401\(k\)/);
@@ -117,7 +122,7 @@ test('landscape reports load errors, supports retry and ignores responses after 
   assert.match(f.node('landscape-root').innerHTML, /Database &lt;unavailable&gt;/);
   fail = false;
   await f.node('landscape-retry').onclick();
-  assert.match(f.node('landscape-root').innerHTML, /landscape-svg/);
+  assert.match(f.node('landscape-root').innerHTML, /landscape-one-view/);
   const pending = [];
   f.context.fetch = () => new Promise(resolve => pending.push(resolve));
   const old = f.context.FinanceLandscape.loadPage();
@@ -143,7 +148,7 @@ test('landscape contains single-row items in wide bottom-to-top blocks and expan
   })) });
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const root = f.node('landscape-root'), map = f.node('landscape-map');
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
   assert.match(root.innerHTML, /class="landscape-illustration"/);
@@ -222,7 +227,7 @@ test('landscape mouse dragging pans both axes without activating items and leave
   const { buildLandscape } = await import('../backend/utils/landscape.js');
   const f = fixture(async () => response(200, buildLandscape()));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const map = f.node('landscape-map'), moves = [];
   let capture = null;
   map.scrollBy = (x, y) => moves.push([x, y]);
@@ -267,7 +272,7 @@ test('landscape has contained blocks, pictograms, visibility filters and optiona
     transactions: [{ id: 1, date: '2026-10-10', description: 'Lunch', amount: 25, direction: 'DEBIT', category: 'Dining', account_id: 1 }] });
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const root = f.node('landscape-root'), click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
   assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8);
   assert.equal((root.innerHTML.match(/class="landscape-section-toggle/g) || []).length, 8);
@@ -311,7 +316,7 @@ test('landscape has contained blocks, pictograms, visibility filters and optiona
   await click({ landscapeNode: 'account-1' });
   assert.match(root.innerHTML, /<option value="cash" selected/, 'related detail navigation switches focused legs');
   f.context.FinanceLandscape.reset();
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   assert.equal((root.innerHTML.match(/data-landscape-leg=/g) || []).length, 8, 'logout clears filters');
 });
 
@@ -330,7 +335,7 @@ test('landscape size weights stay within each leg and measure, with zero and una
   }
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const root = f.node('landscape-root');
   const radius = id => Number(root.innerHTML.match(new RegExp(`data-landscape-node="${id}" data-landscape-radius="([^"]+)"`))[1]);
   const explore = branch => f.node('landscape-explore').onchange({ target: { value: branch } });
@@ -377,7 +382,7 @@ for (const itemCount of [3, 7, 12]) test(`expanded cluster fans keep names, valu
   }
   const f = fixture(async () => response(200, graph));
   f.run('landscape.js');
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   const root = f.node('landscape-root');
   const click = dataset => root.onclick({ target: { dataset, closest() { return this; } } });
   assert.match(root.innerHTML, /\+ Payments \(20\/30\)/, 'preview limits are disclosed');
@@ -412,9 +417,101 @@ for (const itemCount of [3, 7, 12]) test(`expanded cluster fans keep names, valu
     }
   }
   f.context.FinanceLandscape.reset();
-  await f.context.FinanceLandscape.loadPage();
+  await loadLandscapeMap(f);
   assert.equal((root.innerHTML.match(/<g class="landscape-node/g) || []).length, 33);
   assert.doesNotMatch(root.innerHTML, /class="landscape-node is-transaction"/, 'logout clears all expansion state');
+});
+
+test('landscape overview shows all eight sections and reconciles monthly cash flow without counting transfers or balances', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape({ now: new Date('2026-11-09'), accounts: [
+    { id: 1, name: 'Checking', kind: 'checking', status: 'active' },
+    { id: 2, name: 'Savings', kind: 'savings', status: 'active' }
+  ], transactions: [
+    { id: 1, date: '2026-10-10', description: 'Payroll', amount: 5000, direction: 'CREDIT', account_id: 1 },
+    { id: 2, date: '2026-10-10', description: 'Shopping', amount: 600, direction: 'DEBIT', category: 'Shopping', account_id: 1 },
+    { id: 3, date: '2026-10-10', description: 'Mortgage', amount: 1400, direction: 'DEBIT', category: 'Mortgage', account_id: 1 },
+    { id: 4, date: '2026-10-10', description: 'Save', amount: 800, direction: 'DEBIT', transfer_kind: 'savings', transfer_account_id: 2, account_id: 1 }
+  ], debts: [{ id: 1, name: 'Unlinked plan', balance: 90000 }] });
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const root = f.node('landscape-root');
+  assert.equal((root.innerHTML.match(/data-landscape-card=/g) || []).length, 8);
+  assert.match(root.innerHTML, /data-landscape-total="income">\$5,000/);
+  assert.match(root.innerHTML, /data-landscape-total="out">\$2,000/);
+  assert.match(root.innerHTML, /data-landscape-total="remainder">\$3,000/);
+  assert.match(root.innerHTML, /id="landscape-detail"[^>]* hidden/);
+  assert.doesNotMatch(root.innerHTML, /landscape-svg|style="width:[\d.]+px"/);
+  assert.match(root.innerHTML, /Remainder is not available cash or confirmed savings/);
+  await landscapeClick(f, { landscapeNode: 'debt' });
+  assert.equal(f.node('landscape-detail').hidden, false);
+  assert.match(f.node('landscape-detail').innerHTML, /Unlinked plan/);
+  assert.match(f.node('landscape-detail').innerHTML, /\$90,000 balance/);
+  assert.doesNotMatch(f.node('landscape-detail').innerHTML, /Focus this branch/);
+  await landscapeClick(f, { landscapeAction: 'map' });
+  assert.match(root.innerHTML, /landscape-svg/);
+  await landscapeClick(f, { landscapeAction: 'overview' });
+  assert.equal((root.innerHTML.match(/data-landscape-card=/g) || []).length, 8);
+  assert.match(root.innerHTML, /id="landscape-detail"[^>]* hidden/);
+});
+
+test('landscape overview preserves zero, signed and partial balances, missing history, safe labels and every detail item', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape({ now: new Date('2026-11-09'), accounts: [
+    { id: 1, name: '<img src=x onerror=alert(1)>', kind: 'checking', status: 'active' },
+    { id: 2, name: 'Unknown balance', kind: 'checking', status: 'active' },
+    { id: 3, name: 'Overdrawn', kind: 'checking', status: 'active' },
+    { id: 4, name: 'Fourth account', kind: 'checking', status: 'active' }
+  ], banks: [
+    { linked_account_id: 1, account_id: 'p1', current_balance: 0, iso_currency_code: 'USD', balance_checked_at: '2026-11-08' },
+    { linked_account_id: 3, account_id: 'p3', current_balance: -100, iso_currency_code: 'USD', balance_checked_at: '2026-11-08' }
+  ], goals: [{ id: 1, name: 'Emergency fund', current_amount: 9999, target_amount: 10000 }] });
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  const html = f.node('landscape-root').innerHTML;
+  assert.match(html, /data-landscape-total="remainder">Not available/);
+  assert.match(html, /-\$100<\/p>/);
+  assert.match(html, /2\/4 known balances; dates vary/);
+  assert.match(html, /\$0 balance/);
+  assert.match(html, /Balance unavailable/);
+  assert.match(html, /&lt;img/);
+  assert.doesNotMatch(html, /<img|NaN|Infinity|undefined/);
+  assert.match(html, /View all 4 items/);
+  assert.doesNotMatch(html, /data-landscape-node="account-4"/);
+  await landscapeClick(f, { landscapeNode: 'cash' });
+  assert.match(f.node('landscape-detail').innerHTML, /data-landscape-node="account-4"/);
+  await landscapeClick(f, { landscapeNode: 'account-1' });
+  assert.match(f.node('landscape-detail').innerHTML, /as of 2026-11-08/);
+  assert.match(f.node('landscape-detail').innerHTML, /Plaid current balance/);
+  await landscapeClick(f, { landscapeNode: 'account-4' });
+  await landscapeClick(f, { landscapeAction: 'map' });
+  assert.match(f.node('landscape-root').innerHTML, /data-landscape-node="account-4"/, 'switching modes reveals a selected item beyond the map preview');
+  f.context.FinanceLandscape.reset();
+  await f.context.FinanceLandscape.loadPage();
+  assert.match(f.node('landscape-root').innerHTML, /landscape-one-view/);
+});
+
+test('landscape overview displays negative remainder and real zero flows, without treating empty history as zero', async () => {
+  const { buildLandscape } = await import('../backend/utils/landscape.js');
+  const graph = buildLandscape({ now: new Date('2026-11-09'), transactions: [
+    { id: 1, date: '2026-10-10', description: 'Shopping', amount: .01, direction: 'DEBIT', category: 'Shopping' }
+  ] });
+  const f = fixture(async () => response(200, graph));
+  f.run('landscape.js');
+  await f.context.FinanceLandscape.loadPage();
+  assert.match(f.node('landscape-root').innerHTML, /data-landscape-total="income">\$0/);
+  assert.match(f.node('landscape-root').innerHTML, /data-landscape-total="remainder">-\$0\.01/);
+  const empty = fixture(async () => response(200, buildLandscape()));
+  empty.run('landscape.js');
+  await empty.context.FinanceLandscape.loadPage();
+  const html = empty.node('landscape-root').innerHTML;
+  assert.equal((html.match(/data-landscape-card=/g) || []).length, 8);
+  assert.match(html, /data-landscape-total="income">Not available/);
+  assert.match(html, /8 sections have no records/);
+  assert.match(html, /Investment coverage missing/);
+  assert.match(html, /401\(k\) \/ retirement coverage missing/);
 });
 
 test('the floating assistant and settings are removed without removing financial checkup', () => {

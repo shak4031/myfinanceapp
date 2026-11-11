@@ -1,4 +1,63 @@
-#landscape-view { min-width: 0; max-width: none; }
+#landscape-view { min-width: 0; max-width: none; gap: 16px; }
+#landscape-view > .header h1 { font-size: 32px; }
+#landscape-view > .header .eyebrow { margin-bottom: 4px; }
+.landscape-overview-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.landscape-overview-toolbar p { margin: 0; color: #526977; font-size: 13px; }
+.landscape-overview-toolbar b { color: #173b4c; }
+.landscape-overview-toolbar .landscape-toolbar { margin: 0; }
+.landscape-one-view { padding: 12px; border: 1px solid #d5e3e7; border-radius: 20px; background: #f3f7f8; }
+.landscape-row-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; color: #526977; font-size: 11px; line-height: 1.6; }
+.landscape-row-label > span:first-child { font-weight: 750; letter-spacing: 1.2px; }
+.landscape-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; position: relative; }
+.landscape-card-grid-top { margin-top: 12px; padding-bottom: 16px; }
+.landscape-card-grid-bottom { margin-bottom: 12px; padding-top: 16px; }
+.landscape-card-grid::after { content: ''; position: absolute; left: 12%; right: 12%; height: 8px; border: 1px solid #b5cbd2; pointer-events: none; }
+.landscape-card-grid-top::after { bottom: 8px; border-top: 0; border-radius: 0 0 8px 8px; }
+.landscape-card-grid-bottom::after { top: 8px; border-bottom: 0; border-radius: 8px 8px 0 0; }
+.landscape-card { display: flex; flex-direction: column; min-width: 0; padding: 12px; border: 1px solid #d5e3e7; border-top: 3px solid var(--branch-color); border-radius: 12px; background: #fff; }
+.landscape-card button { font: inherit; cursor: pointer; }
+.landscape-card-heading { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; border: 0; text-align: left; background: none; color: #173b4c; font-size: 13px !important; font-weight: 750 !important; }
+.landscape-card-heading svg { flex: 0 0 22px; color: var(--branch-color); }
+.landscape-card-open { margin-left: auto; color: #526977; }
+.landscape-card-total { margin: 8px 0 3px; color: #173b4c; font-size: clamp(18px, 1.7vw, 26px); font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
+.landscape-card-caption { margin: 0 0 8px; color: #526977; font-size: 11px; line-height: 1.5; min-height: 16.5px; }
+.landscape-card-items { list-style: none; padding: 0; margin: 0 0 6px; }
+.landscape-card-items button { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; width: 100%; border: 0; border-top: 1px solid #edf1f3; padding: 4px 0; background: none; color: #264657; text-align: left; font-size: 12px; line-height: 1.4; }
+.landscape-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.landscape-item-value { color: #395666; font-size: 11px; }
+.landscape-card-empty { padding: 6px 0; color: #526977; font-size: 12px; line-height: 1.6; }
+.landscape-card-more { display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-top: auto; border: 0; border-top: 1px solid #edf1f3; padding: 9px 0 0; background: none; color: #285d6e; text-align: left; font-size: 12px !important; font-weight: 650 !important; }
+.landscape-card button:hover, .landscape-card button[aria-pressed="true"] { color: #0c6070; text-decoration: underline; text-underline-offset: 3px; }
+.landscape-card button:focus-visible { outline: 3px solid #397f98; outline-offset: 3px; border-radius: 3px; }
+.landscape-household { position: relative; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding: 14px 18px; border-radius: 14px; background: #173f51; color: #fff; }
+.landscape-household::before, .landscape-household::after { content: ''; position: absolute; left: 50%; width: 1px; height: 8px; background: #b5cbd2; }
+.landscape-household::before { top: -8px; }
+.landscape-household::after { bottom: -8px; }
+.landscape-household-title { display: flex; align-items: center; gap: 12px; }
+.landscape-household-title > svg { width: 32px; height: 32px; color: #b1dbd6; }
+.landscape-household h2 { margin: 0; font-size: 19px; color: #fff; }
+.landscape-household-title p { margin: 4px 0 0; font-size: 11px; color: #c9dde4; }
+.landscape-cashflow { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 22px; margin: 0; }
+.landscape-cashflow dt { font-size: 11px; color: #c9dde4; }
+.landscape-cashflow dd { margin: 5px 0 0; font-size: 23px; font-weight: 750; }
+.landscape-cashflow > span { color: #b1dbd6; }
+.landscape-remainder-note { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.6; color: #c9dde4; }
+.landscape-overview-note { margin: 12px 0; color: #526977; font-size: 12px; line-height: 1.7; }
+.landscape-detail[hidden] { display: none; }
+@media (max-width: 1100px) {
+  .landscape-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .landscape-one-view { padding: 12px; }
+  .landscape-card-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .landscape-card-caption { min-height: 0; }
+  .landscape-card-total { font-size: 24px; }
+  .landscape-card button { min-height: 44px; }
+  .landscape-household { padding: 16px; }
+  .landscape-cashflow { width: 100%; gap: 12px; }
+  .landscape-cashflow > div { flex: 1 1 100%; }
+  .landscape-cashflow > span { display: none; }
+}
 .landscape-period { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 18px; font-size: 14px; color: #395666; }
 .landscape-help { margin-left: auto; max-width: 600px; font-size: 13px; line-height: 1.7; }
 .landscape-help summary { cursor: pointer; color: #285d6e; font-weight: 650; }

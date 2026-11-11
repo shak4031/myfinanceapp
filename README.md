@@ -291,52 +291,37 @@ Both explorers support keyboard selection and horizontal scrolling on small scre
 ## Financial landscape
 
 Open **Financial landscape** in the sidebar, Dashboard or Accounts (`#landscape`).
-This dedicated cluster network is available to active Basic and Pro households.
-A small household hub connects to eight asymmetrically arranged financial
-clusters. Each has its own colorful SVG illustration and curved local fan-out,
-without background boxes, shading
-or 3D controls. Cross-leg flow arrows are off by default
-to avoid a tangled network. Section tiles toggle whole legs with a visible
-shown/hidden state. **Explore** isolates a section and shows all its items.
-On-map controls unfold or fold each leg and reveal additional items in place,
-with multiple legs open together. The details list retains every item; selecting
-one reveals it without hiding other legs. **Show full landscape** restores
-the initial three-item previews and all sections.
-Select illustrations or item markers to inspect balances and recorded money flows; the inspector also
-offers branch collapse/expand. The overview previews three items per branch.
-**View options** holds expand/collapse-all and flow arrows.
-Recorded connections remain available in details even with arrows hidden.
-The diagram is a large canvas, at least 1400 pixels wide. Its height follows
-the diagram's aspect ratio rather than a small
-viewport-height cap. Scroll the workspace/page horizontally and vertically to
-explore it; the diagram has no separate internal scroll container or zoom mode.
-The landscape page is exempt from the usual content-width cap.
-Names and values accompany unframed illustrations throughout the map,
-arranged as small endpoints around each cluster hub rather than on a shared
-household-centered ring. Curved colored connections carry the hierarchy;
-there are no circular bubbles. Local fans use up to five items per tier, and
-expanded clusters move outward only as needed to avoid other nodes and controls.
-Node sizes remain stable as the canvas grows. Hold the left mouse button and drag
-anywhere on the map to pan horizontally and vertically. A short click still
-selects items or activates controls; dragging does not activate them. Phones
-retain native touch scrolling. The white canvas background covers the full SVG even when expanded
-branches extend beyond the initial page width.
-Expanding legs adds outer tiers and grows the canvas instead of scaling nodes down.
-Section controls and the details list
-remain viewport-sized on small screens while the diagram stays large.
-Child illustration sizes increase with the absolute amount relative to the largest
-item of the same measure **within its own leg**, with bounded sizes for readability.
-Monthly activity, balances and planning progress use separate scales (including
-inside the mixed debt leg); negative balances retain their sign in labels.
-Unknown amounts remain unweighted markers, never zero. Hubs stay equal-sized.
-Size is not a financial-health score, a share of net worth, or a
-comparison between legs. There is no
-automatic motion. **Map guide** and **Coverage and calculation notes** hold the
-instructions and accounting caveats without paragraphs surrounding the map.
-Activity nodes can fan out to their latest 20 transactions, with amounts and dates
-on the map, full labels on hover/focus, and links to Transactions.
-Controls disclose displayed/total counts when more records exist.
-Keyboard users can activate expansion controls with Enter or Space.
+Available to active Basic and Pro households, the default is a compact household
+diagram, not a pannable canvas. Eight cards surround the household cash-flow band:
+money in, everyday spending, debt/payments and goals above; cash/other accounts,
+savings, investments and retirement below. All eight sections remain visible
+without expanding branches. Four columns fit desktop screens; smaller screens
+reflow to two or one column without horizontal panning or shrinking text.
+
+The central band shows recorded monthly money in minus spending and debt payments.
+The remainder is **not** available cash, confirmed savings or a forecast. Missing
+imports can change it, and no-history amounts remain unavailable instead of zero.
+Account cards subtotal only their known account balances and disclose the
+known/total account count; amounts can have different as-of dates. Goals are not
+added to assets. Debt balances remain separate from monthly debt payments, and
+potentially overlapping unlinked plans are not summed into a balance total.
+Diagram lines indicate household grouping, not verified transfers.
+
+Each card previews up to two items. **View all** opens every item in the detail
+panel without enlarging the diagram. Select an item to inspect sources, balance
+dates, linked debt plans, verified connections and recent transactions. Native
+buttons support keyboard activation. **Coverage and calculation notes** explains
+missing data, excluded transfers and other limitations.
+
+**Detailed map** retains the bottom-to-top expandable canvas for deeper exploration:
+income, cash/everyday accounts, spending/debt/savings, then longer-term plans.
+Section controls hide/show branches; **Explore** isolates one. Mouse dragging pans
+the canvas and touch devices retain native scrolling. **View options** contains
+expand/collapse-all and optional verified flow arrows. Item sizes compare amounts
+only within the same branch and measure, not financial health or net worth.
+Payment controls reveal the latest 20 supplied transactions and disclose truncated
+counts. **Back to overview** restores the compact eight-section picture; logging
+out clears selections, expansions and view mode.
 
 Dashboard balance provenance, last-check time and bank-lag guidance are available
 from the info button beside **Balance** (keyboard/tap accessible); stale balances
