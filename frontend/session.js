@@ -304,7 +304,7 @@ window.FinanceSession = (() => {
         if (adminLink) adminLink.hidden = !admin;
         document.body.classList.remove('auth-pending');
         const target = location.hash.slice(1);
-        await showView(['membership','financial-health','categories','category-admin','transactions','transaction-review','activity','accounts','landscape','analytics','knowledge-base','etl','payoff','goals','insights','tutorials','settings','subscription'].includes(target.split('/')[0]) ? target : 'dashboard');
+        await showView(['membership','financial-health','categories','category-admin','transactions','transaction-review','activity','accounts','landscape','analytics','knowledge-base','etl','payoff','goals','insights','tutorials','training','settings','subscription'].includes(target.split('/')[0]) ? target : 'dashboard');
         if (verificationNotice) globalThis.notify?.(verificationNotice);
         return;
       }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({}) })) {
@@ -25,8 +25,8 @@ function fixture(fetchImpl = async () => ({ ok: true, status: 200, json: async (
     };
     nodes.set(id, element); return element;
   }
-  const views = ['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights'].map(view => node(`${view}-view`));
-  const nav = ['dashboard', 'financial-health', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'settings'].map(view => {
+  const views = ['dashboard', 'financial-health', 'categories', 'category-admin', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'training'].map(view => node(`${view}-view`));
+  const nav = ['dashboard', 'financial-health', 'categories', 'transactions', 'transaction-review', 'activity', 'accounts', 'landscape', 'analytics', 'knowledge-base', 'etl', 'payoff', 'goals', 'insights', 'training', 'settings'].map(view => {
     const item = node(`nav-${view}`);
     item.dataset.view = view;
     return item;
@@ -57,6 +57,34 @@ async function loadLandscapeMap(f) {
   await f.context.FinanceLandscape.loadPage();
   await landscapeClick(f, { landscapeAction: 'map' });
 }
+
+test('training is navigable and available without a subscription', async () => {
+  const f = fixture();
+  f.run('refresh.js');
+  await f.context.showView('training');
+  assert.equal(f.context.location.hash, '#training');
+  assert.equal(f.node('current-page').textContent, 'Training');
+  assert.ok(f.node('training-view').classList.contains('active'));
+  assert.ok(f.node('nav-training').classList.contains('active'));
+  let paused = false;
+  const queryAll = f.context.document.querySelectorAll;
+  f.context.document.querySelectorAll = selector => selector === '#training-view video' ? [{ pause() { paused = true; } }] : queryAll(selector);
+  await f.context.showView('knowledge-base');
+  assert.ok(paused);
+  const household = householdFixture();
+  await household.context.showView('training');
+  assert.equal(household.context.lastView, 'training');
+  assert.equal(household.calls.length, 0);
+  assert.match(source('session.js'), /'tutorials','training','settings'/);
+  const html = source('index.html');
+  const videos = [...html.matchAll(/<source src="(training-videos\/Module_(\d)_[^"]+\.mp4)" type="video\/mp4">/g)];
+  assert.equal(videos.length, 7);
+  for (let module = 1; module <= 7; module++) {
+    const video = videos[module - 1];
+    assert.equal(Number(video[2]), module);
+    assert.ok(existsSync(new URL(video[1], import.meta.url)));
+  }
+});
 
 test('financial landscape supports navigation and remains accessible on Basic', async () => {
   let loads = 0;

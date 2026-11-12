@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance. Start a 15-day Pro trial without payment details.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261109-landscape"></script>
+  <script src="session.js?v=20261111-training"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -497,6 +497,7 @@
   <link rel="stylesheet" href="analytics.css?v=20261111-chart-takeaways">
   <link rel="stylesheet" href="landscape.css?v=20261111-household-overview">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
+  <link rel="stylesheet" href="training.css?v=20261111">
   <link rel="stylesheet" href="categories.css?v=20261027a">
   <link rel="stylesheet" href="plan.css?v=20261109-mortgage-card">
   <link rel="stylesheet" href="welcome.css?v=20261030c">
@@ -639,6 +640,7 @@
         <li><a class="nav-btn" data-view="insights" href="#insights"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>Financial Checkup</a></li>
         <li><a class="nav-btn" data-view="knowledge-base" href="#knowledge-base"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 5.5v13A2.5 2.5 0 0 1 6.5 16H20M8 7h8m-8 4h8"/></svg>Knowledge Base</a></li>
         <li><a class="nav-btn" data-view="tutorials" href="#tutorials"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>Tutorials</a></li>
+        <li><a class="nav-btn" data-view="training" href="#training"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3 2 8l10 5 10-5-10-5ZM6 10v5c0 2 3 4 6 4s6-2 6-4v-5M22 8v7"/></svg>Training</a></li>
         <li><a class="nav-btn" data-view="settings" href="#settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Settings &amp; support</a></li>
         <li class="admin-only" id="nav-admin-item" hidden><a class="nav-btn" href="/admin.html"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 9 4v5c0 5-9 9-9 9s-9-4-9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg>Admin console</a></li>
       </ul>
@@ -1277,6 +1279,69 @@
           <div><p class="eyebrow">LEARN MYFINANCE</p><h1>Tutorials</h1><p class="muted">Short, narrated walkthroughs. Press play, pause any time, or jump to a chapter.</p></div>
         </header>
         <div id="tutorial-root" class="tut-root"></div>
+      </section>
+
+      <section id="training-view" class="view training-view" aria-labelledby="training-title">
+        <header class="training-intro panel">
+          <p class="eyebrow">DECRYPTION TRAINING</p>
+          <h1 id="training-title">Wire Decryption Mastery: ExtraHop Edition</h1>
+          <p class="training-summary">A 7-part video course on decrypting network traffic for threat detection &middot; about 39 minutes total</p>
+          <p>Most traffic on today&rsquo;s networks is encrypted, and attackers hide in it. Network detection only works when your sensors can see inside that traffic. This course teaches you how to decrypt it the right way: legally, safely, and at scale with ExtraHop sensors.</p>
+          <p>You&rsquo;ll learn how each major type of encryption on the wire works: SSL/TLS, the Microsoft protocols, SSH, QUIC, VPNs and encrypted DNS. For each one, you&rsquo;ll learn where the session key comes from and whether your sensor can get it. The course moves from fundamentals to hands-on configuration, strategy, governance and troubleshooting.</p>
+          <p>Every product detail comes from ExtraHop&rsquo;s own documentation, and every protocol detail comes from the official standards. Each video ends with a slide listing its sources.</p>
+          <p><strong>Who it&rsquo;s for:</strong> SOC analysts, network security engineers and NDR administrators responsible for ExtraHop deployments.</p>
+        </header>
+        <div class="training-modules" aria-label="Course modules">
+          <article class="training-module panel">
+            <p class="training-label">MODULE 1 &middot; 5:26</p>
+            <h2>Foundations: How Encryption Works on the Wire</h2>
+            <p>Start with the idea the rest of the course is built on: you never break encryption, you get the session key. This module explains how symmetric and asymmetric cryptography work together, and why decryption matters for detection. It also compares inline and out-of-band decryption, and covers the five things that must be true before any decryption method works.</p>
+            <p><strong>You&rsquo;ll learn:</strong> the three ways to get a key (derive it, receive it, or fall back to analyzing traffic without decrypting it), and why perfect forward secrecy (PFS) changes your strategy.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 1: Foundations: How Encryption Works on the Wire"><source src="training-videos/Module_1_Foundations_How_Encryption_Works_on_the_Wire.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 2 &middot; 6:12</p>
+            <h2>SSL &amp; TLS Internals</h2>
+            <p>Look inside the handshake. This module traces SSL and TLS from the deprecated SSL versions to TLS 1.3, compares RSA key exchange with ephemeral ECDHE, and shows why forward secrecy defeats private-key decryption. It also covers what TLS 1.3 changed, including the post-quantum key exchange now standard in browsers.</p>
+            <p><strong>You&rsquo;ll learn:</strong> how to read a cipher suite name and tell at a glance whether a private key can decrypt it, plus how session resumption and tickets affect decryption.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 2: SSL and TLS Internals"><source src="training-videos/Module_2_SSL_and_TLS_Internals.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 3 &middot; 6:57</p>
+            <h2>Decrypting TLS with ExtraHop</h2>
+            <p>The hands-on module. It covers ExtraHop&rsquo;s three TLS decryption methods: uploading RSA private keys, session key forwarding, and load balancer integration with F5 or NetScaler. It walks through licensing, sensor configuration, firewall ports, forwarder installation on Windows, Linux and Java, and how to confirm that decryption is working.</p>
+            <p><strong>You&rsquo;ll learn:</strong> how to decrypt PFS and TLS 1.3 traffic, which server environments are supported, and the limitations to plan around.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 3: Decrypting TLS with ExtraHop"><source src="training-videos/Module_3_Decrypting_TLS_with_ExtraHop.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 4 &middot; 4:30</p>
+            <h2>Microsoft Protocol Decryption</h2>
+            <p>Active Directory has its own encryption, and attackers use it to move laterally. This module covers Kerberos, NTLM, SMB3, LDAP, MS-RPC and WinRM, and how connecting ExtraHop to a domain controller unlocks all of them. It also covers the security requirements for that connection.</p>
+            <p><strong>You&rsquo;ll learn:</strong> how to configure the domain controller connection, why the account it uses holds DCSync-level rights, and how to protect the sensor as a tier 0 system.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 4: Microsoft Protocol Decryption"><source src="training-videos/Module_4_Microsoft_Protocol_Decryption.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 5 &middot; 6:08</p>
+            <h2>SSH, QUIC, VPNs, Databases and More</h2>
+            <p>A tour of everything else on the wire, with an honest answer for each protocol about what can be decrypted. Topics include databases, remote desktop, SSH, QUIC/HTTP3, IPsec and WireGuard VPNs, encrypted DNS and Encrypted Client Hello. It also covers fingerprinting techniques such as JA4 and HASSH for traffic you can&rsquo;t decrypt.</p>
+            <p><strong>You&rsquo;ll learn:</strong> a protocol-by-protocol decryption matrix, and how to monitor SSH, QUIC and VPN traffic when you can&rsquo;t decrypt it.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 5: SSH, QUIC, VPNs, Databases and More"><source src="training-videos/Module_5_SSH_QUIC_VPNs_Databases_and_More.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 6 &middot; 4:18</p>
+            <h2>Decryption Strategy, Coverage and Governance</h2>
+            <p>Knowing the methods is half the job; this module covers the other half. It explains how to prioritize what to decrypt, measure coverage, configure servers so decryption works, store session keys with packets for forensics, and build the approvals and access controls that make the program defensible.</p>
+            <p><strong>You&rsquo;ll learn:</strong> a recommended rollout order, a coverage metric, and a governance checklist.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 6: Decryption Strategy, Coverage and Governance"><source src="training-videos/Module_6_Decryption_Strategy_Coverage_and_Governance.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+          <article class="training-module panel">
+            <p class="training-label">MODULE 7 &middot; 5:27</p>
+            <h2>Troubleshooting and the Expert Playbook</h2>
+            <p>When detections go quiet on encrypted traffic, this module shows how to find out why. It covers a five-step troubleshooting order, the forwarder error messages documented by ExtraHop and how to fix them, and checks on the server side. It ends with a hands-on Wireshark lab where you see forward secrecy at work for yourself.</p>
+            <p><strong>You&rsquo;ll learn:</strong> a repeatable troubleshooting method, and an end-of-course checklist that sums up the whole program.</p>
+            <video class="training-video" controls preload="none" aria-label="Module 7: Troubleshooting and the Expert Playbook"><source src="training-videos/Module_7_Troubleshooting_and_the_Expert_Playbook.mp4" type="video/mp4">Your browser does not support video playback.</video>
+          </article>
+        </div>
       </section>
 
     </main>
@@ -2807,7 +2872,7 @@
   <script src="ui.js?v=20261030a"></script>
   <script src="review-tools.js?v=20261101-account"></script>
   <script src="transaction-cleanup.js?v=20261031a"></script>
-  <script src="refresh.js?v=20261111-budget-category-focus"></script>
+  <script src="refresh.js?v=20261111-training"></script>
   <script src="accounts.js?v=20261109-account-controls"></script>
   <script src="landscape.js?v=20261111-household-overview"></script>
   <script src="import-history.js?v=20261024a"></script>
@@ -2827,7 +2892,7 @@
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261111-compass-period"></script>
   <script src="marketing.js?v=20261107-highlights"></script>
-  <script src="household.js?v=20261109-profile-toggle"></script>
+  <script src="household.js?v=20261111-training"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

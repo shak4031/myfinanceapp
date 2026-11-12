@@ -337,7 +337,7 @@
   // Views may carry a sub-path, e.g. #tutorials/debt opens a specific tutorial and #analytics/compass the Spending Compass.
   window.showView = function(route) {
     if (!FinanceSession.isAuthenticated()) return;
-    const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', 'financial-health': 'Financial Health', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', landscape: 'Financial landscape', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
+    const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', 'financial-health': 'Financial Health', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', landscape: 'Financial landscape', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', training: 'Training', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
     let spendingTarget = null;
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
@@ -361,6 +361,7 @@
       transactionId = sub;
     } else if (view !== 'tutorials') sub = '';
     const title = view === 'analytics' && sub === 'compass' ? 'Spending Compass' : view === 'payoff' && sub === 'mortgage' ? 'Mortgage' : titles[view];
+    if (view !== 'training') document.querySelectorAll('#training-view video').forEach(video => video.pause());
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `${view}-view`));
     const navView = view === 'category-admin' ? 'categories' : view;
     if (['transaction-review', 'activity'].includes(view)) {

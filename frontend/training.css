@@ -1,0 +1,14 @@
+.training-view { max-width: 1000px; }
+.training-intro, .training-module { padding: 28px; }
+.training-intro h1 { margin: 8px 0 12px; }
+.training-intro p, .training-module p { line-height: 1.7; }
+.training-intro p + p, .training-module p + p { margin-top: 12px; }
+.training-summary { color: var(--primary); font-weight: 700; }
+.training-modules { display: grid; gap: 18px; margin-top: 24px; }
+.training-module h2 { margin: 5px 0 12px; font-size: 22px; }
+.training-label { color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.training-video { display: block; width: 100%; max-width: 800px; aspect-ratio: 16 / 9; margin-top: 20px; border-radius: 12px; background: #000; }
+@media (max-width: 640px) {
+  .training-intro, .training-module { padding: 18px; }
+  .training-module h2 { font-size: 19px; }
+}

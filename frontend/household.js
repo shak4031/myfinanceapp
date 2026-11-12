@@ -273,7 +273,7 @@
     });
     const ticket = ++routeGeneration;
     const name = route.split('/')[0];
-    const accessible = ['membership', 'settings', 'tutorials', 'knowledge-base'];
+    const accessible = ['membership', 'settings', 'tutorials', 'knowledge-base', 'training'];
     if (accessible.includes(name)) {
       baseShowView(route);
       if (name === 'membership') await loadSettings();
