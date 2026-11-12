@@ -4,6 +4,7 @@
   const $ = id => document.getElementById(id);
   let request = 0, sortKey = 'mtd', sortDir = -1, current = null, tab = 'overview';
   const recurringFilters = { status: 'active', kind: 'all', search: '' };
+  let balanceAccount = '';
   let compassPeriod = null;
   const panelFlow = () => compassPeriod?.data || current?.moneyFlow;
   const monthKey = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;
@@ -43,6 +44,7 @@
   const card = (title, subtitle, body, extra = '') => `<article class="pro-card panel ${extra}"><header><div><h2>${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ''}</div></header><div class="pro-card-body">${body}</div></article>`;
   const scrollRegion = (label, body, className = 'table-scroll') => `<p class="pro-scroll-hint">Swipe sideways to explore the full ${label.toLowerCase()}.</p><div class="${className}" role="region" aria-label="${label}" tabindex="0">${body}</div>`;
   const how = text => globalThis.FinanceUI?.howCalc?.(text) || '';
+  const historyNote = (window, reason) => `<p class="chart-history-note"><b>Fixed history: ${window}.</b> Date filters do not apply to this chart: ${reason}. Missing imports remain unavailable; a shorter filter never shortens the required history.</p>`;
   const KPI_NOTES = [
     'Everything spent since the 1st of this month, transfers between your own accounts excluded, compared with the same day last month.',
     'Spent so far, plus bills still due this month, plus your average flexible spending for the days left.',
@@ -120,28 +122,102 @@
   }
 
   function cashflowCard(a) {
-    const { money } = pro().format;
-    const c = a.cashflow, { market } = charts();
-    if (c.startBalance == null) return card('6-month cash flow', 'Projected balance from your recurring income and spending', '<p class="pro-empty">Import a statement with a running balance to project your cash flow.</p>', 'span-3');
-    const points = [{ x: 0, v: c.startBalance }, ...c.months.map((m, i) => ({ x: i + 1, v: m.balance }))];
-    const ticks = [{ x: 0, label: 'Now' }, ...c.months.map((m, i) => ({ x: i + 1, label: charts().monthShort(m.month) }))];
-    const low = Math.min(...points.map(p => p.v)), end = points[points.length - 1].v;
-    const net = c.months[0]?.net || 0;
-    const basis = c.monthsUsed ? `the last ${c.monthsUsed} full month${c.monthsUsed === 1 ? '' : 's'}` : 'recent months';
-    const netNote = c.basis === 'typical-surplus'
-      ? how(`Your typical monthly surplus: average income minus average spending over ${basis}, transfers excluded. It is the same number your dashboard, Debt and Goals pages use.`)
-      : how('Average income minus last month\'s bills and your average flexible spending.');
-    const body = `<div class="market-chart-heading"><span class="market-eyebrow">BALANCE OUTLOOK</span><span class="market-status">Scenario, not a guarantee</span></div>
-      ${scrollRegion('Projected balance chart', market({ series: [{ name: 'Estimated balance', points, tone: end >= c.startBalance ? 'green' : 'rose', dashed: true, area: true, endpoint: true }], xMax: c.months.length, xTicks: ticks, pointLabel: x => x === 0 ? 'Now: recorded balance' : `${c.months[x - 1].month} estimate`, label: 'Projected balance' }), 'pro-chart-scroll')}
-      <div class="pro-legend"><span class="${end >= c.startBalance ? 'income' : 'danger'} dashed">Estimated balance</span></div>
-      <div class="pro-mini-stats"><div><span>Balance today</span><strong>${money(c.startBalance, true)}</strong></div><div><span>In 6 months</span><strong class="${end < 0 ? 'is-bad' : ''}">${money(end, true)}</strong></div><div><span>${c.basis === 'typical-surplus' ? 'Typical surplus' : 'Net / month'}${netNote}</span><strong class="${net < 0 ? 'is-bad' : 'is-good'}">${net >= 0 ? '+' : ''}${money(net, true)}</strong></div><div><span>Lowest point</span><strong class="${low < 0 ? 'is-bad' : ''}">${money(low, true)}</strong></div></div>`;
-    return card('6-month cash flow', 'Projected balance if your typical surplus continues each month', body, 'span-3 pro-market');
+    const { money, esc } = pro().format, { market, monthShort } = charts();
+    const fan = a.statistics?.fan;
+    const title = 'Cash-flow possibilities';
+    const subtitle = 'A range of paths, not a straight-line prediction';
+    const history = historyNote('last 6 completed months', 'the scenario range needs six consecutive monthly results to measure variation');
+    if (!fan?.points.length) return card(title, subtitle, `${history}<p class="pro-empty">${esc(fan?.reason || 'Import six completed months of activity and a recorded cash balance to build the scenario fan.')}</p>`, 'span-3');
+    const series = [
+      ['p10', '10th percentile', 'violet'], ['p90', '90th percentile', 'violet'],
+      ['p25', '25th percentile', 'cyan'], ['p75', '75th percentile', 'cyan'],
+      ['median', 'Median scenario', 'cyan']
+    ].map(([key, name, tone], i) => ({ name, tone, hidden: i < 4, dashed: true, endpoint: i === 4,
+      points: fan.points.map((p, x) => ({ x, v: p[key] })) }));
+    const end = fan.points.at(-1);
+    const body = `${history}<div class="market-chart-heading"><span class="market-eyebrow">CASH SCENARIO FAN</span><span class="market-status">Model ranges, not guarantees</span></div>
+      ${scrollRegion('Cash scenario fan', market({ series, bands: [
+        { lower: 0, upper: 1, tone: 'violet', name: 'Middle 80% of modeled outcomes', opacity: .14 },
+        { lower: 2, upper: 3, tone: 'cyan', name: 'Middle 50% of modeled outcomes', opacity: .2 }
+      ], xMax: fan.points.length - 1, xTicks: fan.points.map((p, x) => ({ x, label: x ? monthShort(p.month) : 'Recorded' })),
+      pointLabel: x => x ? `${fan.points[x].month} modeled outcomes` : 'Recorded starting balance', label: title }), 'pro-chart-scroll')}
+      <div class="pro-legend"><span class="band-violet">Middle 80%</span><span class="band-cyan">Middle 50%</span><span class="scenario-line">Median scenario</span></div>
+      <div class="pro-mini-stats"><div><span>Recorded start</span><strong>${money(fan.points[0].median, true)}</strong></div><div><span>Median finish</span><strong>${money(end.median, true)}</strong></div><div><span>Lower scenario (10th)</span><strong>${money(end.p10, true)}</strong></div><div><span>Upper scenario (90th)</span><strong>${money(end.p90, true)}</strong></div></div>
+      <details class="market-method"><summary>How to read this range</summary><p>All possible resamples of the last six completed monthly income-minus-spending results, centered on ${fan.basis === 'typical-surplus' ? 'the same typical monthly surplus used by your plan' : 'the existing recent-average income and spending baseline; a shared typical surplus is not available'}. Each future step independently repeats one historical monthly deviation. Training months: ${fan.trainingMonths.map(esc).join(', ')}.</p><p>The bands contain the middle 50% and 80% of model outcomes, not a promised probability for your future balance. Only six observations support this model; missing imports, seasonality, correlated months and new bills are not modeled. Zero variation produces a flat range, not proof of certainty. The starting balance is recorded, not necessarily live; the first step is the next calendar month, without a separate remaining-current-month estimate.</p></details>`;
+    return card(title, subtitle, body, 'span-3 pro-market');
+  }
+
+  function statisticsCard(a, mode) {
+    const { market, monthShort } = charts();
+    const points = a.statistics?.points || [];
+    const volatility = mode === 'volatility';
+    const title = volatility ? 'Spending volatility bands' : 'Spending momentum';
+    const subtitle = volatility ? 'Spot months outside your recent spending range' : 'Short- and long-term averages reveal a change in direction';
+    const history = historyNote('last 12 completed months', volatility
+      ? 'each comparison needs the preceding 3–6 consecutive recorded months for its baseline and variation'
+      : 'the 3- and 6-month averages need consecutive history so short-term and long-term direction stay comparable');
+    const hasValues = points.some(p => volatility ? p.baseline !== null : p.mean3 !== null);
+    if (!hasValues) return card(title, subtitle, `${history}<p class="pro-empty">Import at least three consecutive completed months of activity. Volatility comparisons begin with the following month; a six-month average needs six consecutive months.</p>`, 'span-3');
+    const make = (key, name, tone, options = {}) => ({ name, tone, ...options, points: points.map((p, x) => ({ x, v: p[key] })) });
+    const series = volatility ? [
+      make('lower', 'Lower band', 'violet', { hidden: true }), make('upper', 'Upper band', 'violet', { hidden: true }),
+      make('baseline', 'Prior average', 'violet'), make('spend', 'Recorded spending', 'cyan', { endpoint: true })
+    ] : [make('spend', 'Recorded spending', 'muted'), make('mean3', '3-month average', 'cyan', { endpoint: true }), make('mean6', '6-month average', 'amber')];
+    const body = `${history}<div class="market-chart-heading"><span class="market-eyebrow">${volatility ? 'HISTORICAL VARIATION' : 'ROLLING AVERAGES'}</span><span class="market-status">Completed months only</span></div>
+      ${scrollRegion(title, market({ series, bands: volatility ? [{ lower: 0, upper: 1, tone: 'violet', name: 'Prior mean plus or minus two sample standard deviations' }] : [],
+      xMax: points.length - 1, xTicks: points.map((p, x) => ({ x, label: monthShort(p.month) })), pointLabel: x => points[x].month, label: title }), 'pro-chart-scroll')}
+      <div class="pro-legend">${volatility ? '<span class="band-violet">Prior average ± 2 standard deviations</span><span class="primary">Recorded spending</span>' : '<span class="muted-line">Recorded spending</span><span class="primary">3-month average</span><span class="sma">6-month average</span>'}</div>
+      <p class="market-note">${volatility ? 'Bands use the preceding 3–6 consecutive recorded months, excluding the month being compared; the lower edge is clipped at $0. Outside the band means unusual relative to those imports, not automatically bad spending. These are descriptive bands, not confidence intervals.' : 'The 3- and 6-month averages include the labeled completed month. A rising short average above the long average can indicate accelerating spending, not a trading signal.'} Missing months remain gaps, not zeros. A month with records is not proof of complete imports. The current partial month is excluded.</p>`;
+    return card(title, subtitle, body, 'span-3 pro-market');
+  }
+
+  function balanceHistoryBody(a) {
+    const { money, esc } = pro().format, { market, monthShort } = charts();
+    const accounts = a.statistics?.balances || [];
+    const account = accounts.find(item => String(item.id) === balanceAccount) || accounts.find(item => item.points.length) || accounts[0];
+    if (!account) return '<p class="pro-empty">Add a checking or savings account and import dated running balances to explore balance ranges and drawdown. No balances are reconstructed from spending.</p>';
+    balanceAccount = String(account.id);
+    const select = `<label class="market-account-picker">Cash account<select id="market-balance-account">${accounts.map(item => `<option value="${esc(item.id)}"${item.id === account.id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label>`;
+    const note = '<p class="market-note">One account at a time; balances from different dates are never added together. Only recorded daily closing samples are used (highest transaction ID breaks same-day ties); no intraday ordering or missing days are inferred. Sparse imports may miss the true highs, lows and drawdowns.</p>';
+    if (account.points.length < 2) return `${select}<p class="pro-empty">At least two dated balance samples are needed for this account. No missing balances are treated as zero.</p>${note}`;
+    const first = account.points[0], last = account.points.at(-1);
+    const day = date => Date.parse(`${date}T12:00:00Z`) / 86400000;
+    const start = day(first.date), xMax = day(last.date) - start;
+    const ticks = account.points.filter((p, i, list) => i === 0 || p.date.slice(0, 7) !== list[i - 1].date.slice(0, 7))
+      .map(p => ({ x: day(p.date) - start, label: p.date.slice(5) }));
+    const sampled = new Map(account.points.map(p => [day(p.date) - start, p]));
+    const drawdown = market({ series: [{ name: 'Below observed peak', tone: 'rose', area: true, endpoint: true,
+      points: account.points.map(p => ({ x: day(p.date) - start, v: p.drawdown })) }], xMax, xTicks: ticks,
+      pointLabel: x => sampled.get(x).date, label: 'Cash reserve drawdown' });
+    const candles = account.candles;
+    const monthIndex = month => Number(month.slice(0, 4)) * 12 + Number(month.slice(5)) - 1;
+    const candleStart = candles.length ? monthIndex(candles[0].month) : 0;
+    const candlePoints = key => candles.map(c => ({ x: monthIndex(c.month) - candleStart, v: c[key], open: c.open, high: c.high, low: c.low }));
+    const ranges = candles.length >= 2 ? market({ series: [
+      { name: 'First observed close', tone: 'muted', hidden: true, points: candlePoints('open') },
+      { name: 'Observed high', tone: 'green', hidden: true, points: candlePoints('high') },
+      { name: 'Observed low', tone: 'rose', hidden: true, points: candlePoints('low') },
+      { name: 'Last observed close', tone: 'cyan', type: 'candles', points: candlePoints('close') }
+    ], xMax: Math.max(1, monthIndex(candles.at(-1).month) - candleStart),
+      xTicks: candles.map(c => ({ x: monthIndex(c.month) - candleStart, label: monthShort(c.month) })),
+      pointLabel: x => candles.find(c => monthIndex(c.month) - candleStart === x).month, label: 'Recorded balance candlesticks' }) : '<p class="market-note">Candlesticks need at least two recorded closing samples in each of two months. Import more dated balances to see them; no candles are fabricated.</p>';
+    return `${select}<div class="pro-mini-stats"><div><span>Last sampled balance</span><strong>${money(last.balance, true)}</strong></div><div><span>Largest observed drop</span><strong>${money(account.maxDrawdown, true)}</strong></div><div><span>Balance sample days</span><strong>${account.points.length}</strong></div><div><span>Last sample</span><strong>${esc(last.date)}</strong></div></div>
+      ${Date.parse(a.asOf) - Date.parse(last.date) > 45 * 86400000 ? '<p class="market-note">This account’s latest balance sample is over 45 days old. Update it before relying on the picture.</p>' : ''}
+      <h3 class="market-subtitle">Recorded balance candlesticks</h3>${scrollRegion('Recorded balance ranges', ranges, 'pro-chart-scroll')}
+      <p class="market-note">Each candle covers one month with at least two samples: body = first to last observed daily close; wick = highest and lowest observed daily closes. Green finishes higher, pink lower. These are sampled balance ranges, not market-price candles or verified month-open/month-close balances.</p>
+      <h3 class="market-subtitle">Cash reserve drawdown</h3>${scrollRegion('Cash reserve drawdown', drawdown, 'pro-chart-scroll')}
+      <p class="market-note">Dollar decline from the highest sampled balance seen so far within this displayed history (${esc(first.date)} through ${esc(last.date)}). $0 means back at that observed peak; deposits can create new peaks. This is not an investment return.</p>${note}`;
+  }
+
+  function balanceHistoryCard(a) {
+    return `<section id="market-balance-history" class="span-3" aria-label="Cash reserve history">${card('Cash reserves: ranges & drawdown', 'Candlesticks and peak-to-trough changes from recorded account balances',
+      historyNote('last 12 calendar months through today', 'candlesticks need multiple dated samples and drawdown must retain earlier observed peaks') + `<div id="market-balance-body">${balanceHistoryBody(a)}</div>`, 'pro-market')}</section>`;
   }
 
   function trendCard(a) {
     const s = a.series, { market, monthShort } = charts();
     const sma3 = s.spend.map((_, i) => i < 2 ? null : (s.spend[i] + s.spend[i - 1] + s.spend[i - 2]) / 3);
-    const body = `<div class="market-chart-heading"><span class="market-eyebrow">SPENDING / INCOME</span><span class="market-status">Monthly history</span></div>
+    const body = `${historyNote('12 calendar months, including this month to date', 'the monthly comparison and moving average need a consistent longer view; the latest month is partial')}<div class="market-chart-heading"><span class="market-eyebrow">SPENDING / INCOME</span><span class="market-status">Monthly history</span></div>
       ${scrollRegion('Monthly spending chart', market({ series: [
         { name: 'Spending', points: s.spend.map((v, x) => ({ x, v })), type: 'bars', tone: 'cyan' },
         { name: '3-month average', points: sma3.map((v, x) => ({ x, v })), tone: 'amber', endpoint: true },
@@ -201,7 +277,7 @@
         <label class="recurring-search">Find a payment<input type="search" data-recurring-filter="search" placeholder="Merchant or category" value="${esc(recurringFilters.search)}"></label></div>
       <p class="recurring-count" role="status">${shown.length} of ${unmarked.length} unmarked patterns shown · no list cutoff</p>
       ${list ? `<ul class="pro-list is-scroll recurring-candidates">${list}</ul>` : `<p class="pro-empty">${unmarked.length ? 'No payments match these filters. Try All patterns or a different search.' : all.length ? 'Every recurring charge is already marked fixed.' : 'No recurring charges detected yet.'}</p>`}${note}`;
-    return `<section id="recurring-payment-card" aria-label="Recurring payment candidates">${card('Recurring charges not marked fixed', 'A familiar rhythm? Turn real recurring bills into fixed payments, so your calendar can do the remembering.', body, 'recurring-discovery')}</section>`;
+    return `<section id="recurring-payment-card" class="span-2" aria-label="Recurring payment candidates">${card('Recurring charges not marked fixed', 'A familiar rhythm? Turn real recurring bills into fixed payments, so your calendar can do the remembering.', body, 'recurring-discovery')}</section>`;
   }
 
   function anomaliesCard(a) {
@@ -210,7 +286,7 @@
     const list = a.anomalies.slice(0, 8).map(x => x.type === 'charge'
       ? `<li><div><strong>${window.transactionLink(x.id, x.merchant)}</strong><small>${dateShort(x.date)} &middot; ${esc(x.category)}</small></div><div class="num"><strong>${money(x.amount)}</strong><small class="pro-move is-bad">${x.ratio.toFixed(1)}&times; the usual ${money(x.typical, true)}</small></div></li>`
       : `<li><div><strong>${esc(x.category)}</strong><small>Category on pace for an unusual month</small></div><div class="num"><strong>${money(x.amount, true)}</strong><small class="pro-move is-bad">${ratio(x)}</small></div></li>`).join('');
-    return card('Unusual activity', 'Charges and categories well outside your normal pattern', list ? `<ul class="pro-list is-wrap">${list}</ul>` : `<p class="pro-empty is-good">${pro().ICONS.check} Nothing unusual. Your spending is within its normal range.</p>`);
+    return card('Unusual activity', 'Charges and categories well outside your normal pattern', list ? `<ul class="pro-list is-wrap">${list}</ul>` : `<p class="pro-empty is-good">${pro().ICONS.check} Nothing unusual. Your spending is within its normal range.</p>`, 'span-2');
   }
 
   function merchantsCard(a) {
@@ -231,7 +307,7 @@
     const bars = a.weekdays.map((v, i) => `<div class="pro-weekday${i === peak && v > 0 ? ' is-peak' : ''}"><span style="height:${Math.max(3, (v / max) * 100).toFixed(1)}%" title="${names[i]}: ${money(v, true)}"></span><small>${names[i]}</small></div>`).join('');
     const note = a.weekdays[peak] > 0 ? `${longNames[peak]} are your biggest spending day (${money(a.weekdays[peak], true)} in 90 days).` : 'Not enough recent activity yet.';
     const total = a.weekdays.reduce((s, v) => s + v, 0);
-    if (!total) return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div>`);
+    if (!total) return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div>`, 'pro-weekly');
     const weekend = a.weekdays[0] + a.weekdays[6];
     const quiet = a.weekdays.indexOf(Math.min(...a.weekdays));
     const stats = [
@@ -240,7 +316,7 @@
       ['Average week', money(total / (90 / 7), true)],
       ['Quietest day', longNames[quiet].slice(0, -1)]
     ].map(([k, v]) => `<li><span>${k}</span><strong>${v}</strong></li>`).join('');
-    return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div><ul class="pro-weekday-table">${stats}</ul>`);
+    return card('Weekly rhythm', note, `<div class="pro-weekdays">${bars}</div><ul class="pro-weekday-table">${stats}</ul>`, 'pro-weekly');
   }
 
   const REGION_NAMES = { northeast: 'Northeast', midwest: 'Midwest', south: 'South', west: 'West' };
@@ -810,7 +886,7 @@
     stopField();
     const thin = a.monthsOfHistory < 3 ? '<p class="pro-banner">Insights sharpen with history. Import at least 3 months of statements for reliable moving averages and signals.</p>' : '';
     const footnote = `<details class="money-exact"><summary>Data and estimates</summary><p>As of ${dateShort(a.asOf)}. Spending excludes transfers between your own accounts${a.excludedCategories?.length ? ` (${a.excludedCategories.map(esc).join(', ')})` : ''}. Projections are estimates based on your history, not financial advice.</p></details>`;
-    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${recurringCard(a)}${interestCard()}${signalsTable(a)}${anomaliesCard(a)}${merchantsCard(a)}${weekdayCard(a)}</div>${footnote}`;
+    $('analytics-content').innerHTML = `${tabs(a)}${thin}${kpis(a)}<div class="pro-grid">${forecastCard(a)}${cashflowCard(a)}${trendCard(a)}${statisticsCard(a, 'volatility')}${statisticsCard(a, 'momentum')}${balanceHistoryCard(a)}${interestCard()}${signalsTable(a)}${merchantsCard(a)}${recurringCard(a)}${anomaliesCard(a)}${weekdayCard(a)}</div>${footnote}`;
     if (!interestState.data && !interestState.error) loadInterest();
     finish?.();
   }
@@ -919,6 +995,13 @@
     if (action === 'export-categories') location.href = '/api/analytics/export.csv?type=categories';
   });
   document.addEventListener('change', event => {
+    if (event.target?.id === 'market-balance-account' && current) {
+      balanceAccount = event.target.value;
+      const host = $('market-balance-history');
+      host.querySelector('#market-balance-body').innerHTML = balanceHistoryBody(current);
+      $('market-balance-account')?.focus({ preventScroll: true });
+      return;
+    }
     if (event.target?.dataset?.interestId && event.target.closest?.('#analytics-view')) {
       return setInterestKind(event.target.dataset.interestId, event.target.value, event.target);
     }
@@ -978,7 +1061,7 @@
     if (tab === 'compass') render(current);
   });
   document.addEventListener('pro:entitlement', event => {
-    if (event.detail && !event.detail.plusActive) { compassPeriod = null; current = null; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
+    if (event.detail && !event.detail.plusActive) { compassPeriod = null; current = null; balanceAccount = ''; recurringFilters.status = 'active'; recurringFilters.kind = 'all'; recurringFilters.search = ''; stopField(); }
   });
   document.addEventListener('finance:analytics-invalidated', () => {
     request++;

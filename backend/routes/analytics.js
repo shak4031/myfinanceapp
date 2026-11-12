@@ -25,18 +25,18 @@ async function timed(res, name, callback) {
 async function loadInputs() {
   return db.transaction(async client => {
     const transactions = (await client.query(
-      'SELECT id, date, description, note, amount, direction, category, is_fixed, label_id, transfer_kind, display_name, account_id, pay_mode FROM transactions ORDER BY date, id')).rows;
+      'SELECT id, date, description, note, amount, direction, category, is_fixed, label_id, transfer_kind, display_name, account_id, pay_mode, is_pending FROM transactions ORDER BY date, id')).rows;
     const budgets = (await client.query('SELECT category, monthly_amount FROM category_budgets')).rows
       .map(row => ({ category: row.category, amount: Number(row.monthly_amount) }));
     // Starting cash is checking accounts only, matching the dashboard.
-    const balances = (await client.query('SELECT id, date, balance, account_id FROM transactions WHERE balance IS NOT NULL')).rows;
-    const accounts = (await client.query('SELECT id, kind, statement FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
+    const balances = (await client.query('SELECT id, date, balance, account_id, is_pending FROM transactions WHERE balance IS NOT NULL')).rows;
+    const accounts = (await client.query('SELECT id, name, kind, status, statement FROM accounts WHERE user_id = $1', [currentUserId()])).rows;
     const household = (await client.query('SELECT household_size AS size, region, housing FROM household_profiles LIMIT 1')).rows[0] || null;
     const hasFixedEstimates = (await client.query('SELECT 1 FROM fixed_payment_estimates LIMIT 1')).rows.length > 0;
     const debts = (await client.query('SELECT * FROM credit_cards')).rows;
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { transactions, budgets, household, hasFixedEstimates, debts, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
+    return { transactions, budgets, household, hasFixedEstimates, debts, balances, accounts, latestBalance: cashBalance(balances, new Map(accounts.map(account => [account.id, account])), todayIso) };
   });
 }
 

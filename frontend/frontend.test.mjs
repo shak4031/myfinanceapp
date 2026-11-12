@@ -1977,7 +1977,7 @@ test('Knowledge Base has a direct route and explains both analytics offerings', 
   assert.equal(f.node('current-page').textContent, 'Knowledge Base');
   assert.equal(f.context.location.hash, '#knowledge-base');
   const html = source('index.html');
-  for (const text of ['Month-end forecast', '6-month cash flow', 'Monthly spend trend', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
+  for (const text of ['Month-end forecast', 'Cash-flow possibilities', 'Monthly spend trend', 'Spending volatility bands', 'Spending momentum', 'Cash reserves: ranges &amp; drawdown', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
     assert.ok(html.includes(text), `Knowledge Base should explain ${text}`);
   }
 });
@@ -4944,6 +4944,29 @@ test('recurring discovery shows every candidate and filters status, type and mer
   const originalStats = html.match(/<div class="pro-mini-stats">[\s\S]*?<\/div><\/div>/)[0];
   assert.ok(searched.includes(originalStats), 'filtering leaves all-active totals unchanged');
   assert.doesNotMatch(source('analytics.js'), /unmarked\.slice\(0, 12\)/);
+});
+
+test('analytics balance-account selector switches only recorded account history without losing the overview', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const payload = buildAnalytics({ today: new Date(2026, 10, 11),
+    accounts: [{ id: 1, name: 'Checking', kind: 'checking', status: 'active' }, { id: 2, name: '<Savings>', kind: 'savings', status: 'active' }],
+    balances: [
+      { id: 1, date: '2026-10-01', balance: 100, account_id: 1 }, { id: 2, date: '2026-10-15', balance: 50, account_id: 1 },
+      { id: 3, date: '2026-10-01', balance: 9000, account_id: 2 }, { id: 4, date: '2026-10-15', balance: 8000, account_id: 2 }
+    ] });
+  const f = loadPro(async url => url === '/api/license'
+    ? response(200, { tier: 'pro', active: true, plusActive: true, features: [] })
+    : response(200, payload));
+  await f.context.loadAnalyticsPage(true, '');
+  const original = f.node('analytics-content').innerHTML;
+  assert.match(original, /Cash reserves: ranges & drawdown/);
+  assert.match(original, /Below observed peak: -\$50\.00/);
+  f.listeners.get('document:change')({ target: { id: 'market-balance-account', value: '2' } });
+  const body = f.node('market-balance-history #market-balance-body').innerHTML;
+  assert.match(body, /&lt;Savings&gt;/);
+  assert.match(body, /Below observed peak: -\$1,000\.00/);
+  assert.doesNotMatch(body, /Below observed peak: -\$50\.00/);
+  assert.equal(f.node('analytics-content').innerHTML, original, 'only the history panel changes');
 });
 
 test('all Compass explorers share the summary period and preserve a changed period on reload', async () => {

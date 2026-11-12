@@ -290,24 +290,68 @@ Both explorers support keyboard selection and horizontal scrolling on small scre
 
 ## Analytics overview charts
 
-Month-end forecast, 6-month cash flow and Monthly spend trend use market-style
+Month-end forecast, Cash-flow possibilities and Monthly spend trend use market-style
 SVG charts: dark plotting surfaces, gradient area fills, reference grids, point
 markers and endpoint price labels. These remain household spending and balance
-charts, not securities charts; no OHLC candles, intraday prices or extra data
-points are invented. The forecast shades the estimated period and uses a dashed
-projection; cash flow is explicitly a dashed scenario with a visible zero line
-when balances cross below zero. Monthly spending uses actual monthly bars with
+charts, not securities charts; no intraday prices or extra observations
+are invented. The forecast shades the estimated period and uses a dashed
+projection. Cash-flow possibilities replaces the old straight-line six-month
+cash flow with a nested scenario fan and a visible zero line
+when outcomes cross below zero. Monthly spending uses actual monthly bars with
 income and the three-month moving average overlaid. The average begins only
 after three supplied monthly values.
 
 Hover, tap or tab through chart periods for exact USD values and a crosshair.
 Each chart also offers **Exact chart values**, a keyboard-accessible data table.
-Each of these three charts occupies its own full-content-width row. The analytics
+Every market-style chart occupies its own full-content-width row. The analytics
 page has no content-width cap; charts share a 1000-by-320 drawing canvas so the
 cash-flow graph is no longer compressed into a sidebar. Smaller screens retain
 the readable 1000-pixel chart width in a horizontally scrollable region rather
 than shrinking labels and data points.
-Existing calculation methods, Pro access and missing-balance states are unchanged.
+Pro access, month-end forecast calculations and the shared typical surplus are unchanged.
+
+The additional `statistics` payload is computed from posted non-transfer activity:
+
+These windows are fixed server-side and are independent of date filters
+(including the Spending Compass period). Every statistical card displays its
+required window and explains why filters do not apply, including insufficient-data
+states. A short selection never truncates the required training history. The
+monthly trend retains its 12-calendar-month view, including the partial current
+month; the new volatility/momentum views use 12 completed months. Balance
+candlesticks/drawdown retain the last 12 calendar months through today so earlier
+observed peaks are not lost. Changing the cash-account selector preserves this
+fixed-history notice.
+
+- **Cash-flow possibilities:** requires each of the last six completed months
+  and a recorded starting cash balance. Enumerates all independent resamples of
+  those monthly net-cash-flow deviations, centered on the shared typical surplus
+  when available (otherwise the existing recent-average baseline, disclosed in
+  the chart notes).
+  At six steps there are 6^6 outcomes; interpolation gives the 10th/25th/50th/75th/90th
+  percentiles. Bands describe model outcomes, not validated probabilities.
+  It does not model seasonality, autocorrelation, new bills or the remaining
+  current month. Flat input yields a zero-width range, never artificial noise.
+- **Spending volatility bands:** prior 3–6 consecutive recorded completed months'
+  mean +/- two sample standard deviations, lower bound clipped at zero. The
+  compared month is excluded from its own baseline. These are descriptive
+  ranges, not confidence intervals.
+- **Spending momentum:** completed-month spending with consecutive 3- and 6-month
+  rolling averages, including the labeled month. Unknown months stay null and
+  break the averages/lines, not zero. Any recorded month can still be incomplete.
+- **Cash reserves: ranges & drawdown:** active checking/savings accounts only,
+  selected individually. Last 12 calendar months through today, pending/future/
+  invalid/unassigned balances excluded. Highest transaction ID chooses the daily
+  sample on ties, matching existing balance handling. Monthly candlestick bodies
+  use first/last sampled daily closes, wicks use sampled extrema; they require at
+  least two samples in each of two months. They are not verified month-open/
+  close or intraday OHLC. Drawdown is the signed dollar difference from the
+  running observed peak within the displayed history, never an investment return.
+  No balance history is reconstructed from spending or summed across accounts.
+  Sparse history and stale samples are explicitly disclosed.
+
+The last two overview rows use a small/large, then large/small arrangement:
+Top merchants beside Recurring charges not marked fixed, followed by Unusual
+activity beside Weekly rhythm. On smaller screens these stack in that reading order.
 
 ## Financial landscape
 

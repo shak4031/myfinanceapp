@@ -102,11 +102,11 @@
   }
 
   let marketId = 0;
-  function market({ series, xMax, xTicks = [], pointLabel = String, width = 1000, height = 320, label = 'Financial chart', boundary = null }) {
+  function market({ series, bands = [], xMax, xTicks = [], pointLabel = String, width = 1000, height = 320, label = 'Financial chart', boundary = null }) {
     const id = `market-${++marketId}`;
     const pad = { l: 62, r: 82, t: 28, b: 34 };
     const valid = p => Number.isFinite(p.x) && Number.isFinite(p.v);
-    const all = series.flatMap(s => s.points.filter(valid).map(p => p.v));
+    const all = series.flatMap(s => s.points.filter(valid).flatMap(p => s.type === 'candles' ? [p.v, p.open, p.low, p.high].filter(Number.isFinite) : [p.v]));
     if (!all.length) return '<p class="pro-empty">No recorded values available for this chart.</p>';
     const top = niceMax(Math.max(...all, 0));
     const bottom = Math.min(...all, 0) < 0 ? -niceMax(-Math.min(...all)) : 0;
@@ -124,9 +124,28 @@
     }).join('') + xTicks.map(t => `<line class="market-grid market-grid-vertical" x1="${n(x(t.x))}" x2="${n(x(t.x))}" y1="${pad.t}" y2="${height - pad.b}"/><text class="market-axis" x="${n(x(t.x))}" y="${height - 12}" text-anchor="middle">${esc(t.label)}</text>`).join('');
     const zero = bottom < 0 ? `<line class="market-zero" x1="${pad.l}" x2="${width - pad.r}" y1="${n(baseline)}" y2="${n(baseline)}"/><text class="market-axis" x="${pad.l - 10}" y="${n(baseline - 5)}" text-anchor="end">$0</text>` : '';
     const split = boundary && boundary.x >= 0 && boundary.x <= xMax ? `<rect class="market-future" x="${n(x(boundary.x))}" y="${pad.t}" width="${n(x(xMax) - x(boundary.x))}" height="${ih}"/><line class="market-boundary" x1="${n(x(boundary.x))}" x2="${n(x(boundary.x))}" y1="${pad.t}" y2="${height - pad.b}"/><text class="market-boundary-label" x="${n(Math.min(width - pad.r - 100, Math.max(pad.l + 4, x(boundary.x) + 8)))}" y="17">${esc(boundary.label)}</text>` : '';
+    const ranges = bands.map(band => {
+      const lower = series[band.lower], upper = series[band.upper];
+      const segments = [];
+      let segment = [];
+      for (const point of lower.points) {
+        const high = upper.points.find(p => p.x === point.x);
+        if (valid(point) && high && valid(high)) segment.push({ x: point.x, low: point.v, high: high.v });
+        else if (segment.length) { segments.push(segment); segment = []; }
+      }
+      if (segment.length) segments.push(segment);
+      return segments.map(points => `<path class="market-band" d="${points.map((p, i) => `${i ? 'L' : 'M'}${n(x(p.x))},${n(y(p.high))}`).join(' ')} ${[...points].reverse().map(p => `L${n(x(p.x))},${n(y(p.low))}`).join(' ')} Z" fill="${tone(band)}" fill-opacity="${band.opacity ?? .15}"><title>${esc(band.name)}</title></path>`).join('');
+    }).join('');
     const lines = series.map((s, i) => {
       const points = s.points.filter(valid);
-      if (!points.length) return '';
+      if (!points.length || s.hidden) return '';
+      if (s.type === 'candles') {
+        const bw = Math.min(24, iw / Math.max(points.length, 1) * .35);
+        return points.map(p => {
+          const color = colors[p.v >= p.open ? 'green' : 'rose'];
+          return `<g class="market-candle"><line x1="${n(x(p.x))}" x2="${n(x(p.x))}" y1="${n(y(p.high))}" y2="${n(y(p.low))}" stroke="${color}" stroke-width="2"/><rect x="${n(x(p.x) - bw / 2)}" y="${n(Math.min(y(p.open), y(p.v)))}" width="${bw}" height="${Math.max(2, n(Math.abs(y(p.open) - y(p.v))))}" rx="2" fill="${color}" fill-opacity=".7" stroke="${color}"/></g>`;
+        }).join('');
+      }
       if (s.type === 'bars') {
         const bw = Math.min(30, iw / Math.max(points.length, 1) * .48);
         return points.map(p => `<rect class="market-volume" x="${n(x(p.x) - bw / 2)}" y="${n(Math.min(y(p.v), baseline))}" width="${n(bw)}" height="${n(Math.abs(y(p.v) - baseline))}" rx="3" fill="url(#${id}-fill-${i})" stroke="${tone(s)}" stroke-opacity=".5"/>`).join('');
@@ -165,7 +184,7 @@
       const p = s.points.find(p => valid(p) && p.x === d.position);
       return `<td>${p ? esc(exact(p.v)) : '&mdash;'}</td>`;
     }).join('')}</tr>`).join('')}</tbody></table></div></details>`;
-    return `<div class="market-chart"><svg class="pro-chart pro-market-chart" viewBox="0 0 ${width} ${height}" role="group" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">${esc(label)}</title><desc id="${id}-desc">Hover, tap or tab through data points for exact values. Dashed lines are estimates; lines connect supplied points without inventing intermediate values.</desc><defs>${gradients}</defs><rect class="market-backdrop" x="${pad.l}" y="${pad.t}" width="${iw}" height="${ih}" rx="4"/>${split}${grid}${zero}${lines}${targets}</svg><p class="market-chart-hint">Hover, tap or tab to inspect &middot; USD</p>${table}</div>`;
+    return `<div class="market-chart"><svg class="pro-chart pro-market-chart" viewBox="0 0 ${width} ${height}" role="group" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">${esc(label)}</title><desc id="${id}-desc">Hover, tap or tab through data points for exact values. Dashed lines are estimates; lines connect supplied points without inventing intermediate values. Shaded ranges are described in the chart notes.</desc><defs>${gradients}</defs><rect class="market-backdrop" x="${pad.l}" y="${pad.t}" width="${iw}" height="${ih}" rx="4"/>${split}${grid}${zero}${ranges}${lines}${targets}</svg><p class="market-chart-hint">Hover, tap or tab to inspect &middot; USD</p>${table}</div>`;
   }
 
   window.ProCharts = { PALETTE, bars, plot, market, sparkline, trendLine, donut, compact, monthShort, niceMax };

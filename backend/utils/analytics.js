@@ -1,6 +1,7 @@
 import { getCanonicalMerchant, parseTxDate } from './normalize.js';
 import { buildUpcomingPayments, isFixedPayment } from './fixedPayments.js';
 import { TRANSFER_CATEGORY, isTransferRow } from './transfers.js';
+import { buildAnalyticsStatistics } from './analyticsStatistics.js';
 
 // Money moved between your own accounts is not spending or income (see utils/transfers.js).
 export { TRANSFER_CATEGORY };
@@ -285,7 +286,7 @@ function buildMerchants(rows, context) {
   })).sort((a, b) => b.total - a.total).slice(0, 10);
 }
 
-export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date(), typical = null, upcomingPayments = null, hasFixedEstimates = false } = {}) {
+export function buildAnalytics({ transactions = [], budgets = [], latestBalance = null, today = new Date(), typical = null, upcomingPayments = null, hasFixedEstimates = false, balances = [], accounts = [] } = {}) {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const rows = normalize(transactions, end);
   const currentIndex = end.getFullYear() * 12 + end.getMonth();
@@ -361,6 +362,7 @@ export function buildAnalytics({ transactions = [], budgets = [], latestBalance 
     },
     cashflow: { startBalance: latestBalance == null ? null : round(Number(latestBalance)), months: cashflow,
       basis: Number.isFinite(surplus) ? 'typical-surplus' : 'recent-averages', monthsUsed: typical?.monthsUsed ?? null },
+    statistics: buildAnalyticsStatistics({ transactions, balances, accounts, today, startBalance: latestBalance, monthlyNet, sharedSurplus: Number.isFinite(surplus) }),
     anomalies: buildAnomalies(rows, categories, context),
     recurring: buildRecurring(rows, context),
     merchants: buildMerchants(rows, context),

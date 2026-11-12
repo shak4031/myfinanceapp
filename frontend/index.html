@@ -494,7 +494,7 @@
   </style>
   <link rel="stylesheet" href="refresh.css?v=20261107-bill-progress">
   <link rel="stylesheet" href="spending-history.css?v=20261025b">
-  <link rel="stylesheet" href="analytics.css?v=20261111-full-width-charts">
+  <link rel="stylesheet" href="analytics.css?v=20261111-statistical-outlook">
   <link rel="stylesheet" href="landscape.css?v=20261111-household-overview">
   <link rel="stylesheet" href="knowledge-base.css?v=20261025a">
   <link rel="stylesheet" href="categories.css?v=20261027a">
@@ -940,8 +940,11 @@
             </article>
             <div class="kb-grid">
               <article class="kb-card"><h3>Month-end forecast</h3><p>Plots this month's spending pace beside last month and estimates the finish, splitting the estimate into bills still due and expected flexible spending. Check it after large purchases or as bills come due; compare like-for-like months and remember that new data can move the estimate.</p></article>
-              <article class="kb-card"><h3>6-month cash flow</h3><p>Projects the recorded balance forward if typical income and spending continue. The starting point comes from your latest recorded account balance; the line highlights the projected balance, lowest point and typical surplus or shortfall. Update balances and fixed bills, and treat the result as a scenario—not a guaranteed runway.</p></article>
+              <article class="kb-card"><h3>Cash-flow possibilities</h3><p>Replaces the old 6-month cash flow line with a scenario fan. The middle 50% and 80% of modeled balance outcomes come from all resamples of the last six completed monthly net cash flows, centered on your plan's typical monthly surplus. Six consecutive recorded months and a starting balance are required. Independent monthly repeats do not model seasonality, incomplete imports or new bills; the ranges are not guaranteed future probabilities.</p></article>
               <article class="kb-card"><h3>Monthly spend trend</h3><p>Shows up to 12 months of spending, a 3-month moving average and income. The average smooths one-off bumps so you can see direction; use the monthly bars to find when a change began. Missing statement months can make the trend misleading.</p></article>
+              <article class="kb-card"><h3>Spending volatility bands</h3><p>Compares each completed month with the previous 3–6 consecutive recorded months. The shaded range is their mean plus or minus two sample standard deviations, clipped at zero. The compared month is not used to calculate its own range. These descriptive bands are not confidence intervals, and a spike is not automatically a problem.</p></article>
+              <article class="kb-card"><h3>Spending momentum</h3><p>Plots completed-month spending alongside 3- and 6-month rolling averages. Each average includes the labeled month and requires consecutive recorded months; missing months stay gaps rather than zero. Short-term spending above the long-term average can suggest acceleration, not a buy/sell signal.</p></article>
+              <article class="kb-card"><h3>Cash reserves: ranges &amp; drawdown</h3><p>Select one checking or savings account to inspect sampled balance history. Monthly candlesticks use the first, highest, lowest and last observed daily closing samples, not verified market-style opening or intraday prices. At least two samples in each of two months are required. Drawdown shows the dollar drop below the highest sampled balance seen so far in the displayed history. Missing dates and account balances are never invented or combined across accounts.</p></article>
               <article class="kb-card"><h3>Recurring charges not marked fixed</h3><p>Finds steady, scheduled charges that are not already marked as fixed bills, estimates their monthly/yearly cost and flags detected price increases. Review the merchant, amount and cadence: a repeating charge is not automatically a bill or subscription. Mark genuine bills fixed so they can feed the bill calendar and forecast; review unwanted charges with the provider.</p></article>
               <article class="kb-card"><h3>Category signals</h3><p>For each spending category, compare this month, the same point last month, 3- and 6-month averages, share of spending, trend and volatility. “Running hot” means the projected month is at least 15% above its 3-month average; “Cooling” is a direction, not proof that spending is healthy. Sort the columns, then open a category to inspect its transactions.</p></article>
               <article class="kb-card"><h3>Unusual activity</h3><p>Surfaces individual charges or category spending far outside the usual pattern. Use it as a review queue for possible duplicates, miscategorized items or genuine one-offs—not an automatic fraud alert. Confirm against the statement before changing anything.</p></article>
@@ -2809,13 +2812,13 @@
   <script src="landscape.js?v=20261111-household-overview"></script>
   <script src="import-history.js?v=20261024a"></script>
   <script src="account.js?v=20261107-support-layout"></script>
-  <script src="pro-charts.js?v=20261111-full-width-charts"></script>
+  <script src="pro-charts.js?v=20261111-statistical-outlook"></script>
   <script src="pro-core.js?v=20261028-analytics"></script>
   <script src="pro-dashboard.js?v=20261024-household"></script>
   <script src="spending-history.js?v=20261107-persistent"></script>
   <script src="pro-categories.js?v=20261031-household"></script>
   <script src="money-visuals.js?v=20261111-compass-heatmap"></script>
-  <script src="analytics.js?v=20261111-full-width-charts"></script>
+  <script src="analytics.js?v=20261111-statistical-outlook"></script>
   <script src="plan.js?v=20261109-mortgage-card"></script>
   <script src="welcome.js?v=20261030c"></script>
 <script src="buckets.js?v=20261108-health"></script>
