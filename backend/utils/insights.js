@@ -213,17 +213,20 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
   // Pro spending signals
   if (pro && analytics) {
     const daysLeft = daysInMonth - todayDay;
+    const budgetMonth = /^\d{4}-(0[1-9]|1[0-2])/.test(analytics.asOf || '')
+      ? analytics.asOf.slice(0, 7) : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const budgetAction = category => ({ label: 'Review category', view: `dashboard/spending/${budgetMonth}/${encodeURIComponent(category)}` });
     const spending = (analytics.categories || []).filter(category => !category.transfer);
     const over = spending.filter(category => category.budgetStatus === 'over').sort((a, b) => (b.budgetUsed || 0) - (a.budgetUsed || 0));
     for (const category of over.slice(0, 2)) {
       add({ id: `over:${category.name}`, tone: 'danger', icon: 'gauge', title: `You're over budget on ${category.name}`,
         detail: `${money(category.mtd)} spent of ${money(category.budget)} (${pct(category.budgetUsed)}) with ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the month.`,
-        action: { label: 'Review categories', view: 'categories' } });
+        action: budgetAction(category.name) });
     }
     const risk = spending.filter(category => category.budgetStatus === 'risk').sort((a, b) => (b.budgetProjected || 0) - (a.budgetProjected || 0))[0];
     if (risk) add({ id: `risk:${risk.name}`, tone: 'warning', icon: 'gauge', title: `${risk.name} is on pace to go over budget`,
       detail: `${money(risk.mtd)} so far; at this pace you'll reach about ${money(risk.projected)} against a ${money(risk.budget)} budget.`,
-      action: { label: 'Review categories', view: 'categories' } });
+      action: budgetAction(risk.name) });
     const mover = spending.filter(category => category.deltaPct != null && category.deltaPct >= 0.25 && category.deltaMtd >= 50 && category.budgetStatus !== 'over')
       .sort((a, b) => b.deltaMtd - a.deltaMtd)[0];
     if (mover) add({ id: `mover:${mover.name}`, tone: 'info', icon: 'trend', title: `${mover.name} is up ${pct(mover.deltaPct)} vs last month`,

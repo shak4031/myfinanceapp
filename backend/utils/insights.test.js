@@ -114,11 +114,25 @@ test('free users get a Pro teaser; Pro users get budget and trend signals', () =
   assert.equal(ids[0], 'over:Dining');
   assert.ok(!ids.includes('over:Transfers'));
   assert.ok(ids.includes('risk:Groceries'));
+  assert.deepEqual(result.insights.find(item => item.id === 'over:Dining').action,
+    { label: 'Review category', view: 'dashboard/spending/2026-10/Dining' });
+  assert.deepEqual(result.insights.find(item => item.id === 'risk:Groceries').action,
+    { label: 'Review category', view: 'dashboard/spending/2026-10/Groceries' });
   assert.ok(ids.includes('mover:Groceries'));
   assert.ok(ids.includes('anomaly') && ids.includes('price-hike') && ids.includes('forecast'));
   assert.deepEqual(result.insights.find(item => item.id === 'anomaly').action, { label: 'Review transaction', view: 'transactions/42' });
   assert.ok(!ids.includes('pro'));
   assert.match(result.insights.find(item => item.id === 'price-hike').detail, /\$36 a year/);
+});
+
+test('budget insight links preserve the analytics month and safely encode exact category names', () => {
+  const name = 'Food / dining & "treats" #1';
+  const result = buildInsights({ today, balance: 1000, pro: true, analytics: {
+    asOf: '2026-09-30',
+    categories: [{ name, mtd: 420, budget: 300, budgetUsed: 1.4, budgetStatus: 'over' }]
+  } });
+  assert.equal(result.insights.find(item => item.id === `over:${name}`).action.view,
+    `dashboard/spending/2026-09/${encodeURIComponent(name)}`);
 });
 
 test('debt and goal plans surface progress, and an empty account is guided to import', () => {

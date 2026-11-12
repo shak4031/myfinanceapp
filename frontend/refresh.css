@@ -1167,3 +1167,4 @@ body .view .acct-stale { border-color: #d9b465; }
 .review-candidates li { margin-bottom: 12px; }
 .review-inclusion { font-size: 12px; font-weight: 600; }
 @media (max-width: 700px) { .review-comparison { grid-template-columns: 1fr; } }
+#dashboard-view .mtd-category-card.is-budget-focus { outline: 3px solid #6d28d9; outline-offset: 4px; }

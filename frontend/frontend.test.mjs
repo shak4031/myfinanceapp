@@ -1955,6 +1955,61 @@ test('only one navigation implementation switches to exactly one active view', (
   f.context.showView('categories');
   assert.deepEqual(f.views.filter(view => view.classList.contains('active')).map(view => view.id), ['categories-view']);
 });
+
+test('budget insight route focuses the dashboard spending card and opens the exact category month', async () => {
+  const f = fixture();
+  f.run('refresh.js');
+  const category = 'Food / dining & "treats" #1';
+  const section = f.node('mtd-spending-section'), card = f.node('budget-focus-card');
+  card.dataset = { category, month: '2026-10-01' };
+  let focused = false, scrolled = false, loaded = false;
+  card.focus = () => { focused = true; };
+  card.scrollIntoView = () => { scrolled = true; };
+  section.querySelectorAll = selector => selector === '.mtd-category-card' ? [card] : [];
+  f.context.loadDashboard = async () => { loaded = true; };
+  const opened = [];
+  f.context.openCategoryTransactions = async (...args) => { assert.equal(loaded, true); opened.push(args); };
+  const route = `dashboard/spending/2026-10/${encodeURIComponent(category)}`;
+  await f.context.showView(route);
+  assert.equal(f.context.location.hash, `#${route}`);
+  assert.ok(f.node('dashboard-view').classList.contains('active'));
+  assert.ok(f.node('nav-dashboard').classList.contains('active'));
+  assert.ok(card.classList.contains('is-budget-focus'));
+  assert.ok(focused && scrolled);
+  assert.deepEqual(opened, [[category, '2026-10-01']]);
+});
+
+test('older budget links keep their month even without a current card and stale navigation cannot open a dialog', async () => {
+  const f = fixture();
+  f.run('refresh.js');
+  const opened = [];
+  f.context.openCategoryTransactions = async (...args) => opened.push(args);
+  await f.context.showView('dashboard/spending/2025-12/Dining');
+  assert.deepEqual(opened, [['Dining', '2025-12-01']]);
+  let complete;
+  f.context.loadDashboard = () => new Promise(resolve => { complete = resolve; });
+  const pending = f.context.showView('dashboard/spending/2026-10/Groceries');
+  await f.context.showView('categories');
+  complete();
+  await pending;
+  assert.equal(opened.length, 1, 'leaving the dashboard cancels pending category focus');
+});
+
+test('malformed budget links report the problem rather than opening the wrong category or period', async () => {
+  const f = fixture(), messages = [];
+  f.context.notify = message => messages.push(message);
+  f.run('refresh.js');
+  let opens = 0;
+  f.context.openCategoryTransactions = async () => { opens++; };
+  for (const route of ['dashboard/spending/2026-13/Dining', 'dashboard/spending/2026-10/%E0%A4%A', 'dashboard/spending/2026-10/%20']) {
+    await f.context.showView(route);
+    assert.equal(f.context.location.hash, '#dashboard');
+  }
+  assert.equal(opens, 0);
+  assert.equal(messages.length, 3);
+  assert.ok(messages.every(message => /Invalid category spending link/.test(message)));
+});
+
 test('transaction troubleshooting and activity log routes load their matching pages', () => {
   const f = fixture(); let transferLoads = 0, activityLoads = 0;
   f.context.FinanceReviewTools = {
@@ -5472,7 +5527,8 @@ test('successful financial mutations invalidate cached analytics, while reads an
 test('dashboard welcome greets, ranks insights, escapes text and offers the tour once', async () => {
   const insights = { asOf: '2026-10-15', insights: [
     { id: 'runway', tone: 'danger', icon: 'alert', title: 'Balance dips <below> zero on the 28th', detail: 'Move a payment.', action: { label: 'See upcoming', act: 'upcoming' } },
-    { id: 'budget', tone: 'warning', icon: 'gauge', title: 'Dining is over budget', detail: 'x', action: null }
+    { id: 'budget', tone: 'warning', icon: 'gauge', title: 'Dining is over budget', detail: 'x',
+      action: { label: 'Review category', view: 'dashboard/spending/2026-10/Dining' } }
   ], pulse: { balance: 1520.5, lowPoint: { day: 28, amount: -40 }, billsLeft: { count: 3, total: 900 }, nextIncome: { amount: 2450, day: 23, daysAway: 1 }, debtFreeDate: '2028-09',
     safeToSpend: { amount: 1240.5, committed: 280, count: 2, untilDay: 23 }, lastImport: { daysAgo: 9, latestDate: '2026-10-06' } } };
   const f = fixture(async url => url === '/api/dashboard/insights' ? response(200, insights) : response(200, {}));
@@ -5498,6 +5554,7 @@ test('dashboard welcome greets, ranks insights, escapes text and offers the tour
   assert.equal(slides.length, 3);
   assert.match(slides[0], /tone-danger[^]*welcome-slide-tone">Action needed<\/span>[^]*Balance dips &lt;below&gt; zero[^]*Move a payment\.[^]*data-welcome-action="0">See upcoming/);
   assert.match(slides[1], /tone-warning[^]*welcome-slide-tone">Heads up<\/span>[^]*Dining is over budget/);
+  assert.match(slides[1], /href="#dashboard\/spending\/2026-10\/Dining" data-view="dashboard\/spending\/2026-10\/Dining">Review category/);
   assert.doesNotMatch(html, /⚠️|🔥|👋|👏|welcome-wave/);
   f.context.FinanceWelcome.markTourSeen();
   assert.equal(store.get('mf.tutorials.dashboardSeen'), '1');

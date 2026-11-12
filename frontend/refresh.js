@@ -339,8 +339,20 @@
     if (!FinanceSession.isAuthenticated()) return;
     const titles = { membership: 'Profile & membership', subscription: 'Household subscription', dashboard: 'Dashboard', 'financial-health': 'Financial Health', categories: 'Categories', 'category-admin': 'Manage categories', transactions: 'Transactions', 'transaction-review': 'Transaction troubleshooting', activity: 'Activity log', accounts: 'Accounts', landscape: 'Financial landscape', analytics: 'Analytics', 'knowledge-base': 'Knowledge Base', etl: 'Legacy import review', payoff: 'Debt-free plan', goals: 'Goals', insights: 'Financial Checkup', tutorials: 'Tutorials', settings: 'Settings & support' };
     let [view, sub = ''] = String(route || '').split(/\/(.*)/s);
+    let spendingTarget = null;
     if (!Object.prototype.hasOwnProperty.call(titles, view)) { view = 'dashboard'; sub = ''; }
-    if (view === 'analytics') sub = sub === 'compass' ? sub : '';
+    if (view === 'dashboard' && sub) {
+      const match = /^spending\/(\d{4}-(?:0[1-9]|1[0-2]))\/(.+)$/.exec(sub);
+      if (match) {
+        try {
+          const category = decodeURIComponent(match[2]);
+          if (category.trim()) spendingTarget = { month: match[1], category };
+        } catch (error) {
+          if (!(error instanceof URIError)) throw error;
+        }
+      }
+      if (!spendingTarget) { notify('Invalid category spending link. Showing the dashboard.'); sub = ''; }
+    } else if (view === 'analytics') sub = sub === 'compass' ? sub : '';
     else if (view === 'payoff') sub = sub === 'mortgage' ? sub : '';
     else if (view === 'subscription') sub = ['basic', 'pro'].includes(sub) ? sub : '';
     else if (view === 'transactions') {
@@ -368,7 +380,20 @@
     if (location.hash !== hash) history.pushState(null, '', hash);
     document.querySelector('.main-content').scrollTop = 0;
     const loaders = {
-      dashboard: loadDashboard, categories: loadCategories, 'category-admin': loadCategories,
+      dashboard: async () => {
+        await loadDashboard();
+        if (!spendingTarget || location.hash !== hash || !FinanceSession.isAuthenticated()) return;
+        const section = $('mtd-spending-section');
+        const card = [...(section?.querySelectorAll('.mtd-category-card') || [])]
+          .find(item => item.dataset.category === spendingTarget.category && item.dataset.month?.slice(0, 7) === spendingTarget.month);
+        section?.querySelectorAll('.is-budget-focus').forEach(item => item.classList.remove('is-budget-focus'));
+        if (card) {
+          card.classList.add('is-budget-focus');
+          card.focus({ preventScroll: true });
+          card.scrollIntoView({ block: 'center', behavior: 'auto' });
+        } else section?.scrollIntoView({ block: 'start', behavior: 'auto' });
+        await window.openCategoryTransactions(spendingTarget.category, `${spendingTarget.month}-01`);
+      }, categories: loadCategories, 'category-admin': loadCategories,
       'financial-health': () => window.FinanceBuckets.loadHealth(),
       transactions: () => { window.FinanceTransactionDuplicates?.refreshCounts(); return loadAllTransactions(); },
       'transaction-review': () => window.FinanceReviewTools?.loadTransfers({ refreshImports: true }),
@@ -381,7 +406,7 @@
       tutorials: () => window.FinanceTutorials?.open(sub)
     };
     const finish = window.FinancePerformance?.begin('page', view === 'analytics' && sub === 'compass' ? 'compass' : view);
-    Promise.resolve(loaders[view]?.()).then(() => finish?.(), error => { finish?.('error'); reportError(error); });
+    return Promise.resolve(loaders[view]?.()).then(() => finish?.(), error => { finish?.('error'); reportError(error); });
   };
   window.addEventListener('hashchange', () => { if (!document.body.classList.contains('auth-pending')) window.showView(location.hash.slice(1)); });
   document.addEventListener('click', event => {

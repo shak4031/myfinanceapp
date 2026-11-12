@@ -732,6 +732,9 @@ spending and income; account-type-specific savings and loan rules are unchanged.
   actions, line icons and subtle transitions. Balanced three-column metric rows
   become two columns on phones, with blue and lavender accents alongside emerald.
   The stage resizes smoothly to each message, with reduced-motion support.
+  Budget warnings use **Review category** to highlight the named dashboard spending
+  card and open its transactions for the alert's month, rather than the generic
+  Categories page. Older alerts retain their original month even after rollover.
 - **Today at a glance**: colourful stat bubbles for balance, next payday, bills left, lowest projected point and
   debt-free month. Insights come from `GET /api/dashboard/insights`
   (rules in `backend/utils/insights.js`).
