@@ -2032,7 +2032,7 @@ test('Knowledge Base has a direct route and explains both analytics offerings', 
   assert.equal(f.node('current-page').textContent, 'Knowledge Base');
   assert.equal(f.context.location.hash, '#knowledge-base');
   const html = source('index.html');
-  for (const text of ['Month-end forecast', 'Cash-flow possibilities', 'Monthly spend trend', 'Spending volatility bands', 'Spending momentum', 'Cash reserves: ranges &amp; drawdown', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
+  for (const text of ['Month-end forecast', 'Cash-flow possibilities', 'Monthly spend trend', 'Spending volatility bands', 'Spending momentum', 'The chart, translated', 'Recurring charges not marked fixed', 'Category signals', 'Unusual activity', 'Top merchants', 'Weekly rhythm', 'Where your money flows', 'Where the signals overlap', 'Who gets your money', 'Hot and cold months', 'Your normal range', 'Technical readings']) {
     assert.ok(html.includes(text), `Knowledge Base should explain ${text}`);
   }
 });
@@ -4998,10 +4998,12 @@ test('recurring discovery shows every candidate and filters status, type and mer
   assert.match(setFilter('search', 'no match', true), /No payments match these filters/);
   const originalStats = html.match(/<div class="pro-mini-stats">[\s\S]*?<\/div><\/div>/)[0];
   assert.ok(searched.includes(originalStats), 'filtering leaves all-active totals unchanged');
+  const originalStory = [...html.matchAll(/<aside class="chart-takeaway"[^]*?<\/aside>/g)].find(match => match[0].includes('Small repeats'))[0];
+  assert.ok(searched.includes(originalStory), 'filtering does not turn the all-active takeaway into filtered totals');
   assert.doesNotMatch(source('analytics.js'), /unmarked\.slice\(0, 12\)/);
 });
 
-test('analytics balance-account selector switches only recorded account history without losing the overview', async () => {
+test('every analytics overview panel has a takeaway and sampled cash-reserve charts are removed', async () => {
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const payload = buildAnalytics({ today: new Date(2026, 10, 11),
     accounts: [{ id: 1, name: 'Checking', kind: 'checking', status: 'active' }, { id: 2, name: '<Savings>', kind: 'savings', status: 'active' }],
@@ -5014,14 +5016,90 @@ test('analytics balance-account selector switches only recorded account history 
     : response(200, payload));
   await f.context.loadAnalyticsPage(true, '');
   const original = f.node('analytics-content').innerHTML;
-  assert.match(original, /Cash reserves: ranges & drawdown/);
-  assert.match(original, /Below observed peak: -\$50\.00/);
-  f.listeners.get('document:change')({ target: { id: 'market-balance-account', value: '2' } });
-  const body = f.node('market-balance-history #market-balance-body').innerHTML;
-  assert.match(body, /&lt;Savings&gt;/);
-  assert.match(body, /Below observed peak: -\$1,000\.00/);
-  assert.doesNotMatch(body, /Below observed peak: -\$50\.00/);
-  assert.equal(f.node('analytics-content').innerHTML, original, 'only the history panel changes');
+  assert.doesNotMatch(original, /Cash reserves: ranges|market-balance|candlestick|drawdown/i);
+  assert.equal((original.match(/<aside class="chart-takeaway"/g) || []).length, 11);
+  assert.equal((original.match(/Your next move/g) || []).length, 11);
+  assert.match(original, /The plot needs a few more chapters/);
+  assert.doesNotMatch(original, /NaN|undefined|Infinity/);
+  assert.doesNotMatch(source('analytics.js'), /balanceHistoryBody|balanceHistoryCard|balanceAccount/);
+  assert.match(source('analytics.css'), /grid-template-columns: minmax\(0, 1fr\) 290px/);
+  assert.match(source('analytics.css'), /@container \(max-width: 760px\)/);
+});
+
+test('chart takeaways calculate concrete findings, escape names and do not use partial-month spending as a conclusion', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const payload = buildAnalytics({ today: new Date(2026, 10, 11) });
+  payload.monthsOfHistory = 12;
+  payload.forecast = { ...payload.forecast, mtd: 2000, projected: 5000, lastMonth: 4800, remainingFixed: 700, remainingVariable: 2300 };
+  payload.series.spend[payload.months.indexOf('2026-10')] = 4800;
+  payload.series.income[payload.months.indexOf('2026-10')] = 4500;
+  payload.statistics.points[payload.statistics.points.length - 1] = {
+    month: '2026-10', spend: 4800, income: 4500, mean3: 4600, mean6: 4000, baseline: 3500, lower: 3000, upper: 4200
+  };
+  payload.statistics.fan = { basis: 'typical-surplus', trainingMonths: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+    points: [{ month: 'Recorded balance', median: 1000, p10: 1000, p25: 1000, p75: 1000, p90: 1000 },
+      { month: '2026-12', median: 500, p10: -100, p25: 100, p75: 800, p90: 1200 }] };
+  payload.merchants = [{ merchant: '<Big shop>', total: 700, count: 4, average: 175, share: .25 }];
+  payload.weekdays = [100, 100, 100, 100, 100, 500, 200];
+  payload.recurring = [{ merchant: '<Subscription>', category: 'Services', fixed: false, active: true, monthlyCost: 25, annualCost: 300, amount: 25, cadence: 'monthly' }];
+  payload.anomalies = [{ id: 1, type: 'charge', merchant: '<Surprise>', category: 'Shopping', amount: 600, typical: 100, ratio: 6, date: '2026-11-02' }];
+  payload.categories = [{ name: '<Dining>', transfer: false, mtd: 700, budget: 500, budgetStatus: 'over', series: [], signal: 'above' }];
+  const f = loadPro(async url => response(200, url === '/api/license' ? { plusActive: true, active: true, features: [] } : payload));
+  await f.context.loadAnalyticsPage(true, '');
+  const stories = [...f.node('analytics-content').innerHTML.matchAll(/<aside class="chart-takeaway"[^]*?<\/aside>/g)].map(m => m[0]);
+  assert.match(stories[0], /\$5,000\.00[^]*\$3,000\.00[^]*\$700\.00[^]*\$2,300\.00[^]*\$200\.00 above/);
+  assert.match(stories[1], /Give your cushion[^]*December 2026[^]*\$500\.00[^]*\$100\.00[^]*below zero/);
+  assert.match(stories[2], /October 2026[^]*\$4,500\.00[^]*\$4,800\.00[^]*exceeded income by \$300\.00/);
+  assert.match(stories[3], /plot twist worth[^]*\$600\.00 above the upper edge/);
+  assert.match(stories[4], /picked up the tempo[^]*\$600\.00 higher per month/);
+  assert.match(stories[6], /&lt;Dining&gt;[^]*\$200\.00 over/);
+  assert.match(stories[7], /&lt;Big shop&gt;[^]*\$700\.00[^]*4 payments/);
+  assert.match(stories[8], /&lt;Subscription&gt;[^]*\$25\.00 per month/);
+  assert.match(stories[9], /&lt;Surprise&gt;[^]*\$600\.00[^]*6\.0 times/);
+  assert.match(stories[10], /Friday[^]*\$500\.00[^]*\$300\.00/);
+  assert.doesNotMatch(stories.join(''), /<Big shop>|<Subscription>|<Dining>|<Surprise>|NaN|undefined/);
+  assert.deepEqual(payload.weekdays, [100, 100, 100, 100, 100, 500, 200], 'analysis does not mutate chart data');
+});
+
+test('statistical takeaways cover high, low, steady, missing latest data and exact threshold boundaries', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const cases = [
+    { spend: 500, mean3: 800, mean6: 1000, lower: 600, upper: 1400, volatility: /quieter chapter/, momentum: /easing off/ },
+    { spend: 600, mean3: 1050, mean6: 1000, lower: 600, upper: 1400, volatility: /No big plot twist/, momentum: /steady beat/ },
+    { spend: 1400, mean3: 950, mean6: 1000, lower: 600, upper: 1400, volatility: /No big plot twist/, momentum: /steady beat/ },
+    { spend: 0, mean3: 0, mean6: 0, lower: 0, upper: 0, volatility: /No big plot twist/, momentum: /steady beat/ },
+    { spend: null, mean3: null, mean6: null, lower: null, upper: null, volatility: /few more chapters/, momentum: /few more chapters/ },
+    { spend: 1200, mean3: 1200, mean6: null, lower: null, upper: null, volatility: /few more chapters/, momentum: /few more chapters/ }
+  ];
+  for (const entry of cases) {
+    const payload = buildAnalytics({ today: new Date(2026, 10, 11) });
+    const points = payload.statistics.points;
+    points[points.length - 2] = { month: '2026-09', spend: 3000, income: 4000, mean3: 3000, mean6: 1000, lower: 500, upper: 1000 };
+    points[points.length - 1] = { month: '2026-10', income: entry.spend === null ? null : 1500, ...entry };
+    const f = loadPro(async url => response(200, url === '/api/license' ? { plusActive: true, active: true, features: [] } : payload));
+    await f.context.loadAnalyticsPage(true, '');
+    const stories = [...f.node('analytics-content').innerHTML.matchAll(/<aside class="chart-takeaway"[^]*?<\/aside>/g)].map(m => m[0]);
+    assert.match(stories[3], entry.volatility);
+    assert.match(stories[4], entry.momentum);
+    assert.doesNotMatch(stories[3] + stories[4], /September 2026|NaN|undefined/);
+    if (entry.spend === null) assert.match(stories[2], /few more chapters/);
+  }
+});
+
+test('monthly and forecast takeaways match their plotted totals even when posted-only statistics differ', async () => {
+  const { buildAnalytics } = await import('../backend/utils/analytics.js');
+  const payload = buildAnalytics({ today: new Date(2026, 10, 11), transactions: [
+    { date: '2026-10-05', direction: 'CREDIT', amount: 1000, category: 'Income' },
+    { date: '2026-10-06', direction: 'DEBIT', amount: 100, category: 'Dining' },
+    { date: '2026-10-07', direction: 'DEBIT', amount: 200, category: 'Dining', is_pending: true }
+  ] });
+  assert.equal(payload.statistics.points.at(-1).spend, 100);
+  assert.equal(payload.series.spend[payload.months.indexOf('2026-10')], 300);
+  const f = loadPro(async url => response(200, url === '/api/license' ? { plusActive: true, active: true, features: [] } : payload));
+  await f.context.loadAnalyticsPage(true, '');
+  const stories = [...f.node('analytics-content').innerHTML.matchAll(/<aside class="chart-takeaway"[^]*?<\/aside>/g)].map(m => m[0]);
+  assert.match(stories[2], /spending was \$300\.00[^]*difference was \$700\.00/);
+  assert.ok(stories[0].includes(f.context.FinancePro.format.money(Math.abs(payload.forecast.projected - payload.forecast.lastMonth))));
 });
 
 test('all Compass explorers share the summary period and preserve a changed period on reload', async () => {
@@ -5277,12 +5355,12 @@ test('mortgage shows the full reported payment without adding escrow twice or us
   assert.match(root.innerHTML, /reserve, not the monthly charge/);
 });
 
-test('analytics interest panel shows totals by type, estimates, hints and saves type overrides', async () => {
+test('analytics interest panel shows totals by type, estimates, hints and refreshes takeaways after overrides', async () => {
   const { buildAnalytics } = await import('../backend/utils/analytics.js');
   const { buildInterestSummary } = await import('../backend/utils/interest.js');
   const now = new Date();
   const iso = offset => { const d = new Date(now.getFullYear(), now.getMonth() - offset, 3); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-03`; };
-  const summary = JSON.parse(JSON.stringify(buildInterestSummary({ now, months: 12, transactions: [
+  let summary = JSON.parse(JSON.stringify(buildInterestSummary({ now, months: 12, transactions: [
     { id: 1, date: iso(0), description: 'INTEREST CHARGE ON PURCHASES', amount: 42.17, direction: 'DEBIT' },
     { id: 2, date: iso(1), description: '<Card> interest charge', amount: 38.5, direction: 'DEBIT' },
     { id: 3, date: iso(1), description: 'TOYOTA FIN PMT', amount: 412, direction: 'DEBIT' }
@@ -5312,12 +5390,22 @@ test('analytics interest panel shows totals by type, estimates, hints and saves 
   assert.match(card, /Student/, 'unmatched loans get a setup hint');
   assert.match(card, /href="#payoff"[^>]*>Set up/);
   assert.match(card, /data-interest-id="1"/);
+  const story = card.match(/<aside class="chart-takeaway"[^]*?<\/aside>/)[0];
+  assert.match(story, /price of borrowing[^]*\$140\.67[^]*12-month history[^]*\$60\.00 estimated[^]*Credit cards[^]*\$80\.67/);
+  assert.match(story, /biggest total is not always the highest-rate debt/);
 
+  summary = buildInterestSummary({ now, months: 12, transactions: [
+    { id: 1, date: iso(0), description: 'INTEREST CHARGE ON PURCHASES', amount: 42.17, direction: 'DEBIT', interest_kind: 'personal_loan' },
+    { id: 2, date: iso(1), description: '<Card> interest charge', amount: 38.5, direction: 'DEBIT' }
+  ] });
   f.listeners.get('document:change')({ target: { dataset: { interestId: '1' }, value: 'personal_loan', closest: () => ({}) } });
   await new Promise(resolve => setTimeout(resolve, 0));
   const put = calls.find(([url, method]) => method === 'PUT');
   assert.equal(put[0], '/api/analytics/interest/transactions/1');
   assert.deepEqual(JSON.parse(put[2]), { kind: 'personal_loan' });
+  const updatedStory = f.node('pro-interest').outerHTML.match(/<aside class="chart-takeaway"[^]*?<\/aside>/)[0];
+  assert.match(updatedStory, /\$80\.67 of interest/);
+  assert.doesNotMatch(updatedStory, /\$140\.67|\$60\.00 estimated/);
 
   const click = target => f.listeners.get('document:click')({ target: { closest: selector => selector.includes('data-analytics-action') ? target : null, ...target } });
   click({ dataset: { analyticsAction: 'interest-not', id: '2' } });

@@ -317,10 +317,7 @@ These windows are fixed server-side and are independent of date filters
 required window and explains why filters do not apply, including insufficient-data
 states. A short selection never truncates the required training history. The
 monthly trend retains its 12-calendar-month view, including the partial current
-month; the new volatility/momentum views use 12 completed months. Balance
-candlesticks/drawdown retain the last 12 calendar months through today so earlier
-observed peaks are not lost. Changing the cash-account selector preserves this
-fixed-history notice.
+month; the new volatility/momentum views use 12 completed months.
 
 - **Cash-flow possibilities:** requires each of the last six completed months
   and a recorded starting cash balance. Enumerates all independent resamples of
@@ -338,16 +335,24 @@ fixed-history notice.
 - **Spending momentum:** completed-month spending with consecutive 3- and 6-month
   rolling averages, including the labeled month. Unknown months stay null and
   break the averages/lines, not zero. Any recorded month can still be incomplete.
-- **Cash reserves: ranges & drawdown:** active checking/savings accounts only,
-  selected individually. Last 12 calendar months through today, pending/future/
-  invalid/unassigned balances excluded. Highest transaction ID chooses the daily
-  sample on ties, matching existing balance handling. Monthly candlestick bodies
-  use first/last sampled daily closes, wicks use sampled extrema; they require at
-  least two samples in each of two months. They are not verified month-open/
-  close or intraday OHLC. Drawdown is the signed dollar difference from the
-  running observed peak within the displayed history, never an investment return.
-  No balance history is reconstructed from spending or summed across accounts.
-  Sparse history and stale samples are explicitly disclosed.
+
+Every Analytics overview panel includes **The chart, translated**: a playful,
+data-driven observation, a practical **Your next move**, and a limitation. Wide
+panels place this card to the right; narrow cards and phones stack it below.
+Charts keep their readable drawing width and scroll internally when necessary.
+Forecasts explain remaining bills versus flexible spending; scenario fans flag
+the first modeled lower-path shortfall without claiming a future probability.
+Volatility checks the latest completed month against its prior range. Momentum
+compares that month's 3- and 6-month averages, calling a gap noticeable only when
+it exceeds both $1 and 5% of the longer average. Monthly income/spending takeaways
+use the latest completed month, not the partial current month. Missing recent
+history never silently falls back to an older month or becomes a positive claim.
+Merchant, weekday, category, recurring, anomaly and interest takeaways identify
+specific amounts and review opportunities, without inventing causes or savings.
+Recurring callouts retain all-active totals when the list is filtered; interest
+callouts refresh with the asynchronously loaded or edited breakdown and disclose
+estimates. The cash-reserve candlestick/drawdown panel has been removed from the
+overview; existing balance-statistics API fields remain compatible.
 
 The last two overview rows use a small/large, then large/small arrangement:
 Top merchants beside Recurring charges not marked fixed, followed by Unusual

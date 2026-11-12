@@ -14,7 +14,7 @@ function fixture() {
   context.window = context;
   vm.createContext(context);
   vm.runInContext(source('pro-charts.js'), context);
-  vm.runInContext(source('analytics.js').replace(/\}\)\(\);\s*$/, 'window.testCards = { forecastCard, cashflowCard, trendCard, statisticsCard, balanceHistoryCard, recurringCard, anomaliesCard }; })();'), context);
+  vm.runInContext(source('analytics.js').replace(/\}\)\(\);\s*$/, 'window.testCards = { forecastCard, cashflowCard, trendCard, statisticsCard, takeaway, recurringCard, anomaliesCard }; })();'), context);
   return context;
 }
 
@@ -119,29 +119,20 @@ test('statistical charts render prior-only volatility bands, gap-aware averages 
   assert.match(testCards.statisticsCard({}, 'volatility'), /Import at least three consecutive/);
 });
 
-test('recorded balance candles show real sampled ranges and dollar drawdown for one account at a time', () => {
+test('cash scenario takeaways distinguish flat history and an early lower-path shortfall from a positive finish', () => {
   const { testCards } = fixture();
-  const statistics = buildAnalyticsStatistics({ today: new Date(2026, 10, 11),
-    accounts: [{ id: 1, name: '<Checking>', kind: 'checking', status: 'active' }, { id: 2, name: 'Savings', kind: 'savings', status: 'active' }],
-    balances: [
-      { id: 1, account_id: 1, date: '2026-08-01', balance: 100 },
-      { id: 2, account_id: 1, date: '2026-08-10', balance: 200 },
-      { id: 3, account_id: 1, date: '2026-08-20', balance: 50 },
-      { id: 4, account_id: 1, date: '2026-09-01', balance: 0 },
-      { id: 5, account_id: 1, date: '2026-09-20', balance: -100 }
-    ] });
-  const html = testCards.balanceHistoryCard({ statistics, asOf: '2026-11-11' });
-  assert.equal((html.match(/class="market-candle"/g) || []).length, 2);
-  assert.match(html, /2026-08\. First observed close: \$100\.00\. Observed high: \$200\.00\. Observed low: \$50\.00\. Last observed close: \$50\.00/);
-  assert.match(html, /2026-09-20\. Below observed peak: -\$300\.00/);
-  assert.match(html, /over 45 days old/);
-  assert.match(html, /&lt;Checking&gt;/);
-  assert.doesNotMatch(html, /<Checking>|NaN|Infinity/);
-  assert.match(html, /id="market-balance-account"/);
-  assert.match(html, /not market-price candles/);
-  const insufficient = testCards.balanceHistoryCard({ statistics: { balances: [{ id: 1, name: 'Checking', points: [], candles: [] }] } });
-  assert.match(insufficient, /At least two dated balance samples/);
-  assert.doesNotMatch(insufficient, /market-candle/);
+  const points = [{ month: 'Recorded balance', median: 100, p10: 100, p90: 100 },
+    { month: '2026-12', median: 100, p10: 100, p90: 100 }];
+  const flat = testCards.takeaway({ statistics: { fan: { points } } }, 'fan');
+  assert.match(flat, /One path does not mean a sure thing/);
+  assert.match(flat, /do not make the future certain/);
+  points.splice(1, 0, { month: '2026-11', median: 50, p10: -20, p90: 120 });
+  const dip = testCards.takeaway({ statistics: { fan: { points } } }, 'fan');
+  assert.match(dip, /Give your cushion a little backup/);
+  assert.match(dip, /first falls below zero in November 2026/);
+  assert.match(dip, /not future probabilities/);
+  points[1].p10 = 0;
+  assert.doesNotMatch(testCards.takeaway({ statistics: { fan: { points } } }, 'fan'), /falls below zero/);
 });
 
 test('final overview rows pair small merchants with large recurring and large anomalies with small weekly rhythm', () => {
@@ -158,7 +149,7 @@ test('fixed-history notices explain filter exceptions even when statistical char
   const { testCards } = fixture();
   for (const html of [
     testCards.cashflowCard({}), testCards.statisticsCard({}, 'volatility'),
-    testCards.statisticsCard({}, 'momentum'), testCards.balanceHistoryCard({})
+    testCards.statisticsCard({}, 'momentum')
   ]) {
     assert.match(html, /class="chart-history-note"/);
     assert.match(html, /Date filters do not apply to this chart/);
@@ -166,5 +157,4 @@ test('fixed-history notices explain filter exceptions even when statistical char
   }
   assert.match(testCards.cashflowCard({}), /Fixed history: last 6 completed months/);
   assert.match(testCards.statisticsCard({}, 'volatility'), /Fixed history: last 12 completed months/);
-  assert.match(testCards.balanceHistoryCard({}), /Fixed history: last 12 calendar months through today/);
 });
