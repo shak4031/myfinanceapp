@@ -1,14 +1,25 @@
-.training-view { max-width: 1000px; }
-.training-intro, .training-module { padding: 28px; }
+.training-view { max-width: 1080px; }
+.training-intro, .training-unit { padding: 28px; }
 .training-intro h1 { margin: 8px 0 12px; }
-.training-intro p, .training-module p { line-height: 1.7; }
-.training-intro p + p, .training-module p + p { margin-top: 12px; }
+.training-intro p, .training-intro li, .training-unit p { line-height: 1.7; }
+.training-intro p + p, .training-intro h2 { margin-top: 16px; }
+.training-intro h2 { font-size: 19px; }
+.training-outcomes, .training-method ul { display: grid; gap: 8px; margin: 10px 0 0; padding-left: 22px; }
+.training-method { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.training-method summary { color: var(--primary); font-weight: 700; cursor: pointer; }
 .training-summary { color: var(--primary); font-weight: 700; }
-.training-modules { display: grid; gap: 18px; margin-top: 24px; }
-.training-module h2 { margin: 5px 0 12px; font-size: 22px; }
+.training-units { display: grid; gap: 18px; margin-top: 24px; }
+.training-unit-heading h2 { margin: 5px 0; font-size: 22px; }
+.training-unit-description { margin-top: 8px; color: var(--text-secondary); }
+.training-lessons { display: grid; gap: 22px; margin-top: 22px; }
+.training-lesson { padding-top: 20px; border-top: 1px solid var(--border); }
+.training-lesson-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.training-lesson-heading h3 { margin: 0; font-size: 17px; }
+.training-lesson-description { margin-top: 8px; }
 .training-label { color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
 .training-video { display: block; width: 100%; max-width: 800px; aspect-ratio: 16 / 9; margin-top: 20px; border-radius: 12px; background: #000; }
 @media (max-width: 640px) {
-  .training-intro, .training-module { padding: 18px; }
-  .training-module h2 { font-size: 19px; }
+  .training-intro, .training-unit { padding: 18px; }
+  .training-unit-heading h2 { font-size: 19px; }
+  .training-lesson-heading { display: grid; }
 }

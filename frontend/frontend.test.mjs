@@ -76,14 +76,47 @@ test('training is navigable and available without a subscription', async () => {
   assert.equal(household.context.lastView, 'training');
   assert.equal(household.calls.length, 0);
   assert.match(source('session.js'), /'tutorials','training','settings'/);
-  const html = source('index.html');
-  const videos = [...html.matchAll(/<source src="(training-videos\/Module_(\d)_[^"]+\.mp4)" type="video\/mp4">/g)];
-  assert.equal(videos.length, 7);
-  for (let module = 1; module <= 7; module++) {
-    const video = videos[module - 1];
-    assert.equal(Number(video[2]), module);
-    assert.ok(existsSync(new URL(video[1], import.meta.url)));
+});
+
+test('training renders all 37 guided lessons with their matching videos', () => {
+  const root = {
+    children: [],
+    appendChild(child) { this.children.push(child); }
+  };
+  const createElement = tagName => ({
+    tagName,
+    children: [],
+    attributes: {},
+    append(...children) { this.children.push(...children); },
+    appendChild(child) { this.children.push(child); },
+    setAttribute(name, value) { this.attributes[name] = value; }
+  });
+  const context = {
+    document: {
+      getElementById: id => id === 'training-units' ? root : null,
+      createElement,
+      createTextNode: text => ({ textContent: text })
+    },
+    window: {}
+  };
+  vm.runInNewContext(source('training.js'), context);
+  const visit = (node, result = []) => {
+    if (node.tagName) result.push(node);
+    for (const child of node.children || []) visit(child, result);
+    return result;
+  };
+  const elements = visit(root);
+  const videos = elements.filter(element => element.tagName === 'video');
+  const lessons = elements.filter(element => element.tagName === 'article');
+  assert.equal(root.children.length, 9);
+  assert.equal(lessons.length, 37);
+  assert.equal(videos.length, 37);
+  const sources = videos.map(video => video.children.find(child => child.tagName === 'source'));
+  assert.ok(sources.every(videoSource => videoSource?.type === 'video/mp4'));
+  for (const videoSource of sources) {
+    assert.ok(existsSync(new URL(videoSource.src, import.meta.url)), videoSource.src);
   }
+  assert.equal(context.window.FinanceTraining.units.reduce((count, unit) => count + unit.lessons.length, 0), 37);
 });
 
 test('financial landscape supports navigation and remains accessible on Basic', async () => {
