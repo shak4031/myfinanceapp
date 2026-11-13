@@ -651,6 +651,70 @@ test('profile and membership are accessible during trial, expiry and paid access
   }
 });
 
+test('profile name editing saves the login name, refreshes labels and reports validation or server errors', async () => {
+  let name = 'Casey', failSave = false;
+  const saves = [];
+  const f = fixture(async (url, options = {}) => {
+    if (url === '/api/auth/me') return response(200, { user: { id: 4, name, email: 'casey@example.test', emailVerified: true } });
+    if (url === '/api/auth/profile') {
+      saves.push(JSON.parse(options.body));
+      assert.equal(options.method, 'PATCH');
+      if (failSave) return response(400, { error: 'Unable to save this name.' });
+      name = JSON.parse(options.body).name;
+      return response(200, { user: { id: 4, name } });
+    }
+    if (url === '/api/billing') return response(200, { owner: false, configured: true, entitlement: { tier: 'none', active: false }, subscription: null });
+    if (url === '/api/household') return response(200, { name: 'Home', owner: false, members: [], invitations: [] });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  f.run('pro-core.js');
+  f.run('household.js');
+  await f.context.showView('membership');
+  assert.equal(f.node('membership-profile-editor').hidden, false);
+  assert.equal(f.node('membership-name').value, 'Casey');
+  const save = () => f.node('membership-profile-form').onsubmit({ preventDefault() {} });
+  f.node('membership-name').value = '   ';
+  await save();
+  assert.match(f.node('membership-profile-error').textContent, /1 to 100 characters/);
+  assert.equal(saves.length, 0);
+  f.node('membership-name').value = '  Casey Updated  ';
+  await save();
+  assert.deepEqual(saves, [{ name: 'Casey Updated' }]);
+  assert.equal(f.context.FinanceSession.currentUser().name, 'Casey Updated');
+  assert.equal(f.node('account-name').textContent, 'Casey Updated');
+  assert.equal(f.node('membership-profile').textContent, 'Casey Updated · casey@example.test');
+  assert.equal(f.node('membership-profile-status').textContent, 'Your name has been saved.');
+  failSave = true;
+  f.node('membership-name').value = 'Another name';
+  await save();
+  assert.equal(f.node('membership-profile-error').textContent, 'Unable to save this name.');
+  assert.equal(f.node('membership-profile-status').textContent, '');
+  assert.equal(f.context.FinanceSession.currentUser().name, 'Casey Updated');
+  assert.equal(f.node('membership-profile-save').disabled, false);
+  f.context.FinanceSession.currentSupport = () => ({ accessLevel: 'write' });
+  await f.context.showView('membership');
+  assert.equal(f.node('membership-profile-editor').hidden, true);
+});
+
+test('profile name save discards responses after sign-out', async () => {
+  let complete;
+  const f = fixture(async url => {
+    if (url === '/api/auth/me') return response(200, { user: { id: 4, name: 'Casey' } });
+    if (url === '/api/auth/profile') return new Promise(resolve => { complete = resolve; });
+    if (url === '/api/auth/logout') return response(200, {});
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  const saving = f.context.FinanceSession.updateProfile('Changed');
+  await f.context.FinanceSession.logout();
+  complete(response(200, { user: { id: 4, name: 'Changed' } }));
+  await assert.rejects(saving, /Session changed/);
+  assert.equal(f.context.FinanceSession.currentUser(), null);
+});
+
 test('Profile and membership toggles back to the prior page, preserving its sub-route', async () => {
   const f = householdFixture({ entitlement: { tier: 'pro', active: true, plusActive: true } });
   const button = f.node('profile-toggle');

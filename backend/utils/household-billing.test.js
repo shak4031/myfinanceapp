@@ -236,6 +236,19 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal((await call('/api/dashboard/summary', {}, ownerCookie)).status, 200);
     await database.query("UPDATE user_licenses SET trial_ends_at=NOW()-INTERVAL '1 second' WHERE user_id=$1", [ownerId]);
     assert.equal((await call('/api/dashboard/summary', {}, ownerCookie)).body.code, 'SUBSCRIPTION_REQUIRED');
+    assert.equal((await call('/api/auth/profile', { name: 'Anonymous' }, undefined, 'PATCH')).status, 401);
+    for (const name of ['', '   ', null, 123, 'x'.repeat(101)]) {
+      assert.equal((await call('/api/auth/profile', { name }, ownerCookie, 'PATCH')).status, 400);
+    }
+    assert.equal((await call('/api/auth/profile', { name: 'x'.repeat(100) }, ownerCookie, 'PATCH')).status, 200);
+    const updatedProfile = await call('/api/auth/profile',
+      { name: '  Updated owner  ', id: 1, email: 'changed@example.test', role: 'admin' }, ownerCookie, 'PATCH');
+    assert.equal(updatedProfile.status, 200, 'profile editing remains available after trial expiry');
+    assert.equal(updatedProfile.body.user.name, 'Updated owner');
+    assert.equal(updatedProfile.body.user.email, 'owner@household.test');
+    assert.equal(updatedProfile.body.user.role, 'user');
+    assert.equal((await call('/api/auth/me', undefined, ownerCookie)).body.user.name, 'Updated owner');
+    assert.equal((await database.query('SELECT name FROM users WHERE id=1')).rows[0].name, 'Admin');
     await database.query('UPDATE user_licenses SET trial_ends_at=$2 WHERE user_id=$1', [ownerId, trialDates.trial_ends_at]);
     assert.equal((await call('/api/billing/checkout', { plan: 'basic', consent: true }, ownerCookie)).body.code, 'EMAIL_VERIFICATION_REQUIRED');
     const verification = mail.find(message => message.to === 'owner@household.test').text.match(/#verify-token=([a-f0-9]{64})/)[1];
@@ -295,6 +308,12 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     const spouseCookie = spouse.cookie;
     assert.equal((await call('/api/billing/portal', { action: 'cancel' }, spouseCookie)).status, 403);
     const spouseId = spouse.body.user.id;
+    const memberProfile = await call('/api/auth/profile', { name: 'Updated member' }, spouseCookie, 'PATCH');
+    assert.equal(memberProfile.status, 200);
+    assert.equal(memberProfile.body.user.id, spouseId);
+    assert.equal((await call('/api/auth/me', undefined, spouseCookie)).body.user.name, 'Updated member');
+    assert.equal((await call('/api/auth/me', undefined, ownerCookie)).body.user.name, 'Updated owner',
+      'members edit their own login, not the household owner');
     assert.equal((await call('/api/auth/accept-invite', { ...credentials('Spouse', 'spouse@household.test'), token: invitation })).status, 409);
     assert.equal((await call('/api/auth/me', undefined, spouseCookie)).body.user.household.role, 'member');
     assert.equal((await call('/api/license', undefined, spouseCookie)).body.tier, 'trial');

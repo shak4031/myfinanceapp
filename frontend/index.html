@@ -667,6 +667,17 @@
       </div>
       <section id="membership-view" class="view membership-view" aria-labelledby="membership-title">
         <header class="membership-hero"><div class="membership-identity"><span class="membership-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></span><div><p class="eyebrow">YOUR ACCOUNT</p><h1 id="membership-title">Your profile &amp; membership</h1><p>Make yourself at home.</p><p id="membership-profile"></p><div><button id="membership-choose-plan" class="btn btn-primary" type="button" hidden>Choose a paid plan &rarr;</button></div></div></div><span class="membership-hero-icon" aria-hidden="true">&#10022;</span></header>
+        <section id="membership-profile-editor" class="panel household-card membership-profile-editor" aria-labelledby="membership-profile-heading" hidden>
+          <h2 id="membership-profile-heading">Your name</h2>
+          <p>Update the name on your login. This does not change your household name or billing details.</p>
+          <form id="membership-profile-form">
+            <label for="membership-name">Name</label>
+            <input id="membership-name" name="name" type="text" autocomplete="name" maxlength="100" required>
+            <button id="membership-profile-save" class="btn btn-primary" type="submit">Save name</button>
+            <p id="membership-profile-error" class="household-error" role="alert"></p>
+            <p id="membership-profile-status" role="status"></p>
+          </form>
+        </section>
         <div class="membership-layout"><div id="household-billing" class="panel plan-card household-card membership-card"></div><div id="household-members" class="panel plan-card household-card membership-card"></div></div>
         <a class="membership-settings-link" href="#settings">Need help or sign-in security? Visit Settings &amp; support &rarr;</a>
       </section>

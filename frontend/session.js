@@ -321,6 +321,22 @@ window.FinanceSession = (() => {
       if (mode === 'login') reportTraffic('homepage_view');
     } catch (error) { el('auth-description').textContent = error.message; }
   }
+  async function updateProfile(name) {
+    if (!user || support) throw new Error('Sign in to your own account to edit your profile.');
+    const requestGeneration = generation;
+    const currentUser = user;
+    const response = await window.fetch('/api/auth/profile', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+    });
+    if (response.status === 401) { lock(); throw new Error('Your session ended. Please sign in again.'); }
+    const data = await response.json();
+    if (requestGeneration !== generation || user !== currentUser) throw new Error('Session changed. Request discarded.');
+    if (!response.ok) throw new Error(data.error || 'Unable to save your name. Please try again.');
+    if (data.user?.id !== user.id || typeof data.user.name !== 'string') throw new Error('Unable to verify the updated profile. Please reload.');
+    user.name = data.user.name;
+    el('account-name').textContent = user.name;
+    return user;
+  }
   async function logout() {
     if (window.FinanceSessionGuard) window.FinanceSessionGuard.end();
     else lock();
@@ -336,5 +352,5 @@ window.FinanceSession = (() => {
     lock();
     el('auth-description').textContent = message;
   });
-  return { start, logout, isAuthenticated: () => !!user, currentUser: () => user, currentSupport: () => support, chosenPlan: () => store.get() };
+  return { start, logout, updateProfile, isAuthenticated: () => !!user, currentUser: () => user, currentSupport: () => support, chosenPlan: () => store.get() };
 })();

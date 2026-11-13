@@ -16,6 +16,11 @@
 .membership-avatar svg { width: 39px; height: 39px; }
 #membership-profile:not(:empty) { display: inline-block; margin-top: 12px; padding: 6px 12px; border-radius: 999px; background: #fff; font-size: 13px; overflow-wrap: anywhere; }
 #membership-choose-plan { margin-top: 14px; }
+.membership-profile-editor { margin: 20px 0; border-radius: 20px; }
+#membership-profile-form { display: grid; gap: 12px; max-width: 480px; }
+#membership-profile-form input { width: 100%; min-width: 0; font-size: 16px; }
+#membership-profile-form .btn { justify-self: start; }
+#membership-profile-form p { margin: 0; }
 .membership-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; margin: 20px 0; align-items: start; }
 .membership-layout .membership-card { max-width: none; min-width: 0; margin: 0; border-radius: 20px; }
 .membership-layout .membership-card:first-child { border-top: 5px solid #b5d77b; }

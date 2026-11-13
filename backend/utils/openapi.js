@@ -17,6 +17,7 @@ export function openApiSpec() {
       '/api/auth/status': { get: op('Auth', 'Setup and registration status') },
       '/api/public-metrics': { post: op('Public traffic', 'Unauthenticated, same-origin event report; aggregate counters only, no cookies required (homepage_view or signup_click)', body({ event: 'homepage_view' })) },
       '/api/auth/me': { get: op('Auth', 'Current user and active support session, if any') },
+      '/api/auth/profile': { patch: op('Auth', 'Update only the signed-in login name (1-100 trimmed characters); available without a subscription, blocked in support and demo sessions. Household and billing details stay unchanged.', body({ name: 'Updated name' })) },
       '/api/auth/activity': { post: op('Auth', 'Renew a still-valid session on user interaction; ten-minute idle and twelve-hour absolute expiry', body({ idleMs: 0 })) },
       '/api/auth/login': { post: op('Auth', 'Sign in; untrusted MFA logins require a code. trustBrowser=true opts into 90-day recognition only after factor verification; password always required', body({ email: 'you@example.com', password: '************', code: '123456', trustBrowser: false })) },
       '/api/auth/mfa/trusted-browsers': { get: op('Auth', 'List this login’s remembered browsers and fixed 90-day expiries; no token hashes returned') },

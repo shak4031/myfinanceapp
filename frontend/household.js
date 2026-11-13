@@ -247,6 +247,34 @@
     const profile = $('membership-profile');
     const user = window.FinanceSession?.currentUser?.();
     if (profile) profile.textContent = [user?.name, user?.email].filter(Boolean).join(' · ');
+    const editor = $('membership-profile-editor');
+    if (editor) editor.hidden = !user || support();
+    const form = $('membership-profile-form');
+    if (form) {
+      $('membership-name').value = user?.name || '';
+      $('membership-profile-error').textContent = '';
+      $('membership-profile-status').textContent = '';
+      form.onsubmit = async event => {
+        event.preventDefault();
+        const button = $('membership-profile-save');
+        const input = $('membership-name');
+        const error = $('membership-profile-error');
+        const status = $('membership-profile-status');
+        error.textContent = '';
+        status.textContent = '';
+        const name = input.value.trim();
+        if (!name || name.length > 100) { error.textContent = 'Enter a name of 1 to 100 characters.'; return; }
+        button.disabled = true;
+        try {
+          const updated = await window.FinanceSession.updateProfile(name);
+          input.value = updated.name;
+          if (profile) profile.textContent = [updated.name, updated.email].filter(Boolean).join(' · ');
+          status.textContent = 'Your name has been saved.';
+          await renderMembers($('household-members'));
+        } catch (failure) { error.textContent = failure.message; }
+        finally { button.disabled = false; }
+      };
+    }
     let billing = $('household-billing');
     let members = $('household-members');
     if (!billing) {

@@ -225,6 +225,20 @@ router.get('/me', requireUser, (req, res) => res.json({
   user: req.user,
   support: req.support ? { actor: req.actor, accessLevel: req.support.accessLevel, expiresAt: req.support.expiresAt } : null
 }));
+router.patch('/profile', requireUser, async (req, res, next) => {
+  try {
+    if (req.support) return res.status(403).json({ error: 'End support access to edit your profile.' });
+    if (isDemoEmail(req.user.email)) return res.status(403).json({ error: 'The demo account profile cannot be changed.' });
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 100) return res.status(400).json({ error: 'Enter a name of 1 to 100 characters.' });
+    const user = await administrativeTransaction(async client =>
+      (await client.query('UPDATE users SET name=$1 WHERE id=$2 RETURNING id,name,email,role,email_verified_at',
+        [name, req.user.id])).rows[0]);
+    if (!user) return res.status(404).json({ error: 'Your account could not be found.' });
+    await recordAudit(req, 'auth.profile_updated', 'success', { subjectUserId: req.user.id, status: 200 });
+    res.json({ user: publicUser(user) });
+  } catch (error) { next(error); }
+});
 // Only explicit user interaction renews inactivity; ordinary requests and polling never do.
 router.post('/activity', (req, res, next) => {
   const idleMs = req.body?.idleMs ?? 0;

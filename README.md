@@ -846,6 +846,10 @@ The primary operator and public synthetic demo retain full access.
 The Profile & membership link in the workspace header opens the household plan,
 Stripe billing controls and member invitations in one place. Settings & support
 links to that page and keeps support cases and sign-in security separate.
+Signed-in users can edit their own name and choose **Save name** on that page,
+including during trial or expired access. Names must contain 1 to 100 characters.
+This changes only the login profile, not the household name or Stripe billing
+details. Support sessions and the public demo cannot change profile names.
 Owners can choose **Cancel membership**, confirm they want to continue, and then
 finish cancellation in Stripe. The app prompt alone does not cancel the plan;
 Stripe schedules cancellation at the end of the current billing period. A

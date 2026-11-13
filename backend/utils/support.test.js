@@ -270,6 +270,7 @@ test('audit logging, password reset, admin console and consented support access'
     const writeGrant = await call('/api/support-access', { body: { accessLevel: 'write', hours: 1, reason: 'Fix my goal amount' }, cookie: customerCookie });
     const writeSession = await call('/api/admin/support-sessions', { body: { grantId: writeGrant.body.id }, cookie: adminCookie });
     const writeCookie = `${adminCookie}; ${cookieFrom(writeSession)}`;
+    assert.equal((await call('/api/auth/profile', { method: 'PATCH', body: { name: 'Support rename' }, cookie: writeCookie })).status, 403);
     assert.equal((await call('/api/goals', { body: { name: 'Support-added fund', target_amount: 500, target_date: '2027-01-01' }, cookie: writeCookie })).status, 200);
     assert.equal((await call('/api/auth/end-support', { body: {}, cookie: writeCookie })).status, 200);
     const customerGoals = await call('/api/goals', { cookie: customerCookie });
