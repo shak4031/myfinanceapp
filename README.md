@@ -855,7 +855,10 @@ action on the membership page. Retained manual access has no Stripe subscription
 to change or cancel; contact support for changes.
 
 Account creation does not require plan selection or Stripe Checkout. Email
-verification is required before subscribing. Unpaid households whose trial has
+verification is required before subscribing. Registering an existing email
+(ignoring case and surrounding whitespace) displays an already-registered
+message directing the user to sign in or reset their password.
+Unpaid households whose trial has
 expired see subscription onboarding instead
 of financial pages. Only the owner can consent
 to billing and open Stripe Checkout or the cancellation/payment-method portal.

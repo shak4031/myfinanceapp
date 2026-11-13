@@ -218,6 +218,16 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal(owner.status, 200);
     const ownerCookie = owner.cookie;
     const ownerId = owner.body.user.id;
+    const verificationCount = mail.length;
+    for (const email of ['owner@household.test', ' OWNER@HOUSEHOLD.TEST ']) {
+      const duplicate = await call('/api/auth/register', credentials('Duplicate', email));
+      assert.equal(duplicate.status, 409);
+      assert.equal(duplicate.body.error, 'This email is already registered with an account. Please sign in or reset your password.');
+      assert.equal(duplicate.cookie, undefined, 'duplicate registration must not create a session');
+    }
+    assert.equal(mail.length, verificationCount, 'duplicate registration must not send another verification email');
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM users WHERE lower(email)=$1',
+      ['owner@household.test'])).rows[0].count, 1);
     const initialTrial = (await call('/api/license', undefined, ownerCookie)).body;
     assert.equal(initialTrial.source, 'self-service-trial');
     assert.equal(initialTrial.plusActive, true);

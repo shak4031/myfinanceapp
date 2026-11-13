@@ -295,6 +295,10 @@ for (const action of ['setup', 'register']) {
     } catch (error) {
       if (error.code === '23505' || error.status === 409) {
         await recordAudit(req, `auth.${action}`, 'failure', { email: normalizeEmail(req.body.email), status: 409 });
+        if (action === 'register' && error.code === '23505'
+          && ['users_email_key', 'users_email_normalized_key'].includes(error.constraint)) {
+          return res.status(409).json({ error: 'This email is already registered with an account. Please sign in or reset your password.' });
+        }
         return res.status(409).json({ error: error.status === 409 ? error.message : 'This account cannot be registered. Try signing in.' });
       }
       next(error);

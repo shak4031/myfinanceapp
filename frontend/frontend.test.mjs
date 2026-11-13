@@ -1101,6 +1101,28 @@ test('register starts on signup and navigates to dashboard without checkout', as
   assert.equal(calls.some(call => call.url === '/api/billing/checkout'), false);
 });
 
+test('signup displays the duplicate-email message and stays on the registration form', async () => {
+  const message = 'This email is already registered with an account. Please sign in or reset your password.';
+  const f = fixture(async url => {
+    if (url === '/api/auth/me') return response(401, {});
+    if (url === '/api/auth/status') return response(200, { registrationEnabled: true });
+    if (url === '/api/auth/register') return response(409, { error: message });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  f.context.location.pathname = '/signup';
+  f.run('session.js');
+  await f.context.FinanceSession.start();
+  f.node('auth-email').value = 'existing@example.test';
+  f.node('auth-name').value = 'Existing owner';
+  f.node('auth-password').value = 'secure-password-123';
+  await f.node('auth-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.node('auth-error').textContent, message);
+  assert.equal(f.node('auth-submit').disabled, false);
+  assert.equal(f.context.FinanceSession.currentUser(), null);
+  assert.equal(f.context.location.pathname, '/signup');
+  assert.notEqual(f.context.location.href, '/#dashboard');
+});
+
 test('signed-in checkout wrapper throws verification errors with code and status intact', async () => {
   const f = fixture(async url => url === '/api/auth/me'
     ? response(200, { user: { id: 4, emailVerified: false, household: { role: 'owner' } } })
