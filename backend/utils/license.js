@@ -3,8 +3,8 @@ import { isDemoEmail } from './demo.js';
 
 export const OWNER_USER_ID = 1;
 export const TRIAL_DAYS = 15;
-export const PLAN = Object.freeze({ id: 'basic', name: 'MyFinance Basic', price: 9.99, currency: 'USD', interval: 'month' });
-export const PLUS_PLAN = Object.freeze({ id: 'pro', name: 'MyFinance Pro', price: 14.99, currency: 'USD', interval: 'month' });
+export const PLAN = Object.freeze({ id: 'basic', name: 'MyFinance Basic', price: 4.99, currency: 'USD', interval: 'month' });
+export const PLUS_PLAN = Object.freeze({ id: 'pro', name: 'MyFinance Pro', price: 7.99, currency: 'USD', interval: 'month' });
 export const PLUS_FEATURES = Object.freeze([
   { id: 'planning', title: 'Debt-free plan', text: 'Compare payoff strategies, see an estimated debt-free date and explore extra-payment what-ifs.' },
   { id: 'goals', title: 'Savings goals', text: 'Plan for emergencies, a home, a trip or college with monthly targets and progress tracking.' }

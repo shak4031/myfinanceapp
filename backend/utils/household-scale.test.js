@@ -50,7 +50,7 @@ test('32 logins and 24 populated households retain isolation across Stripe subsc
   setMailTransportForTests({ sendMail: async message => { mail.push(message); return { accepted: [message.to] }; } });
   setStripeForTests({
     prices: { retrieve: async id => ({
-      id, active: true, currency: 'usd', unit_amount: id === process.env.STRIPE_BASIC_PRICE_ID ? 999 : 1499,
+      id, active: true, currency: 'usd', unit_amount: id === process.env.STRIPE_BASIC_PRICE_ID ? 499 : 799,
       recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' }
     }) },
     customers: { create: async (data, options) => {

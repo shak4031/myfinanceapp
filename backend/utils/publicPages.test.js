@@ -111,8 +111,8 @@ test('public SEO serves crawlable HTML, accurate pricing and only canonical publ
         assert.match(html, /Planning results are estimates/);
       }
       if (path === '/pricing') {
-        assert.match(html, /\$9\.99/);
-        assert.match(html, /\$14\.99/);
+        assert.match(html, /\$4\.99/);
+        assert.match(html, /\$7\.99/);
         assert.match(html, /15-day Pro trial/);
         assert.match(html, /bills automatically/);
       }

@@ -1375,7 +1375,7 @@
       window.selectCheckupTab('snapshot');
     } catch (error) {
       if (error.code === 'PRO_PLUS_REQUIRED') {
-        root.innerHTML = '<div class="coach-note"><h3>Bring your goals into the bigger picture.</h3><p>Analytics, debt planning and savings goals are included with Pro (USD 14.99/month per household).</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro</button></div>';
+        root.innerHTML = '<div class="coach-note"><h3>Bring your goals into the bigger picture.</h3><p>Analytics, debt planning and savings goals are included with Pro (USD 7.99/month per household).</p><button type="button" class="btn btn-primary" id="coach-unlock">Explore Pro</button></div>';
         $('coach-unlock').onclick = () => window.FinancePro?.openUpgrade('Financial Checkup requires Pro.', 'pro');
       } else root.innerHTML = `<div class="checkup-error"><h2>We couldn’t load your checkup</h2><p>${escape(error.message || 'Please try again.')}</p><button type="button" class="btn btn-secondary" onclick="generateInsights()">Try again</button></div>`;
     }

@@ -121,12 +121,14 @@ Implementation: [passwords](backend/utils/passwords.js),
 
 ## Billing and household permissions
 
-Basic is USD $9.99/month per household; Pro is USD $14.99/month. There is no
-unpaid financial-access tier. A first eligible Stripe subscription receives
-15 days of Pro after selecting a plan, verifying email, consenting to renewal
-and adding a payment method in Stripe-hosted Checkout. Stripe automatically
-bills the selected plan at trial end unless cancelled. The server grants access
-from signed webhooks and current subscription state, never a success redirect.
+Basic is USD $4.99/month per household; Pro is USD $7.99/month. New accounts
+receive 15 days of Pro at registration, managed by the app without a card or
+Stripe trial configuration. Without a subscription, access expires automatically
+and no charge occurs. After verifying email and consenting to billing, the owner
+can subscribe through Stripe-hosted Checkout. This charges immediately, ends any
+remaining free trial and renews monthly until cancelled. Existing Stripe-managed
+trials retain their original terms. Paid access comes from signed webhooks and
+current subscription state, never a success redirect.
 
 Trial eligibility is persisted per household. Cancelling and signing in again,
 or resubscribing under the same account, does not grant a second trial. Registering

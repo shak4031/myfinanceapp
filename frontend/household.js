@@ -18,7 +18,7 @@
   function planCard(plan, name, checked, disabled = false) {
     const basic = plan === 'basic';
     return `<label class="household-plan-option${basic ? '' : ' household-plan-pro'}"><input type="radio" name="${name}" value="${plan}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}>
-      <span class="household-plan-heading"><strong>${basic ? 'Basic' : 'Pro'}</strong><span class="household-plan-check" aria-hidden="true">&#10003;</span></span><span class="household-plan-price">${basic ? '$9.99' : '$14.99'} <small>/ month</small></span><span>${basic ? 'Everyday finances, imports and your Financial Health program.' : 'Basic plus analytics and advanced planning.'}</span></label>`;
+      <span class="household-plan-heading"><strong>${basic ? 'Basic' : 'Pro'}</strong><span class="household-plan-check" aria-hidden="true">&#10003;</span></span><span class="household-plan-price">${basic ? '$4.99' : '$7.99'} <small>/ month</small></span><span>${basic ? 'Everyday finances, imports and your Financial Health program.' : 'Basic plus analytics and advanced planning.'}</span></label>`;
   }
   function billingMarkup(data, reason = '', selected = 'pro') {
     const entitlement = data.entitlement || {};
@@ -39,9 +39,9 @@
       ${reason ? `<p>${esc(reason)}</p>` : ''}
       <p>One plan covers your household.</p>
       ${entitlement.active || subscription ? `<p><strong>${esc(pro().planLabel(entitlement).title)}</strong>${subscription ? ` · ${esc(subscription.status)}` : ''}</p>` : ''}
-      ${subscription ? `<p>${!managedSubscription ? 'Previous plan' : subscription.cancel_at_period_end ? 'Current plan' : 'Selected renewal plan'}: <strong>${(subscription.pending_change?.plan === 'basic' && !subscription.cancel_at_period_end) || subscription.plan === 'basic' ? 'Basic · USD 9.99/month' : subscription.plan === 'pro' ? 'Pro · USD 14.99/month' : esc(subscription.plan || 'Not available')}</strong>. ${!managedSubscription ? 'Period ended' : subscription.cancel_at_period_end ? 'Cancellation scheduled. Subscription ends' : 'Current period ends'}: ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}.</p>` : ''}
+      ${subscription ? `<p>${!managedSubscription ? 'Previous plan' : subscription.cancel_at_period_end ? 'Current plan' : 'Selected renewal plan'}: <strong>${(subscription.pending_change?.plan === 'basic' && !subscription.cancel_at_period_end) || subscription.plan === 'basic' ? 'Basic · USD 4.99/month' : subscription.plan === 'pro' ? 'Pro · USD 7.99/month' : esc(subscription.plan || 'Not available')}</strong>. ${!managedSubscription ? 'Period ended' : subscription.cancel_at_period_end ? 'Cancellation scheduled. Subscription ends' : 'Current period ends'}: ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}.</p>` : ''}
       ${entitlement.tier === 'trial' ? `<p>Pro trial ends ${esc(date(entitlement.trialEndsAt || subscription?.trial_ends_at))}. ${entitlement.source === 'self-service-trial' ? 'No payment details are required; access ends automatically unless you subscribe.' : subscription?.cancel_at_period_end ? 'Your trial will not renew.' : 'Your selected plan renews automatically; the owner receives a reminder 24 hours before the trial ends.'}</p>` : ''}
-      ${subscription?.pending_change ? `<p data-household-pending-change>Basic · USD 9.99/month is scheduled for ${esc(date(subscription.pending_change.effective_at))}. Pro stays available until then. Your saved finances are retained.</p>` : ''}
+      ${subscription?.pending_change ? `<p data-household-pending-change>Basic · USD 4.99/month is scheduled for ${esc(date(subscription.pending_change.effective_at))}. Pro stays available until then. Your saved finances are retained.</p>` : ''}
       ${!owner ? '<p class="coach-note">Ask your household owner to choose or manage the subscription. Members cannot change billing.</p>' : `
       ${canChoosePlan && verificationRequired ? `<div class="coach-note"><h3>Verify your email before checkout</h3><p>Open your verification email, then return here.</p><button type="button" class="btn btn-secondary" data-resend-verification>Resend verification email</button><button type="button" class="btn btn-secondary" data-refresh-verification>I verified my email · refresh</button><p class="verification-status" role="status"></p></div>` : ''}
       ${canChoosePlan ? `<form id="household-checkout-form">
@@ -59,14 +59,14 @@
       </fieldset>
       ${canDowngrade ? `<form data-household-downgrade-form hidden>
         <p>Pro continues until ${esc(date(subscription.current_period_end || subscription.trial_ends_at))}. No charge or credit today; saved data stays, but Pro tools become unavailable.</p>
-        <label class="household-consent"><input type="checkbox" id="household-downgrade-consent" required> I agree to Basic at USD 9.99/month from that date, renewing monthly until cancelled.</label>
+        <label class="household-consent"><input type="checkbox" id="household-downgrade-consent" required> I agree to Basic at USD 4.99/month from that date, renewing monthly until cancelled.</label>
         <button type="submit" class="btn btn-primary" data-household-downgrade>Confirm switch to Basic</button></form>` : ''}
       ${canUpgrade ? '<div data-household-upgrade-options hidden><p>Review the prorated charge in Stripe; your renewal date stays the same.</p><button type="button" class="btn btn-primary" data-household-upgrade>Upgrade to Pro in Stripe</button></div>' : ''}
       ${retainedAccess ? '<div data-household-license-options hidden><p>To change this access, contact support.</p><a href="#settings">Contact support &rarr;</a></div>' : ''}` : ''}
       ${managedSubscription && !canUpgrade && !canDowngrade && !subscription.pending_change && !subscription.schedule_managed ? `<p>${subscription.cancel_at_period_end ? 'Manage billing in Stripe to change your scheduled cancellation.' : subscription.status === 'trialing' ? 'Plan changes are available after your Stripe trial ends.' : !['active'].includes(subscription.status) ? 'Manage billing in Stripe before changing plans.' : ''}</p>` : ''}
       ${subscription && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="btn btn-secondary" data-household-portal>Manage billing in Stripe</button>' : ''}
       ${subscription && ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status) && !subscription.cancel_at_period_end && !subscription.schedule_managed && !subscription.pending_change ? '<button type="button" class="household-cancel-link" data-household-cancel>Cancel membership</button>' : ''}
-      ${subscription?.pending_change ? '<button type="button" class="btn btn-secondary" data-household-keep-pro>Keep Pro · remove scheduled downgrade</button><p>Remove the scheduled downgrade before opening Stripe to cancel your subscription. Keeping Pro retains your USD 14.99/month renewal.</p>' : subscription?.schedule_managed ? '<p>A Stripe schedule manages this subscription. Contact support before changing or cancelling it.</p>' : ''}
+      ${subscription?.pending_change ? '<button type="button" class="btn btn-secondary" data-household-keep-pro>Keep Pro · remove scheduled downgrade</button><p>Remove the scheduled downgrade before opening Stripe to cancel your subscription. Keeping Pro retains your USD 7.99/month renewal.</p>' : subscription?.schedule_managed ? '<p>A Stripe schedule manages this subscription. Contact support before changing or cancelling it.</p>' : ''}
       ${canChoosePlan && !data.configured ? '<p role="alert">Online billing is not configured. Contact your administrator.</p>' : ''}
       ${complimentaryAccess ? '<p>This account includes complimentary Pro access and has no Stripe subscription to manage.</p>' : retainedAccess ? '<p>Your access is not a Stripe subscription. <a href="#settings">Contact support</a> to change it.</p>' : ''}`}
       <p class="household-error" role="alert"></p>`;
@@ -170,7 +170,7 @@
       error.textContent = '';
       try {
         await post('/api/billing/downgrade/cancel');
-        await renderBilling(root, 'Scheduled downgrade removed. Pro continues at USD 14.99/month.');
+        await renderBilling(root, 'Scheduled downgrade removed. Pro continues at USD 7.99/month.');
       } catch (failure) { error.textContent = failure.message; event.target.disabled = false; }
     });
   }

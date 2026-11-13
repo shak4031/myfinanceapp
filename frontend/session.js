@@ -134,8 +134,8 @@ window.FinanceSession = (() => {
   // Plan picked on the public pricing cards; survives the post-sign-in reload until it is submitted.
   const PLAN_KEY = 'myfinance.chosenPlan';
   const PLANS = {
-    basic: { name: 'Basic', price: 'USD 9.99 / month per household', note: 'Core finances for your household. Continue after sign-in to select your plan and provide payment details in Stripe hosted Checkout.' },
-    pro: { name: 'Pro', price: 'USD 14.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Stripe hosted Checkout charges immediately and renews monthly until cancelled.' }
+    basic: { name: 'Basic', price: 'USD 4.99 / month per household', note: 'Core finances for your household. Continue after sign-in to select your plan and provide payment details in Stripe hosted Checkout.' },
+    pro: { name: 'Pro', price: 'USD 7.99 / month per household', note: 'All analytics, budgets, debt planning and goals. Stripe hosted Checkout charges immediately and renews monthly until cancelled.' }
   };
   let chosenPlan = '';
   const store = {

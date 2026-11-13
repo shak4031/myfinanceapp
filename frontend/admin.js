@@ -279,8 +279,8 @@
       'revoke-sessions': 'Sign this user out of every device and forget all trusted browsers? If MFA is enabled, the next sign-in will require a factor.',
       unlock: 'Clear failed sign-in lockouts for this user?',
       'license-grant': plan === 'pro'
-        ? `Grant MyFinance Pro (USD 14.99/month per household) to ${email}? This includes all analytics, budgets, debt planning and goals. This license action does not collect payment.`
-        : `Set ${email} to MyFinance Basic (USD 9.99/month per household)? Core finances unlock. Analytics, budgets, debt planning and goals will be locked, with saved data kept. This license action does not collect payment.`,
+        ? `Grant MyFinance Pro (USD 7.99/month per household) to ${email}? This includes all analytics, budgets, debt planning and goals. This license action does not collect payment.`
+        : `Set ${email} to MyFinance Basic (USD 4.99/month per household)? Core finances unlock. Analytics, budgets, debt planning and goals will be locked, with saved data kept. This license action does not collect payment.`,
       'license-revoke': `Revoke paid access from ${email}? Saved financial data is kept. Subscription cancellation must be managed through Stripe.`
     };
     if (!await FinanceUI.confirm(prompts[action])) return;

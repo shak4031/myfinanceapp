@@ -613,6 +613,10 @@ test('household billing clearly discloses both plans, trial payment consent and 
   assert.doesNotMatch(html, /card-number|cardNumber|Pro Plus|7-day|no charge/);
   const trial = f.context.FinanceHousehold.billingMarkup({ owner: true, configured: true, entitlement: { trialAvailable: true }, subscription: null }, '<script>oops</script>', 'basic');
   assert.match(trial, /value="basic" checked/);
+  assert.match(trial, /\$4\.99 <small>\/ month/);
+  assert.match(trial, /\$7\.99 <small>\/ month/);
+  assert.doesNotMatch(trial, /\$9\.99/);
+  assert.doesNotMatch(trial, /\$14\.99/);
   assert.match(trial, /Stripe charges immediately and renews monthly until cancelled/);
   assert.match(trial, /Subscribing ends any remaining trial/);
   assert.match(trial, /&lt;script&gt;oops&lt;\/script&gt;/);
@@ -686,8 +690,8 @@ test('paid membership cancellation requires confirmation and is finalized in Str
   assert.doesNotMatch(root.innerHTML, /household-checkout-form/);
   assert.match(root.innerHTML, /value="pro" checked/);
   assert.match(root.innerHTML, /value="basic"/);
-  assert.match(root.innerHTML, /\$9\.99/);
-  assert.match(root.innerHTML, /\$14\.99/);
+  assert.match(root.innerHTML, /\$4\.99/);
+  assert.match(root.innerHTML, /\$7\.99/);
   assert.match(root.innerHTML, /Confirm switch to Basic/);
   const button = root.querySelector('[data-household-cancel]');
   await button.listeners.click({ target: button });
@@ -789,7 +793,7 @@ test('Pro downgrade keeps access until renewal and needs explicit owner consent'
   await f.context.FinanceHousehold.openBilling();
   const root = f.node('household-dialog-content');
   assert.match(root.innerHTML, /data-household-downgrade/);
-  assert.match(root.innerHTML, /9\.99/);
+  assert.match(root.innerHTML, /Basic at USD 4\.99\/month/);
   assert.doesNotMatch(root.innerHTML, /<details>/);
   assert.match(root.innerHTML, /data-household-downgrade-form hidden/);
   assert.match(root.innerHTML, /Pro continues until/);
@@ -823,8 +827,8 @@ test('retained access shows plan options without pretending it is a Stripe subsc
   for (const tier of ['basic', 'pro']) {
     const html = f.context.FinanceHousehold.billingMarkup({ owner: true, entitlement: { tier, active: true, source: 'license' }, subscription: null });
     assert.match(html, new RegExp(`value="${tier}" checked`));
-    assert.match(html, /\$9\.99/);
-    assert.match(html, /\$14\.99/);
+    assert.match(html, /\$4\.99/);
+    assert.match(html, /\$7\.99/);
     assert.match(html, /not a Stripe subscription/);
     assert.match(html, /Contact support/);
     assert.doesNotMatch(html, /data-household-cancel|data-household-upgrade|data-household-downgrade|household-checkout-form/);
@@ -4654,8 +4658,8 @@ test('marketing page explains household pricing, Stripe and trial renewal clearl
   assert.match(html, /your personal money workspace/);
   assert.match(html, /Illustrative preview/);
   assert.match(html, /id="marketing-pricing"/);
-  assert.match(html, /\$9\.99<span>USD \/ month per household/);
-  assert.match(html, /\$14\.99<span>USD \/ month per household/);
+  assert.match(html, /\$4\.99<span>USD \/ month per household/);
+  assert.match(html, /\$7\.99<span>USD \/ month per household/);
   assert.match(html, /15-day trial/);
   assert.match(html, /No card or plan choice required/);
   assert.match(html, /CONNECT OR UPLOAD/);
@@ -4669,7 +4673,7 @@ test('marketing page explains household pricing, Stripe and trial renewal clearl
   assert.match(html, /Intentional projections/);
   assert.match(html, /Stripe charges immediately and renews monthly until cancelled/);
   assert.match(html, /Trial access ends after 15 days without a subscription/);
-  assert.doesNotMatch(html, /Pro Plus|PRO PLUS|data-choose-plan="free"|\$4\.99|\$9\.98/);
+  assert.doesNotMatch(html, /Pro Plus|PRO PLUS|data-choose-plan="free"|\$14\.99|\$9\.98/);
   assert.match(source('marketing.css'), /prefers-reduced-motion/);
 });
 test('marketing page scrolls, has section navigation and a feature spotlight', () => {
@@ -4991,7 +4995,7 @@ test('direct debt and goals loads show a full-page Pro lock for none and Basic',
     for (const id of ['plan-debt-root', 'plan-goals-root']) {
       const html = f.node(id).innerHTML;
       assert.match(html, /plus-page-lock/);
-      assert.match(html, /USD 14\.99\/month per household/);
+      assert.match(html, /USD 7\.99\/month per household/);
       assert.match(html, /Explore Pro/);
       assert.doesNotMatch(html, /data-act="add-(debt|goal)"/);
     }

@@ -114,8 +114,8 @@ ALLOW_REGISTRATION=false
 # Stripe: USD recurring monthly prices, one subscription per household
 STRIPE_SECRET_KEY=<Stripe secret key from the same test/live environment as the prices>
 STRIPE_WEBHOOK_SECRET=<signing secret for this deployment's webhook endpoint>
-STRIPE_BASIC_PRICE_ID=<active USD 9.99 monthly recurring price>
-STRIPE_PRO_PRICE_ID=<active USD 14.99 monthly recurring price>
+STRIPE_BASIC_PRICE_ID=<active USD 4.99 monthly recurring price>
+STRIPE_PRO_PRICE_ID=<active USD 7.99 monthly recurring price>
 
 # Password-reset, security-notice and support-ticket email
 SMTP_HOST=<smtp-host>
@@ -507,8 +507,8 @@ Stripe. Newly registered households receive 15 days of Pro without a card.
 Older no-card trials are not restarted. Back up the database before migration; do not roll back application
 code without a compatible schema/plan migration.
 
-1. Create Stripe test-mode recurring monthly prices: Basic **USD 9.99** and Pro
-   **USD 14.99**, quantity one per household. Configure the environment variables
+1. Create Stripe test-mode recurring monthly prices: Basic **USD 4.99** and Pro
+   **USD 7.99**, quantity one per household. Configure the environment variables
    above. Checkout verifies currency, amount, interval and active status.
 2. Register **POST `/api/billing/webhook`** with Stripe for
    `checkout.session.completed`, `checkout.session.expired`,
@@ -536,7 +536,7 @@ code without a compatible schema/plan migration.
    date. Pro unlocks only after a verified webhook confirms a paid upgrade
    invoice. Test successful, declined and authentication-required upgrades in
    sandbox. Pro owners (including Pro-selected trials) can explicitly consent in
-   app billing to Basic USD 9.99/month starting at the next renewal/trial expiry.
+   app billing to Basic USD 4.99/month starting at the next renewal/trial expiry.
    This uses Stripe subscription schedules because the products are separate;
    do not assume the portal's same-product scheduled downgrade applies.
    Ensure restricted API keys permit schedule create/read/update/release and
@@ -563,6 +563,32 @@ code without a compatible schema/plan migration.
    and billing disclosures, tax obligations, refund/cancellation policies and
    processor requirements have been reviewed. Do not reuse test IDs in live mode.
    Then explicitly enable registration when ready.
+
+### Live-mode cutover
+
+There is no in-app sandbox/live toggle. In Stripe live mode, complete account
+activation, create active fixed monthly USD prices (Basic **499 cents**, Pro
+**799 cents**), and create a live webhook destination at
+`https://YOUR_APP_DOMAIN/api/billing/webhook` with the full event list above.
+In your host's backend secrets, replace `STRIPE_SECRET_KEY` with the `sk_live_`
+key, both `STRIPE_*_PRICE_ID` values with live Price IDs, and
+`STRIPE_WEBHOOK_SECRET` with that live destination's signing secret. Keep
+`APP_ORIGIN` set to the production HTTPS origin and SMTP configured. Restart
+every backend instance; `NODE_ENV=production` alone does not select Stripe live mode.
+Settings > Billing reports setting presence, not a successful connection.
+Validate Checkout totals, portal actions and signed webhook delivery; a
+real-money test needs explicit authorization.
+
+Before switching an existing database, inventory `household_subscriptions`.
+Saved sandbox customer, subscription and Checkout IDs do not work with live keys.
+Use a separate clean production billing environment, or reconcile test-only
+billing records through a backed-up, reviewed migration that preserves users,
+financial data and trial history. Do not blanket-delete users or billing rows.
+Test subscriptions and payment methods do not become live subscriptions.
+Likewise, new Stripe Price IDs do not reprice existing subscriptions; existing
+paid subscriptions or pending schedules need a separate planned migration.
+This app recognizes only the two configured Price IDs, so do not simply replace
+them while subscriptions still use retired prices.
 
 New account trial duration is 15 days with Pro access and no payment method.
 Checkout requires renewal consent and a payment method, charges immediately,

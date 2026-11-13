@@ -200,7 +200,7 @@
       </div>
       <div class="pro-locked-cta panel">
         <span class="pro-hero-mark">${ICONS.lock}</span>
-        <p class="eyebrow">MYFINANCE PRO &middot; USD 14.99/MONTH PER HOUSEHOLD</p>
+        <p class="eyebrow">MYFINANCE PRO &middot; USD 7.99/MONTH PER HOUSEHOLD</p>
         <h2>${entitlement.trialEndsAt && !entitlement.active ? 'Your Pro trial has ended' : 'Unlock the full picture'}</h2>
         <p class="muted">Moving averages, budgets, forecasts and signals for every category &mdash; the insights that turn transactions into decisions.</p>
         <ul class="pro-locked-features">${features}</ul>

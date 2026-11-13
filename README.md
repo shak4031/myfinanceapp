@@ -828,8 +828,8 @@ duplicate review, Spending Compass and debt planning. Security claims link to
 the whitepaper for safeguards and limitations.
 
 Prices are USD per month **per household**:
-- **Basic ($9.99):** imports, accounts, transactions, category review and the everyday dashboard.
-- **Pro ($14.99):** Basic plus budgets, analytics, charts, forecasts, recurring-charge
+- **Basic ($4.99):** imports, accounts, transactions, category review and the everyday dashboard.
+- **Pro ($7.99):** Basic plus budgets, analytics, charts, forecasts, recurring-charge
   radar, unusual-charge signals, CSV exports, Debt Free and Savings Goals.
 
 There is no permanent free financial-access tier. New accounts start a one-time
@@ -865,14 +865,14 @@ without scheduled cancellation can upgrade to Pro through a Stripe-hosted
 confirmation showing an immediate prorated charge, with the renewal date unchanged.
 Only Pro is offered in that upgrade flow. Webhooks
 keep Basic access until Stripe confirms the upgrade invoice is paid.
-Pro owners can explicitly confirm Basic at **USD 9.99/month at the next renewal**
+Pro owners can explicitly confirm Basic at **USD 4.99/month at the next renewal**
 inside app billing. Pro remains available until then, including the full original
 trial if still trialing; no immediate charge, credit, or data deletion occurs.
 The app uses a Stripe subscription schedule (two bounded phases, then release),
 not a general portal downgrade: Basic and Pro are separate Stripe products.
 Billing shows the pending date and a **Keep Pro** option to remove the downgrade.
 Remove a pending downgrade before opening Stripe to cancel; keeping Pro retains
-USD 14.99/month renewal. Members cannot schedule or remove changes. Subscription
+USD 7.99/month renewal. Members cannot schedule or remove changes. Subscription
 and schedule webhooks fetch current Stripe state; only the actual Basic transition
 changes access, preserving all saved finances.
 Success redirects never grant access by themselves; verified Stripe webhooks

@@ -33,7 +33,7 @@
      The optional styles above are scoped to .stripe-guide and may be added through your site's custom CSS facility. -->
 <article class="stripe-guide">
   <header>
-    <p class="small">MYFINANCE / ADMINISTRATOR SETUP GUIDE / UPDATED OCTOBER 24, 2026</p>
+    <p class="small">MYFINANCE / ADMINISTRATOR SETUP GUIDE / UPDATED NOVEMBER 12, 2026</p>
     <h1>Enable Stripe payments, step by step</h1>
     <p class="intro">Connect MyFinance to Stripe, configure your server, test subscriptions safely, and move to live payments when you are ready.</p>
     <p><strong>Where this work happens:</strong> Stripe Dashboard, your hosting provider's backend environment settings, and a separate staging copy of MyFinance.</p>
@@ -65,17 +65,17 @@
         <caption>Monthly household plans</caption>
         <thead><tr><th scope="col">Plan</th><th scope="col">Price</th><th scope="col">Includes</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Basic</th><td>USD $9.99/month</td><td>Accounts, statement imports, transactions, categories, and everyday dashboard.</td></tr>
-          <tr><th scope="row">Pro</th><td>USD $14.99/month</td><td>Basic plus analytics, budgets, debt planning, and savings goals.</td></tr>
+          <tr><th scope="row">Basic</th><td>USD $4.99/month</td><td>Accounts, statement imports, transactions, categories, and everyday dashboard.</td></tr>
+          <tr><th scope="row">Pro</th><td>USD $7.99/month</td><td>Basic plus analytics, budgets, debt planning, and savings goals.</td></tr>
         </tbody>
       </table>
     </div>
     <ul>
-      <li>Eligible households receive a <strong>15-day Pro trial</strong>, even when Basic is selected for renewal.</li>
-      <li>The trial begins after verified email, explicit billing consent, and completed Stripe Checkout with payment details. Account creation alone does not start it.</li>
-      <li>Stripe automatically bills the selected plan when the trial ends unless canceled.</li>
+      <li>New households receive a <strong>15-day Pro trial at account creation</strong>, managed by the app without a card or Stripe trial configuration.</li>
+      <li>The trial deadline is stored in the app database. Without a subscription, access expires automatically and there is no charge.</li>
+      <li>After verifying email and accepting billing consent, the owner can subscribe in Stripe Checkout. Stripe charges immediately, ends the remaining free trial and renews monthly until cancelled.</li>
       <li>Cancellation preserves access through the trial or paid period; it does not delete transaction data.</li>
-      <li>The app attempts an owner-only reminder email 24 hours before trial expiry.</li>
+      <li>Existing Stripe-managed trials retain their terms; the app attempts an owner-only reminder 24 hours before those trials expire. The no-card signup trial is not covered by that reminder worker.</li>
       <li>A used trial cannot restart for the same household. Unrelated accounts using different emails are not currently linked for person-level trial-abuse prevention.</li>
     </ul>
   </section>
@@ -95,11 +95,11 @@
     <table>
       <thead><tr><th scope="col">Product</th><th scope="col">Price settings</th><th scope="col">Copy its Price ID to</th></tr></thead>
       <tbody>
-        <tr><td>MyFinance Basic</td><td>USD 9.99, every 1 month, quantity 1</td><td><code>STRIPE_BASIC_PRICE_ID</code></td></tr>
-        <tr><td>MyFinance Pro</td><td>USD 14.99, every 1 month, quantity 1</td><td><code>STRIPE_PRO_PRICE_ID</code></td></tr>
+        <tr><td>MyFinance Basic</td><td>USD 4.99, every 1 month, quantity 1</td><td><code>STRIPE_BASIC_PRICE_ID</code></td></tr>
+        <tr><td>MyFinance Pro</td><td>USD 7.99, every 1 month, quantity 1</td><td><code>STRIPE_PRO_PRICE_ID</code></td></tr>
       </tbody>
     </table>
-    <p>Use IDs beginning <code>price_</code>, not Product IDs beginning <code>prod_</code>. Do not use annual, metered, or tiered pricing. The app sets the trial in Checkout; you do not need a product-level trial.</p>
+    <p>Use IDs beginning <code>price_</code>, not Product IDs beginning <code>prod_</code>. Do not use annual, metered, or tiered pricing. The app manages the signup trial itself and does not request a Stripe Checkout trial.</p>
     <p>Tax collection is not configured by these steps. Review your obligations before launching.</p>
 
     <h3>C. Obtain your server API key</h3>
@@ -109,7 +109,7 @@
     <h3>D. Create a webhook destination</h3>
     <p>In <strong>Workbench / Webhooks</strong>, create an event destination for your account, using:</p>
     <pre><code>POST https://YOUR_APP_DOMAIN/api/billing/webhook</code></pre>
-    <p>Select all eight events:</p>
+    <p>Select all fourteen events:</p>
     <pre><code>checkout.session.completed
 checkout.session.expired
 customer.subscription.created
@@ -135,7 +135,7 @@ invoice.payment_failed</code></pre>
     <h3>E. Review customer-facing settings</h3>
     <p>Configure business branding, support email, statement descriptor, receipts, and relevant policy links. Review payment-failure emails and refund/cancellation terms.</p>
     <p>The app creates its own portal configuration when an owner opens billing. It supports cancellation at period end, payment-method updates, invoices, and customer email/address updates. Active Basic owners without scheduled cancellation can choose <strong>Upgrade to Pro in Stripe</strong>: Stripe confirms an immediate prorated charge without changing the renewal date. Pro access waits for a verified webhook and paid upgrade invoice.</p>
-    <p><strong>Pro → Basic at next renewal:</strong> The owner explicitly agrees in app billing to Basic at USD 9.99/month starting on the displayed renewal date. Pro remains available until then, including the full original trial for Pro-selected trials. No immediate charge, proration, or data deletion occurs. Basic and Pro are separate Stripe products, so this uses subscription schedules rather than assuming the portal supports same-product scheduled downgrades. The current Pro phase and trial end are preserved, followed by one bounded Basic month and release to ongoing Basic. Billing displays the pending date; <strong>Keep Pro</strong> removes the downgrade and retains USD 14.99/month renewal. Remove a pending downgrade before opening Stripe to cancel. Members cannot change billing. Subscription and schedule webhooks retrieve current state; reminders use pending Basic pricing.</p>
+    <p><strong>Pro → Basic at next renewal:</strong> The owner explicitly agrees in app billing to Basic at USD 4.99/month starting on the displayed renewal date. Pro remains available until then, including the full original trial for existing Stripe-managed trials. No immediate charge, proration, or data deletion occurs. Basic and Pro are separate Stripe products, so this uses subscription schedules rather than assuming the portal supports same-product scheduled downgrades. The current Pro phase and trial end are preserved, followed by one bounded Basic month and release to ongoing Basic. Billing displays the pending date; <strong>Keep Pro</strong> removes the downgrade and retains USD 7.99/month renewal. Remove a pending downgrade before opening Stripe to cancel. Members cannot change billing. Subscription and schedule webhooks retrieve current state; reminders use pending Basic pricing.</p>
     <p>In the sandbox, verify renewal/trial-expiry timing, unchanged Pro before transition, Basic reminder pricing, lost-response retries, duplicate confirmation, Keep Pro and rescheduling, owner/member restrictions, cancellation conflicts, and retained financial records after Basic starts. Automated tests use fakes; real sandbox verification is a separate launch check.</p>
   </section>
 
@@ -161,8 +161,8 @@ npm audit --omit=dev</code></pre>
         <tbody>
           <tr><td><code>STRIPE_SECRET_KEY</code></td><td><code>sk_test_REPLACE_PRIVATELY</code></td><td>Secret server API key.</td></tr>
           <tr><td><code>STRIPE_WEBHOOK_SECRET</code></td><td><code>whsec_REPLACE_PRIVATELY</code></td><td>Secret for this webhook destination.</td></tr>
-          <tr><td><code>STRIPE_BASIC_PRICE_ID</code></td><td><code>price_BASIC_MONTHLY_USD</code></td><td>Active USD 9.99 monthly price.</td></tr>
-          <tr><td><code>STRIPE_PRO_PRICE_ID</code></td><td><code>price_PRO_MONTHLY_USD</code></td><td>Active USD 14.99 monthly price.</td></tr>
+          <tr><td><code>STRIPE_BASIC_PRICE_ID</code></td><td><code>price_BASIC_MONTHLY_USD</code></td><td>Active USD 4.99 monthly price.</td></tr>
+          <tr><td><code>STRIPE_PRO_PRICE_ID</code></td><td><code>price_PRO_MONTHLY_USD</code></td><td>Active USD 7.99 monthly price.</td></tr>
           <tr><td><code>APP_ORIGIN</code></td><td><code>https://YOUR_APP_DOMAIN</code></td><td>Exact public browser origin; no path or trailing slash.</td></tr>
           <tr><td><code>NODE_ENV</code></td><td><code>production</code></td><td>Production HTTPS/cookie protections; also use for hosted staging.</td></tr>
           <tr><td><code>ALLOW_REGISTRATION</code></td><td><code>false</code> during setup</td><td>Enable public signup only after launch checks.</td></tr>
@@ -202,16 +202,16 @@ npm audit --omit=dev</code></pre>
     <h2>4. Test the complete payment flow</h2>
     <p>Use a fresh unpaid household owner, not administrator user 1, the public demo, or a grandfathered manual paid account. Temporarily enable registration only in isolated staging and restart it to test signup. Keep live signup closed.</p>
     <ol class="checklist">
-      <li><strong>Signup and verification:</strong> Select Basic, create the account, and confirm the plan is retained. Receive the verification email. Checkout must remain blocked before verification.</li>
-      <li><strong>Checkout consent:</strong> Verify the email and accept the recurring-billing disclosure. Stripe should show the trial and selected renewal price.</li>
+      <li><strong>Signup and verification:</strong> Select Basic, create the account, and confirm the plan is retained. Pro trial access should start immediately without a card. Receive the verification email. Checkout must remain blocked before verification.</li>
+      <li><strong>Checkout consent:</strong> Verify the email and accept the immediate and recurring-billing disclosure. Stripe should show the selected price charged now, with no additional trial.</li>
       <li><strong>Sandbox card:</strong> Use <code>4242 4242 4242 4242</code>, any future expiry, and any three-digit CVC. Use only in sandbox/test mode, never with real card data.</li>
-      <li><strong>Activation:</strong> Confirm successful HTTP 200 webhook deliveries in Stripe. The app should grant Pro trial access even for a Basic renewal plan. A success redirect alone must not grant access.</li>
-      <li><strong>Cancellation:</strong> Cancel through the owner's Stripe portal. Trial access should continue until expiry, then lock, without paid conversion.</li>
-      <li><strong>Paid conversion:</strong> Validate Basic and Pro conversions and invoice outcomes. Basic should lose advanced features after its trial; Pro should retain them.</li>
+      <li><strong>Activation:</strong> Confirm successful HTTP 200 webhook deliveries in Stripe. Paid Basic or Pro should replace the signup trial. A success redirect alone must not grant paid access.</li>
+      <li><strong>Expiry and cancellation:</strong> An unsubscribed signup trial expires without charge. Cancel paid subscriptions through the owner's Stripe portal; paid access remains until period end. Existing Stripe-managed trials retain access until their original expiry when cancelled.</li>
+      <li><strong>Paid conversion:</strong> Validate Basic and Pro payments and invoice outcomes. Basic should lose advanced features immediately after subscribing; Pro should retain them.</li>
       <li><strong>Failure and recovery:</strong> Use Stripe-documented sandbox failure scenarios. Past-due/unpaid access should lock; successful current-period payment synchronization should restore eligible access. Billing and authentication must remain available.</li>
       <li><strong>Returning customer:</strong> Sign in after a canceled trial. No second trial should be offered. Paid activation is required and prior records should remain intact.</li>
       <li><strong>Household permissions:</strong> Invite another login. Members share their household's records and entitlement but cannot manage billing. An unrelated household must not see that data.</li>
-      <li><strong>Reminder:</strong> Verify a real owner-only email around 24 hours before the actual trial deadline with the server running. Monitor failures and delivery.</li>
+      <li><strong>Reminder:</strong> For an existing Stripe-managed trial, verify a real owner-only email around 24 hours before its deadline with the server running. The no-card signup trial has no reminder in this worker. Monitor failures and delivery.</li>
       <li><strong>Retries:</strong> Repeated checkout clicks must not create multiple subscriptions. Duplicate/reordered events must not overwrite current paid access with retired subscription state.</li>
     </ol>
     <aside class="notice warning"><strong>Time simulation is not automatic.</strong> The app does not attach Checkout customers to Stripe Test Clocks. Advancing a Stripe clock does not advance the app's system time or reminder worker. Test-clock orchestration needs additional setup/code; otherwise use supported Stripe testing workflows and actual sandbox lifecycle events.</aside>
@@ -222,9 +222,11 @@ npm audit --omit=dev</code></pre>
     <h2>5. Switch to live payments</h2>
     <p>Proceed only after sandbox acceptance, dependency remediation, production security review, and review of business verification, tax obligations, privacy notice, automatic-renewal disclosures, refund/cancellation policy, and support details.</p>
     <ol>
-      <li>Create Basic and Pro products/prices again in <strong>live mode</strong>, at the exact USD monthly amounts.</li>
-      <li>Create a live webhook destination for the production URL with the same eight events.</li>
-      <li>Set production <code>STRIPE_SECRET_KEY</code> to the live secret, and replace both Price IDs and <code>STRIPE_WEBHOOK_SECRET</code> with matching live values.</li>
+      <li>Create Basic and Pro products/prices in <strong>live mode</strong>: USD 4.99 (499 cents) and USD 7.99 (799 cents), fixed monthly, quantity one.</li>
+      <li>Create a live webhook destination at <code>https://YOUR_APP_DOMAIN/api/billing/webhook</code> with the same fourteen events.</li>
+      <li>In the hosting provider's backend settings, set <code>STRIPE_SECRET_KEY</code> to the <code>sk_live_</code> secret, and replace both Price IDs and <code>STRIPE_WEBHOOK_SECRET</code> with matching live values. There is no in-app mode toggle; <code>NODE_ENV=production</code> alone does not select live Stripe. Preserve production HTTPS <code>APP_ORIGIN</code> and SMTP settings.</li>
+      <li>Inventory saved billing records before switching: sandbox customer, subscription and Checkout IDs do not work with live keys. Use a separate production billing environment or a backed-up, reviewed migration of test-only billing state that preserves users, financial data and trial history. Do not blanket-delete users or billing rows. Test payment methods/subscriptions do not become live subscriptions.</li>
+      <li>New Price IDs do not change existing subscriptions or schedules. This app recognizes only the configured IDs; migrate any existing old-price subscriptions/schedules deliberately before replacing IDs, rather than assuming they will be repriced.</li>
       <li>Keep sandbox credentials and destinations on staging only. Do not mix environments.</li>
       <li>Restart production and confirm configuration and webhook delivery. Any real-money smoke test requires explicit authorization; live mode can charge actual money.</li>
       <li>Set <code>ALLOW_REGISTRATION=true</code> and restart only when ready to accept new customers.</li>
@@ -238,7 +240,7 @@ npm audit --omit=dev</code></pre>
       <dt><strong>Billing is not configured</strong></dt>
       <dd>Check all four Stripe variables, <code>SMTP_HOST</code>, and <code>SMTP_FROM</code> on the backend process. Restart after changes.</dd>
       <dt><strong>Price does not match the published plan</strong></dt>
-      <dd>Verify active fixed monthly USD prices: Basic 999 cents, Pro 1499 cents, interval count 1. Use Price IDs, not Product IDs, and do not mix sandbox/live values.</dd>
+      <dd>Verify active fixed monthly USD prices: Basic 499 cents, Pro 799 cents, interval count 1. Use Price IDs, not Product IDs, and do not mix sandbox/live values.</dd>
       <dt><strong>Invalid webhook signature</strong></dt>
       <dd>Check the destination's signing secret, raw body, signature header, environment, and server clock. Unsigned browser requests are expected to fail.</dd>
       <dt><strong>Webhook gets HTML, redirects, 401, 403, or 404</strong></dt>

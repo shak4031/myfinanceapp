@@ -4,7 +4,7 @@ import { failure } from './categorization.js';
 import { sendSecurityNotice, mailConfigured } from './mailer.js';
 import { structuredLog } from './audit.js';
 
-export const PRICES = Object.freeze({ basic: 999, pro: 1499 });
+export const PRICES = Object.freeze({ basic: 499, pro: 799 });
 export const BILLING_TRIAL_DAYS = 15;
 let testStripe;
 let cached;
@@ -62,7 +62,7 @@ export async function billingSubscription(household) {
 }
 
 export async function scheduleDowngrade(household, consent, effectiveAt) {
-  if (consent !== true) throw failure(400, 'Confirm Basic at USD 9.99/month starting at your next renewal. Pro continues until then.');
+  if (consent !== true) throw failure(400, 'Confirm Basic at USD 4.99/month starting at your next renewal. Pro continues until then.');
   const stripe = stripeClient();
   return administrativeTransaction(async client => {
     const row = (await client.query('SELECT * FROM household_subscriptions WHERE household_id=$1 FOR UPDATE', [household.id])).rows[0];
@@ -122,7 +122,7 @@ export async function scheduleDowngrade(household, consent, effectiveAt) {
     const updated = await stripe.subscriptionSchedules.update(schedule.id, {
       end_behavior: 'release', proration_behavior: 'none',
       metadata: { myfinance_change: downgradeTag, subscription_id: subscription.id,
-        household_id: String(household.id), consent: 'basic_usd_999_monthly_next_renewal' },
+        household_id: String(household.id), consent: 'basic_usd_499_monthly_next_renewal' },
       phases: [{ ...current, proration_behavior: 'none' },
         { start_date: end, items: [{ price: basic, quantity: 1 }],
           duration: { interval: 'month', interval_count: 1 }, proration_behavior: 'none' }]
@@ -165,7 +165,7 @@ export async function verifiedPrice(stripe, plan) {
 }
 
 export async function checkout(household, user, plan, consent) {
-  if (consent !== true) throw failure(400, 'Acknowledge automatic billing after the trial before continuing.');
+  if (consent !== true) throw failure(400, 'Acknowledge the immediate and recurring monthly charge before continuing.');
   if (!billingConfigured()) throw failure(503, 'Billing and reminder email must be configured before starting a subscription.');
   const stripe = stripeClient();
   const price = await verifiedPrice(stripe, plan);
@@ -204,7 +204,7 @@ export async function checkout(household, user, plan, consent) {
       success_url: `${origin}/#settings/billing`, cancel_url: `${origin}/#settings/billing`,
       metadata: { household_id: String(household.id), plan },
       subscription_data: { metadata: { household_id: String(household.id) } },
-      custom_text: { submit: { message: `${plan === 'basic' ? 'Basic $9.99' : 'Pro $14.99'} USD/month per household, charged immediately. Renews automatically until cancelled.` } }
+      custom_text: { submit: { message: `${plan === 'basic' ? 'Basic $4.99' : 'Pro $7.99'} USD/month per household, charged immediately. Renews automatically until cancelled.` } }
     }, { idempotencyKey: `household-checkout-${household.id}-${plan}-${row.checkout_session_id || 'first'}` });
     await client.query(`UPDATE household_subscriptions SET checkout_session_id=$1,checkout_expires_at=$2,updated_at=NOW()
       WHERE household_id=$3`, [session.id, timestamp(session.expires_at), household.id]);
@@ -348,7 +348,7 @@ export async function sendDueTrialReminders(now = new Date()) {
       const sent = await sendSecurityNotice(row, 'Your MyFinance Pro trial ends tomorrow',
         `Hi ${row.name},\n\nYour 15-day Pro trial ends at ${new Date(row.trial_ends_at).toISOString()}.\n`
         + (row.cancel_at_period_end ? 'Your subscription is scheduled to cancel. You will not be charged and access will stop at trial end.'
-          : `Your selected ${renewalPlan === 'basic' ? 'Basic ($9.99)' : 'Pro ($14.99)'} plan will automatically bill in USD monthly per household unless you cancel before that time.`)
+          : `Your selected ${renewalPlan === 'basic' ? 'Basic ($4.99)' : 'Pro ($7.99)'} plan will automatically bill in USD monthly per household unless you cancel before that time.`)
         + `\nManage or cancel securely from Settings > Billing: ${process.env.APP_ORIGIN}/#settings/billing\n\nNo card numbers are stored in MyFinance.`);
       if (!sent) throw new Error('Trial reminder email is not configured');
       await client.query('UPDATE household_subscriptions SET reminder_sent_at=NOW() WHERE household_id=$1', [row.household_id]);

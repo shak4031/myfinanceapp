@@ -6,7 +6,30 @@ import { PGlite } from '@electric-sql/pglite';
 import application from '../app.js';
 import { migratePrivateSchema } from './schema.js';
 import { setMailTransportForTests } from './mailer.js';
-import { setStripeForTests, sendDueTrialReminders, syncSubscription } from './billing.js';
+import { setStripeForTests, sendDueTrialReminders, syncSubscription, verifiedPrice } from './billing.js';
+
+test('checkout prices accept the new monthly amounts and reject retired prices', async () => {
+  const saved = [process.env.STRIPE_BASIC_PRICE_ID, process.env.STRIPE_PRO_PRICE_ID];
+  process.env.STRIPE_BASIC_PRICE_ID = 'price_basic_new';
+  process.env.STRIPE_PRO_PRICE_ID = 'price_pro_new';
+  try {
+    for (const [plan, amount, retired] of [['basic', 499, 999], ['pro', 799, 999]]) {
+      const id = process.env[plan === 'basic' ? 'STRIPE_BASIC_PRICE_ID' : 'STRIPE_PRO_PRICE_ID'];
+      const stripe = value => ({ prices: { retrieve: async requested => {
+        assert.equal(requested, id);
+        return { active: true, currency: 'usd', unit_amount: value,
+          recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' } };
+      } } });
+      assert.equal(await verifiedPrice(stripe(amount), plan), id);
+      await assert.rejects(verifiedPrice(stripe(retired), plan), { status: 503 });
+    }
+  } finally {
+    for (const [index, key] of ['STRIPE_BASIC_PRICE_ID', 'STRIPE_PRO_PRICE_ID'].entries()) {
+      if (saved[index] === undefined) delete process.env[key];
+      else process.env[key] = saved[index];
+    }
+  }
+});
 
 test('late canceled subscription events do not block an active paid replacement', async () => {
   const savedPrice = process.env.STRIPE_PRO_PRICE_ID;
@@ -98,7 +121,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
   const createdSchedules = new Map();
   const signatures = new Stripe('sk_test_synthetic_only').webhooks;
   setStripeForTests({
-    prices: { retrieve: async id => ({ id, product: id === 'price_basic' ? 'prod_basic' : 'prod_pro', active: true, currency: 'usd', unit_amount: badPrice ? 1 : id === 'price_basic' ? 999 : 1499,
+    prices: { retrieve: async id => ({ id, product: id === 'price_basic' ? 'prod_basic' : 'prod_pro', active: true, currency: 'usd', unit_amount: badPrice ? 1 : id === 'price_basic' ? 499 : 799,
       recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' } }) },
     customers: { create: async () => ({ id: 'cus_household' }) },
     subscriptions: { retrieve: async () => subscription, update: async (id, data) => {
@@ -218,6 +241,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     assert.equal(checkoutRequests[0][0].subscription_data.trial_end, undefined);
     assert.equal(checkoutRequests[0][0].payment_method_collection, 'always');
     assert.equal(checkoutRequests[0][0].line_items[0].price, 'price_basic');
+    assert.match(checkoutRequests[0][0].custom_text.submit.message, /Basic \$4\.99.*charged immediately/);
     assert.match(checkoutRequests[0][1].idempotencyKey, /household-checkout/);
     assert.equal((await call('/api/billing/checkout', { plan: 'basic', consent: true }, ownerCookie)).status, 200);
     assert.equal(checkoutRequests.length, 1, 'repeat checkout uses the pending session');
@@ -290,7 +314,7 @@ test('Stripe trial, household invitations, tenant boundaries, removal and email 
     const reminders = mail.filter(message => message.subject === 'Your MyFinance Pro trial ends tomorrow');
     assert.equal(reminders.length, 1);
     assert.equal(reminders[0].to, 'owner@household.test');
-    assert.match(reminders[0].text, /Basic \(\$9.99\)/);
+    assert.match(reminders[0].text, /Basic \(\$4.99\)/);
     assert.equal((await call('/api/billing/downgrade/cancel', {}, ownerCookie)).status, 200);
     subscription.items.data[0].price.id = 'price_basic';
     assert.equal(await webhook('evt_trial_back_to_basic'), 200);

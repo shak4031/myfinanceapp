@@ -80,9 +80,9 @@ test('MyFinance Pro: owner license, one-time trial, gating, admin grant/revoke, 
     const ownerLicense = await call('/api/license', { cookie: ownerCookie });
     assert.equal(ownerLicense.body.tier, 'pro');
     assert.equal(ownerLicense.body.source, 'owner');
-    assert.equal(ownerLicense.body.plan.price, 9.99);
+    assert.equal(ownerLicense.body.plan.price, 4.99);
     assert.equal(ownerLicense.body.plusActive, true);
-    assert.equal(ownerLicense.body.plusPlan.price, 14.99);
+    assert.equal(ownerLicense.body.plusPlan.price, 7.99);
     assert.equal(ownerLicense.body.features.some(feature => feature.id === 'planning'), false);
     const initialAnalytics = await call('/api/analytics', { cookie: ownerCookie });
     assert.equal(initialAnalytics.status, 200);
