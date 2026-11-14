@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance. Start a 15-day Pro trial without payment details.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261115-demo"></script>
+  <script src="session.js?v=20261116-trialpaths"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -505,7 +505,7 @@
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261107-review-counts">
-  <link rel="stylesheet" href="marketing.css?v=20261115-layout">
+  <link rel="stylesheet" href="marketing.css?v=20261116-signup">
   <link rel="stylesheet" href="household.css?v=20261107-profile-plans">
 </head>
 <body class="auth-pending">
@@ -529,7 +529,7 @@
         <p class="marketing-kicker"><span aria-hidden="true">&#10022;</span> SMALL STEPS. BIGGER POSSIBILITIES.</p>
         <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
         <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
-        <div class="marketing-actions"><a class="btn btn-primary" href="/signup">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a class="btn btn-secondary marketing-demo-link" href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden><span class="marketing-demo-dot" aria-hidden="true"></span>See the live demo</a></div>
+        <div class="marketing-actions"><a class="btn btn-primary" href="/signup?plan=trial">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a class="btn btn-secondary marketing-demo-link" href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden><span class="marketing-demo-dot" aria-hidden="true"></span>See the live demo</a></div>
         <p class="marketing-reassurance">No card or plan choice required. Connect or upload&mdash;your choice.</p>
       </div>
     <div class="marketing-access" id="marketing-access">
@@ -551,19 +551,19 @@
       <ol class="auth-signup-steps" id="auth-signup-steps" aria-label="Account setup steps" hidden>
         <li aria-current="step"><span>1</span> Account</li>
         <li><span>2</span> Verify email</li>
-        <li><span>3</span> Secure checkout</li>
+        <li><span>3</span> <span id="auth-step-final">Secure checkout</span></li>
       </ol>
       <div class="auth-plan" id="auth-plan" role="status" hidden><p class="auth-plan-head"><span>Your plan</span><strong id="auth-plan-name"></strong><b id="auth-plan-price"></b></p><p class="auth-plan-note" id="auth-plan-note"></p><p class="auth-plan-links"><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Change plan</a><button class="link-button" id="auth-plan-clear" type="button">Clear choice</button></p></div>
       <form id="auth-form" hidden>
         <fieldset class="auth-plan-options" id="auth-plan-options" hidden>
-          <legend>Choose your household plan</legend>
-          <p class="auth-trial-note">Select a paid household plan when you are ready.</p>
+          <legend>How would you like to start?</legend>
           <div class="auth-plan-grid">
-            <label class="auth-plan-option"><input id="auth-plan-basic" type="radio" name="signup-plan" value="basic" disabled><span><strong>Basic</strong><b>USD $4.99<span> / month</span></b><small>Accounts, statement imports, transactions, categories and everyday dashboard.</small></span></label>
-            <label class="auth-plan-option"><input id="auth-plan-pro" type="radio" name="signup-plan" value="pro" disabled><span><strong>Pro</strong><b>USD $7.99<span> / month</span></b><small>Everything in Basic, plus analytics, budgets, debt planning and savings goals.</small></span></label>
+            <label class="auth-plan-option auth-path-trial"><input id="auth-plan-trial" type="radio" name="signup-plan" value="trial" disabled><span><strong>Free trial</strong><b>$0<span> for 15 days</span></b><small>Every Pro feature. No card needed.</small></span></label>
+            <label class="auth-plan-option auth-path-basic"><input id="auth-plan-basic" type="radio" name="signup-plan" value="basic" disabled><span><strong>Basic</strong><b>USD $4.99<span> / month</span></b><small>Accounts, imports, transactions and everyday dashboard.</small></span></label>
+            <label class="auth-plan-option auth-path-pro"><input id="auth-plan-pro" type="radio" name="signup-plan" value="pro" disabled><span><strong>Pro</strong><b>USD $7.99<span> / month</span></b><small>Basic plus analytics, budgets, debt payoff and goals.</small></span></label>
           </div>
-          <p class="auth-trial-note">Paid subscriptions are charged immediately and renew monthly until cancelled.</p>
         </fieldset>
+        <p class="auth-path" id="auth-path" role="status" hidden><span class="auth-path-label">You're signing up for</span><strong id="auth-path-name"></strong><small id="auth-path-note"></small></p>
         <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="100"></label>
         <label id="auth-email-label">Email<input id="auth-email" type="email" autocomplete="username" required></label>
         <label id="auth-password-label">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="12" required></label>
@@ -646,7 +646,7 @@
       </div>
       <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Create an account and start your trial</li><li><b>2</b> Verify your email</li><li><b>3</b> Choose a paid plan when ready</li></ol>
       <p class="marketing-billing-note">Prices in USD, per household. Trial access ends after 15 days without a subscription. If you subscribe, Stripe charges immediately and renews monthly until cancelled; any remaining trial ends. Only the household owner manages billing and invitations. Existing paid access is retained.</p>
-      <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="/signup">Start your free trial <span aria-hidden="true">&rarr;</span></a><a href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden>Try the live demo</a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
+      <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="/signup?plan=trial">Start your free trial <span aria-hidden="true">&rarr;</span></a><a href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden>Try the live demo</a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
     </section>
     <footer class="marketing-footer"><p>MyFinance does not move money. Planning results are estimates, not promises.</p><nav aria-label="About, security and contact"><a href="/about">About</a><a href="/security">Security</a><a href="/contact">Contact</a><a class="marketing-top-link" href="#marketing-top" data-marketing-jump="top">Back to top <span aria-hidden="true">&uarr;</span></a></nav></footer>
   </section>
@@ -2934,7 +2934,7 @@
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261111-compass-period"></script>
   <script src="marketing.js?v=20261115-demo"></script>
-  <script src="household.js?v=20261111-training"></script>
+  <script src="household.js?v=20261116-signup"></script>
   <script>FinanceSession.start();</script>
 </body>
 </html>

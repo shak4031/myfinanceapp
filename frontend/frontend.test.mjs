@@ -1200,10 +1200,17 @@ test('signed-in checkout wrapper throws verification errors with code and status
     error => error.status === 403 && error.code === 'EMAIL_VERIFICATION_REQUIRED');
 });
 
-test('signup needs no plan selection or browser storage', async () => {
+test('signup offers trial, Basic or Pro and shows the chosen path beside the form', async () => {
   const html = source('index.html');
   assert.match(html, /<fieldset class="auth-plan-options" id="auth-plan-options" hidden>/);
-  for (const plan of ['basic', 'pro']) {
+  assert.match(html, /id="auth-plan-trial" type="radio" name="signup-plan" value="trial"/);
+  assert.match(html, /href="\/signup\?plan=trial"/, 'trial CTAs preselect the trial path');
+  const expected = {
+    trial: { href: '/#dashboard', submit: 'Start my free trial', badge: /free trial/, final: 'Start exploring' },
+    basic: { href: '/#membership', submit: 'Create account & continue to Basic', badge: /Basic/, final: 'Pay in Stripe' },
+    pro: { href: '/#membership', submit: 'Create account & continue to Pro', badge: /Pro/, final: 'Pay in Stripe' }
+  };
+  for (const [path, want] of Object.entries(expected)) {
     const calls = [];
     const f = fixture(async (url, options = {}) => {
       calls.push({ url, options });
@@ -1216,14 +1223,20 @@ test('signup needs no plan selection or browser storage', async () => {
     f.context.location.pathname = '/signup';
     f.run('session.js');
     await f.context.FinanceSession.start();
-    assert.equal(f.node('auth-plan-options').hidden, true);
-    assert.equal(f.node('auth-plan-basic').disabled, true);
-    assert.equal(f.node('auth-screen').classList.contains('is-registering'), true);
-    assert.equal(f.node('auth-signup-steps').hidden, true);
-    assert.equal(f.node('auth-plan-basic').required, false);
+    assert.equal(f.node('auth-plan-options').hidden, false);
+    assert.equal(f.node('auth-plan-trial').checked, true, 'the free trial is the default path');
+    assert.equal(f.node('auth-signup-steps').hidden, false);
+    if (path !== 'trial') {
+      f.node(`auth-plan-${path}`).checked = true;
+      f.node(`auth-plan-${path}`).listeners.change({ target: f.node(`auth-plan-${path}`) });
+    }
+    assert.equal(f.node('auth-path').hidden, false);
+    assert.match(f.node('auth-path-name').textContent, want.badge);
+    assert.equal(f.node('auth-submit').textContent, want.submit);
+    assert.equal(f.node('auth-step-final').textContent, want.final);
     await f.node('auth-form').onsubmit({ preventDefault() {} });
-    assert.equal(calls.some(call => call.url.endsWith('/register')), true);
-    assert.equal(f.context.location.href, '/#dashboard');
+    assert.equal(f.context.FinanceSession.chosenPlan(), path === 'trial' ? '' : path, 'paid paths preselect the plan at checkout');
+    assert.equal(f.context.location.href, want.href);
     assert.equal(calls.some(call => call.url === '/api/billing/checkout'), false, 'signup does not silently authorize billing');
   }
 });

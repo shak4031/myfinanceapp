@@ -101,6 +101,7 @@ erDiagram
         text password_hash
         text role
         timestamptz email_verified_at
+        timestamptz unverified_warning_sent_at
     }
     households {
         integer id PK
@@ -353,7 +354,7 @@ They do not inherit the financial-table RLS policy.
 
 | Table | Key and columns | Constraints / responsibility |
 |---|---|---|
-| `users` | PK `id`; `name`, `email`, `role`, `password_hash`, `created_at`, `password_changed_at`, `email_verified_at` | Unique email and unique `lower(email)` index; separate login identity |
+| `users` | PK `id`; `name`, `email`, `role`, `password_hash`, `created_at`, `password_changed_at`, `email_verified_at`, `unverified_warning_sent_at` | Unique email and unique `lower(email)` index; separate login identity. Logins still unverified 15 days after signup are warned at day 12 and then deleted |
 | `sessions` | PK `token_hash`; `user_id`, `expires_at`, `created_at`, `last_activity_at`, `actor_user_id`, `support_grant_id` | User/support FKs; hashed tokens, idle/absolute expiry |
 | `auth_attempts` | PK `key`; `attempts`, `reset_at` | Hashed IP/email/invitation throttling keys |
 | `password_reset_tokens` | PK `token_hash`; `user_id`, `expires_at`, `used_at`, `created_at` | User FK with cascade delete |

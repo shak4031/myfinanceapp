@@ -28,7 +28,7 @@ export function openApiSpec() {
       '/api/auth/mfa/disable': { post: op('Auth', 'Disable TOTP with password plus authenticator or recovery code', body({ password: '************', code: '123456' })) },
       '/api/auth/mfa/recovery-codes': { post: op('Auth', 'Replace all recovery codes with password plus a factor', body({ password: '************', code: '123456' })) },
       '/api/auth/logout': { post: op('Auth', 'Sign out and end any support session') },
-      '/api/auth/register': { post: op('Auth', 'Create an account (only when ALLOW_REGISTRATION=true)', body({ name: 'Name', email: 'you@example.com', password: '************' })) },
+      '/api/auth/register': { post: op('Auth', 'Create an account (only when ALLOW_REGISTRATION=true). Starts the 15-day trial; accounts with an unverified email are deleted 15 days after signup.', body({ name: 'Name', email: 'you@example.com', password: '************' })) },
       '/api/auth/password-reset/request': { post: op('Auth', 'Email a single-use password reset link', body({ email: 'you@example.com' })) },
       '/api/auth/password-reset/confirm': { post: op('Auth', 'Set a new password with a reset token; signs out all sessions', body({ token: '<from email link>', password: '************' })) },
       '/api/auth/end-support': { post: op('Support', 'End the current support session') },

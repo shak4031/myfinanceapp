@@ -186,7 +186,7 @@ async function sendVerification(client, req, user) {
   await client.query("INSERT INTO email_verification_tokens(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '24 hours')",
     [tokenHash(token), user.id]);
   const sent = await sendSecurityNotice(user, 'Verify your MyFinance email',
-    `Hi ${user.name},\n\nVerify your email within 24 hours before starting your subscription:\n${appOrigin(req)}/#verify-token=${token}\n\nIf you did not create this login, do not follow the link.`);
+    `Hi ${user.name},\n\nVerify your email within 24 hours before starting your subscription:\n${appOrigin(req)}/#verify-token=${token}\n\nAccounts that are not verified within 15 days of signup are deleted automatically.\n\nIf you did not create this login, do not follow the link.`);
   if (!sent) throw Object.assign(new Error('Verification email could not be delivered.'), { status: 503 });
 }
 

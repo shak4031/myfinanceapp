@@ -94,11 +94,12 @@ window.FinanceSession = (() => {
     }
     const recovery = mode === 'forgot' || mode === 'reset';
     el('auth-screen').classList.toggle('is-registering', mode === 'register');
-    el('auth-signup-steps').hidden = true;
-    el('auth-plan-options').hidden = true;
-    for (const plan of ['basic', 'pro']) {
-      el(`auth-plan-${plan}`).disabled = true;
-      el(`auth-plan-${plan}`).required = false;
+    const registering = mode === 'register';
+    el('auth-signup-steps').hidden = !registering;
+    el('auth-plan-options').hidden = !registering;
+    for (const plan of SIGNUP_PATHS) {
+      el(`auth-plan-${plan}`).disabled = !registering;
+      el(`auth-plan-${plan}`).required = registering;
     }
     el('auth-form').hidden = false;
     el('auth-title').textContent = ['invite', 'accept'].includes(mode) ? 'Join your household.' : mode === 'setup' ? 'Your fresh start begins here.' : mode === 'register' ? 'Make room for your next chapter.'
@@ -121,7 +122,6 @@ window.FinanceSession = (() => {
       : mode === 'forgot' ? 'Email me a reset link' : mode === 'reset' ? 'Save new password' : 'Sign in';
     el('auth-switch').hidden = inviteToken || recovery || mode === 'setup' ? false : !registrationEnabled;
     el('auth-switch').textContent = mode === 'accept' ? 'Keep my current household' : mode === 'invite' ? 'Already have an account? Sign in to join' : inviteToken && mode === 'login' ? 'Create a login for this invitation' : recovery || mode === 'setup' ? 'Back to sign in' : mode === 'register' ? 'Already have an account? Sign in' : 'Create an account';
-    if (mode === 'register') el('auth-description').textContent = 'Create your account to start 15 days of Pro access. No payment details or plan selection required. Your trial starts immediately; verify your email to subscribe later.';
     if (mode === 'invite') el('auth-description').textContent = 'Create your own login to edit your household’s shared finances. The household owner manages billing and members.';
     if (mode === 'accept') el('auth-description').textContent = 'Join with your existing login to edit the invited household’s shared finances. You can join only if your current household has no financial data or paid access. The invited household’s owner manages billing and membership.';
     el('auth-forgot').hidden = mode !== 'login';
@@ -129,6 +129,7 @@ window.FinanceSession = (() => {
     const setupLink = el('auth-setup');
     if (setupLink) setupLink.hidden = !setupRequired || mode !== 'login';
     renderPlanChoice();
+    renderSignupPath();
     renderDemo();
     if (verificationNotice) el('auth-error').textContent = verificationNotice;
   }
@@ -188,6 +189,7 @@ window.FinanceSession = (() => {
   function renderPlanChoice() {
     const chosen = store.get();
     for (const plan of ['basic', 'pro']) el(`auth-plan-${plan}`).checked = chosen === plan;
+    el('auth-plan-trial').checked = !chosen;
     document.querySelectorAll('[data-choose-plan]').forEach(button => {
       const selected = button.dataset.choosePlan === chosen;
       button.setAttribute('aria-pressed', String(selected));
@@ -201,6 +203,34 @@ window.FinanceSession = (() => {
     el('auth-plan-name').textContent = PLANS[chosen].name;
     el('auth-plan-price').textContent = PLANS[chosen].price;
     el('auth-plan-note').textContent = PLANS[chosen].note;
+  }
+  // Signup offers three paths; the free trial is the default unless a paid plan was picked.
+  const SIGNUP_PATHS = ['trial', 'basic', 'pro'];
+  const PATH_COPY = {
+    trial: { name: '15-day free trial', note: 'Every Pro feature, no card. Pick a plan any time before it ends.', final: 'Start exploring', submit: 'Start my free trial',
+      description: 'Create your account to start 15 days of Pro access right away. No payment details needed.' },
+    basic: { name: 'Basic · USD 4.99 / month', note: 'Full access starts now. Verify your email, then pay in Stripe to keep Basic.', final: 'Pay in Stripe', submit: 'Create account & continue to Basic',
+      description: 'Create your account and start using MyFinance right away. Verify your email, then subscribe to Basic in Stripe hosted Checkout before your 15 days end.' },
+    pro: { name: 'Pro · USD 7.99 / month', note: 'Full access starts now. Verify your email, then pay in Stripe to keep Pro.', final: 'Pay in Stripe', submit: 'Create account & continue to Pro',
+      description: 'Create your account and start using MyFinance right away. Verify your email, then subscribe to Pro in Stripe hosted Checkout before your 15 days end.' }
+  };
+  const signupPath = () => store.get() || 'trial';
+  function renderSignupPath() {
+    const badge = el('auth-path');
+    const registering = mode === 'register';
+    if (badge) badge.hidden = !registering;
+    if (!registering) return;
+    const path = signupPath();
+    const copy = PATH_COPY[path];
+    if (badge) {
+      badge.dataset.path = path;
+      badge.className = `auth-path auth-path-${path}`;
+    }
+    el('auth-path-name').textContent = copy.name;
+    el('auth-path-note').textContent = copy.note;
+    el('auth-step-final').textContent = copy.final;
+    el('auth-submit').textContent = copy.submit;
+    el('auth-description').textContent = copy.description;
   }
   function showSupportBanner(support) {
     const banner = document.createElement('div');
@@ -219,6 +249,11 @@ window.FinanceSession = (() => {
   }
   async function start() {
     cleanAppMarkup = document.querySelector('.app-container').innerHTML;
+    if (location.pathname === '/signup') {
+      const requested = new URLSearchParams(location.search || '').get('plan');
+      if (requested === 'trial') store.set('');
+      else if (PLANS[requested]) store.set(requested);
+    }
     el('auth-screen').classList.toggle('access-page', ['/signup', '/signin'].includes(location.pathname) || !!inviteToken || !!verifyToken || location.hash.startsWith('#reset-token=') || ['#owner-setup', '#marketing-signin'].includes(location.hash));
     const focusAccess = () => {
       if (location.pathname !== '/signup') { location.href = '/signup'; return; }
@@ -236,9 +271,9 @@ window.FinanceSession = (() => {
     el('auth-plan-clear')?.addEventListener('click', () => { store.set(''); renderPlanChoice(); });
     document.querySelectorAll('[data-demo-copy]').forEach(button => button.addEventListener('click', () => copyDemo(button)));
     document.querySelectorAll('[data-demo-signin]').forEach(button => button.addEventListener('click', () => openDemo(button)));
-    for (const plan of ['basic', 'pro']) {
+    for (const plan of SIGNUP_PATHS) {
       el(`auth-plan-${plan}`).addEventListener('change', event => {
-        if (event.target.checked) { store.set(plan); renderPlanChoice(); }
+        if (event.target.checked) { store.set(plan === 'trial' ? '' : plan); renderPlanChoice(); renderSignupPath(); }
       });
     }
     el('auth-switch').onclick = () => {
@@ -310,7 +345,7 @@ window.FinanceSession = (() => {
           return;
         }
         inviteToken = '';
-        if (registering) { location.href = '/#dashboard'; return; }
+        if (registering) { location.href = signupPath() === 'trial' ? '/#dashboard' : '/#membership'; return; }
         location.reload();
       } catch (error) { el('auth-error').textContent = error.message; }
       finally { el('auth-submit').disabled = false; }

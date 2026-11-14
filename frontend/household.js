@@ -287,7 +287,7 @@
       members.className = 'panel plan-card household-card membership-card';
       membership.appendChild(members);
     }
-    await Promise.all([renderBilling(billing), renderMembers(members)]);
+    await Promise.all([renderBilling(billing, '', window.FinanceSession?.chosenPlan?.() || 'pro'), renderMembers(members)]);
   }
   const baseShowView = window.showView;
   window.showView = async function(route = 'dashboard') {

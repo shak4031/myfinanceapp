@@ -16,6 +16,7 @@ import { trafficReport } from '../utils/traffic.js';
 import { revokeTrustedBrowsers } from '../utils/trustedBrowsers.js';
 import { consumeFactor } from '../utils/mfa.js';
 import { bankHealthReport } from '../utils/bankMonitor.js';
+import { removeAccountRecords } from '../utils/accountDeletion.js';
 
 const router = Router();
 const SUPPORT_SESSION_MINUTES = 120;
@@ -204,40 +205,9 @@ router.delete('/users/:id', async (req, res, next) => {
       const stripeCancellation = await cancelStripeSubscriptionForDeletion(current);
       if (typeof stripeCancellation === 'string') return { conflict: stripeCancellation };
 
-      const counts = {};
-      const remove = async (table, sql = `DELETE FROM ${table} WHERE user_id=$1`) => {
-        counts[table] = (await client.query(sql, [id])).rowCount;
-      };
-
-      await remove('transaction_import_reviews');
-      await remove('transactions');
-      await remove('transaction_labels');
-      await remove('accounts');
-      await remove('import_batches');
-      await remove('plaid_accounts');
-      await remove('plaid_connections');
-      await remove('staging_transactions');
-      await remove('credit_cards');
-      await remove('savings_goals');
-      await remove('categories');
-      await remove('category_budgets');
-      await remove('money_plans');
-      await remove('household_profiles');
-      await remove('name_rules');
-      await remove('import_reviews');
-      await client.query('DELETE FROM household_invitations WHERE invited_by=$1', [id]);
-      await client.query('DELETE FROM auth_attempts WHERE key = ANY($1)', [attemptKeysForEmail(current.email)]);
-      if (current.household_role === 'owner') {
-        await client.query('DELETE FROM household_invitations WHERE household_id=$1', [current.household_id]);
-        await client.query('DELETE FROM household_subscriptions WHERE household_id=$1', [current.household_id]);
-        await client.query('DELETE FROM households WHERE id=$1', [current.household_id]);
-      } else {
-        await client.query('DELETE FROM household_members WHERE user_id=$1', [id]);
-      }
-      const result = await client.query('DELETE FROM users WHERE id=$1 AND email=$2 RETURNING id', [id, current.email]);
-      if (!result.rowCount) throw new Error('The account changed during deletion.');
+      const counts = await removeAccountRecords(client, current);
       return {
-        id: result.rows[0].id, email: current.email, counts,
+        id: current.id, email: current.email, counts,
         stripeSubscriptionCanceled: stripeCancellation
       };
     });

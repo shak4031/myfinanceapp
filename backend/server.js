@@ -6,6 +6,7 @@ import { syncDuePlaidConnections } from './routes/plaid.js';
 import { demoEnabled, resetDemoAccount, startDemoResets } from './utils/demo.js';
 import { startLogStore, purgeExpiredLogs, flushLogStore } from './utils/logStore.js';
 import { startTrialReminders } from './utils/billing.js';
+import { startUnverifiedCleanup } from './utils/unverifiedAccounts.js';
 
 const db = new Database();
 
@@ -46,6 +47,7 @@ try {
   await db.init();
   startLogStore();
   startTrialReminders();
+  startUnverifiedCleanup();
   await purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
   if (demoEnabled()) {
