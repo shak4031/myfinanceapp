@@ -3925,14 +3925,14 @@ test('dashboard marks goal and debt-payoff entries as manual plan items and skip
   vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
   await f.context.loadDashboard();
   const markup = f.node('dashboard-payments').innerHTML;
-  assert.match(markup, /<article class="pay-card is-upcoming is-flex plan-goal"/);
-  assert.match(markup, /<article class="pay-card is-upcoming plan-debt"/);
-  assert.match(markup, /<li class="pay-row is-upcoming plan-debt"/);
-  assert.match(markup, /class="pay-plan-chip is-goal"[^>]*>Goal &middot; move it yourself</);
-  assert.match(markup, /class="pay-plan-chip is-debt"[^>]*>Debt payoff &middot; pay it yourself</);
+  assert.match(markup, /<article class="pay-card is-upcoming is-flex pay-plan-goal"/);
+  assert.match(markup, /<article class="pay-card is-upcoming pay-plan-debt"/);
+  assert.match(markup, /<li class="pay-row is-upcoming pay-plan-debt"/);
+  assert.match(markup, /not automatic, move this money yourself/);
   assert.match(markup, /<article class="pay-card is-upcoming" title="Phone/, 'regular bills are not marked as plan items');
   assert.match(markup, /<li class="pay-row is-pending"/);
-  assert.match(markup, /plus \$450\.11 pending at bank \(already in balance\)/);
+  assert.match(markup, /<span class="pay-row-status">Pending<\/span>/);
+  assert.match(markup, /&middot; \$450\.11 pending</);
   assert.match(markup, /Projected balance in 30 days<\/span><strong>\$830\.00/, 'the pending PSEG debit is not deducted again');
 });
 test('bill action menus close and return focus on Escape', async () => {
