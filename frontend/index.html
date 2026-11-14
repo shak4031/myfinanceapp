@@ -529,27 +529,8 @@
         <p class="marketing-kicker"><span aria-hidden="true">&#10022;</span> SMALL STEPS. BIGGER POSSIBILITIES.</p>
         <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
         <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
-        <div class="marketing-actions"><a class="btn btn-primary" href="/signup">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden>Explore the live demo first</a><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Compare household plans</a></div>
+        <div class="marketing-actions"><a class="btn btn-primary" href="/signup">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a class="btn btn-secondary marketing-demo-link" href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden><span class="marketing-demo-dot" aria-hidden="true"></span>See the live demo</a></div>
         <p class="marketing-reassurance">No card or plan choice required. Connect or upload&mdash;your choice.</p>
-        <section class="marketing-demo" id="marketing-demo" aria-labelledby="marketing-demo-title" hidden>
-          <div class="marketing-demo-head"><p class="marketing-demo-kicker"><span class="marketing-demo-dot" aria-hidden="true"></span>LIVE DEMO &middot; NO SIGNUP NEEDED</p>
-            <h2 id="marketing-demo-title">Take the full app for a spin first.</h2>
-            <p>Sign in to a sample household with every Pro feature turned on: dashboard, budgets, analytics, debt payoff and goals. Click around, edit, import&mdash;you can't break it.</p></div>
-          <dl class="marketing-demo-creds">
-            <div><dt>Email</dt><dd><code data-demo-email></code><button type="button" class="marketing-demo-copy" data-demo-copy="email" aria-label="Copy demo email">Copy</button></dd></div>
-            <div><dt>Password</dt><dd><code data-demo-password></code><button type="button" class="marketing-demo-copy" data-demo-copy="password" aria-label="Copy demo password">Copy</button></dd></div>
-          </dl>
-          <div class="marketing-demo-actions"><button type="button" class="btn btn-primary" data-demo-signin>Open the live demo <span aria-hidden="true">&rarr;</span></button><span>Shared sample data, reset every night. Please don't enter real information.</span></div>
-          <p class="marketing-demo-error" role="alert"></p>
-        </section>
-        <section class="marketing-trust" aria-labelledby="marketing-trust-title"><h2 id="marketing-trust-title">Independent app. Concrete safeguards.</h2><ul class="marketing-trust-list"><li><strong>Optional bank sync</strong><span>Start with CSV, OFX/QFX or supported PDF statements instead.</span></li><li><strong>Protected connections</strong><span>Plaid sync tokens are encrypted, and connections cannot move money.</span></li><li><strong>Separate workspaces</strong><span>Database access rules help protect each household's records.</span></li></ul><a href="/security">Read the technical security whitepaper &rarr;</a><p class="marketing-disclaimer">No online service is risk-free. Learn about the safeguards and their limits before you connect.</p></section>
-        <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
-          <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
-          <div class="marketing-preview-title"><span aria-hidden="true">&#10022;</span><strong>Little by little.<br>Look at you go.</strong><span class="marketing-sticker">a little<br>more possible</span></div>
-          <div class="marketing-preview-steps"><span><b>01</b> Know your spending<small>Basic</small></span><span><b>02</b> Spot your patterns<small>Pro</small></span><span><b>03</b> Plan your next chapter<small>Pro</small></span></div>
-          <div class="marketing-goal"><span>Emergency fund <small>Pro</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
-          <p class="marketing-preview-note">Your own pace. Your own priorities. Estimates, not promises.</p>
-        </div>
       </div>
     <div class="marketing-access" id="marketing-access">
       <section class="marketing-spotlight" id="marketing-spotlight" aria-roledescription="carousel" aria-labelledby="marketing-spotlight-title">
@@ -610,22 +591,64 @@
     </div><p class="auth-footnote">Connect through Plaid or start with a statement.<br>MyFinance never moves your money.</p>
     <div class="marketing-first-step"><span aria-hidden="true">&#8627;</span><p><strong>Just one small start.</strong><br>Import a statement. Get a clearer picture.<br>Choose your next step when you are ready.</p></div></div>
     </div>
-    <section class="marketing-benefits" id="marketing-benefits" aria-labelledby="marketing-benefits-title"><div><p class="marketing-kicker">CONNECT OR UPLOAD &mdash; YOUR CHOICE</p><h2 id="marketing-benefits-title">A clearer today.<br>A more intentional tomorrow.</h2><p>Import supported CSV, OFX/QFX or text-based PDF statements from multiple banks, or optionally connect an eligible U.S. bank through Plaid. PDF compatibility depends on the statement layout.</p></div>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Spending Compass</h3><p>See how your spending trends over time and compare categories with typical households.</p></article>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#8644;</span><p class="marketing-tier">BASIC</p><h3>Smart duplicate detection</h3><p>Review possible statement overlaps and merge selected unambiguous matches in bulk.</p></article>
-      <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO</p><h3>Intentional projections</h3><p>Compare debt payoff strategies and plan savings goals without automatic payments.</p></article>
+    <section class="marketing-section marketing-demo" id="marketing-demo" aria-labelledby="marketing-demo-title" hidden>
+      <div class="marketing-demo-head"><p class="marketing-demo-kicker"><span class="marketing-demo-dot" aria-hidden="true"></span>LIVE DEMO &middot; NO SIGNUP NEEDED</p>
+        <h2 id="marketing-demo-title">Take the full app for a spin first.</h2>
+        <p>A sample household with every Pro feature on. Click around, edit, import&mdash;you can't break it.</p></div>
+      <div class="marketing-demo-panel">
+        <dl class="marketing-demo-creds">
+          <div><dt>Email</dt><dd><code data-demo-email></code><button type="button" class="marketing-demo-copy" data-demo-copy="email" aria-label="Copy demo email">Copy</button></dd></div>
+          <div><dt>Password</dt><dd><code data-demo-password></code><button type="button" class="marketing-demo-copy" data-demo-copy="password" aria-label="Copy demo password">Copy</button></dd></div>
+        </dl>
+        <button type="button" class="btn btn-primary marketing-demo-open" data-demo-signin>Open the live demo <span aria-hidden="true">&rarr;</span></button>
+        <p class="marketing-demo-note">Shared sample data, reset every night. Please don't enter real information.</p>
+        <p class="marketing-demo-error" role="alert"></p>
+      </div>
     </section>
-    <section class="marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
-      <p class="marketing-kicker">ONE PLAN. YOUR WHOLE HOUSEHOLD.</p><h2 id="marketing-pricing-title">Start with clarity.<br>Add possibility.</h2><p class="marketing-pricing-intro">Start with 15 days of Pro, no card required. Choose a paid plan when you are ready; your first payment is charged immediately.</p>
+    <section class="marketing-section marketing-benefits" id="marketing-benefits" aria-labelledby="marketing-benefits-title">
+      <div class="marketing-section-head"><p class="marketing-kicker">CONNECT OR UPLOAD &mdash; YOUR CHOICE</p><h2 id="marketing-benefits-title">A clearer today. A more intentional tomorrow.</h2><p>Import supported CSV, OFX/QFX or text-based PDF statements from multiple banks, or optionally connect an eligible U.S. bank through Plaid. PDF compatibility depends on the statement layout.</p></div>
+      <div class="marketing-card-grid">
+        <article><span class="marketing-feature-icon" aria-hidden="true">&#9678;</span><p class="marketing-tier">PRO</p><h3>Spending Compass</h3><p>See how your spending trends over time and compare categories with typical households.</p></article>
+        <article><span class="marketing-feature-icon" aria-hidden="true">&#8644;</span><p class="marketing-tier">BASIC</p><h3>Smart duplicate detection</h3><p>Review possible statement overlaps and merge selected unambiguous matches in bulk.</p></article>
+        <article><span class="marketing-feature-icon" aria-hidden="true">&#10022;</span><p class="marketing-tier">PRO</p><h3>Intentional projections</h3><p>Compare debt payoff strategies and plan savings goals without automatic payments.</p></article>
+      </div>
+    </section>
+    <section class="marketing-section marketing-how" aria-labelledby="marketing-how-title">
+      <div class="marketing-section-head"><p class="marketing-kicker">HOW IT WORKS</p><h2 id="marketing-how-title">Little by little. Look at you go.</h2><p>Your own pace. Your own priorities.</p></div>
+      <div class="marketing-how-grid">
+        <ol class="marketing-steps">
+          <li><b>01</b><div><strong>Know your spending</strong><span>Import or connect, then review categories. <small>Basic</small></span></div></li>
+          <li><b>02</b><div><strong>Spot your patterns</strong><span>Budgets, analytics and unusual-charge alerts. <small>Pro</small></span></div></li>
+          <li><b>03</b><div><strong>Plan your next chapter</strong><span>Debt payoff and savings goals with monthly targets. <small>Pro</small></span></div></li>
+        </ol>
+        <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
+          <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
+          <div class="marketing-preview-title"><span aria-hidden="true">&#10022;</span><strong>A little more possible.</strong></div>
+          <div class="marketing-goal"><span>Emergency fund <small>Pro</small></span><strong>$600 <small>/ $1,000</small></strong><div role="img" aria-label="Example savings progress: 60 percent"><i></i></div></div>
+          <p class="marketing-preview-note">Estimates, not promises.</p>
+        </div>
+      </div>
+    </section>
+    <section class="marketing-section marketing-trust" aria-labelledby="marketing-trust-title">
+      <div class="marketing-section-head"><p class="marketing-kicker">SAFE BY DESIGN</p><h2 id="marketing-trust-title">Independent app. Concrete safeguards.</h2></div>
+      <ul class="marketing-card-grid marketing-trust-list">
+        <li><strong>Optional bank sync</strong><span>Start with CSV, OFX/QFX or supported PDF statements instead.</span></li>
+        <li><strong>Protected connections</strong><span>Plaid sync tokens are encrypted, and connections cannot move money.</span></li>
+        <li><strong>Separate workspaces</strong><span>Database access rules help protect each household's records.</span></li>
+      </ul>
+      <p class="marketing-trust-foot"><a href="/security">Read the technical security whitepaper &rarr;</a><span class="marketing-disclaimer">No online service is risk-free. Learn about the safeguards and their limits before you connect.</span></p>
+    </section>
+    <section class="marketing-section marketing-pricing" id="marketing-pricing" aria-labelledby="marketing-pricing-title">
+      <div class="marketing-section-head"><p class="marketing-kicker">ONE PLAN. YOUR WHOLE HOUSEHOLD.</p><h2 id="marketing-pricing-title">Start with clarity. Add possibility.</h2><p>Start with 15 days of Pro, no card required. Choose a paid plan when you are ready; your first payment is charged immediately.</p></div>
       <div class="marketing-plan-grid">
         <article class="marketing-plan"><p class="marketing-tier">BASIC</p><h3>Your everyday finances.</h3><p class="marketing-price">$4.99<span>USD / month per household</span></p><ul><li>Supported CSV, OFX/QFX &amp; text-based PDF imports</li><li>Accounts &amp; transactions</li><li>Category review</li><li>Your everyday dashboard</li><li>90-day Financial Health program</li><li>Shared household editing</li></ul><p class="marketing-plan-limit">Analytics, budgets, debt planning and goals require Pro.</p><button class="btn btn-secondary" type="button" data-choose-plan="basic" aria-pressed="false">Choose Basic</button></article>
         <article class="marketing-plan is-plus"><span class="marketing-plan-ribbon">FOR YOUR NEXT CHAPTER</span><p class="marketing-tier">PRO</p><h3>Give your dreams a plan.</h3><p class="marketing-price">$7.99<span>USD / month per household</span></p><ul><li>Everything in Basic</li><li>All analytics, budgets &amp; forecasts</li><li>Recurring &amp; unusual charge alerts</li><li>Debt payoff strategies &amp; what-if planning</li><li>Savings goals &amp; monthly targets</li></ul><p class="marketing-plan-limit">All Pro features are included during your 15-day trial.</p><button class="btn btn-primary" type="button" data-choose-plan="pro" aria-pressed="false">Choose Pro</button></article>
       </div>
-              <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Create an account and start your trial</li><li><b>2</b> Verify your email</li><li><b>3</b> Choose a paid plan when ready</li></ol>
-              <p class="marketing-billing-note">Prices in USD, per household. Trial access ends after 15 days without a subscription. If you subscribe, Stripe charges immediately and renews monthly until cancelled; any remaining trial ends. Only the household owner manages billing and invitations. Existing paid access is retained.</p>
-            <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="/signup">Start your free trial <span aria-hidden="true">&rarr;</span></a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
-          </section>
-          <footer class="marketing-footer"><p>MyFinance does not move money. Planning results are estimates, not promises.</p><nav aria-label="About, security and contact"><a href="/about">About</a><a href="/security">Security</a><a href="/contact">Contact</a><a class="marketing-top-link" href="#marketing-top" data-marketing-jump="top">Back to top <span aria-hidden="true">&uarr;</span></a></nav></footer>
+      <ol class="marketing-plan-steps" aria-label="How choosing a plan works"><li><b>1</b> Create an account and start your trial</li><li><b>2</b> Verify your email</li><li><b>3</b> Choose a paid plan when ready</li></ol>
+      <p class="marketing-billing-note">Prices in USD, per household. Trial access ends after 15 days without a subscription. If you subscribe, Stripe charges immediately and renews monthly until cancelled; any remaining trial ends. Only the household owner manages billing and invitations. Existing paid access is retained.</p>
+      <nav class="marketing-pricing-nav" aria-label="After pricing"><a class="btn btn-primary" href="/signup">Start your free trial <span aria-hidden="true">&rarr;</span></a><a href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden>Try the live demo</a><a href="#marketing-spotlight" data-marketing-jump="marketing-spotlight">Replay the feature tour</a></nav>
+    </section>
+    <footer class="marketing-footer"><p>MyFinance does not move money. Planning results are estimates, not promises.</p><nav aria-label="About, security and contact"><a href="/about">About</a><a href="/security">Security</a><a href="/contact">Contact</a><a class="marketing-top-link" href="#marketing-top" data-marketing-jump="top">Back to top <span aria-hidden="true">&uarr;</span></a></nav></footer>
   </section>
   <div class="app-container">
     <!-- HAMBURGER BUTTON (visible on mobile) -->
