@@ -6,7 +6,7 @@
   <title>MyFinance · Your money, with direction</title>
   <meta name="description" content="Shared household finances with MyFinance. Start a 15-day Pro trial without payment details.">
   <script src="session-guard.js?v=20261023a"></script>
-  <script src="session.js?v=20261111-training"></script>
+  <script src="session.js?v=20261115-demo"></script>
   <script src="performance.js?v=20261026a"></script>
   <script src="client-errors.js?v=20261017r"></script>
   <style>
@@ -505,7 +505,7 @@
   <link rel="stylesheet" href="income-review.css?v=20261017r">
   <link rel="stylesheet" href="tutorial.css?v=20261022d">
   <link rel="stylesheet" href="review-tools.css?v=20261107-review-counts">
-  <link rel="stylesheet" href="marketing.css?v=20261107-trial">
+  <link rel="stylesheet" href="marketing.css?v=20261115-demo">
   <link rel="stylesheet" href="household.css?v=20261107-profile-plans">
 </head>
 <body class="auth-pending">
@@ -521,6 +521,7 @@
         <a href="/security">Security</a>
         <a href="/contact">Contact</a>
       </nav>
+      <a class="marketing-nav-demo" href="#marketing-demo" data-marketing-jump="marketing-demo" hidden><span class="marketing-demo-dot" aria-hidden="true"></span>Live demo</a>
       <a class="marketing-nav-cta" href="/signin">Sign in <span aria-hidden="true">&rarr;</span></a>
     </header>
     <div class="marketing-hero">
@@ -528,8 +529,19 @@
         <p class="marketing-kicker"><span aria-hidden="true">&#10022;</span> SMALL STEPS. BIGGER POSSIBILITIES.</p>
         <h1>Your money.<br>Less <span class="marketing-scribble">guesswork.</span><br>More <em>living.</em></h1>
         <p class="marketing-intro">Meet MyFinance: your personal money workspace. See where your money goes, build better spending habits, and make a plan for less debt and the life you want.</p>
-        <div class="marketing-actions"><a class="btn btn-primary" href="/signup">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Compare household plans</a></div>
+        <div class="marketing-actions"><a class="btn btn-primary" href="/signup">Try MyFinance free for 15 days <span aria-hidden="true">&rarr;</span></a><a href="#marketing-demo" data-marketing-jump="marketing-demo" data-demo-link hidden>Explore the live demo first</a><a href="#marketing-pricing" data-marketing-jump="marketing-pricing">Compare household plans</a></div>
         <p class="marketing-reassurance">No card or plan choice required. Connect or upload&mdash;your choice.</p>
+        <section class="marketing-demo" id="marketing-demo" aria-labelledby="marketing-demo-title" hidden>
+          <div class="marketing-demo-head"><p class="marketing-demo-kicker"><span class="marketing-demo-dot" aria-hidden="true"></span>LIVE DEMO &middot; NO SIGNUP NEEDED</p>
+            <h2 id="marketing-demo-title">Take the full app for a spin first.</h2>
+            <p>Sign in to a sample household with every Pro feature turned on: dashboard, budgets, analytics, debt payoff and goals. Click around, edit, import&mdash;you can't break it.</p></div>
+          <dl class="marketing-demo-creds">
+            <div><dt>Email</dt><dd><code data-demo-email></code><button type="button" class="marketing-demo-copy" data-demo-copy="email" aria-label="Copy demo email">Copy</button></dd></div>
+            <div><dt>Password</dt><dd><code data-demo-password></code><button type="button" class="marketing-demo-copy" data-demo-copy="password" aria-label="Copy demo password">Copy</button></dd></div>
+          </dl>
+          <div class="marketing-demo-actions"><button type="button" class="btn btn-primary" data-demo-signin>Open the live demo <span aria-hidden="true">&rarr;</span></button><span>Shared sample data, reset every night. Please don't enter real information.</span></div>
+          <p class="marketing-demo-error" role="alert"></p>
+        </section>
         <section class="marketing-trust" aria-labelledby="marketing-trust-title"><h2 id="marketing-trust-title">Independent app. Concrete safeguards.</h2><ul class="marketing-trust-list"><li><strong>Optional bank sync</strong><span>Start with CSV, OFX/QFX or supported PDF statements instead.</span></li><li><strong>Protected connections</strong><span>Plaid sync tokens are encrypted, and connections cannot move money.</span></li><li><strong>Separate workspaces</strong><span>Database access rules help protect each household's records.</span></li></ul><a href="/security">Read the technical security whitepaper &rarr;</a><p class="marketing-disclaimer">No online service is risk-free. Learn about the safeguards and their limits before you connect.</p></section>
         <div class="marketing-preview" aria-label="Illustrative planning preview, not actual results">
           <div class="marketing-preview-top"><span>YOUR NEXT CHAPTER</span><span class="marketing-sample">Illustrative preview</span></div>
@@ -583,6 +595,11 @@
         <button class="link-button" id="auth-forgot" type="button" hidden>Forgot your password?</button>
         <button class="link-button" id="auth-setup" type="button" hidden>First-time setup: create the owner account</button>
       </form>
+      <div class="auth-demo" id="auth-demo" hidden>
+        <p><strong>Just looking?</strong> Explore the full app with the demo account: <code data-demo-email></code> / <code data-demo-password></code></p>
+        <button class="btn btn-secondary" type="button" data-demo-signin>Open the live demo</button>
+        <p class="marketing-demo-error" role="alert"></p>
+      </div>
       <section class="auth-privacy" aria-labelledby="auth-privacy-title">
         <div class="auth-privacy-heading"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7Z"/><path d="m8 12 3 3 5-6"/></svg><h3 id="auth-privacy-title">Security you can understand.</h3></div>
         <p>Database rules keep workspaces separate. Other users do not have access to your financial workspace by default. Passwords are stored as salted hashes, and sessions expire after 10 minutes without interaction.</p>
@@ -2893,7 +2910,7 @@
   <script src="transaction-duplicates.js?v=20261107-review-counts"></script>
   <script src="knowledge-base.js?v=20261103-topics"></script>
   <script src="tutorial.js?v=20261111-compass-period"></script>
-  <script src="marketing.js?v=20261107-highlights"></script>
+  <script src="marketing.js?v=20261115-demo"></script>
   <script src="household.js?v=20261111-training"></script>
   <script>FinanceSession.start();</script>
 </body>

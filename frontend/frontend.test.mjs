@@ -4880,6 +4880,42 @@ test('signup route opens registration only when registration is enabled', async 
     if (!registrationEnabled) assert.match(f.node('auth-description').textContent, /Registration is currently closed/);
   }
 });
+test('welcome page advertises the demo login only when the server enables it', async () => {
+  for (const enabled of [true, false]) {
+    const logins = [];
+    const f = fixture(async (url, options = {}) => {
+      if (url === '/api/auth/me') return response(401, {});
+      if (url === '/api/auth/login') { logins.push(JSON.parse(options.body)); return response(200, { user: { id: 9 } }); }
+      if (url === '/api/public-metrics') return response(202, {});
+      return response(200, { setupRequired: false, registrationEnabled: true, demo: enabled ? { email: 'demo@myfinance.app', password: 'password1234' } : null });
+    });
+    const section = Object.assign(f.node('marketing-demo'), { hidden: true });
+    const card = Object.assign(f.node('auth-demo'), { hidden: true });
+    const email = f.node('demo-email');
+    const password = f.node('demo-password');
+    const error = f.node('demo-error');
+    const open = Object.assign(f.node('demo-open'), { closest: () => ({ querySelector: () => error }) });
+    const all = f.context.document.querySelectorAll;
+    f.context.document.querySelectorAll = selector => selector.includes('#marketing-demo') ? [section]
+      : selector === '[data-demo-email]' ? [email] : selector === '[data-demo-password]' ? [password]
+      : selector === '[data-demo-signin]' ? [open] : all(selector);
+    f.context.location.pathname = '/signin';
+    f.run('session.js');
+    await f.context.FinanceSession.start();
+    assert.equal(section.hidden, !enabled);
+    assert.equal(card.hidden, !enabled);
+    if (!enabled) continue;
+    assert.equal(email.textContent, 'demo@myfinance.app');
+    assert.equal(password.textContent, 'password1234');
+    await open.listeners.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual(logins, [{ email: 'demo@myfinance.app', password: 'password1234' }]);
+    assert.equal(f.context.location.href, '/#dashboard');
+  }
+  const html = source('index.html');
+  assert.match(html, /id="marketing-demo"[^>]*hidden/);
+  assert.match(html, /data-demo-signin/);
+});
 test('traffic reports public views and signup entry clicks, but not signed-in views or closed/invited signup', async () => {
   for (const scenario of [
     { registrationEnabled: true, signedIn: false, invited: false, views: 1, clicks: 0 },

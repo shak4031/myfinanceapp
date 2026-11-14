@@ -40,6 +40,34 @@ body.auth-pending { height: auto; overflow: visible; }
 .marketing-page .btn-secondary { color: var(--ink); border: 1px solid #bcc7b9; background: #fff9; }
 .marketing-actions a { font-size: 14px; font-weight: 650; }
 .marketing-reassurance { color: var(--muted-ink); font-size: 12px; margin: 13px 0 30px; }
+.marketing-demo { position: relative; margin: 0 0 34px; padding: clamp(20px, 2.6vw, 28px); border-radius: 22px; color: #fff; background: radial-gradient(circle at 96% 0, #d7e99a55 0, transparent 46%), linear-gradient(140deg, var(--ink), var(--leaf)); box-shadow: 0 22px 50px #243e352e; overflow: hidden; }
+.marketing-demo[hidden], .auth-demo[hidden], .marketing-nav-demo[hidden], [data-demo-link][hidden] { display: none !important; }
+.marketing-demo-kicker { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: #d7e99a; }
+.marketing-demo-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #a6e36b; box-shadow: 0 0 0 0 #a6e36b99; animation: marketing-demo-pulse 2s infinite; }
+@keyframes marketing-demo-pulse { 70% { box-shadow: 0 0 0 8px #a6e36b00; } 100% { box-shadow: 0 0 0 0 #a6e36b00; } }
+.marketing-demo h2 { margin: 0 0 8px; color: #fff; font-size: clamp(22px, 2.2vw, 28px); letter-spacing: -.6px; line-height: 1.15; }
+.marketing-demo-head p:last-child { margin: 0; color: #e3ebe0; font-size: 14px; line-height: 1.6; max-width: 560px; }
+.marketing-demo-creds { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 18px 0; }
+.marketing-demo-creds div { padding: 10px 12px; border-radius: 14px; background: #ffffff1a; border: 1px solid #ffffff2e; }
+.marketing-demo-creds dt { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #d7e99a; }
+.marketing-demo-creds dd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 0; }
+.marketing-demo-creds code { font: 700 15px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; color: #fff; user-select: all; overflow-wrap: anywhere; }
+.marketing-demo-copy { flex: none; padding: 5px 11px; border-radius: 999px; border: 1px solid #ffffff59; background: transparent; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.marketing-demo-copy:hover, .marketing-demo-copy:focus-visible { background: #fff; color: var(--ink); }
+.marketing-demo-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.marketing-demo-actions > span { color: #d4ddd0; font-size: 12px; }
+.marketing-page .marketing-demo .btn-primary { background: #d7e99a; border-color: #d7e99a; color: var(--ink); font-weight: 800; }
+.marketing-page .marketing-demo .btn-primary:hover { background: #fff; border-color: #fff; }
+.marketing-demo-error { margin: 10px 0 0; font-size: 13px; font-weight: 700; color: #ffd2c8; }
+.marketing-demo-error:empty { display: none; }
+.marketing-nav-demo { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 750; text-decoration: none; padding: 9px 14px; border-radius: 999px; background: #e6ecd5; color: var(--ink) !important; white-space: nowrap; }
+.marketing-nav-demo:hover { background: #d7e99a; }
+.marketing-nav-demo .marketing-demo-dot { background: #2f8a4f; }
+.auth-demo { margin-top: 20px; padding: 14px 16px; border-radius: 14px; background: #eef3e0; border: 1px dashed #b7c79a; color: var(--ink); font-size: 13px; line-height: 1.6; }
+.auth-demo p { margin: 0 0 10px; }
+.auth-demo code { font-weight: 700; user-select: all; }
+.auth-demo .marketing-demo-error { color: #b42318; }
+@media (prefers-reduced-motion: reduce) { .marketing-demo-dot { animation: none; } }
 .marketing-access { padding-top: 28px; }
 .marketing-access .auth-card { width: 100%; padding: clamp(24px, 3vw, 38px); background: #fffdf9; border: 1px solid #dce1d4; box-shadow: 0 16px 60px #293d3510; border-radius: 24px; }
 .marketing-page:not(.access-page) .auth-card,
@@ -270,6 +298,7 @@ body.auth-pending { height: auto; overflow: visible; }
   .marketing-brand .brand-mark { width: 34px; height: 34px; }
   .marketing-links a:not([data-marketing-jump="marketing-pricing"]):not([href="/contact"]) { display: none; }
   .marketing-links a, .marketing-nav-cta { padding: 8px 12px; font-size: 13px; }
+  .marketing-nav-demo { display: none; }
   .marketing-page [id] { scroll-margin-top: 72px; }
   .mk-stage { min-height: 236px; }
   .mk-slide h3 { font-size: 21px; }

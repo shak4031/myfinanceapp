@@ -100,8 +100,8 @@
         return;
       }
       const id = link.dataset.marketingJump;
-      if (id === 'marketing-benefits' && page.classList.contains('access-page')) {
-        location.href = '/#marketing-benefits';
+      if (['marketing-benefits', 'marketing-demo'].includes(id) && page.classList.contains('access-page')) {
+        location.href = `/#${id}`;
         return;
       }
       const behavior = reducedMotion() ? 'auto' : 'smooth';

@@ -21,6 +21,7 @@ window.FinanceSession = (() => {
   let verifyToken = location.hash.startsWith('#verify-token=') ? location.hash.slice('#verify-token='.length) : '';
   let verificationNotice = '';
   let mfaRequired = false;
+  let demo = null;
   if (inviteToken || verifyToken) history.replaceState(null, '', location.pathname);
   const el = id => document.getElementById(id);
   function lock() {
@@ -128,7 +129,49 @@ window.FinanceSession = (() => {
     const setupLink = el('auth-setup');
     if (setupLink) setupLink.hidden = !setupRequired || mode !== 'login';
     renderPlanChoice();
+    renderDemo();
     if (verificationNotice) el('auth-error').textContent = verificationNotice;
+  }
+
+  // Public sample account advertised on the welcome page; hidden when the server disables it.
+  function renderDemo() {
+    const available = !!demo && !inviteToken && mode !== 'setup';
+    document.querySelectorAll('#marketing-demo, .marketing-nav-demo, [data-demo-link]').forEach(node => { node.hidden = !available; });
+    const inCard = el('auth-demo');
+    if (inCard) inCard.hidden = !available || mode !== 'login' || mfaRequired;
+    if (!available) return;
+    document.querySelectorAll('[data-demo-email]').forEach(node => { node.textContent = demo.email; });
+    document.querySelectorAll('[data-demo-password]').forEach(node => { node.textContent = demo.password; });
+  }
+  async function copyDemo(button) {
+    const value = button.dataset.demoCopy === 'password' ? demo?.password : demo?.email;
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      button.textContent = 'Copied';
+    } catch { button.textContent = 'Select & copy'; }
+    setTimeout(() => { button.textContent = 'Copy'; }, 1800);
+  }
+  async function openDemo(button) {
+    if (!demo) return;
+    const error = button.closest('#marketing-demo, #auth-demo')?.querySelector('.marketing-demo-error');
+    if (error) error.textContent = '';
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: demo.email, password: demo.password })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'The demo is unavailable right now. Please try again shortly.');
+      if (location.pathname === '/') {
+        history.replaceState(null, '', '/#dashboard');
+        location.reload();
+      } else location.href = '/#dashboard';
+    } catch (failure) {
+      if (error) error.textContent = failure.message;
+      button.disabled = false;
+    }
   }
 
   // Plan picked on the public pricing cards; survives the post-sign-in reload until it is submitted.
@@ -191,6 +234,8 @@ window.FinanceSession = (() => {
       focusAccess();
     }));
     el('auth-plan-clear')?.addEventListener('click', () => { store.set(''); renderPlanChoice(); });
+    document.querySelectorAll('[data-demo-copy]').forEach(button => button.addEventListener('click', () => copyDemo(button)));
+    document.querySelectorAll('[data-demo-signin]').forEach(button => button.addEventListener('click', () => openDemo(button)));
     for (const plan of ['basic', 'pro']) {
       el(`auth-plan-${plan}`).addEventListener('change', event => {
         if (event.target.checked) { store.set(plan); renderPlanChoice(); }
@@ -315,7 +360,9 @@ window.FinanceSession = (() => {
       setupRequired = !!status.setupRequired;
       mode = inviteToken ? 'invite' : setupRequired && location.hash === '#owner-setup' ? 'setup' : location.pathname === '/signup' && status.registrationEnabled ? 'register' : 'login';
       registrationEnabled = !!status.registrationEnabled;
+      demo = status.demo?.email && status.demo?.password ? status.demo : null;
       renderMode();
+      if (demo && location.hash === '#marketing-demo') el('marketing-demo')?.scrollIntoView?.({ block: 'start' });
       if (mode === 'register') reportTraffic('signup_click');
       if (location.pathname === '/signup' && !registrationEnabled) el('auth-description').textContent = 'Registration is currently closed.';
       if (mode === 'login') reportTraffic('homepage_view');

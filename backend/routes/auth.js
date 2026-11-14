@@ -8,7 +8,7 @@ import { withUser } from '../utils/tenant.js';
 import { log } from '../utils/logger.js';
 import { recordAudit } from '../utils/audit.js';
 import { sendPasswordResetEmail, sendSecurityNotice, mailConfigured, appOrigin } from '../utils/mailer.js';
-import { isDemoEmail } from '../utils/demo.js';
+import { DEMO_EMAIL, DEMO_PASSWORD, demoEnabled, isDemoEmail } from '../utils/demo.js';
 import { ensureHousehold, invitedHousehold, joinHousehold } from '../utils/households.js';
 import { newSecret, encryptSecret, decryptSecret, matchingStep, recoveryCodes, consumeFactor } from '../utils/mfa.js';
 import { TRIAL_DAYS } from '../utils/license.js';
@@ -217,7 +217,9 @@ router.post('/resend-verification', requireUser, async (req, res, next) => {
 router.get('/status', async (req, res, next) => {
   try {
     const result = await administrativeTransaction(client => client.query('SELECT password_hash IS NULL AS needed FROM users WHERE id = 1'));
-    res.json({ setupRequired: result.rows[0]?.needed === true, registrationEnabled: process.env.ALLOW_REGISTRATION === 'true' });
+    // The demo login is public on purpose: it holds sample data only and is rebuilt every night.
+    res.json({ setupRequired: result.rows[0]?.needed === true, registrationEnabled: process.env.ALLOW_REGISTRATION === 'true',
+      demo: demoEnabled() ? { email: DEMO_EMAIL, password: DEMO_PASSWORD } : null });
   } catch (error) { next(error); }
 });
 
