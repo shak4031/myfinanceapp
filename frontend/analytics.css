@@ -245,7 +245,44 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-pie-legend em { font-style: normal; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 1180px) { .pro-pie { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .pro-pie-stage { grid-template-columns: 1fr; padding: 12px; } }
-@media (prefers-reduced-motion: reduce) { .pie3d, .pie3d .pie3d-top, .pie-detail { animation: none; } .pie3d :is(.pie3d-side, .pie3d-top), .pro-pie-legend button { transition: none; } }
+/* Budget status on the pie (colours match the spending card meters) */
+.pie3d .pie3d-flag { display: none; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+.pie3d .pie3d-flag:is(.is-over, .is-risk) { display: inline; }
+.pie3d .pie3d-flag:is(.is-hot, .is-selected) { transform: translate(var(--lx), var(--ly)); }
+.pie3d .pie3d-flag circle { fill: #b91c1c; stroke: #fff; stroke-width: 2; }
+.pie3d .pie3d-flag.is-risk circle { fill: #b45309; }
+.pie3d .pie3d-flag .pie3d-flag-ring { fill: none; stroke: #b91c1c; stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: pie3d-ping 2.2s ease-out infinite; }
+.pie3d .pie3d-flag.is-risk .pie3d-flag-ring { stroke: #b45309; }
+.pie3d .pie3d-flag text { fill: #fff; font-size: 12px; font-weight: 900; }
+@keyframes pie3d-ping { 0% { opacity: .7; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(2); } }
+.pie3d .pie3d-top.is-over .pie3d-face { stroke: #b91c1c; stroke-width: 2.2; }
+.pie3d .pie3d-top.is-over.is-selected .pie3d-face { stroke: #fff; }
+.pro-pie-legend button { position: relative; overflow: hidden; }
+.pro-pie-legend .pie-legend-label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pro-pie-legend .pie-legend-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pro-pie-legend button.is-over { border-color: #e6a5a5; }
+.pro-pie-legend button.is-over strong { color: #b91c1c; }
+.pie-flag { flex: none; padding: 1px 7px; border-radius: 999px; background: #fee2e2; color: #b91c1c; font-size: 10.5px; font-weight: 750; white-space: nowrap; }
+.pie-flag.is-risk { background: #fef3c7; color: #92400e; }
+.pie-legend-meter { position: absolute; left: 12px; right: 12px; bottom: 4px; height: 3px; overflow: hidden; border-radius: 999px; background: #edf2f4; text-decoration: none; }
+.pie-legend-meter i, .pie-detail-budget i { display: block; height: 100%; border-radius: inherit; background: #047857; }
+:is(.pie-legend-meter, .pie-detail-budget).is-risk i { background: #b45309; }
+:is(.pie-legend-meter, .pie-detail-budget).is-over i { background: repeating-linear-gradient(135deg,#b91c1c 0 5px,#ef4444 5px 8px); }
+.pie-detail-budget { display: grid; gap: 3px; }
+.pie-detail-budget u { display: block; height: 6px; overflow: hidden; border-radius: 999px; background: #edf2f4; text-decoration: none; }
+.pie-detail-budget.is-over u { background: #fee2e2; }
+.pie-detail-budget small { color: var(--text-secondary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.pie-detail-budget.is-over small { color: #b91c1c; font-weight: 650; }
+.pie-detail-stats .is-warn strong { color: #92400e; }
+.pie-detail-alerts { display: grid; gap: 4px; margin-top: 2px; }
+.pie-detail-alerts button { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border: 1px solid #f3c4c4; border-left: 3px solid #b91c1c; border-radius: 8px; background: #fef2f2; font: inherit; font-size: 12.5px; color: var(--text-primary); text-align: left; cursor: pointer; }
+.pie-detail-alerts button strong { color: #b91c1c; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pie-detail-alerts button.is-risk { border-color: #f5dfa8; border-left-color: #b45309; background: #fffbeb; }
+.pie-detail-alerts button.is-risk strong { color: #92400e; }
+.pie-detail-alerts button:hover { filter: brightness(.97); }
+.pie-detail-ok { color: #047857 !important; font-weight: 650; }
+.pie-detail-rest .pie-flag { margin-left: 4px; }
+@media (prefers-reduced-motion: reduce) { .pie3d, .pie3d .pie3d-top, .pie-detail, .pie3d .pie3d-flag .pie3d-flag-ring { animation: none; } .pie3d :is(.pie3d-side, .pie3d-top, .pie3d-flag), .pro-pie-legend button { transition: none; } }
 /* Donut (used elsewhere) */
 .pro-donut { width: 100%; height: auto; display: block; }
 .pro-donut .track { fill: none; stroke: #eef2f7; }

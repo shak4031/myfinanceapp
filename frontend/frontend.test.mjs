@@ -4628,6 +4628,8 @@ test('Pro chart helpers produce scalable SVG', () => {
   assert.match(pie, />75%<\/text>/);
   assert.doesNotMatch(pie, />5%<\/text>/, 'slivers are too small for an inline label');
   assert.ok(pie.indexOf('pie3d-sides') < pie.indexOf('pie3d-tops'), 'walls sit beneath the top faces');
+  assert.ok(pie.indexOf('pie3d-tops') < pie.indexOf('pie3d-flags'), 'status badges sit above every face');
+  assert.equal((pie.match(/class="pie3d-flag" data-pie-index/g) || []).length, 3);
   assert.match(ProCharts.pie3d([{ label: 'All', value: 10, color: '#000' }]), /A148,77 0 1 1/, 'a single category draws a full ellipse');
 });
 test('category analytics derive monthly series but never draw card trends below six months', () => {

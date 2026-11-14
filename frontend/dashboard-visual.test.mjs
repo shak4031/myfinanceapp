@@ -84,12 +84,26 @@ test('turning analytics off or using Basic removes enhancements without budget f
 test('pie view renders a selectable 3D pie with an overview panel, linked legend and grouped small categories', async () => {
   const listeners = new Map(), inserted = [];
   const grid = { hidden: false, insertAdjacentHTML: (position, html) => inserted.push(html) };
-  const section = { isConnected: true, querySelector: selector => selector === '.mtd-grid' ? grid : { insertAdjacentHTML() {} }, querySelectorAll: () => [] };
+  const legend = { innerHTML: '' }, slot = { innerHTML: '' };
+  const node = (index, kind) => {
+    const classes = new Set([kind]), attrs = { 'aria-label': `Cat ${index}` };
+    return { dataset: { pieIndex: String(index) }, classes, attrs, getAttribute: name => attrs[name], setAttribute: (name, value) => { attrs[name] = value; },
+      classList: { contains: name => classes.has(name), toggle: (name, on) => on ? classes.add(name) : classes.delete(name) } };
+  };
+  const nodes = Array.from({ length: 9 }, (_, i) => [node(i, 'pie3d-top'), node(i, 'pie3d-flag')]).flat();
+  const root = { querySelector: selector => selector === '.pro-pie-legend' ? legend : selector === '.pie-detail-slot' ? slot : null,
+    querySelectorAll: selector => selector === '.pie3d [data-pie-index]' ? nodes : [] };
+  const section = { isConnected: true, querySelector: selector => selector === '.mtd-grid' ? grid : selector === '.pro-pie' ? root : { insertAdjacentHTML() {} }, querySelectorAll: () => [] };
   const context = {
     document: { getElementById: () => section, addEventListener: (name, callback) => listeners.set(name, callback) },
     window: {},
     FinancePro: { ensureEntitlement: async () => {}, isPlusActive: () => true, prefs: { get: key => key === 'dash.view' ? 'pie' : 'off' },
-      format: { money, esc }, proSwitch: () => '', ICONS: { lock: '' } }
+      format: { money, esc }, proSwitch: () => '', ICONS: { lock: '' },
+      getAnalytics: async () => ({ categories: [
+        { name: 'Cat 0', budget: 100, mtd: 110, budgetStatus: 'over' },
+        { name: 'Cat 1', budget: 120, mtd: 100, budgetStatus: 'risk' },
+        { name: 'Cat 2', budget: 500, mtd: 90, budgetStatus: 'ok' },
+        { name: 'Cat 10', budget: 5, mtd: 10, budgetStatus: 'over' }] }) }
   };
   vm.createContext(context);
   vm.runInContext(readFileSync(new URL('pro-charts.js', import.meta.url), 'utf8'), context);
@@ -105,6 +119,18 @@ test('pie view renders a selectable 3D pie with an overview panel, linked legend
   assert.match(html, /Spent this month<\/span><strong class="pie-detail-amount">\$660\.00/);
   assert.match(html, /11 categories &middot; most on <b>Cat 0<\/b>/);
   assert.match(html, /aria-live="polite"/);
+  // Budget status arrives with analytics, even with the Analytics summary switched off.
+  const flagged = state => nodes.filter(n => n.classes.has(state)).map(n => `${n.classes.has('pie3d-top') ? 'top' : 'flag'}${n.dataset.pieIndex}`);
+  assert.deepEqual(flagged('is-over'), ['top0', 'flag0', 'top8', 'flag8'], 'over-budget slices and the group holding one are flagged');
+  assert.deepEqual(flagged('is-risk'), ['top1', 'flag1']);
+  assert.equal(nodes[0].attrs['aria-label'], 'Cat 0, over budget');
+  assert.match(legend.innerHTML, /class="is-over" data-pie-select="0"[^>]*title="\$110\.00 of \$100\.00 budget · \$10\.00 over"/);
+  assert.match(legend.innerHTML, /<b class="pie-flag is-over">Over budget<\/b>/);
+  assert.match(legend.innerHTML, /<b class="pie-flag is-risk">Near limit<\/b>/);
+  assert.match(legend.innerHTML, /<b class="pie-flag is-over">1 over<\/b>/);
+  assert.match(legend.innerHTML, /pie-legend-meter is-ok"[^>]*><i style="width:18\.0%">/);
+  assert.match(slot.innerHTML, /data-pie-jump="0"><span>Cat 0<\/span><strong>\$10\.00 over[\s\S]*data-pie-jump="8"><span>Cat 10<\/span><strong>\$5\.00 over[\s\S]*class="is-risk" data-pie-jump="1"><span>Cat 1<\/span><strong>\$20\.00 left/,
+    'the overview lists over-budget categories first, then those near their limit');
 });
 
 test('spending cards retain category drill-down hooks and readable spent context', () => {

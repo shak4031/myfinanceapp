@@ -138,7 +138,8 @@
       const style = `--lx:${n(lift[0])}px;--ly:${n(lift[1])}px;--delay:${index * 45}ms`;
       const percent = Math.round(share * 100);
       const labelAt = whole ? [cx, cy] : [cx + rx * 0.62 * Math.cos(mid), cy + ry * 0.62 * Math.sin(mid)];
-      return { item, index, mid, style, share, percent, top, walls, cuts: whole ? [] : [cut(a0), cut(a1)], labelAt };
+      const flagAt = whole ? [cx, cy - ry * 0.55] : [cx + rx * 0.86 * Math.cos(mid), cy + ry * 0.86 * Math.sin(mid)];
+      return { item, index, mid, style, share, percent, top, walls, cuts: whole ? [] : [cut(a0), cut(a1)], labelAt, flagAt };
     });
     const sides = [...slices].sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid)).map(slice => `<g class="pie3d-side" data-pie-index="${slice.index}" style="${slice.style}" aria-hidden="true">
       ${slice.cuts.map(d => `<path class="pie3d-cut" d="${d}" fill="${shade(slice.item.color, -0.42)}"/>`).join('')}
@@ -148,6 +149,9 @@
       <path d="${slice.top}" fill="url(#${id}-gloss)" pointer-events="none"/>
       ${slice.share >= 0.06 ? `<text class="pie3d-pct" x="${n(slice.labelAt[0])}" y="${n(slice.labelAt[1] + 4)}" text-anchor="middle" pointer-events="none">${slice.percent}%</text>` : ''}
       <title>${esc(`${slice.item.label}: ${compact(slice.item.value)} (${slice.percent}%)`)}</title></g>`).join('');
+    // Status badges (e.g. over budget) sit above every face so a neighbour never covers them; hidden until flagged.
+    const flags = slices.map(slice => `<g class="pie3d-flag" data-pie-index="${slice.index}" style="${slice.style}" aria-hidden="true" pointer-events="none">
+      <g transform="translate(${n(slice.flagAt[0])} ${n(slice.flagAt[1])})"><circle class="pie3d-flag-ring" r="9"/><circle r="8"/><text y="4" text-anchor="middle">!</text></g></g>`).join('');
     return `<svg class="pie3d" viewBox="0 0 ${width} ${height}" role="group" aria-label="${esc(label)}">
       <defs>
         <radialGradient id="${id}-gloss" cx="38%" cy="22%" r="85%"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#0f172a" stop-opacity=".12"/></radialGradient>
@@ -155,7 +159,7 @@
         <radialGradient id="${id}-shadow"><stop offset="0" stop-color="#0f172a" stop-opacity=".28"/><stop offset="1" stop-color="#0f172a" stop-opacity="0"/></radialGradient>
       </defs>
       <ellipse cx="${cx}" cy="${n(cy + depth + 8)}" rx="${n(rx * 1.04)}" ry="${n(ry * 0.9)}" fill="url(#${id}-shadow)"/>
-      <g class="pie3d-sides">${sides}</g><g class="pie3d-tops">${tops}</g></svg>`;
+      <g class="pie3d-sides">${sides}</g><g class="pie3d-tops">${tops}</g><g class="pie3d-flags">${flags}</g></svg>`;
   }
   function market({ series, bands = [], xMax, xTicks = [], pointLabel = String, width = 1000, height = 320, label = 'Financial chart', boundary = null }) {
     const id = `market-${++marketId}`;
