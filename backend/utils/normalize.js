@@ -104,7 +104,8 @@ export function stripBankPrefix(description) {
 
   // Zelle
   if (/\bZELLE\b/i.test(s)) {
-    const lastZelle = s.lastIndexOf(' ZELLE ');
+    // Banks mix case ("TD ZELLE SENT 6317... Zelle NAME"); the last marker precedes the payee.
+    const lastZelle = s.toUpperCase().lastIndexOf(' ZELLE ');
     if (lastZelle !== -1) {
       return s.slice(lastZelle + ' ZELLE '.length).trim();
     }

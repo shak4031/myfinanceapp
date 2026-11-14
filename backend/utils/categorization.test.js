@@ -21,6 +21,11 @@ test('merchant matching is literal, bank-prefix normalized, and exact', () => {
   assert.equal(classify({ description: 'A+B Market' }, rules, names).category, 'Groceries');
   assert.equal(classify({ description: 'AAAB Market' }, rules, names).category, 'Other');
   assert.equal(classify({ description: 'A+B Market Annex' }, rules, names).category, 'Other');
+  assert.equal(canonicalMerchant('TD ZELLE SENT 631700P0C05L Zelle CRISTIANE DE LIMA S'), 'CRISTIANE DE LIMA S');
+  const learned = compileRules([merchant(2, 'SENT 630300P01LSZ ZELLE CRISTIANE DE LIMA S', 'Groceries')]);
+  assert.equal(classify({ description: 'TD ZELLE SENT 631700P0C05L Zelle CRISTIANE DE LIMA S' }, learned, names).category, 'Groceries',
+    'a rule learned before the fix still matches new Zelle payments with a different reference');
+  assert.equal(classify({ description: 'TD ZELLE SENT 631700P0C05L Zelle SAM PATEL' }, learned, names).category, 'Other');
 });
 
 test('deterministic priority, specificity, id ordering and enabled rules', () => {
