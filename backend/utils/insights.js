@@ -39,9 +39,10 @@ const listNames = items => {
 };
 
 // Dated windows include overdue commitments. Same-day income lands before same-day bills.
+// Bills matched to a pending bank debit are already in the balance, so they are not subtracted again.
 export function projectRunway(balance, upcoming, today) {
   const todayDay = today.getDate();
-  const ahead = upcoming.filter(item => item.status !== 'processed' && (item.date || item.dayOfMonth >= todayDay))
+  const ahead = upcoming.filter(item => item.status !== 'processed' && item.status !== 'pending' && (item.date || item.dayOfMonth >= todayDay))
     .sort((a, b) => relativeDay(a, today) - relativeDay(b, today) || Number(b.isIncome) - Number(a.isIncome));
   if (balance == null || !Number.isFinite(Number(balance))) return { ahead, low: null, shortfall: null, end: null };
   let running = Number(balance), low = { amount: running, day: todayDay, item: null }, shortfall = null;
@@ -65,7 +66,7 @@ export function safeToSpend(balance, runway, today) {
   };
 }
 
-export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true, incomeStreams = [], lastImport = null, accounts = null } = {}) {
+export function buildInsights({ today = new Date(), balance = null, upcoming = [], plan = null, analytics = null, pro = false, hasData = true, incomeStreams = [], lastImport = null, accounts = null, balanceAccounts = [] } = {}) {
   const insights = [];
   const add = (insight, weight = 0) => insights.push({ ...insight, weight });
   const todayDay = today.getDate();
@@ -270,6 +271,11 @@ export function buildInsights({ today = new Date(), balance = null, upcoming = [
       lowPoint: runway.low && outflows.length ? { amount: runway.low.amount, day: runway.low.day, ...(runway.low.item?.date ? { date: runway.low.item.date } : {}) } : null,
       horizonDays: 30,
       billsLeft: { count: bills.length, total: cents(bills.reduce((sum, item) => sum + Number(item.amount || 0), 0)) },
+      pendingAtBank: (() => {
+        const held = upcoming.filter(item => item.status === 'pending');
+        return held.length ? { count: held.length, total: sumAmounts(held) } : null;
+      })(),
+      balanceAccounts: Array.isArray(balanceAccounts) && balanceAccounts.length > 1 ? balanceAccounts : [],
       safeToSpend: safe,
       lastImport: importAge == null ? null : { daysAgo: importAge, latestDate: lastImport.latestDate || null },
       savedThisMonth: accounts?.savedThisMonth?.amount ?? null,

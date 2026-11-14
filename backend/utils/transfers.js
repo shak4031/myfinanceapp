@@ -252,6 +252,12 @@ export async function reconcileTransfers(client, userId) {
 // Cash on hand: newest balance per checking account (plus rows not yet assigned to an account).
 // Savings, cards and loans are shown on the Accounts page rather than mixed into spendable cash.
 export function cashBalance(rows, accountsById = new Map(), todayIso = new Date().toISOString().slice(0, 10)) {
+  const entries = cashBalanceByAccount(rows, accountsById, todayIso);
+  return entries.length ? cents(entries.reduce((sum, entry) => sum + entry.balance, 0)) : null;
+}
+
+// The newest balance of each checking account that makes up spendable cash.
+export function cashBalanceByAccount(rows, accountsById = new Map(), todayIso = new Date().toISOString().slice(0, 10)) {
   const newest = new Map();
   for (const row of rows) {
     const iso = parseTxDate(row.date)?.iso;
@@ -271,11 +277,11 @@ export function cashBalance(rows, accountsById = new Map(), todayIso = new Date(
       newest.set(`a${account.id}`, { iso: statement.closingDate, balance: Number(statement.balance) });
     }
   }
-  if (!newest.size) return null;
+  if (!newest.size) return [];
   // Unassigned legacy rows only stand in for cash when no checking account has a balance yet.
   const assigned = [...newest].filter(([key]) => key !== 'unassigned');
   const used = assigned.length ? assigned : [...newest];
-  return cents(used.reduce((sum, [, entry]) => sum + entry.balance, 0));
+  return used.map(([key, entry]) => ({ accountId: key === 'unassigned' ? null : Number(key.slice(1)), asOf: entry.iso, balance: entry.balance }));
 }
 
 // Newest balance for every account, for the Accounts page.

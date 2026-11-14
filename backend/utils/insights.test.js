@@ -13,6 +13,19 @@ test('projectRunway walks the month with income landing before same-day bills', 
   assert.equal(runway.ahead.length, 2);
 });
 
+test('bills already pending at the bank are in the balance and are not subtracted again', () => {
+  const upcoming = [bill('PSEG', 450.11, 16, { date: '2026-10-16', status: 'pending', expectedAmount: 454.28 }), bill('Phone', 100, 20, { date: '2026-10-20' })];
+  const result = buildInsights({ today, balance: 1000, upcoming,
+    balanceAccounts: [{ name: 'Checking', last4: '5261', balance: 600 }, { name: 'Joint', last4: '5237', balance: 400 }] });
+  assert.equal(result.pulse.safeToSpend.amount, 900);
+  assert.deepEqual(result.pulse.billsLeft, { count: 1, total: 100 });
+  assert.deepEqual(result.pulse.pendingAtBank, { count: 1, total: 450.11 });
+  assert.equal(result.pulse.lowPoint.amount, 900);
+  assert.equal(result.pulse.balanceAccounts.length, 2);
+  assert.deepEqual(buildInsights({ today, balance: 600, balanceAccounts: [{ name: 'Checking', balance: 600 }] }).pulse.balanceAccounts, [],
+    'a single account needs no breakdown');
+});
+
 test('dated runway agrees with the rolling dashboard across month boundaries and includes overdue bills', () => {
   const now = new Date(2026, 9, 30);
   const upcoming = [

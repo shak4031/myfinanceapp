@@ -170,7 +170,9 @@ test('the 10 percent threshold is explicit, excludes pending transactions, and k
   const run = amount => reconcilePaymentOccurrences([original, tx(2, '2026-11-01', { amount, is_fixed: false }),
     tx(3, '2026-11-02', { amount: 50, is_pending: true })], [], new Date(2026, 10, 2), new Date(2026, 11, 2), estimate);
   const short = run(629.99).items.find(item => item.dueDate === '2026-11-05' && item.status === 'projected');
-  assert.equal(short.amount, 70.01);
+  assert.equal(short.remainingAmount, 70.01, 'pending debits do not count toward the paid threshold');
+  assert.equal(short.pendingTransaction.amount, 50);
+  assert.equal(short.amount, 20.01, 'the pending debit already in the balance is not projected again');
   const result = run(630);
   assert.equal(result.items.some(item => item.dueDate === '2026-11-05' && item.status === 'projected'), false);
   assert.equal(result.items.find(item => item.id === 2).approximatelyComplete, true);
@@ -421,12 +423,14 @@ test('OLLO mobile-pay history with two September payments settles the shortened 
         category: 'Interest Charges', is_fixed: false })
     ];
     const paid = tx(5, '2026-11-05', { ...metadata,
-      ...(crossSource ? { plaid_account_id: 'td-checking-5261' } : source),
+      ...(crossSource ? { plaid_account_id: 'td-checking-5261', account_in_balance: true } : source),
       description: 'OLLO CC', amount: 150 });
     const initial = build(history, [], new Date(2026, 10, 4));
     const pending = build([...history, { ...paid, is_pending: true }], initial.occurrences, new Date(2026, 10, 6));
-    assert.equal(pending.items.find(item => item.dueDate === '2026-11-06').status, 'projected');
-    assert.equal(pending.items.find(item => item.dueDate === '2026-11-06').amount, 155);
+    const due = pending.items.find(item => item.dueDate === '2026-11-06');
+    assert.equal(due.status, 'pending', 'unpaid, but already reflected in the bank balance');
+    assert.equal(due.expectedAmount, 155);
+    assert.equal(due.pendingTransaction.id, paid.id);
     assert.equal(pending.occurrences.some(row => row.matched_transaction_id === paid.id), false);
     const result = build([...history, { ...paid, is_pending: false }], pending.occurrences, new Date(2026, 10, 6));
     assert.equal(result.items.some(item => item.status === 'projected' && item.date.startsWith('2026-11')), false);
@@ -465,4 +469,35 @@ test('a CSV source identity shared by two different Plaid accounts is ambiguous'
   const duplicateMask = { ...paid, id: 3, plaid_account_id: 'second' };
   const result = build([original, paid, duplicateMask], [], new Date(2026, 10, 6));
   assert.ok(result.items.some(item => item.status === 'projected' && item.date.startsWith('2026-11')));
+});
+const pendingBill = (extra = {}) => ({ id: 90, date: '2026-11-13', description: 'PUBLIC SERVICE', category: 'Other', amount: 450.11,
+  direction: 'DEBIT', is_fixed: false, is_pending: true, plaid_account_id: 'td-checking', account_in_balance: true, ...extra });
+
+test('a pending bank debit for an upcoming bill is shown on the bill without being subtracted twice', () => {
+  const pseg = tx(1, '2026-10-16', { description: 'PSEG ELECTRIC PAYMENT', amount: 454.28 });
+  const today = new Date(2026, 10, 14);
+  const run = rows => build(rows, [], today).items.find(item => item.date === '2026-11-16');
+  const plain = run([pseg]);
+  assert.equal(plain.status, 'projected');
+  assert.equal(plain.pendingTransaction, undefined);
+
+  const held = run([pseg, pendingBill()]);
+  assert.equal(held.status, 'pending', 'the bill is not marked paid, but is flagged as pending at the bank');
+  assert.equal(held.amount, 450.11);
+  assert.equal(held.expectedAmount, 454.28);
+  assert.deepEqual(held.pendingTransaction, { id: 90, date: '2026-11-13', amount: 450.11, description: 'PUBLIC SERVICE' });
+
+  assert.equal(run([pseg, pendingBill({ account_in_balance: false })]).status, 'projected', 'pending on an account outside the balance');
+  assert.equal(run([pseg, pendingBill({ description: 'GROCERY OUTLET' })]).status, 'projected', 'different kind of bill');
+  assert.equal(run([pseg, pendingBill({ amount: 300 })]).status, 'projected', 'amount too different without a merchant match');
+  assert.equal(run([pseg, pendingBill({ date: '2026-11-01' })]).status, 'projected', 'outside the matching window');
+});
+
+test('a pending payment from the same biller only reduces what is left on that bill', () => {
+  const bill = tx(1, '2026-10-16', { description: 'PSEG ELECTRIC PAYMENT', amount: 400 });
+  const item = build([bill, pendingBill({ description: 'PSEG ELECTRIC PAYMENT', amount: 150 })], [], new Date(2026, 10, 14))
+    .items.find(row => row.date === '2026-11-16');
+  assert.equal(item.status, 'projected');
+  assert.equal(item.amount, 250);
+  assert.equal(item.pendingTransaction.amount, 150);
 });

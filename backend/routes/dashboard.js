@@ -11,7 +11,7 @@ import { buildPlanPayments, computePlan, loadPlanInputs, typicalSurplus } from '
 import { getEntitlement } from '../utils/license.js';
 import { buildAnalytics } from '../utils/analytics.js';
 import { buildInsights } from '../utils/insights.js';
-import { cashBalance, savedAmount } from '../utils/transfers.js';
+import { cashBalance, cashBalanceByAccount, savedAmount } from '../utils/transfers.js';
 import { buildSpendingHistory } from '../utils/spendingHistory.js';
 import { recordAudit } from '../utils/audit.js';
 import { bucketOf, buildSpendingBuckets, debtMatchers } from '../utils/spendingBuckets.js';
@@ -310,22 +310,36 @@ async function loadCash(userId) {
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const rows = await db.all('SELECT id, date, balance, account_id FROM transactions WHERE user_id = $1 AND balance IS NOT NULL', [userId]);
   let accounts = [];
-  try { accounts = await db.all('SELECT id, name, kind, last4, status, statement FROM accounts WHERE user_id = $1', [userId]); }
+  try { accounts = await db.all('SELECT id, name, kind, last4, institution, status, statement FROM accounts WHERE user_id = $1', [userId]); }
   catch (error) { log('DASHBOARD', `Accounts unavailable: ${error.message}`, 'warn'); }
   const byId = new Map(accounts.map(account => [account.id, account]));
+  const statementEntries = cashBalanceByAccount(rows, byId, todayIso);
   const statementBalance = cashBalance(rows, byId, todayIso);
-  const plaid = await db.get(`SELECT SUM(COALESCE(available_balance,current_balance)) AS balance,
-      MAX(balance_checked_at) AS updated_at, COUNT(*) AS account_count
-    FROM plaid_accounts WHERE user_id=$1 AND use_for_cashflow=TRUE AND type='depository'
-      AND iso_currency_code='USD' AND COALESCE(available_balance,current_balance) IS NOT NULL`,
-  [userId]);
-  const hasPlaidBalance = Number(plaid.account_count) > 0 && plaid.balance !== null;
-  const balanceCheckedAt = hasPlaidBalance ? plaid.updated_at : null;
+  const plaidRows = await db.all(`SELECT pa.id, pa.name, pa.official_name, pa.mask, pa.subtype, pc.institution_name,
+      COALESCE(pa.available_balance,pa.current_balance) AS balance, pa.balance_checked_at
+    FROM plaid_accounts pa LEFT JOIN plaid_connections pc ON pc.id=pa.connection_id AND pc.user_id=pa.user_id
+    WHERE pa.user_id=$1 AND pa.use_for_cashflow=TRUE AND pa.type='depository'
+      AND pa.iso_currency_code='USD' AND COALESCE(pa.available_balance,pa.current_balance) IS NOT NULL
+    ORDER BY pa.id`, [userId]);
+  const hasPlaidBalance = plaidRows.length > 0;
+  const plaidTotal = Math.round(plaidRows.reduce((sum, row) => sum + Number(row.balance), 0) * 100) / 100;
+  const plaidCheckedAt = plaidRows.map(row => row.balance_checked_at).filter(Boolean)
+    .map(value => new Date(value)).sort((a, b) => b - a)[0] || null;
+  const balanceCheckedAt = hasPlaidBalance && plaidCheckedAt ? plaidCheckedAt.toISOString() : null;
+  const balanceAccounts = hasPlaidBalance
+    ? plaidRows.map(row => ({ name: row.name || row.official_name || 'Account', last4: row.mask || null,
+      institution: row.institution_name || null, balance: Number(row.balance), source: 'plaid' }))
+    : statementEntries.map(entry => {
+      const account = entry.accountId != null ? byId.get(entry.accountId) : null;
+      return { name: account?.name || 'Checking', last4: account?.last4 || null, institution: account?.institution || null,
+        balance: entry.balance, asOf: entry.asOf, source: 'statement' };
+    });
   return {
-    balance: hasPlaidBalance ? Number(plaid.balance) : statementBalance,
+    balance: hasPlaidBalance ? plaidTotal : statementBalance,
     balanceSource: hasPlaidBalance ? 'plaid' : Number.isFinite(statementBalance) ? 'statement' : null,
     balanceCheckedAt,
     balanceStale: balanceCheckedAt ? Date.now() - new Date(balanceCheckedAt).getTime() > 36 * 60 * 60 * 1000 : false,
+    balanceAccounts,
     accounts,
     byId
   };
@@ -398,7 +412,7 @@ router.get('/insights', async (req, res) => {
     // Rows imported before created_at existed have no import time; the newest transaction date is the best proxy.
     const importedAt = count.lastImportAt || (count.latestDate ? `${count.latestDate}T12:00:00.000Z` : null);
     const lastImport = importedAt ? { at: importedAt, latestDate: count.latestDate } : null;
-    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: count.total > 0, incomeStreams: streams, lastImport, accounts }));
+    res.json(buildInsights({ today, balance, upcoming: items, plan, analytics, pro, hasData: count.total > 0, incomeStreams: streams, lastImport, accounts, balanceAccounts: cash.balanceAccounts || [] }));
   } catch (error) {
     log('DASHBOARD', `Error building insights: ${error.message}`);
     res.status(500).json({ error: error.message });

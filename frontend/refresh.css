@@ -515,6 +515,12 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-cal-summary .is-paid, .pay-cal-legend .is-paid, .pay-card.is-paid { --tone: #10b981; }
 .pay-cal-summary .is-upcoming, .pay-cal-legend .is-upcoming, .pay-card.is-upcoming { --tone: #2563eb; }
 .pay-cal-legend .is-overdue, .pay-card.is-overdue { --tone: #d97706; }
+/* Bills matched to a pending bank debit: unpaid but already in the bank balance. */
+.pay-cal-legend .is-pending, .pay-card.is-pending, .pay-row.is-pending { --tone: #7c3aed; }
+.pay-card.is-pending { background: #faf7ff; border-style: dashed; border-left-style: solid; }
+.pay-row.is-pending { background: #fbf9ff; }
+.pay-pending-note { display: block; min-width: 0; margin-top: 2px; color: #5b21b6; font-size: 11px; line-height: 1.4; white-space: normal; }
+.pay-card .pay-pending-note { order: 4; flex: 1 0 100%; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 9.5px; }
 .pay-cal-summary .is-deficit, .pay-cal-legend .is-deficit, .pay-card.is-deficit { --tone: #e11d48; }
 .pay-cal-summary .is-balance { --tone: #0f766e; }
 /* Month calendar sized to fit one screen: a single weekday header, compact day cells and dense bill cards. */
@@ -679,7 +685,7 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
   .pay-day-items { gap: 3px; }
   .pay-card { padding: 3px 6px 4px 7px; }
   .pay-card-amount { font-size: 12px; }
-  .pay-cal .pay-card-mode { display: none; }
+  .pay-cal :is(.pay-card-mode, .pay-plan-chip) { display: none; }
   .pay-card.mode-auto .pay-card-cat::before, .pay-card.mode-manual .pay-card-cat::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; vertical-align: 1px; border-radius: 50%; background: #14b8a6; }
   .pay-card.mode-manual .pay-card-cat::before { background: #6d28d9; }
 }
@@ -694,7 +700,7 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
   .pay-card { padding: 2px 2px; border-width: 0; border-radius: 5px; background: color-mix(in srgb, var(--tone) 14%, #fff); box-shadow: none; text-align: center; }
   .pay-card.is-paid { background: #eef1f4; }
   .pay-card.mode-manual:not(.is-paid) { box-shadow: inset 0 0 0 1.5px #6d28d9; }
-  .pay-cal :is(.pay-card-cat, .pay-card-bal, .pay-card-mode, .pay-card-stop, .pay-amt-full) { display: none; }
+  .pay-cal :is(.pay-card-cat, .pay-card-bal, .pay-card-mode, .pay-plan-chip, .pay-card-stop, .pay-amt-full) { display: none; }
   .pay-amt-short { display: inline; }
   .pay-card-amount { color: color-mix(in srgb, var(--tone) 80%, #0f172a); font-size: 10px; letter-spacing: -.3px; }
   .pay-row { grid-template-columns: 38px minmax(0,1fr) auto; gap: 4px 10px; padding: 10px 10px 10px 9px; }
@@ -719,6 +725,15 @@ body .filter-panel .month-chip.is-empty, body .filter-panel .month-chip.is-empty
 .pay-cal-legend .is-mode-auto { --tone: #14b8a6; }
 .pay-cal-legend .is-mode-manual { --tone: #6d28d9; }
 .pay-cal-legend .is-mode-auto::before, .pay-cal-legend .is-mode-manual::before { border-radius: 50%; }
+/* Goal and debt-payoff plan entries: never automatic, so they get their own tint, corner flag and badge on top of the status tone. */
+.pay-card.plan-goal, .pay-row.plan-goal, .pay-plan-chip.is-goal, .pay-cal-legend .is-plan-goal { --plan: #db2777; }
+.pay-card.plan-debt, .pay-row.plan-debt, .pay-plan-chip.is-debt, .pay-cal-legend .is-plan-debt { --plan: #c2410c; }
+.pay-card:is(.plan-goal, .plan-debt):not(.is-paid) { border-color: color-mix(in srgb, var(--plan) 45%, var(--border)); border-left-color: var(--tone); background-image: linear-gradient(135deg, transparent calc(100% - 11px), var(--plan) 0), linear-gradient(color-mix(in srgb, var(--plan) 7%, transparent), color-mix(in srgb, var(--plan) 7%, transparent)); }
+.pay-row:is(.plan-goal, .plan-debt):not(.is-paid) { background: linear-gradient(90deg, color-mix(in srgb, var(--plan) 8%, #fff), #fff 60%); box-shadow: inset -3px 0 0 var(--plan); }
+.pay-plan-chip { order: 2; display: inline-block; max-width: 100%; overflow: hidden; padding: 0 6px; background: var(--plan); color: #fff; border-radius: 4px; font-size: 8.5px; font-weight: 800; letter-spacing: .3px; line-height: 15px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.pay-row-tags .pay-plan-chip { font-size: 9.5px; line-height: 18px; }
+:is(.pay-card, .pay-row).is-paid .pay-plan-chip { background: transparent; color: inherit; box-shadow: inset 0 0 0 1px #e2e8f0; }
+.pay-cal-legend :is(.is-plan-goal, .is-plan-debt)::before { background: var(--plan); clip-path: polygon(100% 0, 100% 100%, 0 100%); border-radius: 0; }
 .paymode-select { min-width: 104px; font-weight: 600; }
 .paymode-select.is-auto { color: #0f766e; background-color: #f0fdfa; border-color: #99f6e4; }
 .paymode-select.is-manual { color: #6d28d9; background-color: #f5f3ff; border-color: #ddd6fe; }

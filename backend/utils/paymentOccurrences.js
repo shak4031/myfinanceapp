@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { billTypesCompatible, createBillMatcher, isFixedPayment, sameBill } from './fixedPayments.js';
+import { billTypesCompatible, createBillMatcher, getFixedBillCategory, isFixedPayment, sameBill } from './fixedPayments.js';
 import { parseTxDate, getCanonicalMerchant } from './normalize.js';
 import { currentReadOnly, currentUserId } from './tenant.js';
 import { sameSourceAccount, sourceAccountsCompatible, TRANSACTION_ACCOUNT_FIELDS, TRANSACTION_ACCOUNT_JOINS } from './transactionAccount.js';
@@ -272,14 +272,78 @@ export function reconcilePaymentOccurrences(transactions, stored, today, through
       category: tx.category || 'Other', amount: tx.amount, isFixed: true, isIncome: false, status: 'processed', payMode: tx.pay_mode || null,
       ...(isFixedPayment(tx) ? { estimateTransactionId: tx.id } : {}) });
   }
-  return { occurrences: retained, items: [...items, ...estimatedItems].sort((a, b) => a.date.localeCompare(b.date)) };
+  const finalItems = [...items, ...estimatedItems];
+  matchPendingBankTransactions(finalItems, transactions, retained, groups, {
+    todayKey,
+    identityMatch: (group, tx) => groupMatches(group, tx) || group.identities.some(template => matchesVariant(template, tx))
+  });
+  return { occurrences: retained, items: finalItems.sort((a, b) => a.date.localeCompare(b.date)) };
+}
+
+const PENDING_MATCH_DAYS = 10;
+const PENDING_COVERS_RATIO = 0.9;
+const dayNumber = key => Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10))) / 86400000;
+const billCategoryOf = tx => {
+  const detected = getFixedBillCategory(tx.display_name || '') || getFixedBillCategory(tx.description || '');
+  const own = String(tx.category || '').trim();
+  return (detected || (own && !/^(other|uncategorized|transfer)$/i.test(own) ? own : '')).toLowerCase();
+};
+
+// A pending bank debit is already in the bank's available balance but is not a
+// settled payment. Link it to the unpaid bill it most likely represents so the
+// projection does not subtract the same money twice; the bill stays unpaid
+// until the posted transaction arrives.
+function matchPendingBankTransactions(items, transactions, occurrences, groups, { todayKey, identityMatch }) {
+  // Only debits on an account counted in the projected cash balance can already be reflected in it.
+  const pending = transactions.filter(tx => tx.is_pending && String(tx.direction).toUpperCase() === 'DEBIT'
+    && (tx.plaid_account_id == null || tx.account_in_balance === true))
+    .map(tx => ({ ...tx, date: parseTxDate(tx.date)?.iso, amount: Number(tx.amount) }))
+    .filter(tx => tx.date && tx.date <= todayKey && Number.isFinite(tx.amount) && tx.amount > 0);
+  if (!pending.length) return;
+  const rowByKey = new Map(occurrences.map(row => [row.payment_key, row]));
+  const candidates = [];
+  for (const item of items) {
+    if (item.status !== 'projected' || !item.paymentKey || !(Number(item.amount) > 0)) continue;
+    const row = rowByKey.get(item.paymentKey);
+    if (!row) continue;
+    const group = groups.find(entry => entry.occurrences.includes(row));
+    const expected = Number(item.amount);
+    const category = billCategoryOf(row.template);
+    for (const tx of pending) {
+      const days = Math.abs(dayNumber(tx.date) - dayNumber(item.date));
+      if (days > PENDING_MATCH_DAYS) continue;
+      const identity = !!group && identityMatch(group, tx);
+      const ratio = tx.amount / expected;
+      // Without a merchant match, require the same bill type and a near-identical amount.
+      if (!identity && !(category && billCategoryOf(tx) === category && ratio >= PENDING_COVERS_RATIO && ratio <= 1 / PENDING_COVERS_RATIO)) continue;
+      candidates.push({ item, tx, score: [identity ? 0 : 1, Math.abs(1 - ratio), days] });
+    }
+  }
+  candidates.sort((a, b) => a.score[0] - b.score[0] || a.score[1] - b.score[1] || a.score[2] - b.score[2]);
+  const usedItems = new Set(), usedTx = new Set();
+  for (const { item, tx } of candidates) {
+    if (usedItems.has(item) || usedTx.has(String(tx.id))) continue;
+    usedItems.add(item);
+    usedTx.add(String(tx.id));
+    const expected = Number(item.amount);
+    item.pendingTransaction = { id: tx.id, date: tx.date, amount: tx.amount,
+      description: tx.display_name || tx.description };
+    if (tx.amount >= expected * PENDING_COVERS_RATIO) {
+      item.status = 'pending';
+      item.expectedAmount = expected;
+      item.amount = tx.amount;
+    } else {
+      item.amount = Math.round((expected - tx.amount) * 100) / 100;
+    }
+  }
 }
 
 export async function loadFixedPaymentOccurrences(client, today, through) {
   const userId = currentUserId();
   if (!currentReadOnly()) await client.query('SELECT pg_advisory_xact_lock($1,193647)', [userId]);
   const transactions = (await client.query(`SELECT t.id,t.date,t.description,t.display_name,t.category,t.amount,t.direction,
-    t.account_id,t.plaid_account_id,t.is_fixed,t.pay_mode,t.is_pending,${TRANSACTION_ACCOUNT_FIELDS}
+    t.account_id,t.plaid_account_id,t.is_fixed,t.pay_mode,t.is_pending,
+    (pa.use_for_cashflow AND pa.type='depository') AS account_in_balance,${TRANSACTION_ACCOUNT_FIELDS}
     FROM transactions t ${TRANSACTION_ACCOUNT_JOINS}
     WHERE t.user_id=$1 AND t.date IS NOT NULL AND t.date::date <= $2::date`, [userId, iso(today)])).rows;
   const stored = (await client.query('SELECT * FROM fixed_payment_occurrences WHERE user_id=$1', [userId])).rows;

@@ -3903,6 +3903,38 @@ test('bill estimate editor saves the monthly amount and displays partial progres
   assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/estimate')).options.body).amount, '650');
   assert.equal(f.node('fixed-estimate-dialog').open, false);
 });
+test('dashboard marks goal and debt-payoff entries as manual plan items and skips bills pending at the bank', async () => {
+  const timeline = [
+    { date: '2026-11-04', dueDate: '2026-11-04', amount: 450.11, expectedAmount: 454.28, description: 'PSEG', status: 'pending',
+      isFixed: true, paymentKey: 'c'.repeat(64), pendingTransaction: { id: 9, date: '2026-11-02', amount: 450.11, description: 'PUBLIC SERVICE' } },
+    { key: 'goal:1', planKey: 'goal:1', planKind: 'goal', planned: true, flexible: true, goalId: 1, date: '2026-11-06', dayOfMonth: 6,
+      description: 'Vacation savings', category: 'Savings goal', amount: 100, status: 'projected' },
+    { key: 'debt-min:2', planKind: 'debt-minimum', planned: true, flexible: false, date: '2026-11-08', dayOfMonth: 8,
+      description: 'Visa minimum', category: 'Debt-free program', amount: 50, status: 'projected' },
+    { date: '2026-11-09', dueDate: '2026-11-09', amount: 20, description: 'Phone', status: 'projected', isFixed: true, paymentKey: 'd'.repeat(64) }];
+  const f = fixture(async url => response(200, url.endsWith('/summary') ? { balance: 1000, income: 0, expenses: 0, netCashflow: 0 }
+    : url.endsWith('/upcoming-payments') ? timeline : []));
+  const RealDate = Date;
+  f.context.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [2026, 10, 2, 12])); } };
+  f.context.escapeHtml = value => String(value);
+  f.context.usd = value => '$' + Number(value).toFixed(2);
+  f.context.transactionLink = (id, name) => name;
+  f.context.FinanceUI = { howCalc: () => '' };
+  f.node('upcoming-section').insertAdjacentHTML = () => {};
+  const html = source('index.html');
+  vm.runInContext(html.slice(html.indexOf('let dashboardRequest = 0;'), html.indexOf('async function toggleFixed')), f.context);
+  await f.context.loadDashboard();
+  const markup = f.node('dashboard-payments').innerHTML;
+  assert.match(markup, /<article class="pay-card is-upcoming is-flex plan-goal"/);
+  assert.match(markup, /<article class="pay-card is-upcoming plan-debt"/);
+  assert.match(markup, /<li class="pay-row is-upcoming plan-debt"/);
+  assert.match(markup, /class="pay-plan-chip is-goal"[^>]*>Goal &middot; move it yourself</);
+  assert.match(markup, /class="pay-plan-chip is-debt"[^>]*>Debt payoff &middot; pay it yourself</);
+  assert.match(markup, /<article class="pay-card is-upcoming" title="Phone/, 'regular bills are not marked as plan items');
+  assert.match(markup, /<li class="pay-row is-pending"/);
+  assert.match(markup, /plus \$450\.11 pending at bank \(already in balance\)/);
+  assert.match(markup, /Projected balance in 30 days<\/span><strong>\$830\.00/, 'the pending PSEG debit is not deducted again');
+});
 test('bill action menus close and return focus on Escape', async () => {
   const f = fixture(async url => response(200, url.endsWith('/summary')
     ? { balance: 1000, income: 0, expenses: 0, netCashflow: 0 } : []));
@@ -5896,7 +5928,7 @@ test('the categories strip totals the visible rows by spending bucket', () => {
   assert.match(refresh, /\$\('category-bucket-summary'\)\.textContent = ''/);
   const html2 = source('index.html');
   assert.match(html2, /id="category-overview-summary"[^]*?id="category-bucket-summary"[^]*?id="category-cards"/);
-  assert.match(html2, /id="bucket-section"[^]*?id="upcoming-section"/);
+  assert.match(html2, /id="upcoming-section"[^]*?id="cashflow-history"[^]*?id="bucket-section"[^]*?<\/section>\s*<\/section>\s*<!-- CATEGORY OVERVIEW -->/);
   assert.match(html2, /FinanceBuckets\?\.load\(\)/);
   assert.match(html2, /<script src="buckets\.js\?v=[^"]+"><\/script>/);
   assert.match(html2, /<link rel="stylesheet" href="buckets\.css\?v=[^"]+">/);

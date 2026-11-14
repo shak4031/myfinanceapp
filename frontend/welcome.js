@@ -69,7 +69,14 @@
     const today = new Date().getDate();
     const dated = iso => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const rows = [];
-    rows.push(['cash', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), pulse.balance == null ? 'Import a statement with balances' : 'Latest recorded', pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint']);
+    const held = pulse.pendingAtBank;
+    const accountLabel = account => `${account.name || 'Account'}${account.last4 ? ` ••${account.last4}` : ''}`;
+    const accountsList = Array.isArray(pulse.balanceAccounts) && pulse.balanceAccounts.length > 1
+      ? `<ul class="welcome-pulse-accounts" aria-label="Balance by account">${pulse.balanceAccounts.map(account => `<li${Number(account.balance) < 0 ? ' class="is-negative"' : ''}><span title="${esc([account.institution, accountLabel(account)].filter(Boolean).join(' · '))}">${esc(accountLabel(account))}</span><b>${esc(money(account.balance, 2))}</b></li>`).join('')}</ul>` : '';
+    const balanceNote = pulse.balance == null ? 'Import a statement with balances'
+      : `${accountsList ? `Combined · ${pulse.balanceAccounts.length} accounts` : 'Latest recorded'}${held ? ` · includes ${money(held.total, 2)} pending` : ''}`;
+    const balanceHow = held ? globalThis.FinanceUI?.howCalc?.(`Your bank's balance already includes ${held.count} pending bill payment${held.count === 1 ? '' : 's'} totaling ${money(held.total, 2)}. ${held.count === 1 ? 'That bill stays' : 'Those bills stay'} on your calendar as "Pending at bank" until the payment posts, but ${held.count === 1 ? 'it is' : 'they are'} not subtracted from your balance again.`, 'Pending bank payments') || '' : '';
+    rows.push(['cash', 'Balance', pulse.balance == null ? '—' : money(pulse.balance, 2), balanceNote, pulse.balance != null && pulse.balance < 0 ? 'bad' : 'mint', balanceHow, accountsList]);
     if (pulse.nextIncome) {
       const away = pulse.nextIncome.daysAway;
       rows.push(['calendar', 'Next payday', money(pulse.nextIncome.amount), away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days · ${pulse.nextIncome.date ? dated(pulse.nextIncome.date) : `the ${ordinal(pulse.nextIncome.day)}`}`, 'good']);
@@ -77,7 +84,7 @@
     const safe = pulse.safeToSpend;
     if (safe) {
       const until = safe.untilDate ? `before payday on ${dated(safe.untilDate)}` : safe.untilDay ? `before payday on the ${ordinal(safe.untilDay)}` : 'within the forecast window';
-      const how = globalThis.FinanceUI?.howCalc?.(`Your latest balance (${money(pulse.balance, 2)}) minus ${safe.count} bill${safe.count === 1 ? '' : 's'} and planned payment${safe.count === 1 ? '' : 's'} totaling ${money(safe.committed, 2)} due ${until}. Paychecks are not counted until they arrive.`, 'How safe to spend is calculated') || '';
+      const how = globalThis.FinanceUI?.howCalc?.(`Your latest balance (${money(pulse.balance, 2)}) minus ${safe.count} bill${safe.count === 1 ? '' : 's'} and planned payment${safe.count === 1 ? '' : 's'} totaling ${money(safe.committed, 2)} due ${until}. Paychecks are not counted until they arrive.${held ? ` Bills already pending at your bank (${money(held.total, 2)}) are in your balance and are not subtracted again.` : ''}`, 'How safe to spend is calculated') || '';
       rows.push(['shield', 'Safe to spend', money(safe.amount), safe.untilDate ? `Until payday · ${dated(safe.untilDate)}` : safe.untilDay ? `Until payday · the ${ordinal(safe.untilDay)}` : 'Next 30 days', safe.amount <= 0 ? 'bad' : safe.amount < 250 ? 'warn' : 'good', how]);
     }
     rows.push(['repeat', 'Bills in next 30 days', pulse.billsLeft.count ? money(pulse.billsLeft.total) : 'All paid', pulse.billsLeft.count ? `${pulse.billsLeft.count} payment${pulse.billsLeft.count === 1 ? '' : 's'}, including overdue` : 'Nothing else due', 'sky']);
@@ -89,7 +96,7 @@
     if (pulse.lastImport && pulse.lastImport.daysAgo >= 7) {
       rows.push(['upload', 'Last import', `${pulse.lastImport.daysAgo} days ago`, pulse.lastImport.latestDate ? `Newest transaction ${new Date(`${pulse.lastImport.latestDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Import to stay current', pulse.lastImport.daysAgo >= 14 ? 'warn' : 'sky']);
     }
-    return rows.map(([symbol, label, value, note, tone, how = '']) => `<div class="welcome-pulse-row is-${tone}"><dt><span class="welcome-pulse-icon" aria-hidden="true">${icon(symbol, 15)}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span></dd></div>`).join('');
+    return rows.map(([symbol, label, value, note, tone, how = '', extra = '']) => `<div class="welcome-pulse-row is-${tone}"><dt><span class="welcome-pulse-icon" aria-hidden="true">${icon(symbol, 15)}</span>${esc(label)}${how}</dt><dd><strong>${esc(value)}</strong><span>${esc(note)}</span>${extra}</dd></div>`).join('');
   }
 
   function actionLink(item, index) {
