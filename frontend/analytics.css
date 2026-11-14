@@ -196,23 +196,63 @@ strong.is-name { font-size: 17px !important; overflow: hidden; text-overflow: el
 .pro-budget-bar b { position: absolute; top: -3px; width: 2px; height: 14px; margin-left: -1px; border-radius: 2px; background: #0f172a; opacity: .55; }
 .pro-inline-error { margin: 12px 24px 0 !important; color: var(--bad); font-size: 13px; }
 
-/* Pie view */
-.pro-pie { display: grid; grid-template-columns: minmax(200px,280px) minmax(0,1fr); gap: 32px; align-items: center; padding: 8px 4px; }
-.pro-pie-chart { max-width: 280px; width: 100%; margin: 0 auto; }
+/* Pie view: tilted 3D pie with a linked detail panel and legend */
+.pro-pie { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 24px; align-items: center; padding: 8px 4px; }
+.pro-pie-stage { display: grid; grid-template-columns: minmax(280px, 1.5fr) minmax(210px, 1fr); gap: 18px; align-items: center; padding: 18px 18px 18px 8px; border-radius: 18px; background: radial-gradient(120% 90% at 30% 10%, #ffffff 0%, #f4f7fb 55%, #eaf0f6 100%); box-shadow: inset 0 0 0 1px #e6ebf2; }
+.pro-pie-chart { width: 100%; max-width: 460px; margin: 0 auto; }
+.pie3d { display: block; width: 100%; height: auto; overflow: visible; animation: pie3d-in .55s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pie3d-in { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } }
+.pie3d .pie3d-side, .pie3d .pie3d-top { transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .2s, filter .2s; }
+.pie3d .pie3d-top { cursor: pointer; outline: none; animation: pie3d-slice .5s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--delay); }
+@keyframes pie3d-slice { from { opacity: 0; } to { opacity: 1; } }
+.pie3d .pie3d-cut { opacity: 0; transition: opacity .2s; }
+.pie3d :is(.pie3d-side, .pie3d-top):is(.is-hot, .is-selected) { transform: translate(var(--lx), var(--ly)); }
+.pie3d .pie3d-side:is(.is-hot, .is-selected) .pie3d-cut { opacity: 1; }
+.pie3d .pie3d-top:is(.is-hot, .is-selected) .pie3d-face { filter: brightness(1.08) saturate(1.1); }
+.pie3d .pie3d-top.is-selected .pie3d-face { stroke: #fff; stroke-width: 2; }
+.pie3d .pie3d-top:focus-visible .pie3d-face { stroke: #0f172a; stroke-width: 2; }
+.pro-pie.has-selection .pie3d :is(.pie3d-side, .pie3d-top):not(.is-selected):not(.is-hot) { filter: saturate(.3) brightness(1.12); }
+.pie3d .pie3d-pct { fill: #fff; font-size: 11.5px; font-weight: 800; paint-order: stroke; stroke: #0f172a59; stroke-width: 2.5px; letter-spacing: -.2px; }
+.pie-detail-slot { min-width: 0; }
+.pie-detail { --pie-color: #64748b; position: relative; display: grid; gap: 6px; padding: 16px 16px 16px 18px; border-radius: 14px; background: #fff; border: 1px solid #e6ebf2; border-left: 4px solid var(--pie-color); box-shadow: 0 10px 24px -18px #0f172a80; animation: pie3d-in .3s ease both; }
+.pie-detail.is-overview { border-left-color: #226452; }
+.pie-detail h3 { margin: 0; padding-right: 20px; overflow-wrap: anywhere; color: var(--text-primary); font-size: 16px; }
+.pie-detail p { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.pie-detail p b { color: var(--text-primary); }
+.pie-detail-eyebrow { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 10.5px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; }
+.pie-detail-eyebrow i { width: 10px; height: 10px; border-radius: 3px; background: var(--pie-color); }
+.pie-detail-amount { color: var(--text-primary); font-size: 26px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.pie-detail-hint { font-style: italic; }
+.pie-detail-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
+.pie-detail-stats div { display: grid; gap: 1px; padding: 7px 9px; border-radius: 9px; background: color-mix(in srgb, var(--pie-color) 9%, #fff); }
+.pie-detail-stats span { color: var(--text-secondary); font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+.pie-detail-stats strong { color: var(--text-primary); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.pie-detail-stats .is-bad strong { color: var(--danger, #e11d48); }
+.pie-detail-stats .is-good strong { color: var(--success, #10b981); }
+.pie-detail .btn { justify-self: start; }
+.pie-detail-close { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--text-secondary); font-size: 18px; line-height: 1; cursor: pointer; }
+.pie-detail-close:hover { background: #f1f5f9; color: var(--text-primary); }
+.pie-detail-rest { list-style: none; display: grid; gap: 4px; max-height: 170px; margin: 4px 0 0; padding: 0; overflow: auto; }
+.pie-detail-rest button { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 6px 9px; border: 1px solid #edf1f6; border-radius: 8px; background: #fff; font: inherit; font-size: 12.5px; color: var(--text-primary); cursor: pointer; }
+.pie-detail-rest button:hover { border-color: var(--pie-color); }
+.pro-pie-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 6px; }
+.pro-pie-legend button { display: grid; grid-template-columns: 12px minmax(0,1fr) auto 44px; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 1px solid var(--divider); border-radius: 10px; background: #fff; font: inherit; font-size: 13px; color: var(--text-primary); text-align: left; cursor: pointer; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.pro-pie-legend button:is(:hover, .is-hot) { border-color: #cbd5e1; transform: translateX(3px); box-shadow: 0 4px 12px -8px #0f172a66; }
+.pro-pie-legend button[aria-pressed="true"] { border-color: #0f172a33; background: #f8fafc; box-shadow: inset 3px 0 0 #0f172a; }
+.pro-pie-legend i { width: 12px; height: 12px; border-radius: 4px; box-shadow: inset 0 -3px 0 #0f172a33; }
+.pro-pie-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pro-pie-legend strong { font-variant-numeric: tabular-nums; }
+.pro-pie-legend em { font-style: normal; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 1180px) { .pro-pie { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .pro-pie-stage { grid-template-columns: 1fr; padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .pie3d, .pie3d .pie3d-top, .pie-detail { animation: none; } .pie3d :is(.pie3d-side, .pie3d-top), .pro-pie-legend button { transition: none; } }
+/* Donut (used elsewhere) */
 .pro-donut { width: 100%; height: auto; display: block; }
 .pro-donut .track { fill: none; stroke: #eef2f7; }
 .pro-donut .slice { fill: none; transition: opacity .15s; }
 .pro-donut:hover .slice { opacity: .55; } .pro-donut .slice:hover { opacity: 1; }
 .pro-donut .donut-label { fill: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .pro-donut .donut-value { fill: var(--text-primary); font-size: 24px; font-weight: 750; }
-.pro-pie-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap: 8px; }
-.pro-pie-legend button { display: grid; grid-template-columns: 12px minmax(0,1fr) auto 44px; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 10px; background: #fff; font: inherit; font-size: 13px; color: var(--text-primary); text-align: left; cursor: pointer; }
-.pro-pie-legend button:not([disabled]):hover { border-color: #a78bfa; background: #fbfaff; }
-.pro-pie-legend button[disabled] { cursor: default; color: var(--text-secondary); }
-.pro-pie-legend i { width: 12px; height: 12px; border-radius: 4px; }
-.pro-pie-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pro-pie-legend strong { font-variant-numeric: tabular-nums; }
-.pro-pie-legend em { font-style: normal; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Categories page insights */
 .pro-insight-panel { margin-bottom: 18px; padding: 0; overflow: hidden; }

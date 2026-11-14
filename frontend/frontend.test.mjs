@@ -4621,6 +4621,14 @@ test('Pro chart helpers produce scalable SVG', () => {
   const donut = ProCharts.donut([{ label: 'A <b>', value: 60, color: '#000' }, { label: 'B', value: 40, color: '#fff' }], { centerValue: '$100' });
   assert.equal((donut.match(/class="slice"/g) || []).length, 2);
   assert.match(donut, /A &lt;b&gt;: \$60 \(60%\)/);
+  const pie = ProCharts.pie3d([{ label: 'Rent <b>', value: 75, color: '#10b981' }, { label: 'Fun', value: 20, color: '#38bdf8' }, { label: 'Tiny', value: 5, color: '#818cf8' }]);
+  assert.equal((pie.match(/class="pie3d-top"/g) || []).length, 3);
+  assert.equal((pie.match(/class="pie3d-side"/g) || []).length, 3);
+  assert.match(pie, /role="button" tabindex="0" aria-label="Rent &lt;b&gt;: \$75, 75% of spending"/);
+  assert.match(pie, />75%<\/text>/);
+  assert.doesNotMatch(pie, />5%<\/text>/, 'slivers are too small for an inline label');
+  assert.ok(pie.indexOf('pie3d-sides') < pie.indexOf('pie3d-tops'), 'walls sit beneath the top faces');
+  assert.match(ProCharts.pie3d([{ label: 'All', value: 10, color: '#000' }]), /A148,77 0 1 1/, 'a single category draws a full ellipse');
 });
 test('category analytics derive monthly series but never draw card trends below six months', () => {
   const { FinanceProCategories: C } = loadPro().context;

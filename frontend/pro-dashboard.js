@@ -37,18 +37,75 @@
     </div>`;
   }
 
+  let pieItems = [], pieTotal = 0, pieSelected = null, analyticsByName = new Map();
+
+  function pieDetail() {
+    const { money, esc } = globalThis.FinancePro.format;
+    const item = pieItems[pieSelected];
+    if (!item) {
+      const top = pieItems[0];
+      return `<div class="pie-detail is-overview"><span class="pie-detail-eyebrow">Spent this month</span><strong class="pie-detail-amount">${money(pieTotal, true)}</strong>
+        <p>${pieItems.reduce((sum, entry) => sum + (entry.rest ? entry.rest.length : 1), 0)} categories${top ? ` &middot; most on <b>${esc(top.label)}</b> (${Math.round(top.value / pieTotal * 100)}%)` : ''}</p>
+        <p class="pie-detail-hint">Select a slice or category to explore it.</p></div>`;
+    }
+    const share = Math.round(item.value / pieTotal * 100);
+    if (item.rest) {
+      return `<div class="pie-detail" style="--pie-color:${item.color}"><span class="pie-detail-eyebrow"><i></i>Smaller categories</span><strong class="pie-detail-amount">${money(item.value, true)}</strong>
+        <p>${share}% of spending across ${item.rest.length} categories</p>
+        <ul class="pie-detail-rest">${item.rest.map(c => `<li><button type="button" data-pie-category="${esc(c.name)}"><span>${esc(c.name)}</span><strong>${money(c.totalSpending, true)}</strong></button></li>`).join('')}</ul>
+        <button type="button" class="pie-detail-close" data-pie-clear aria-label="Back to overview">&times;</button></div>`;
+    }
+    const count = Number(item.count) || 0;
+    const stats = [`<div><span>Share</span><strong>${share}%</strong></div>`, `<div><span>Transactions</span><strong>${count}</strong></div>`];
+    if (count) stats.push(`<div><span>Average</span><strong>${money(item.value / count, true)}</strong></div>`);
+    const analytics = analyticsByName.get(item.label);
+    const budget = Number(analytics?.budget);
+    if (budget > 0) {
+      const left = budget - item.value;
+      stats.push(`<div class="${left < 0 ? 'is-bad' : ''}"><span>Budget</span><strong>${left < 0 ? `${money(-left, true)} over` : `${money(left, true)} left`}</strong></div>`);
+    }
+    if (Number.isFinite(Number(analytics?.deltaMtd)) && Number(analytics.deltaMtd) !== 0) {
+      const delta = Number(analytics.deltaMtd);
+      stats.push(`<div class="${delta > 0 ? 'is-bad' : 'is-good'}"><span>vs last month</span><strong>${delta > 0 ? '▲' : '▼'} ${money(Math.abs(delta), true)}</strong></div>`);
+    }
+    return `<div class="pie-detail" style="--pie-color:${item.color}"><span class="pie-detail-eyebrow"><i></i>#${pieSelected + 1} of ${pieItems.length}</span>
+      <h3>${esc(item.label)}</h3><strong class="pie-detail-amount">${money(item.value, true)}</strong>
+      <div class="pie-detail-stats">${stats.join('')}</div>
+      <button type="button" class="btn btn-primary btn-compact" data-pie-category="${esc(item.label)}">View transactions</button>
+      <button type="button" class="pie-detail-close" data-pie-clear aria-label="Back to overview">&times;</button></div>`;
+  }
+
+  function selectSlice(index) {
+    const root = document.querySelector('#mtd-spending-section .pro-pie');
+    if (!root) return;
+    pieSelected = index == null || index === pieSelected ? null : index;
+    root.classList.toggle('has-selection', pieSelected != null);
+    root.querySelectorAll('[data-pie-index]').forEach(node => node.classList.toggle('is-selected', Number(node.dataset.pieIndex) === pieSelected));
+    root.querySelectorAll('[data-pie-select]').forEach(node => node.setAttribute('aria-pressed', String(Number(node.dataset.pieSelect) === pieSelected)));
+    root.querySelector('.pie-detail-slot').innerHTML = pieDetail();
+  }
+
+  let hotIndex = null;
+  function hotSlice(index) {
+    if (index === hotIndex) return;
+    hotIndex = index;
+    document.querySelectorAll('#mtd-spending-section .pro-pie [data-pie-index], #mtd-spending-section .pro-pie [data-pie-select]').forEach(node =>
+      node.classList.toggle('is-hot', index != null && Number(node.dataset.pieIndex ?? node.dataset.pieSelect) === index));
+  }
+
   function pie(categories) {
-    const { PALETTE, donut } = globalThis.ProCharts;
+    const { PALETTE, pie3d } = globalThis.ProCharts;
     const { money, esc } = globalThis.FinancePro.format;
     const sorted = categories.filter(c => c.totalSpending > 0).sort((a, b) => b.totalSpending - a.totalSpending);
     const shown = sorted.length <= 9 ? 9 : 8;
-    const items = sorted.slice(0, shown).map((c, i) => ({ label: c.name, value: c.totalSpending, color: PALETTE[i] }));
+    pieItems = sorted.slice(0, shown).map((c, i) => ({ label: c.name, value: c.totalSpending, count: c.transactionCount, color: PALETTE[i] }));
     const rest = sorted.slice(shown);
-    if (rest.length) items.push({ label: `${rest.length} more`, value: rest.reduce((s, c) => s + c.totalSpending, 0), color: PALETTE[9], rest: true });
-    const total = items.reduce((s, i) => s + i.value, 0);
-    if (!total) return '<div class="pro-pie pro-added"><p class="muted">No spending yet this month.</p></div>';
-    const legend = items.map(item => `<li><button type="button" ${item.rest ? 'disabled' : `data-pie-category="${esc(item.label)}"`}><i style="background:${item.color}"></i><span>${esc(item.label)}</span><strong>${money(item.value, true)}</strong><em>${Math.round((item.value / total) * 100)}%</em></button></li>`).join('');
-    return `<div class="pro-pie pro-added"><div class="pro-pie-chart">${donut(items, { centerLabel: 'This month', centerValue: money(total, true) })}</div><ul class="pro-pie-legend">${legend}</ul></div>`;
+    if (rest.length) pieItems.push({ label: `${rest.length} more`, value: rest.reduce((s, c) => s + c.totalSpending, 0), color: PALETTE[9], rest });
+    pieTotal = pieItems.reduce((s, i) => s + i.value, 0);
+    pieSelected = null;
+    if (!pieTotal) return '<div class="pro-pie pro-added"><p class="muted">No spending yet this month.</p></div>';
+    const legend = pieItems.map((item, index) => `<li><button type="button" data-pie-select="${index}" aria-pressed="false"><i style="background:${item.color}"></i><span>${esc(item.label)}</span><strong>${money(item.value, true)}</strong><em>${Math.round((item.value / pieTotal) * 100)}%</em></button></li>`).join('');
+    return `<div class="pro-pie pro-added"><div class="pro-pie-stage"><div class="pro-pie-chart">${pie3d(pieItems, { label: 'Month-to-date spending by category. Select a slice for details.' })}</div><div class="pie-detail-slot" aria-live="polite">${pieDetail()}</div></div><ul class="pro-pie-legend">${legend}</ul></div>`;
   }
 
   async function enhance(detail) {
@@ -63,6 +120,7 @@
     const view = active ? pro.prefs.get('dash.view', 'cards') : 'cards';
     const head = section.querySelector('.section-head'), grid = section.querySelector('.mtd-grid');
     section.querySelectorAll('.pro-added').forEach(node => node.remove());
+    analyticsByName = new Map();
     grid.hidden = view === 'pie';
     head.insertAdjacentHTML('beforeend', `<div class="pro-toolbar pro-added">${pro.proSwitch('dash-insights', 'Analytics', insights)}${segmented(view, !active)}
       <button type="button" class="btn btn-secondary btn-compact" data-pro-budgets>${active ? '' : pro.ICONS.lock}Budgets</button></div>`);
@@ -73,6 +131,9 @@
       if (run !== token || !section.isConnected) return;
       head.insertAdjacentHTML('afterend', summary(analytics));
       const byName = new Map(analytics.categories.map(c => [c.name, c]));
+      analyticsByName = byName;
+      const slot = section.querySelector('.pie-detail-slot');
+      if (slot) slot.innerHTML = pieDetail();
       section.querySelectorAll('.mtd-category-card').forEach(card => {
         const category = byName.get(card.dataset.category);
         const visual = category && budgetVisual(category);
@@ -87,6 +148,20 @@
   }
 
   document.addEventListener('mtd:rendered', event => enhance(event.detail));
+  const pieTarget = target => target?.closest?.('#mtd-spending-section .pro-pie [data-pie-index], #mtd-spending-section .pro-pie [data-pie-select]');
+  const pieIndexOf = node => Number(node.dataset.pieIndex ?? node.dataset.pieSelect);
+  document.addEventListener('pointerover', event => { const node = pieTarget(event.target); hotSlice(node ? pieIndexOf(node) : null); });
+  document.addEventListener('focusin', event => { const node = pieTarget(event.target); hotSlice(node ? pieIndexOf(node) : null); });
+  document.addEventListener('keydown', event => {
+    const node = pieTarget(event.target);
+    if (node && node.matches('.pie3d-top') && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); selectSlice(pieIndexOf(node)); }
+    else if (event.key === 'Escape' && pieSelected != null && event.target?.closest?.('#mtd-spending-section .pro-pie')) selectSlice(null);
+  });
+  document.addEventListener('click', event => {
+    const node = pieTarget(event.target);
+    if (node) return selectSlice(pieIndexOf(node));
+    if (event.target?.closest?.('#mtd-spending-section .pro-pie [data-pie-clear]')) selectSlice(null);
+  });
   document.addEventListener('click', event => {
     const pro = globalThis.FinancePro;
     const target = event.target?.closest?.('[data-pro-switch="dash-insights"], [data-dash-view], [data-pro-budgets], [data-pie-category]');

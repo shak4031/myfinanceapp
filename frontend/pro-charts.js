@@ -102,6 +102,61 @@
   }
 
   let marketId = 0;
+
+  // Tilted 3D pie: front side walls are drawn in a layer beneath the top faces so slices never paint over each other.
+  // Interactive parts carry data-pie-index; lifting a slice is a CSS translate along --lx/--ly.
+  let pieId = 0;
+  function pie3d(items, { label = 'Spending by category', tilt = 0.52, depth = 26 } = {}) {
+    const id = `pie3d-${++pieId}`;
+    const width = 360, cx = 180, rx = 148, ry = rx * tilt, cy = ry + 18, height = Math.ceil(cy + ry + depth + 22);
+    const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
+    const shade = (hex, amount) => {
+      const value = parseInt(String(hex).replace('#', ''), 16);
+      if (!Number.isFinite(value)) return hex;
+      const mix = channel => Math.round(amount < 0 ? channel * (1 + amount) : channel + (255 - channel) * amount);
+      return `rgb(${mix(value >> 16 & 255)},${mix(value >> 8 & 255)},${mix(value & 255)})`;
+    };
+    const at = (angle, drop = 0) => `${n(cx + rx * Math.cos(angle))},${n(cy + ry * Math.sin(angle) + drop)}`;
+    const TAU = Math.PI * 2;
+    let start = -Math.PI / 2;
+    const slices = items.map((item, index) => {
+      const sweep = item.value / total * TAU, a0 = start, a1 = start + sweep, mid = a0 + sweep / 2;
+      start = a1;
+      const share = item.value / total;
+      const whole = sweep >= TAU - 1e-6;
+      const top = whole
+        ? `M${n(cx - rx)},${n(cy)}A${n(rx)},${n(ry)} 0 1 1 ${n(cx + rx)},${n(cy)}A${n(rx)},${n(ry)} 0 1 1 ${n(cx - rx)},${n(cy)}Z`
+        : `M${cx},${n(cy)}L${at(a0)}A${n(rx)},${n(ry)} 0 ${sweep > Math.PI ? 1 : 0} 1 ${at(a1)}Z`;
+      // Only the part of the rim facing the viewer (sin > 0) is visible.
+      const walls = [];
+      for (let k = -1; k <= 2; k++) {
+        const s = Math.max(a0, k * TAU), e = Math.min(a1, k * TAU + Math.PI);
+        if (e - s > 1e-4) walls.push(`M${at(s)}A${n(rx)},${n(ry)} 0 0 1 ${at(e)}L${at(e, depth)}A${n(rx)},${n(ry)} 0 0 0 ${at(s, depth)}Z`);
+      }
+      const cut = angle => `M${cx},${n(cy)}L${at(angle)}L${at(angle, depth)}L${cx},${n(cy + depth)}Z`;
+      const lift = whole ? [0, 0] : [Math.cos(mid) * 12, Math.sin(mid) * 12 * tilt];
+      const style = `--lx:${n(lift[0])}px;--ly:${n(lift[1])}px;--delay:${index * 45}ms`;
+      const percent = Math.round(share * 100);
+      const labelAt = whole ? [cx, cy] : [cx + rx * 0.62 * Math.cos(mid), cy + ry * 0.62 * Math.sin(mid)];
+      return { item, index, mid, style, share, percent, top, walls, cuts: whole ? [] : [cut(a0), cut(a1)], labelAt };
+    });
+    const sides = [...slices].sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid)).map(slice => `<g class="pie3d-side" data-pie-index="${slice.index}" style="${slice.style}" aria-hidden="true">
+      ${slice.cuts.map(d => `<path class="pie3d-cut" d="${d}" fill="${shade(slice.item.color, -0.42)}"/>`).join('')}
+      ${slice.walls.map(d => `<path d="${d}" fill="${shade(slice.item.color, -0.3)}"/><path d="${d}" fill="url(#${id}-wall)"/>`).join('')}</g>`).join('');
+    const tops = slices.map(slice => `<g class="pie3d-top" data-pie-index="${slice.index}" style="${slice.style}" role="button" tabindex="0" aria-label="${esc(`${slice.item.label}: ${compact(slice.item.value)}, ${slice.percent}% of spending`)}">
+      <path class="pie3d-face" d="${slice.top}" fill="${slice.item.color}" stroke="${shade(slice.item.color, 0.35)}" stroke-width=".8"/>
+      <path d="${slice.top}" fill="url(#${id}-gloss)" pointer-events="none"/>
+      ${slice.share >= 0.06 ? `<text class="pie3d-pct" x="${n(slice.labelAt[0])}" y="${n(slice.labelAt[1] + 4)}" text-anchor="middle" pointer-events="none">${slice.percent}%</text>` : ''}
+      <title>${esc(`${slice.item.label}: ${compact(slice.item.value)} (${slice.percent}%)`)}</title></g>`).join('');
+    return `<svg class="pie3d" viewBox="0 0 ${width} ${height}" role="group" aria-label="${esc(label)}">
+      <defs>
+        <radialGradient id="${id}-gloss" cx="38%" cy="22%" r="85%"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#0f172a" stop-opacity=".12"/></radialGradient>
+        <linearGradient id="${id}-wall" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#0f172a" stop-opacity=".35"/><stop offset=".45" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#0f172a" stop-opacity=".4"/></linearGradient>
+        <radialGradient id="${id}-shadow"><stop offset="0" stop-color="#0f172a" stop-opacity=".28"/><stop offset="1" stop-color="#0f172a" stop-opacity="0"/></radialGradient>
+      </defs>
+      <ellipse cx="${cx}" cy="${n(cy + depth + 8)}" rx="${n(rx * 1.04)}" ry="${n(ry * 0.9)}" fill="url(#${id}-shadow)"/>
+      <g class="pie3d-sides">${sides}</g><g class="pie3d-tops">${tops}</g></svg>`;
+  }
   function market({ series, bands = [], xMax, xTicks = [], pointLabel = String, width = 1000, height = 320, label = 'Financial chart', boundary = null }) {
     const id = `market-${++marketId}`;
     const pad = { l: 62, r: 82, t: 28, b: 34 };
@@ -187,5 +242,5 @@
     return `<div class="market-chart"><svg class="pro-chart pro-market-chart" viewBox="0 0 ${width} ${height}" role="group" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">${esc(label)}</title><desc id="${id}-desc">Hover, tap or tab through data points for exact values. Dashed lines are estimates; lines connect supplied points without inventing intermediate values. Shaded ranges are described in the chart notes.</desc><defs>${gradients}</defs><rect class="market-backdrop" x="${pad.l}" y="${pad.t}" width="${iw}" height="${ih}" rx="4"/>${split}${grid}${zero}${ranges}${lines}${targets}</svg><p class="market-chart-hint">Hover, tap or tab to inspect &middot; USD</p>${table}</div>`;
   }
 
-  window.ProCharts = { PALETTE, bars, plot, market, sparkline, trendLine, donut, compact, monthShort, niceMax };
+  window.ProCharts = { PALETTE, bars, plot, market, sparkline, trendLine, donut, pie3d, compact, monthShort, niceMax };
 })();

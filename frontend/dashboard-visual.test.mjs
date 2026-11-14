@@ -81,6 +81,32 @@ test('turning analytics off or using Basic removes enhancements without budget f
   }
 });
 
+test('pie view renders a selectable 3D pie with an overview panel, linked legend and grouped small categories', async () => {
+  const listeners = new Map(), inserted = [];
+  const grid = { hidden: false, insertAdjacentHTML: (position, html) => inserted.push(html) };
+  const section = { isConnected: true, querySelector: selector => selector === '.mtd-grid' ? grid : { insertAdjacentHTML() {} }, querySelectorAll: () => [] };
+  const context = {
+    document: { getElementById: () => section, addEventListener: (name, callback) => listeners.set(name, callback) },
+    window: {},
+    FinancePro: { ensureEntitlement: async () => {}, isPlusActive: () => true, prefs: { get: key => key === 'dash.view' ? 'pie' : 'off' },
+      format: { money, esc }, proSwitch: () => '', ICONS: { lock: '' } }
+  };
+  vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('pro-charts.js', import.meta.url), 'utf8'), context);
+  context.ProCharts = context.window.ProCharts;
+  vm.runInContext(source, context);
+  const categories = Array.from({ length: 11 }, (_, i) => ({ name: `Cat ${i}`, totalSpending: 110 - i * 10, transactionCount: 2 }));
+  await listeners.get('mtd:rendered')({ detail: { categories } });
+  const html = inserted.join('');
+  assert.equal(grid.hidden, true);
+  assert.equal((html.match(/class="pie3d-top"/g) || []).length, 9, 'eight categories plus one grouped slice');
+  assert.equal((html.match(/data-pie-select="/g) || []).length, 9);
+  assert.match(html, /3 more/);
+  assert.match(html, /Spent this month<\/span><strong class="pie-detail-amount">\$660\.00/);
+  assert.match(html, /11 categories &middot; most on <b>Cat 0<\/b>/);
+  assert.match(html, /aria-live="polite"/);
+});
+
 test('spending cards retain category drill-down hooks and readable spent context', () => {
   const html = readFileSync(new URL('index.html', import.meta.url), 'utf8');
   assert.match(html, /class="metric-card list-item mtd-category-card" data-category=/);
