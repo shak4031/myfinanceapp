@@ -493,6 +493,18 @@ test('a pending bank debit for an upcoming bill is shown on the bill without bei
   assert.equal(run([pseg, pendingBill({ date: '2026-11-01' })]).status, 'projected', 'outside the matching window');
 });
 
+test('a pending payment settles last month\'s overdue bill before this month\'s upcoming one', () => {
+  const pseg = tx(1, '2026-09-16', { description: 'PSEG ELECTRIC PAYMENT', amount: 454.28 });
+  const items = build([pseg, pendingBill()], [], new Date(2026, 10, 14)).items;
+  const overdue = items.find(item => item.date === '2026-10-16');
+  const upcoming = items.find(item => item.date === '2026-11-16');
+  assert.equal(overdue.status, 'pending');
+  assert.equal(overdue.pendingTransaction.id, 90);
+  assert.equal(upcoming.status, 'projected', 'this month\'s bill is still due');
+  assert.equal(upcoming.amount, 454.28);
+  assert.equal(upcoming.pendingTransaction, undefined);
+});
+
 test('a pending payment from the same biller only reduces what is left on that bill', () => {
   const bill = tx(1, '2026-10-16', { description: 'PSEG ELECTRIC PAYMENT', amount: 400 });
   const item = build([bill, pendingBill({ description: 'PSEG ELECTRIC PAYMENT', amount: 150 })], [], new Date(2026, 10, 14))

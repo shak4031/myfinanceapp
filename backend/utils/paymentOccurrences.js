@@ -311,15 +311,19 @@ function matchPendingBankTransactions(items, transactions, occurrences, groups, 
     const category = billCategoryOf(row.template);
     for (const tx of pending) {
       const days = Math.abs(dayNumber(tx.date) - dayNumber(item.date));
-      if (days > PENDING_MATCH_DAYS) continue;
       const identity = !!group && identityMatch(group, tx);
+      // An overdue bill is usually what a late payment settles, however old it is.
+      const settlesOverdue = item.date < todayKey && tx.date >= item.date;
+      if (days > PENDING_MATCH_DAYS && !settlesOverdue) continue;
       const ratio = tx.amount / expected;
       // Without a merchant match, require the same bill type and a near-identical amount.
       if (!identity && !(category && billCategoryOf(tx) === category && ratio >= PENDING_COVERS_RATIO && ratio <= 1 / PENDING_COVERS_RATIO)) continue;
-      candidates.push({ item, tx, score: [identity ? 0 : 1, Math.abs(1 - ratio), days] });
+      const covers = ratio >= PENDING_COVERS_RATIO && ratio <= 1 / PENDING_COVERS_RATIO;
+      // Merchant matches first, then a payment that covers the bill, then the oldest unpaid bill.
+      candidates.push({ item, tx, score: [identity ? 0 : 1, covers ? 0 : 1, dayNumber(item.date), Math.abs(1 - ratio), days] });
     }
   }
-  candidates.sort((a, b) => a.score[0] - b.score[0] || a.score[1] - b.score[1] || a.score[2] - b.score[2]);
+  candidates.sort((a, b) => a.score.reduce((order, value, index) => order || value - b.score[index], 0));
   const usedItems = new Set(), usedTx = new Set();
   for (const { item, tx } of candidates) {
     if (usedItems.has(item) || usedTx.has(String(tx.id))) continue;
